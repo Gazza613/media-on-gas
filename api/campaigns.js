@@ -1,4 +1,4 @@
-const activeAccounts = [
+const metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
   { name: "Concord College", id: "act_825253026181227" },
@@ -8,21 +8,24 @@ const activeAccounts = [
 ];
 
 export default async function handler(req, res) {
-  const token = process.env.META_ACCESS_TOKEN;
+  const metaToken = process.env.META_ACCESS_TOKEN;
+  const ttToken = process.env.TIKTOK_ACCESS_TOKEN;
+  const ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
   const from = req.query.from || "2026-04-01";
   const to = req.query.to || "2026-04-07";
+  const allCampaigns = [];
 
-  try {
-    const allCampaigns = [];
-
-    for (const account of activeAccounts) {
-      const url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + JSON.stringify({since: from, until: to}) + "&level=campaign&limit=100&access_token=" + token;
-      try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.data) {
-          data.data.forEach(c => {
+  for (const account of metaAccounts) {
+    try {
+      const timeRange = JSON.stringify({since: from, until: to});
+      const url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=100&access_token=" + metaToken;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.data) {
+        data.data.forEach(function(c) {
+          if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
             allCampaigns.push({
+              platform: "Meta",
               accountName: account.name,
               accountId: account.id,
               campaignId: c.campaign_id,
@@ -35,25 +38,24 @@ export default async function handler(req, res) {
               cpc: c.cpc,
               ctr: c.ctr,
               clicks: c.clicks,
-              actions: c.actions || [],
-              dateStart: c.date_start,
-              dateStop: c.date_stop
+              actions: c.actions || []
             });
-          });
-        }
-      } catch (err) {
-        // skip account if error, continue with others
+          }
+        });
       }
+    } catch (err) {}
+  }
+
+  try {
+    const ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100";
+    const ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
+    const ttListData = await ttListRes.json();
+    const ttCampaigns = {};
+    if (ttListData.data && ttListData.data.list) {
+      ttListData.data.list.forEach(function(c) {
+        ttCampaigns[c.campaign_id] = c.campaign_name;
+      });
     }
 
-    allCampaigns.sort((a, b) => parseFloat(b.spend) - parseFloat(a.spend));
-
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.status(200).json({
-      totalCampaigns: allCampaigns.length,
-      campaigns: allCampaigns
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}
+    const dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+    const metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm","cpc","ctr","video_views_p100","
