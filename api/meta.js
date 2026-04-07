@@ -1,13 +1,8 @@
-const clientAccounts = {
-  "mtn-momo": "act_542990539806888"
-};
-
 export default async function handler(req, res) {
   const token = process.env.META_ACCESS_TOKEN;
-  const clientSlug = req.query.client || "mtn-momo";
-  const account = clientAccounts[clientSlug] || process.env.META_AD_ACCOUNT_ID;
-  const from = req.query.from || "2026-03-01";
-  const to = req.query.to || "2026-04-07";
+  const account = req.query.account || "act_8159212987434597";
+  const from = req.query.from || "2026-04-01";
+  const to = req.query.to || "2026-04-05";
   const level = req.query.level || "campaign";
   const breakdown = req.query.breakdown || "";
   const fields = "campaign_name,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions";
