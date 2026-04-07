@@ -8,7 +8,7 @@ const P = {
   orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",
   cyan:"#22D3EE",mint:"#34D399",lime:"#84CC16",
   fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",
-  txt:"#EDE9F5",sub:"#8B7FA3",dim:"#4A3D60",
+  txt:"#FFFFFF",sub:"#D1C9E0",dim:"#4A3D60",
   rule:"rgba(168,85,247,0.12)",
 };
 const gFire=`linear-gradient(135deg,${P.lava},${P.ember},${P.solar})`;
