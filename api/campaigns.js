@@ -47,15 +47,35 @@ export default async function handler(req, res) {
   }
 
   try {
-    const ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100";
-    const ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
-    const ttListData = await ttListRes.json();
-    const ttCampaigns = {};
+    var ttCampaigns = {};
+    var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100";
+    var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
+    var ttListData = await ttListRes.json();
     if (ttListData.data && ttListData.data.list) {
       ttListData.data.list.forEach(function(c) {
-        ttCampaigns[c.campaign_id] = c.campaign_name;
+        ttCampaigns[c.campaign_id] = {
+          name: c.campaign_name,
+          status: c.operation_status,
+          budget: c.budget
+        };
       });
     }
 
-    const dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    const metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm","cpc","ctr","video_views_p100","
+    var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm"]));
+    var ttReportUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=50";
+    var ttReportRes = await fetch(ttReportUrl, {headers: {"Access-Token": ttToken}});
+    var ttRaw = await ttReportRes.text();
+
+    try {
+      var ttReportData = JSON.parse(ttRaw);
+      if (ttReportData.data && ttReportData.data.list) {
+        ttReportData.data.list.forEach(function(c) {
+          var m = c.metrics;
+          if (parseFloat(m.impressions) > 0 || parseFloat(m.spend) > 0) {
+            var info = ttCampaigns[c.dimensions.campaign_id] || {};
+            allCampaigns.push({
+              platform: "TikTok",
+              accountName: "MTN MoMo TikTok",
+              accountId: ttAdvId,
+              camp
