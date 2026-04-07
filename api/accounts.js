@@ -1,19 +1,40 @@
 export default async function handler(req, res) {
   const token = process.env.META_ACCESS_TOKEN;
   const url = "https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=" + token;
+
+  const excluded = [
+    "Gila Rappaport",
+    "Gary Berman",
+    "Dan Griffiths",
+    "18FORTYSIX",
+    "IKI BREATHE",
+    "GAS_Unicam",
+    "The Anxiety Project",
+    "10157625843740107"
+  ];
+
+  const nameMap = {
+    "GAS Marketing Automation": "GAS Marketing (Willowbrook + Internal)",
+    "GAS_MoMo_ZA_V2": "MTN MoMo",
+    "GAS_MTN_Khava": "MTN Khava",
+    "GAS_ConcordCollege": "Concord College",
+    "GAS_EdenCollege": "Eden College",
+    "GAS | Psycho Bunny (test)": "Psycho Bunny ZA",
+    "GAS | PsychoBunnyZA": "Psycho Bunny ZA"
+  };
+
   try {
     const response = await fetch(url);
     const data = await response.json();
     const active = data.data
       .filter(a => a.account_status === 1)
       .filter(a => !a.name.includes("Read-Only"))
-      .filter(a => a.name !== "Gary Berman")
-      .filter(a => a.name !== "Dan Griffiths")
-      .filter(a => a.name !== "Gila Rappaport")
+      .filter(a => !excluded.includes(a.name))
       .map(a => ({
-        name: a.name,
+        name: nameMap[a.name] || a.name,
+        originalName: a.name,
         accountId: a.id,
-        slug: a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+        slug: (nameMap[a.name] || a.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
       }));
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({ accounts: active });
