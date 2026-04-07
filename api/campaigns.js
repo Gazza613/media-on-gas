@@ -78,4 +78,30 @@ export default async function handler(req, res) {
               platform: "TikTok",
               accountName: "MTN MoMo TikTok",
               accountId: ttAdvId,
-              camp
+              campaignId: c.dimensions.campaign_id,
+              campaignName: info.name || "TikTok Campaign " + c.dimensions.campaign_id,
+              impressions: m.impressions,
+              reach: "0",
+              frequency: "0",
+              spend: m.spend,
+              cpm: m.cpm,
+              cpc: m.cpc || "0",
+              ctr: m.ctr || "0",
+              clicks: m.clicks
+            });
+          }
+        });
+      }
+    } catch (parseErr) {}
+  } catch (ttErr) {}
+
+  allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
+
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.status(200).json({
+    totalCampaigns: allCampaigns.length,
+    dateFrom: from,
+    dateTo: to,
+    campaigns: allCampaigns
+  });
+}
