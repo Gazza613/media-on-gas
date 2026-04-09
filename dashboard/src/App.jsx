@@ -130,7 +130,7 @@ export default function MediaOnGas(){
   var openFlags=flags.filter(function(f){return f.status==="open";}).length;
 
   var tabs=[{id:"overview",label:"Overview",icon:Ic.chart(P.orchid,16)},{id:"tof",label:"Ad Serving",icon:Ic.radar(P.ember,16)},{id:"mof",label:"Engagement",icon:Ic.pulse(P.mint,16)},{id:"bof",label:"Objectives",icon:Ic.target(P.rose,16)}];
-  if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
+  tabs.push({id:"deepdive",label:"Deep Dive",icon:Ic.eye(P.cyan,16)});if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
 
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
@@ -261,7 +261,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {/* OPTIMISATION */}
-        {tab==="optimise"&&!isClient&&(<div>
+        {tab==="deepdive"&&(<div><SH icon={Ic.eye(P.cyan,20)} title="Deep Dive" sub="Demographics & Creative Performance · Powered by Looker Studio" accent={P.cyan}/><Glass accent={P.cyan} st={{padding:0,overflow:"hidden",marginBottom:24}}><div style={{width:"100%",height:800,position:"relative"}}><iframe src="https://lookerstudio.google.com/u/0/embed/reporting/823fd5fa-b39d-4dc3-b623-549197d0341f/page/p_2upnicpx0d" width="100%" height="100%" style={{border:"none",borderRadius:16}} allowFullScreen></iframe></div></Glass><Insight title="About This View" accent={P.cyan} icon={Ic.eye(P.cyan,16)}>This interactive report provides granular campaign analysis including audience demographics, ad creative performance with visual thumbnails, placement breakdowns, and device-level delivery data. Use the date controls within the report to adjust the analysis period.</Insight></div>)}{tab==="optimise"&&!isClient&&(<div>
           <SH icon={Ic.flag(P.warning,20)} title="Optimisation — Flags & Recommendations" sub={flags.length+" flags · "+openFlags+" open · Auto-generated"} accent={P.warning}/>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
             {[{l:"CRITICAL",c:P.critical},{l:"WARNING",c:P.warning},{l:"INFO",c:P.info},{l:"POSITIVE",c:P.positive}].map(function(x){return<Glass key={x.l} accent={x.c} st={{padding:"18px 16px",textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:x.c,letterSpacing:2,fontFamily:fm,marginBottom:6}}>{x.l}</div><div style={{fontSize:28,fontWeight:900,color:x.c,fontFamily:fm}}>{flags.filter(function(f){return f.severity===x.l.toLowerCase();}).length}</div></Glass>;})}
