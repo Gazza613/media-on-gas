@@ -1,4 +1,4 @@
-const metaAccounts = [
+var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
   { name: "Concord College", id: "act_825253026181227" },
@@ -8,100 +8,90 @@ const metaAccounts = [
 ];
 
 export default async function handler(req, res) {
-  const metaToken = process.env.META_ACCESS_TOKEN;
-  const ttToken = process.env.TIKTOK_ACCESS_TOKEN;
-  const ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
-  const from = req.query.from || "2026-04-01";
-  const to = req.query.to || "2026-04-07";
-  const allCampaigns = [];
+  var metaToken = process.env.META_ACCESS_TOKEN;
+  var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
+  var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
+  var from = req.query.from || "2026-04-01";
+  var to = req.query.to || "2026-04-07";
+  var allCampaigns = [];
+  var seenIds = {};
 
-  for (const account of metaAccounts) {
+  for (var i = 0; i < metaAccounts.length; i++) {
+    var account = metaAccounts[i];
     try {
-      const timeRange = JSON.stringify({since: from, until: to});
-      const url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=100&access_token=" + metaToken;
-      const response = await fetch(url);
-      const data = await response.json();
+      var timeRange = JSON.stringify({since: from, until: to});
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=100&access_token=" + metaToken;
+      var response = await fetch(url);
+      var data = await response.json();
       if (data.data) {
-        data.data.forEach(function(c) {
+        for (var j = 0; j < data.data.length; j++) {
+          var c = data.data[j];
           if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
-            allCampaigns.push({
-              platform: "Meta",
-              accountName: account.name,
-              accountId: account.id,
-              campaignId: c.campaign_id,
-              campaignName: c.campaign_name,
-              impressions: c.impressions,
-              reach: c.reach,
-              frequency: c.frequency,
-              spend: c.spend,
-              cpm: c.cpm,
-              cpc: c.cpc,
-              ctr: c.ctr,
-              clicks: c.clicks,
-              actions: c.actions || []
-            });
+            seenIds[c.campaign_id] = true;
+            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: "active" });
           }
-        });
+        }
+      }
+    } catch (err) {}
+
+    try {
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,status,start_time,stop_time&limit=100&access_token=" + metaToken;
+      var listRes = await fetch(listUrl);
+      var listData = await listRes.json();
+      if (listData.data) {
+        for (var k = 0; k < listData.data.length; k++) {
+          var camp = listData.data[k];
+          if (!seenIds[camp.id] && (camp.status === "ACTIVE" || camp.status === "PAUSED" || camp.status === "SCHEDULED")) {
+            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: camp.id, campaignName: camp.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: camp.status.toLowerCase() });
+          }
+        }
       }
     } catch (err) {}
   }
 
   try {
-    var ttCampaigns = {};
+    var ttNames = {};
+    var ttStatuses = {};
     var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100";
     var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
     var ttListData = await ttListRes.json();
     if (ttListData.data && ttListData.data.list) {
-      ttListData.data.list.forEach(function(c) {
-        ttCampaigns[c.campaign_id] = {
-          name: c.campaign_name,
-          status: c.operation_status,
-          budget: c.budget
-        };
-      });
+      for (var l = 0; l < ttListData.data.list.length; l++) {
+        ttNames[ttListData.data.list[l].campaign_id] = ttListData.data.list[l].campaign_name;
+        ttStatuses[ttListData.data.list[l].campaign_id] = ttListData.data.list[l].operation_status;
+      }
     }
 
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm"]));
-    var ttReportUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=50";
-    var ttReportRes = await fetch(ttReportUrl, {headers: {"Access-Token": ttToken}});
-    var ttRaw = await ttReportRes.text();
+    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm","follows","likes"]));
+    var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=50";
+    var ttRes = await fetch(ttUrl, {headers: {"Access-Token": ttToken}});
+    var ttRaw = await ttRes.text();
+    var ttSeenIds = {};
 
     try {
-      var ttReportData = JSON.parse(ttRaw);
-      if (ttReportData.data && ttReportData.data.list) {
-        ttReportData.data.list.forEach(function(c) {
-          var m = c.metrics;
-          if (parseFloat(m.impressions) > 0 || parseFloat(m.spend) > 0) {
-            var info = ttCampaigns[c.dimensions.campaign_id] || {};
-            allCampaigns.push({
-              platform: "TikTok",
-              accountName: "MTN MoMo TikTok",
-              accountId: ttAdvId,
-              campaignId: c.dimensions.campaign_id,
-              campaignName: info.name || "TikTok Campaign " + c.dimensions.campaign_id,
-              impressions: m.impressions,
-              reach: "0",
-              frequency: "0",
-              spend: m.spend,
-              cpm: m.cpm,
-              cpc: m.cpc || "0",
-              ctr: m.ctr || "0",
-              clicks: m.clicks
-            });
+      var ttData = JSON.parse(ttRaw);
+      if (ttData.data && ttData.data.list) {
+        for (var n = 0; n < ttData.data.list.length; n++) {
+          var tc = ttData.data.list[n];
+          var tm = tc.metrics;
+          if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
+            ttSeenIds[tc.dimensions.campaign_id] = true;
+            allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", status: "active" });
           }
-        });
+        }
       }
     } catch (parseErr) {}
+
+    Object.keys(ttNames).forEach(function(tid) {
+      if (!ttSeenIds[tid] && ttStatuses[tid] === "ENABLE") {
+        allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", status: "scheduled" });
+      }
+    });
   } catch (ttErr) {}
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.status(200).json({
-    totalCampaigns: allCampaigns.length,
-    dateFrom: from,
-    dateTo: to,
-    campaigns: allCampaigns
-  });
+  res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns });
 }
