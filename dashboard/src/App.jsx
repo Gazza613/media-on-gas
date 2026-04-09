@@ -153,7 +153,7 @@ export default function MediaOnGas(){
           </div>
         </div>
       </div>
-      <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1}}>{tabs.map(function(tb){return<button key={tb.id} onClick={function(){setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:tab===tb.id?P.ember+"10":"transparent",border:"none",borderBottom:tab===tb.id?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:"pointer",color:tab===tb.id?P.ember:P.sub,fontSize:11,fontWeight:tab===tb.id?800:500,fontFamily:fm}}>{tb.icon}<span>{tb.label}</span></button>;})}</div></div>
+      <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1}}>{tabs.map(function(tb){return<button key={tb.id} onClick={function(){setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:tab===tb.id?P.ember+"10":"transparent",border:"none",borderBottom:tab===tb.id?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:"pointer",color:tab===tb.id?P.ember:P.sub,fontSize:13,fontWeight:tab===tb.id?800:500,fontFamily:ff,letterSpacing:0.3}}>{tb.icon}<span>{tb.label}</span></button>;})}</div></div>
     </header>
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}}/>}
