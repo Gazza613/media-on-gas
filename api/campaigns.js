@@ -42,7 +42,7 @@ export default async function handler(req, res) {
           if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
             seenIds[c.campaign_id] = true;
             var st = campaignStatuses[c.campaign_id];
-            var status = st ? st.status.toLowerCase() : "active";
+            var status = st ? "active" : "completed";
             allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: status });
           }
         }
