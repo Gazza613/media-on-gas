@@ -18,6 +18,19 @@ export default async function handler(req, res) {
 
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
+
+    try {
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,status,effective_status&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
+      var listRes = await fetch(listUrl);
+      var listData = await listRes.json();
+      var activeCampaignIds = {};
+      if (listData.data) {
+        for (var k = 0; k < listData.data.length; k++) {
+          activeCampaignIds[listData.data[k].id] = { name: listData.data[k].name, status: listData.data[k].effective_status };
+        }
+      }
+    } catch (err) { var activeCampaignIds = {}; }
+
     try {
       var timeRange = JSON.stringify({since: from, until: to});
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=100&access_token=" + metaToken;
@@ -26,7 +39,7 @@ export default async function handler(req, res) {
       if (data.data) {
         for (var j = 0; j < data.data.length; j++) {
           var c = data.data[j];
-          if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
+          if (activeCampaignIds[c.campaign_id] && (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0)) {
             seenIds[c.campaign_id] = true;
             allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: "active" });
           }
@@ -34,19 +47,11 @@ export default async function handler(req, res) {
       }
     } catch (err) {}
 
-    try {
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,status,start_time,stop_time&limit=100&access_token=" + metaToken;
-      var listRes = await fetch(listUrl);
-      var listData = await listRes.json();
-      if (listData.data) {
-        for (var k = 0; k < listData.data.length; k++) {
-          var camp = listData.data[k];
-          if (!seenIds[camp.id] && (camp.status === "ACTIVE" || camp.status === "PAUSED" || camp.status === "SCHEDULED")) {
-            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: camp.id, campaignName: camp.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: camp.status.toLowerCase() });
-          }
-        }
+    Object.keys(activeCampaignIds).forEach(function(cid) {
+      if (!seenIds[cid] && activeCampaignIds[cid].status === "SCHEDULED") {
+        allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: activeCampaignIds[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "scheduled" });
       }
-    } catch (err) {}
+    });
   }
 
   try {
@@ -57,8 +62,11 @@ export default async function handler(req, res) {
     var ttListData = await ttListRes.json();
     if (ttListData.data && ttListData.data.list) {
       for (var l = 0; l < ttListData.data.list.length; l++) {
-        ttNames[ttListData.data.list[l].campaign_id] = ttListData.data.list[l].campaign_name;
-        ttStatuses[ttListData.data.list[l].campaign_id] = ttListData.data.list[l].operation_status;
+        var ttCamp = ttListData.data.list[l];
+        if (ttCamp.operation_status === "ENABLE") {
+          ttNames[ttCamp.campaign_id] = ttCamp.campaign_name;
+          ttStatuses[ttCamp.campaign_id] = "active";
+        }
       }
     }
 
@@ -75,16 +83,16 @@ export default async function handler(req, res) {
         for (var n = 0; n < ttData.data.list.length; n++) {
           var tc = ttData.data.list[n];
           var tm = tc.metrics;
-          if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
+          if (ttNames[tc.dimensions.campaign_id] && (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0)) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
-            allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", status: "active" });
+            allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id], impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", status: "active" });
           }
         }
       }
     } catch (parseErr) {}
 
     Object.keys(ttNames).forEach(function(tid) {
-      if (!ttSeenIds[tid] && ttStatuses[tid] === "ENABLE") {
+      if (!ttSeenIds[tid]) {
         allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", status: "scheduled" });
       }
     });
