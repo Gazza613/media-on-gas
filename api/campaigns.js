@@ -18,18 +18,18 @@ export default async function handler(req, res) {
 
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
+    var campaignStatuses = {};
 
     try {
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,status,effective_status&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,effective_status&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\",\"PAUSED\",\"COMPLETED\"]}]&limit=100&access_token=" + metaToken;
       var listRes = await fetch(listUrl);
       var listData = await listRes.json();
-      var activeCampaignIds = {};
       if (listData.data) {
         for (var k = 0; k < listData.data.length; k++) {
-          activeCampaignIds[listData.data[k].id] = { name: listData.data[k].name, status: listData.data[k].effective_status };
+          campaignStatuses[listData.data[k].id] = { name: listData.data[k].name, status: listData.data[k].effective_status };
         }
       }
-    } catch (err) { var activeCampaignIds = {}; }
+    } catch (err) {}
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
@@ -39,17 +39,20 @@ export default async function handler(req, res) {
       if (data.data) {
         for (var j = 0; j < data.data.length; j++) {
           var c = data.data[j];
-          if (activeCampaignIds[c.campaign_id] && (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0)) {
+          if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
             seenIds[c.campaign_id] = true;
-            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: "active" });
+            var st = campaignStatuses[c.campaign_id];
+            var status = st ? st.status.toLowerCase() : "active";
+            if (status === "completed") status = "completed";
+            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: status });
           }
         }
       }
     } catch (err) {}
 
-    Object.keys(activeCampaignIds).forEach(function(cid) {
-      if (!seenIds[cid] && activeCampaignIds[cid].status === "SCHEDULED") {
-        allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: activeCampaignIds[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "scheduled" });
+    Object.keys(campaignStatuses).forEach(function(cid) {
+      if (!seenIds[cid] && campaignStatuses[cid].status === "SCHEDULED") {
+        allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: campaignStatuses[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "scheduled" });
       }
     });
   }
@@ -63,10 +66,8 @@ export default async function handler(req, res) {
     if (ttListData.data && ttListData.data.list) {
       for (var l = 0; l < ttListData.data.list.length; l++) {
         var ttCamp = ttListData.data.list[l];
-        if (ttCamp.operation_status === "ENABLE") {
-          ttNames[ttCamp.campaign_id] = ttCamp.campaign_name;
-          ttStatuses[ttCamp.campaign_id] = "active";
-        }
+        ttNames[ttCamp.campaign_id] = ttCamp.campaign_name;
+        ttStatuses[ttCamp.campaign_id] = ttCamp.operation_status;
       }
     }
 
@@ -83,17 +84,18 @@ export default async function handler(req, res) {
         for (var n = 0; n < ttData.data.list.length; n++) {
           var tc = ttData.data.list[n];
           var tm = tc.metrics;
-          if (ttNames[tc.dimensions.campaign_id] && (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0)) {
+          if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
-            allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id], impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", status: "active" });
+            var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : "completed";
+            allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", status: ttStatus });
           }
         }
       }
     } catch (parseErr) {}
 
     Object.keys(ttNames).forEach(function(tid) {
-      if (!ttSeenIds[tid]) {
-        allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", status: "scheduled" });
+      if (!ttSeenIds[tid] && ttStatuses[tid] === "ENABLE") {
+        allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", status: "active" });
       }
     });
   } catch (ttErr) {}
