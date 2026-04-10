@@ -15,18 +15,21 @@ export default async function handler(req, res) {
   var to = req.query.to || "2026-04-07";
   var allCampaigns = [];
   var seenIds = {};
+  var now = new Date();
+  var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
-    var campaignStatuses = {};
+    var campaignInfo = {};
 
     try {
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,effective_status&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,effective_status,created_time&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
       var listRes = await fetch(listUrl);
       var listData = await listRes.json();
       if (listData.data) {
         for (var k = 0; k < listData.data.length; k++) {
-          campaignStatuses[listData.data[k].id] = { name: listData.data[k].name, status: listData.data[k].effective_status };
+          var camp = listData.data[k];
+          campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, created: new Date(camp.created_time) };
         }
       }
     } catch (err) {}
@@ -41,19 +44,20 @@ export default async function handler(req, res) {
           var c = data.data[j];
           if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
             seenIds[c.campaign_id] = true;
-            var st = campaignStatuses[c.campaign_id];
-            var status = st ? "active" : "completed";
-            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: status });
+            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: "active" });
           }
         }
       }
     } catch (err) {}
 
-    Object.keys(campaignStatuses).forEach(function(cid) {
+    Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid]) {
-        var campStatus = campaignStatuses[cid].status;
-        var displayStatus = campStatus === "SCHEDULED" ? "scheduled" : "pending";
-        allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: campaignStatuses[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: displayStatus });
+        var info = campaignInfo[cid];
+        if (info.status === "SCHEDULED") {
+          allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "scheduled" });
+        } else if (info.status === "ACTIVE" && info.created >= thirtyDaysAgo) {
+          allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "pending" });
+        }
       }
     });
   }
