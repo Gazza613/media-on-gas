@@ -108,7 +108,7 @@ export default async function handler(req, res) {
         var info = campaignInfo[cid];
         if (info.status === "SCHEDULED") {
           allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name, accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
-        } else if (info.status === "ACTIVE" && info.created >= thirtyDaysAgo) {
+        } else if (info.status === "ACTIVE" && info.created >= new Date(from)) {
           allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name, accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "pending" });
         }
       }
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
     }
 
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm","follows","likes","comments","shares"]));
+    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","reach","clicks","cpm","cpc","ctr","follows","likes","comments","shares"]));
     var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=50";
     var ttRes = await fetch(ttUrl, {headers: {"Access-Token": ttToken}});
     var ttRaw = await ttRes.text();
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
           if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
             var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : "completed";
-            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: ttStatus });
+            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: ttStatus });
           }
         }
       }
