@@ -250,9 +250,9 @@ export default function MediaOnGas(){
                 var obj=getObj(camp.campaignName);var result=getResult(camp,obj);var spend=parseFloat(camp.spend||0);var clicks=parseFloat(camp.clicks||0);var costPer=result>0?spend/result:0;var convRate=clicks>0&&obj==="Leads"?(parseFloat(camp.leads||0)/clicks*100):0;
                 return{name:camp.campaignName,platform:camp.platform,objective:obj,spend:spend,clicks:clicks,result:result,resultLabel:getResultLabel(obj),costPer:costPer,costLabel:getCostLabel(obj),convRate:convRate};
               });
-              var platOrder={"Facebook":0,"Instagram":1,"TikTok":2};
+              var platOrder={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
               var objOrder={"App Store Clicks":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
-              rows.sort(function(a,b){var p=platOrder[a.platform]||9;var q=platOrder[b.platform]||9;if(p!==q)return p-q;return (objOrder[a.objective]||9)-(objOrder[b.objective]||9);});
+              rows.sort(function(a,b){var p=platOrder[a.platform]||9;var q=platOrder[b.platform]||9;if(p!==q)return p-q;return b.result-a.result;});
 
               var objectives=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
               var groups={};objectives.forEach(function(o){groups[o]=rows.filter(function(r){return r.objective===o;});});
