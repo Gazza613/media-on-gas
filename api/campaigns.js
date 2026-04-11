@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         for (var j = 0; j < data.data.length; j++) {
           var c = data.data[j];
           if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
-            var pub = c.publisher_platform || "facebook";
+            var pub = c.publisher_platform || "facebook"; if (pub !== "facebook" && pub !== "instagram") continue;
             var platName = "Facebook";
             if (pub === "instagram") platName = "Instagram";
             else if (pub === "audience_network") platName = "Audience Network";
