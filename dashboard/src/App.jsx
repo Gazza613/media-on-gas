@@ -233,7 +233,7 @@ export default function MediaOnGas(){
                 if(n.indexOf("follower")>=0)return "Followers & Likes";
                 if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidSocial_like")>=0||n.indexOf("paidsocial_like")>=0)return "Followers & Likes";
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
-                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch_display_homeloans")>=0)return "Landing Page Clicks";
+                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0||n.indexOf("google")>=0)return "Landing Page Clicks";
                 return "Traffic";
               };
 
