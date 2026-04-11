@@ -25,14 +25,15 @@ export default async function handler(req, res) {
       return res.status(400).json({error: "Token refresh failed", debug: debug, tokenResponse: tokenData});
     }
 
-    var versions = ["v17", "v16", "v15", "v14"];
-    var gaqlData = null;
     var query = "SELECT campaign.name, campaign.id, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
 
-    for (var v = 0; v < versions.length; v++) {
-      debug.step = "trying_" + versions[v];
-      var url = "https://googleads.googleapis.com/" + versions[v] + "/customers/" + customerId + "/googleAds:search";
+    var versions = ["v21", "v20", "v19", "v18", "v17", "v16"];
+    var gaqlData = null;
+    var attempts = [];
 
+    for (var v = 0; v < versions.length; v++) {
+      var url = "https://googleads.googleapis.com/" + versions[v] + "/customers/" + customerId + "/googleAds:search";
+      
       var gaqlRes = await fetch(url, {
         method: "POST",
         headers: {
@@ -44,21 +45,32 @@ export default async function handler(req, res) {
         body: JSON.stringify({query: query})
       });
 
-      debug.statusCode = gaqlRes.status;
-      debug.version = versions[v];
+      var responseText = await gaqlRes.text();
+      attempts.push({version: versions[v], status: gaqlRes.status, preview: responseText.substring(0, 300)});
 
       if (gaqlRes.status === 200) {
-        gaqlData = await gaqlRes.json();
+        try {
+          gaqlData = JSON.parse(responseText);
+          debug.version = versions[v];
+        } catch(e) {}
         break;
-      } else if (gaqlRes.status !== 404) {
-        var errText = await gaqlRes.text();
-        debug.responsePreview = errText.substring(0, 500);
-        return res.status(400).json({error: "Google Ads API error", debug: debug});
+      }
+
+      if (gaqlRes.status !== 404) {
+        try {
+          var errData = JSON.parse(responseText);
+          debug.version = versions[v];
+          debug.statusCode = gaqlRes.status;
+          return res.status(400).json({error: "Google Ads API error", debug: debug, response: errData, attempts: attempts});
+        } catch(e) {
+          debug.version = versions[v];
+          return res.status(400).json({error: "Google Ads non-404 error", debug: debug, attempts: attempts});
+        }
       }
     }
 
     if (!gaqlData) {
-      return res.status(400).json({error: "No working API version found", debug: debug});
+      return res.status(400).json({error: "No working API version found", debug: debug, attempts: attempts});
     }
 
     var campaigns = [];
@@ -75,7 +87,6 @@ export default async function handler(req, res) {
         platform: "Google Display",
         accountName: "MTN MoMo Google",
         campaignId: "google_" + c.id,
-        rawCampaignId: c.id,
         campaignName: c.name,
         status: c.status === "ENABLED" ? "active" : c.status.toLowerCase(),
         impressions: impressions.toString(),
@@ -87,15 +98,9 @@ export default async function handler(req, res) {
         ctr: impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : "0",
         clicks: clicks.toString(),
         conversions: conversions.toString(),
-        costPerConversion: conversions > 0 ? (spend / conversions).toFixed(2) : "0",
-        leads: "0",
-        appInstalls: "0",
-        landingPageViews: "0",
-        pageLikes: "0",
-        follows: "0",
-        likes: "0",
-        costPerLead: "0",
-        costPerInstall: "0"
+        leads: "0", appInstalls: "0", landingPageViews: "0",
+        pageLikes: "0", follows: "0", likes: "0",
+        costPerLead: "0", costPerInstall: "0"
       });
     }
 
