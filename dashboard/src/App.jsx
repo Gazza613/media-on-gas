@@ -261,7 +261,7 @@ export default function MediaOnGas(){
                 if(o==="Landing Page Clicks"){var tr=rows.filter(function(r){return r.objective==="Traffic";});matched=matched.concat(tr);}
                 var sorted=[];
                 platList.forEach(function(pl){var plRows=matched.filter(function(r){return r.platform===pl;});plRows.sort(function(a,b){return b.clicks-a.clicks;});sorted=sorted.concat(plRows);});
-                console.log("GROUP "+o+":",sorted.map(function(x){return x.platform+" | "+x.name+" | clicks:"+x.clicks;}));groups[o]=sorted;
+                groups[o]=sorted;
               });
 
               var objColors={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
