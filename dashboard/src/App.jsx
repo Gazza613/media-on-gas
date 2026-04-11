@@ -264,7 +264,7 @@ export default function MediaOnGas(){
 
               objectives.forEach(function(objName){
                 var g=groups[objName];if(!g||g.length===0)return;
-                var totalSpend=g.reduce(function(a,r){return a+r.spend;},0);var totalClicks=g.reduce(function(a,r){return a+r.clicks;},0);var totalResults=g.reduce(function(a,r){return a+r.result;},0);var totalCostPer=totalResults>0?totalSpend/totalResults:0;var totalConv=totalClicks>0&&objName==="Leads"?(totalResults/totalClicks*100):0;var oc=objColors[objName]||P.ember;
+                var pOrd={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};g.sort(function(a,b){var pa=pOrd[a.platform]||9;var pb=pOrd[b.platform]||9;if(pa!==pb)return pa-pb;return b.result-a.result;});var totalSpend=g.reduce(function(a,r){return a+r.spend;},0);var totalClicks=g.reduce(function(a,r){return a+r.clicks;},0);var totalResults=g.reduce(function(a,r){return a+r.result;},0);var totalCostPer=totalResults>0?totalSpend/totalResults:0;var totalConv=totalClicks>0&&objName==="Leads"?(totalResults/totalClicks*100):0;var oc=objColors[objName]||P.ember;
 
                 sections.push(<div key={objName} style={{marginBottom:24}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}><span style={{width:12,height:12,borderRadius:"50%",background:oc}}></span><span style={{fontSize:14,fontWeight:800,color:oc,fontFamily:ff}}>{objName}</span></div>
