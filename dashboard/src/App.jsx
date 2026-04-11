@@ -243,7 +243,7 @@ export default function MediaOnGas(){
                 return parseFloat(camp.clicks||0);
               };
 
-              var getResultLabel=function(obj){if(obj==="Leads")return "Leads";if(obj==="Followers & Likes")return "Follows/Likes";return "Clicks";};
+              var getResultLabel=function(obj){if(obj==="Leads")return "Leads";if(obj==="Followers & Likes")return "Follows/Likes";return "Results";};
               var getCostLabel=function(obj){if(obj==="Leads")return "CPL";if(obj==="Followers & Likes")return "CPF";return "CPC";};
 
               var rows=sel.map(function(camp){
