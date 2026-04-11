@@ -228,7 +228,7 @@ export default function MediaOnGas(){
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("follower")>=0)return "Follows";
                 if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0)return "Page Likes";
-                if(n.indexOf("appinstall")>=0||n.indexOf("app install")>=0)return "App Store Clicks";
+                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)return "App Store Clicks";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0)return "Landing Page Clicks";
                 return "Traffic";
               };
