@@ -36,15 +36,68 @@ export default async function handler(req, res) {
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=100&access_token=" + metaToken;
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
       var response = await fetch(url);
       var data = await response.json();
       if (data.data) {
         for (var j = 0; j < data.data.length; j++) {
           var c = data.data[j];
           if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
+            var pub = c.publisher_platform || "facebook";
+            var platName = "Facebook";
+            if (pub === "instagram") platName = "Instagram";
+            else if (pub === "audience_network") platName = "Audience Network";
+            else if (pub === "messenger") platName = "Messenger";
+            var uniqueId = c.campaign_id + "_" + pub;
             seenIds[c.campaign_id] = true;
-            allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: c.campaign_id, campaignName: c.campaign_name, impressions: c.impressions, reach: c.reach, frequency: c.frequency, spend: c.spend, cpm: c.cpm, cpc: c.cpc, ctr: c.ctr, clicks: c.clicks, actions: c.actions || [], status: "active" });
+
+            var leads = 0;
+            var appInstalls = 0;
+            var landingPageViews = 0;
+            var pageLikes = 0;
+            if (c.actions) {
+              for (var a = 0; a < c.actions.length; a++) {
+                var act = c.actions[a];
+                if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead") {
+                  leads = Math.max(leads, parseInt(act.value));
+                }
+                if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install") {
+                  appInstalls += parseInt(act.value);
+                }
+                if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
+                  landingPageViews = Math.max(landingPageViews, parseInt(act.value));
+                }
+                if (act.action_type === "like" || act.action_type === "page_engagement") {
+                  pageLikes = Math.max(pageLikes, parseInt(act.value));
+                }
+              }
+            }
+
+            allCampaigns.push({
+              platform: platName,
+              metaPlatform: pub,
+              accountName: account.name,
+              accountId: account.id,
+              campaignId: uniqueId,
+              rawCampaignId: c.campaign_id,
+              campaignName: c.campaign_name,
+              impressions: c.impressions,
+              reach: c.reach,
+              frequency: c.frequency,
+              spend: c.spend,
+              cpm: c.cpm,
+              cpc: c.cpc,
+              ctr: c.ctr,
+              clicks: c.clicks,
+              leads: leads.toString(),
+              appInstalls: appInstalls.toString(),
+              landingPageViews: landingPageViews.toString(),
+              pageLikes: pageLikes.toString(),
+              costPerLead: leads > 0 ? (parseFloat(c.spend) / leads).toFixed(2) : "0",
+              costPerInstall: appInstalls > 0 ? (parseFloat(c.spend) / appInstalls).toFixed(2) : "0",
+              actions: c.actions || [],
+              status: "active"
+            });
           }
         }
       }
@@ -54,9 +107,9 @@ export default async function handler(req, res) {
       if (!seenIds[cid]) {
         var info = campaignInfo[cid];
         if (info.status === "SCHEDULED") {
-          allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "scheduled" });
+          allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name, accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
         } else if (info.status === "ACTIVE" && info.created >= thirtyDaysAgo) {
-          allCampaigns.push({ platform: "Meta", accountName: account.name, accountId: account.id, campaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", actions: [], status: "pending" });
+          allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name, accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: info.name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "pending" });
         }
       }
     });
@@ -77,7 +130,7 @@ export default async function handler(req, res) {
     }
 
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm","follows","likes"]));
+    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","clicks","cpm","follows","likes","comments","shares"]));
     var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=50";
     var ttRes = await fetch(ttUrl, {headers: {"Access-Token": ttToken}});
     var ttRaw = await ttRes.text();
@@ -92,7 +145,7 @@ export default async function handler(req, res) {
           if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
             var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : "completed";
-            allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", status: ttStatus });
+            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: "0", frequency: "0", spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: tm.ctr || "0", clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: ttStatus });
           }
         }
       }
@@ -100,7 +153,7 @@ export default async function handler(req, res) {
 
     Object.keys(ttNames).forEach(function(tid) {
       if (!ttSeenIds[tid] && ttStatuses[tid] === "ENABLE") {
-        allCampaigns.push({ platform: "TikTok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", status: "active" });
+        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active" });
       }
     });
   } catch (ttErr) {}
