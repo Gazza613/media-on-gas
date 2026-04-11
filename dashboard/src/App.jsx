@@ -254,7 +254,7 @@ export default function MediaOnGas(){
               var objOrder={"App Store Clicks":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
               rows.sort(function(a,b){var p=platOrder[a.platform]||9;var q=platOrder[b.platform]||9;if(p!==q)return p-q;return b.result-a.result;});
 
-              var objectives=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
+              var pOrd={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};rows.sort(function(a,b){var pa=pOrd[a.platform]||9;var pb=pOrd[b.platform]||9;if(pa!==pb)return pa-pb;return b.clicks-a.clicks;});var objectives=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
               var groups={};objectives.forEach(function(o){groups[o]=rows.filter(function(r){return r.objective===o;});});
               var trafficRows=rows.filter(function(r){return r.objective==="Traffic";});
               if(trafficRows.length>0){groups["Landing Page Clicks"]=groups["Landing Page Clicks"].concat(trafficRows);}
