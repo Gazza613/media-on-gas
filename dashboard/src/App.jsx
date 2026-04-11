@@ -225,38 +225,37 @@ export default function MediaOnGas(){
 
               var getObj=function(name){
                 var n=(name||"").toLowerCase();
-                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
-                if(n.indexOf("follower")>=0)return "Follows";
-                if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0)return "Page Likes";
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)return "App Store Clicks";
+                if(n.indexOf("follower")>=0)return "Followers & Likes";
+                if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidSocial_like")>=0||n.indexOf("paidsocial_like")>=0)return "Followers & Likes";
+                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0)return "Landing Page Clicks";
                 return "Traffic";
               };
 
               var getResult=function(camp,obj){
                 if(obj==="Leads")return parseFloat(camp.leads||0);
-                if(obj==="Follows")return parseFloat(camp.follows||0);
-                if(obj==="Page Likes")return parseFloat(camp.pageLikes||0);
+                if(obj==="Followers & Likes")return parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
                 return parseFloat(camp.clicks||0);
               };
 
-              var getResultLabel=function(obj){if(obj==="Leads")return "Leads";if(obj==="Follows")return "Follows";if(obj==="Page Likes")return "Likes";return "Clicks";};
-              var getCostLabel=function(obj){if(obj==="Leads")return "CPL";if(obj==="Follows")return "CPF";if(obj==="Page Likes")return "CPL";return "CPC";};
+              var getResultLabel=function(obj){if(obj==="Leads")return "Leads";if(obj==="Followers & Likes")return "Follows/Likes";return "Clicks";};
+              var getCostLabel=function(obj){if(obj==="Leads")return "CPL";if(obj==="Followers & Likes")return "CPF";return "CPC";};
 
               var rows=sel.map(function(camp){
                 var obj=getObj(camp.campaignName);var result=getResult(camp,obj);var spend=parseFloat(camp.spend||0);var clicks=parseFloat(camp.clicks||0);var costPer=result>0?spend/result:0;var convRate=clicks>0&&obj==="Leads"?(parseFloat(camp.leads||0)/clicks*100):0;
                 return{name:camp.campaignName,platform:camp.platform,objective:obj,spend:spend,clicks:clicks,result:result,resultLabel:getResultLabel(obj),costPer:costPer,costLabel:getCostLabel(obj),convRate:convRate};
               });
               var platOrder={"Facebook":0,"Instagram":1,"TikTok":2};
-              var objOrder={"App Store Clicks":0,"Landing Page Clicks":1,"Leads":2,"Follows":3,"Page Likes":4,"Traffic":5};
+              var objOrder={"App Store Clicks":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
               rows.sort(function(a,b){var p=platOrder[a.platform]||9;var q=platOrder[b.platform]||9;if(p!==q)return p-q;return (objOrder[a.objective]||9)-(objOrder[b.objective]||9);});
 
-              var objectives=["App Store Clicks","Landing Page Clicks","Leads","Follows","Page Likes"];
+              var objectives=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
               var groups={};objectives.forEach(function(o){groups[o]=rows.filter(function(r){return r.objective===o;});});
               var trafficRows=rows.filter(function(r){return r.objective==="Traffic";});
               if(trafficRows.length>0){groups["Landing Page Clicks"]=groups["Landing Page Clicks"].concat(trafficRows);}
 
-              var objColors={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Follows":P.tt,"Page Likes":P.fb};
+              var objColors={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
               var sections=[];
 
               objectives.forEach(function(objName){
@@ -285,13 +284,13 @@ export default function MediaOnGas(){
               if(sections.length===0)sections.push(<div key="none" style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>No objective data found for the selected campaigns.</div>);
 
               var tLeads=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.result;},0);
-              var tFollows=rows.filter(function(r){return r.objective==="Follows";}).reduce(function(a,r){return a+r.result;},0);
-              var tLikes=rows.filter(function(r){return r.objective==="Page Likes";}).reduce(function(a,r){return a+r.result;},0);
+              var tFollows=rows.filter(function(r){return r.objective==="Followers & Likes";}).reduce(function(a,r){return a+r.result;},0);
+              var tLikes=0;
               var tApp=rows.filter(function(r){return r.objective==="App Store Clicks";}).reduce(function(a,r){return a+r.result;},0);
               var tLp=rows.filter(function(r){return r.objective==="Landing Page Clicks"||r.objective==="Traffic";}).reduce(function(a,r){return a+r.result;},0);
               var sLeads=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.spend;},0);
-              var sFollows=rows.filter(function(r){return r.objective==="Follows";}).reduce(function(a,r){return a+r.spend;},0);
-              var sLikes=rows.filter(function(r){return r.objective==="Page Likes";}).reduce(function(a,r){return a+r.spend;},0);
+              var sFollows=rows.filter(function(r){return r.objective==="Followers & Likes";}).reduce(function(a,r){return a+r.spend;},0);
+              var sLikes=0;
               var sApp=rows.filter(function(r){return r.objective==="App Store Clicks";}).reduce(function(a,r){return a+r.spend;},0);
               var sLp=rows.filter(function(r){return r.objective==="Landing Page Clicks"||r.objective==="Traffic";}).reduce(function(a,r){return a+r.spend;},0);
               var allSpend=rows.reduce(function(a,r){return a+r.spend;},0);
@@ -299,12 +298,12 @@ export default function MediaOnGas(){
 
               return <div>
                 {sections}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
                   <Glass accent={P.fb} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>CLICKS TO APP INSTALL</div><div style={{fontSize:22,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(tApp)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPC: {fR(tApp>0?sApp/tApp:0)}</div></Glass>
                   <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>CLICKS TO LANDING PAGE</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(tLp)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPC: {fR(tLp>0?sLp/tLp:0)}</div></Glass>
                   <Glass accent={P.rose} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>LEADS</div><div style={{fontSize:22,fontWeight:900,color:P.rose,fontFamily:fm}}>{fmt(tLeads)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPL: {fR(tLeads>0?sLeads/tLeads:0)}</div></Glass>
-                  <Glass accent={P.tt} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWS</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(tFollows)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPF: {fR(tFollows>0?sFollows/tFollows:0)}</div></Glass>
-                  <Glass accent={P.fb} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>LIKES</div><div style={{fontSize:22,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(tLikes)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPL: {fR(tLikes>0?sLikes/tLikes:0)}</div></Glass>
+                  <Glass accent={P.tt} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWERS & LIKES</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(tFollows)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPF: {fR(tFollows>0?sFollows/tFollows:0)}</div></Glass>
+                  
                 </div>
                 <Insight title="Objective Performance" accent={P.rose} icon={Ic.target(P.rose,16)}>{(function(){var p=[];p.push("The selected campaigns have deployed "+fR(allSpend)+" across "+sel.length+" campaign placements, generating "+fmt(allClicks)+" total measurable actions.");if(tApp>0){p.push("App install campaigns delivered "+fmt(tApp)+" clicks to the app store at "+fR(sApp/tApp)+" cost per click. Each click represents a user driven to the point of installation, the final measurable step before conversion in the app acquisition funnel.");}if(tLp>0){p.push("Landing page campaigns generated "+fmt(tLp)+" qualified visits at "+fR(sLp/tLp)+" cost per visit, driving high-intent traffic to destination pages for further conversion.");}if(tLeads>0){var lClicks=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.clicks;},0);var convR=lClicks>0?(tLeads/lClicks*100).toFixed(1):"0";p.push("Lead generation campaigns produced "+fmt(tLeads)+" qualified leads at "+fR(sLeads/tLeads)+" cost per lead"+(lClicks>0?", converting "+convR+"% of "+fmt(lClicks)+" clicks into form submissions. "+(parseFloat(convR)>5?"The above-5% conversion rate indicates strong alignment between ad creative, audience targeting, and landing page experience.":"The conversion rate suggests potential to optimise the landing page experience to improve click-to-lead conversion."):".")+"");}if(tFollows>0){p.push("Community growth campaigns acquired "+fmt(tFollows)+" new followers at "+fR(sFollows/tFollows)+" cost per follow. Each follower represents a compounding organic asset that increases future content reach and reduces long-term paid media dependency.");}if(tLikes>0){p.push("Page engagement campaigns earned "+fmt(tLikes)+" new page likes at "+fR(sLikes/tLikes)+" per like, strengthening organic reach capacity and social proof signals that enhance paid ad performance.");}if(allClicks===0)p.push("No measurable objective actions recorded in this date range. Verify campaign delivery status and objective configuration.");return p.join(" ");})()}</Insight>
               </div>;
@@ -318,7 +317,7 @@ export default function MediaOnGas(){
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:20}}>
               <Glass accent={P.fb} hv={true} st={{padding:22,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:P.fb}}></span><span style={{fontSize:11,fontWeight:700,color:P.fb,fontFamily:fm}}>FACEBOOK</span></div><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>LIKES</div><div style={{fontSize:32,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(m.pageLikes)}</div></Glass>
               <Glass accent={P.ig} hv={true} st={{padding:22,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:P.ig}}></span><span style={{fontSize:11,fontWeight:700,color:P.ig,fontFamily:fm}}>INSTAGRAM</span></div><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>FOLLOWERS</div><div style={{fontSize:32,fontWeight:900,color:P.ig,fontFamily:fm}}>{fmt(computed.ig.pageLikes)}</div></Glass>
-              <Glass accent={P.tt} hv={true} st={{padding:22,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:11,fontWeight:700,color:P.tt,fontFamily:fm}}>TIKTOK</span></div><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>FOLLOWS</div><div style={{fontSize:32,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(t.follows)}</div></Glass>
+              <Glass accent={P.tt} hv={true} st={{padding:22,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:11,fontWeight:700,color:P.tt,fontFamily:fm}}>TIKTOK</span></div><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>FOLLOWERS & LIKES</div><div style={{fontSize:32,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(t.follows)}</div></Glass>
             </div>
 
             <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:16}}><div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Community by Platform</div><ResponsiveContainer width="100%" height={200}><BarChart data={[{name:"FB Likes",value:m.pageLikes,fill:P.fb},{name:"IG Follows",value:computed.ig.pageLikes,fill:P.ig},{name:"TT Follows",value:t.follows,fill:P.tt}]} barSize={40}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.txt,fontFamily:fm}} stroke="transparent"/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><Tooltip content={Tip} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="value" radius={[8,8,0,0]}><Cell fill={P.fb}/><Cell fill={P.ig}/><Cell fill={P.tt}/></Bar></BarChart></ResponsiveContainer></div>
