@@ -7,54 +7,33 @@ export default async function handler(req, res) {
   var customerId = req.query.customer || "9587382256";
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-30";
+  var debug = {};
+
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   try {
+    debug.step = "token_refresh";
+    debug.hasClientId = !!clientId;
+    debug.hasClientSecret = !!clientSecret;
+    debug.hasRefreshToken = !!refreshToken;
+    debug.hasDevToken = !!devToken;
+    debug.managerId = managerId;
+    debug.customerId = customerId;
+
     var tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: {"Content-Type": "application/x-www-form-urlencoded"},
       body: "client_id=" + clientId + "&client_secret=" + clientSecret + "&refresh_token=" + refreshToken + "&grant_type=refresh_token"
     });
     var tokenData = await tokenRes.json();
+    debug.step = "token_received";
+    debug.tokenOk = !!tokenData.access_token;
+
     if (!tokenData.access_token) {
-      res.status(400).json({error: "Token refresh failed", details: tokenData});
-      return;
+      return res.status(400).json({error: "Token refresh failed", debug: debug, tokenResponse: tokenData});
     }
 
-    var query = "SELECT campaign.name, campaign.id, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.cost_per_conversion, metrics.average_cpm FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
-
-    var gaqlRes = await fetch("https://googleads.googleapis.com/v18/customers/" + customerId + "/googleAds:searchStream", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + tokenData.access_token,
-        "developer-token": devToken,
-        "login-customer-id": managerId,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({query: query})
-    })
-cat > /workspaces/media-on-gas/api/google.js << 'DONE'
-export default async function handler(req, res) {
-  var clientId = process.env.GOOGLE_ADS_CLIENT_ID;
-  var clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
-  var refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
-  var devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-  var managerId = process.env.GOOGLE_ADS_MANAGER_ID;
-  var customerId = req.query.customer || "9587382256";
-  var from = req.query.from || "2026-04-01";
-  var to = req.query.to || "2026-04-30";
-
-  try {
-    var tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      body: "client_id=" + clientId + "&client_secret=" + clientSecret + "&refresh_token=" + refreshToken + "&grant_type=refresh_token"
-    });
-    var tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      res.status(400).json({error: "Token refresh failed", details: tokenData});
-      return;
-    }
-
+    debug.step = "query_google_ads";
     var query = "SELECT campaign.name, campaign.id, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.cost_per_conversion, metrics.average_cpm FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
 
     var gaqlRes = await fetch("https://googleads.googleapis.com/v18/customers/" + customerId + "/googleAds:searchStream", {
@@ -68,7 +47,21 @@ export default async function handler(req, res) {
       body: JSON.stringify({query: query})
     });
 
-    var gaqlData = await gaqlRes.json();
+    var gaqlText = await gaqlRes.text();
+    debug.step = "response_received";
+    debug.statusCode = gaqlRes.status;
+    debug.responsePreview = gaqlText.substring(0, 500);
+
+    var gaqlData;
+    try {
+      gaqlData = JSON.parse(gaqlText);
+    } catch(e) {
+      return res.status(400).json({error: "Failed to parse Google Ads response", debug: debug});
+    }
+
+    if (gaqlRes.status !== 200) {
+      return res.status(400).json({error: "Google Ads API error", debug: debug, response: gaqlData});
+    }
 
     var campaigns = [];
     if (gaqlData && gaqlData[0] && gaqlData[0].results) {
@@ -93,7 +86,7 @@ export default async function handler(req, res) {
           spend: spend.toFixed(2),
           cpm: impressions > 0 ? ((spend / impressions) * 1000).toFixed(2) : "0",
           cpc: clicks > 0 ? (spend / clicks).toFixed(2) : "0",
-          ctr: m.ctr ? (parseFloat(m.ctr) * 100).toFixed(2) : "0",
+          ctr: impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : "0",
           clicks: clicks.toString(),
           conversions: conversions.toString(),
           costPerConversion: conversions > 0 ? (spend / conversions).toFixed(2) : "0",
@@ -109,9 +102,10 @@ export default async function handler(req, res) {
       }
     }
 
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.status(200).json({totalCampaigns: campaigns.length, raw: gaqlData, campaigns: campaigns});
+    debug.step = "done";
+    debug.campaignsFound = campaigns.length;
+    return res.status(200).json({totalCampaigns: campaigns.length, debug: debug, campaigns: campaigns});
   } catch (error) {
-    res.status(500).json({error: error.message});
+    return res.status(500).json({error: error.message, stack: error.stack, debug: debug});
   }
 }
