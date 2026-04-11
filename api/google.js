@@ -1,113 +1,100 @@
-export default async function handler(req, res) {
-  var clientId = process.env.GOOGLE_ADS_CLIENT_ID;
-  var clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
-  var refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
-  var devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-  var managerId = process.env.GOOGLE_ADS_MANAGER_ID;
-  var customerId = req.query.customer || "9587382256";
-  var from = req.query.from || "2026-04-01";
-  var to = req.query.to || "2026-04-30";
-  var debug = {};
+cat > /workspaces/media-on-gas/fix_google_dash.py << 'DONE'
+with open("/workspaces/media-on-gas/api/campaigns.js", "r") as f:
+    c = f.read()
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
+# Add Google Ads data pull before the sort and response
+old_sort = """allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 
+  res.setHeader("Access-Control-Allow-Origin", "*");"""
+
+new_sort = """// Google Ads
   try {
-    debug.step = "token_refresh";
-    var tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      body: "client_id=" + clientId + "&client_secret=" + clientSecret + "&refresh_token=" + refreshToken + "&grant_type=refresh_token"
-    });
-    var tokenData = await tokenRes.json();
-    debug.tokenOk = !!tokenData.access_token;
+    var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
+    var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
+    var gRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+    var gDevToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+    var gManagerId = process.env.GOOGLE_ADS_MANAGER_ID;
+    var gCustomerId = "9587382256";
 
-    if (!tokenData.access_token) {
-      return res.status(400).json({error: "Token refresh failed", debug: debug, tokenResponse: tokenData});
-    }
-
-    var query = "SELECT campaign.name, campaign.id, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
-
-    var versions = ["v21", "v20", "v19", "v18", "v17", "v16"];
-    var gaqlData = null;
-    var attempts = [];
-
-    for (var v = 0; v < versions.length; v++) {
-      var url = "https://googleads.googleapis.com/" + versions[v] + "/customers/" + customerId + "/googleAds:search";
-      
-      var gaqlRes = await fetch(url, {
+    if (gClientId && gRefreshToken && gDevToken) {
+      var gTokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
-        headers: {
-          "Authorization": "Bearer " + tokenData.access_token,
-          "developer-token": devToken,
-          "login-customer-id": managerId,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({query: query})
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: "client_id=" + gClientId + "&client_secret=" + gClientSecret + "&refresh_token=" + gRefreshToken + "&grant_type=refresh_token"
       });
+      var gTokenData = await gTokenRes.json();
 
-      var responseText = await gaqlRes.text();
-      attempts.push({version: versions[v], status: gaqlRes.status, preview: responseText.substring(0, 300)});
+      if (gTokenData.access_token) {
+        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
+        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + gTokenData.access_token,
+            "developer-token": gDevToken,
+            "login-customer-id": gManagerId,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({query: gQuery})
+        });
 
-      if (gaqlRes.status === 200) {
-        try {
-          gaqlData = JSON.parse(responseText);
-          debug.version = versions[v];
-        } catch(e) {}
-        break;
-      }
-
-      if (gaqlRes.status !== 404) {
-        try {
-          var errData = JSON.parse(responseText);
-          debug.version = versions[v];
-          debug.statusCode = gaqlRes.status;
-          return res.status(400).json({error: "Google Ads API error", debug: debug, response: errData, attempts: attempts});
-        } catch(e) {
-          debug.version = versions[v];
-          return res.status(400).json({error: "Google Ads non-404 error", debug: debug, attempts: attempts});
+        if (gRes.status === 200) {
+          var gData = await gRes.json();
+          var gResults = gData.results || [];
+          for (var g = 0; g < gResults.length; g++) {
+            var gr = gResults[g];
+            var gc = gr.campaign;
+            var gm = gr.metrics;
+            var gSpend = parseFloat(gm.costMicros || 0) / 1000000;
+            var gClicks = parseInt(gm.clicks || 0);
+            var gImps = parseInt(gm.impressions || 0);
+            var gConv = parseFloat(gm.conversions || 0);
+            if (gImps > 0 || gSpend > 0) {
+              var gPlatform = "Google Display";
+              if ((gc.name || "").toLowerCase().indexOf("youtube") >= 0) gPlatform = "YouTube";
+              if ((gc.name || "").toLowerCase().indexOf("search") >= 0 && (gc.name || "").toLowerCase().indexOf("display") < 0) gPlatform = "Google Search";
+              allCampaigns.push({
+                platform: gPlatform,
+                metaPlatform: "google",
+                accountName: "MTN MoMo Google",
+                accountId: gCustomerId,
+                campaignId: "google_" + gc.id,
+                rawCampaignId: gc.id,
+                campaignName: gc.name,
+                impressions: gImps.toString(),
+                reach: "0",
+                frequency: "0",
+                spend: gSpend.toFixed(2),
+                cpm: gImps > 0 ? ((gSpend / gImps) * 1000).toFixed(2) : "0",
+                cpc: gClicks > 0 ? (gSpend / gClicks).toFixed(2) : "0",
+                ctr: gImps > 0 ? ((gClicks / gImps) * 100).toFixed(2) : "0",
+                clicks: gClicks.toString(),
+                conversions: gConv.toFixed(0),
+                leads: "0",
+                appInstalls: "0",
+                landingPageViews: "0",
+                pageLikes: "0",
+                follows: "0",
+                likes: "0",
+                costPerLead: "0",
+                costPerInstall: "0",
+                actions: [],
+                status: gc.status === "ENABLED" ? "active" : "paused"
+              });
+            }
+          }
         }
       }
     }
+  } catch (gErr) {}
 
-    if (!gaqlData) {
-      return res.status(400).json({error: "No working API version found", debug: debug, attempts: attempts});
-    }
+  allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 
-    var campaigns = [];
-    var results = gaqlData.results || [];
-    for (var i = 0; i < results.length; i++) {
-      var r = results[i];
-      var c = r.campaign;
-      var m = r.metrics;
-      var spend = parseFloat(m.costMicros || 0) / 1000000;
-      var clicks = parseInt(m.clicks || 0);
-      var impressions = parseInt(m.impressions || 0);
-      var conversions = parseFloat(m.conversions || 0);
-      campaigns.push({
-        platform: "Google Display",
-        accountName: "MTN MoMo Google",
-        campaignId: "google_" + c.id,
-        campaignName: c.name,
-        status: c.status === "ENABLED" ? "active" : c.status.toLowerCase(),
-        impressions: impressions.toString(),
-        reach: "0",
-        frequency: "0",
-        spend: spend.toFixed(2),
-        cpm: impressions > 0 ? ((spend / impressions) * 1000).toFixed(2) : "0",
-        cpc: clicks > 0 ? (spend / clicks).toFixed(2) : "0",
-        ctr: impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : "0",
-        clicks: clicks.toString(),
-        conversions: conversions.toString(),
-        leads: "0", appInstalls: "0", landingPageViews: "0",
-        pageLikes: "0", follows: "0", likes: "0",
-        costPerLead: "0", costPerInstall: "0"
-      });
-    }
+  res.setHeader("Access-Control-Allow-Origin", "*");"""
 
-    debug.step = "done";
-    debug.campaignsFound = campaigns.length;
-    return res.status(200).json({totalCampaigns: campaigns.length, debug: debug, campaigns: campaigns});
-  } catch (error) {
-    return res.status(500).json({error: error.message, debug: debug});
-  }
-}
+c = c.replace(old_sort, new_sort)
+
+with open("/workspaces/media-on-gas/api/campaigns.js", "w") as f:
+    f.write(c)
+print("Done - Google Ads added to campaigns endpoint")
+DONE
+python3 /workspaces/media-on-gas/fix_google_dash.py
