@@ -241,7 +241,7 @@ export default function MediaOnGas(){
 
               var getResult=function(camp,obj){
                 if(obj==="Leads")return parseFloat(camp.leads||0);
-                if(obj==="Followers & Likes")return parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+                if(obj==="Followers & Likes"){var fl=parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);if(fl===0&&camp.pageFollows){fl=parseFloat(camp.pageFollows||0);}return fl;}
                 return parseFloat(camp.clicks||0);
               };
 
@@ -333,7 +333,7 @@ export default function MediaOnGas(){
                 var isFollowLike=n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0;
                 if(isFollowLike){
                   if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
-                  if(camp.platform==="Instagram"){igEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);igSpend+=parseFloat(camp.spend||0);}
+                  if(camp.platform==="Instagram"){igEarned+=parseFloat(camp.pageFollows||camp.pageLikes||0)+parseFloat(camp.follows||0);igSpend+=parseFloat(camp.spend||0);}
                   if(camp.platform==="TikTok"){ttEarned+=parseFloat(camp.follows||0);ttSpend+=parseFloat(camp.spend||0);}
                 }
               });
