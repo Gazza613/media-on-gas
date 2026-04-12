@@ -347,16 +347,7 @@ export default function MediaOnGas(){
               }
 
               var fbEarned=0;var igEarned=0;var ttEarned=0;
-              sel.forEach(function(camp){
-                var n=(camp.campaignName||"").toLowerCase();
-                var obj=getObj(camp.campaignName);
-                if(obj==="Followers & Likes"){
-                  var result=getResult(camp,obj);
-                  if(camp.platform==="Facebook") fbEarned+=result;
-                  if(camp.platform==="Instagram") igEarned+=result;
-                  if(camp.platform==="TikTok") ttEarned+=result;
-                }
-              });
+              
               var totalEarned=fbEarned+igEarned+ttEarned;
 
               return <div>
