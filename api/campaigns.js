@@ -80,7 +80,7 @@ export default async function handler(req, res) {
             allCampaigns.push({
               platform: platName,
               metaPlatform: pub,
-              accountName: account.name,
+              accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""),
               accountId: account.id,
               campaignId: uniqueId,
               rawCampaignId: c.campaign_id,
@@ -110,7 +110,7 @@ export default async function handler(req, res) {
 
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
-        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name, accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: campaignInfo[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
+        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: campaignInfo[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
       }
     });
   }
