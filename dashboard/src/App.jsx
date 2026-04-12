@@ -353,14 +353,14 @@ export default function MediaOnGas(){
                   if(n.indexOf("_like_")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("paidsocial_like")>=0){
                     fbEarned+=parseFloat(camp.pageLikes||0);
                   }
+                  if(n.indexOf("follower")>=0){
+                    fbEarned+=parseFloat(camp.pageLikes||0);
+                  }
                 }
                 if(camp.platform==="Instagram"){
                   if(n.indexOf("follower")>=0){
-                    igEarned+=parseFloat(camp.pageLikes||0);
+                    igEarned+=parseFloat(camp.pageFollows||0);
                   }
-                }
-                if(camp.platform==="Facebook"&&n.indexOf("follower")>=0){
-                  fbEarned+=parseFloat(camp.pageLikes||0);
                 }
               });
               var totalEarned=fbEarned+igEarned+ttEarned;
