@@ -23,13 +23,13 @@ export default async function handler(req, res) {
     var campaignInfo = {};
 
     try {
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,effective_status,created_time&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,effective_status,created_time,start_time,stop_time&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
       var listRes = await fetch(listUrl);
       var listData = await listRes.json();
       if (listData.data) {
         for (var k = 0; k < listData.data.length; k++) {
           var camp = listData.data[k];
-          campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, created: new Date(camp.created_time) };
+          campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, created: new Date(camp.created_time), startTime: camp.start_time || null, stopTime: camp.stop_time || null };
         }
       }
     } catch (err) {}
@@ -101,6 +101,8 @@ export default async function handler(req, res) {
               costPerLead: leads > 0 ? (parseFloat(c.spend) / leads).toFixed(2) : "0",
               costPerInstall: appInstalls > 0 ? (parseFloat(c.spend) / appInstalls).toFixed(2) : "0",
               actions: c.actions || [],
+              startDate: campaignInfo[c.campaign_id] && campaignInfo[c.campaign_id].startTime ? campaignInfo[c.campaign_id].startTime.substring(0,10) : "",
+              endDate: campaignInfo[c.campaign_id] && campaignInfo[c.campaign_id].stopTime ? campaignInfo[c.campaign_id].stopTime.substring(0,10) : "",
               status: campaignInfo[c.campaign_id] ? campaignInfo[c.campaign_id].status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active"
             });
           }
