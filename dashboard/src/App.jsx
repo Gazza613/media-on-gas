@@ -106,7 +106,7 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var isClient=window.location.pathname.indexOf("/view/")===0;
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){setCampaigns(d.campaigns);setSelected(d.campaigns.map(function(c){return c.campaignId;}));}if(d.pages){setPages(d.pages);}setLoading(false);}).catch(function(){setLoading(false);});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){setCampaigns(d.campaigns);setSelected(d.campaigns.filter(function(c){return parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0;}).map(function(c){return c.campaignId;}));}if(d.pages){setPages(d.pages);}setLoading(false);}).catch(function(){setLoading(false);});};
   useEffect(function(){fetchData();},[]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
