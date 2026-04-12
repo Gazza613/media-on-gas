@@ -40,7 +40,7 @@ function SevBadge(props){var c={critical:P.critical,warning:P.warning,info:P.inf
 
 function CampaignSelector(props){
   var cs=props.campaigns,sel=props.selected,search=props.search;
-  var f=cs.filter(function(c){return c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0;});
+  var f=cs.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});
   var g={};f.forEach(function(c){var k=c.accountName||"Unknown";if(!g[k])g[k]={platform:c.platform,campaigns:[]};g[k].campaigns.push(c);});
   return(<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:16,padding:18,maxHeight:480,overflowY:"auto"}}>
     <input placeholder="Search campaigns..." value={search} onChange={function(e){props.onSearch(e.target.value);}} style={{width:"100%",boxSizing:"border-box",background:"rgba(40,25,60,0.5)",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",marginBottom:12}}/>
@@ -52,7 +52,7 @@ function CampaignSelector(props){
     {Object.keys(g).map(function(k){var gr=g[k];var gc=gr.campaigns[0].platform==="TikTok"?P.tt:gr.campaigns[0].platform==="Google Display"?P.gd:gr.campaigns[0].platform==="Instagram"?P.ig:P.fb;return(<div key={k} style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,paddingBottom:4,borderBottom:"1px solid "+P.rule}}><span style={{width:7,height:7,borderRadius:"50%",background:gc}}/><span style={{fontSize:9,fontWeight:800,color:gc,letterSpacing:2,textTransform:"uppercase",fontFamily:fm}}>{k}</span></div>
       {gr.campaigns.map(function(c){var s=sel.indexOf(c.campaignId)>=0;return(<div key={c.campaignId} onClick={function(){props.onToggle(c.campaignId);}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:2,borderRadius:8,cursor:"pointer",background:s?gc+"10":"transparent",border:"1px solid "+(s?gc+"30":"transparent")}}>
         <div style={{width:18,height:18,borderRadius:5,border:"2px solid "+(s?gc:P.dim),background:s?gc:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{s&&Ic.check("#fff",12)}</div>
-        <div style={{flex:1,minWidth:0}}><div title={c.campaignName} style={{fontSize:11,fontWeight:600,color:s?P.txt:P.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"help"}}>{c.campaignName}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm}}>{fmt(c.impressions)} imps {c.status&&c.status!=="active"&&<span style={{color:c.status==="scheduled"?P.solar:c.status==="pending"?P.cyan:c.status==="completed"?P.sub:P.warning,fontWeight:700,textTransform:"uppercase",marginLeft:4}}>{c.status}</span>} · {fR(parseFloat(c.spend))}</div></div>
+        <div style={{flex:1,minWidth:0}}><div title={c.campaignName} style={{fontSize:11,fontWeight:600,color:s?P.txt:P.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"help"}}>{c.campaignName}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm}}>{fmt(c.impressions)} imps {c.status&&c.status!=="active"&&<span style={{background:c.status==="scheduled"?P.solar+"20":c.status==="paused"?P.warning+"20":c.status==="completed"?P.sub+"20":P.dim+"20",color:c.status==="scheduled"?P.solar:c.status==="paused"?P.warning:c.status==="completed"?P.sub:P.dim,fontWeight:700,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>{c.status}</span>} · {fR(parseFloat(c.spend))}</div></div>
       </div>);})}
     </div>);})}
   </div>);
@@ -110,7 +110,7 @@ export default function MediaOnGas(){
   useEffect(function(){fetchData();},[]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
-  var selectAll=function(){var f=campaigns.filter(function(c){return c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0;});setSelected(f.map(function(c){return c.campaignId;}));};
+  var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
   var clearAll=function(){setSelected([]);};
 
   var computed=useMemo(function(){
