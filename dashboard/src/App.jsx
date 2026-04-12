@@ -359,7 +359,7 @@ export default function MediaOnGas(){
                 }
                 if(camp.platform==="Instagram"){
                   if(n.indexOf("follower")>=0){
-                    igEarned+=parseFloat(camp.pageFollows||0);
+                    igEarned+=parseFloat(camp.clicks||0);
                   }
                 }
               });
