@@ -232,6 +232,14 @@ export default async function handler(req, res) {
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 
+  // Fetch page follower data
+  var pageData = [];
+  try {
+    var pagesRes = await fetch("https://graph.facebook.com/v25.0/me/accounts?fields=name,id,fan_count,followers_count,instagram_business_account{id,username,followers_count}&limit=50&access_token=" + metaToken);
+    var pagesJson = await pagesRes.json();
+    if (pagesJson.data) pageData = pagesJson.data;
+  } catch (pgErr) {}
+
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns });
+  res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData });
 }
