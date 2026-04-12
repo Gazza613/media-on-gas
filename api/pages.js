@@ -5,20 +5,26 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   try {
-    var pagesRes = await fetch("https://graph.facebook.com/v25.0/me/accounts?fields=name,id,fan_count,followers_count,instagram_business_account{id,username,followers_count}&limit=50&access_token=" + token);
+    var pagesRes = await fetch("https://graph.facebook.com/v25.0/me/accounts?fields=name,id,fan_count,followers_count,access_token,instagram_business_account{id,username,followers_count}&limit=50&access_token=" + token);
     var pagesData = await pagesRes.json();
     var pages = pagesData.data || [];
+    var debug = [];
 
     for (var i = 0; i < pages.length; i++) {
       var page = pages[i];
+      var pageToken = page.access_token || token;
+      
       if (page.instagram_business_account && from && to) {
         try {
           var igId = page.instagram_business_account.id;
           var since = Math.floor(new Date(from).getTime() / 1000);
           var until = Math.floor(new Date(to + "T23:59:59").getTime() / 1000);
-          var igUrl = "https://graph.facebook.com/v25.0/" + igId + "/insights?metric=follower_count&period=day&since=" + since + "&until=" + until + "&access_token=" + token;
+          var igUrl = "https://graph.facebook.com/v25.0/" + igId + "/insights?metric=follower_count&period=day&since=" + since + "&until=" + until + "&access_token=" + pageToken;
           var igRes = await fetch(igUrl);
-          var igData = await igRes.json();
+          var igText = await igRes.text();
+          debug.push({page: page.name, igId: igId, status: igRes.status, response: igText.substring(0, 500)});
+          
+          var igData = JSON.parse(igText);
           if (igData.data && igData.data[0] && igData.data[0].values && igData.data[0].values.length > 0) {
             var vals = igData.data[0].values;
             var firstVal = vals[0].value;
@@ -28,12 +34,14 @@ export default async function handler(req, res) {
             page.instagram_business_account.follower_end = lastVal;
           }
         } catch (igErr) {
+          debug.push({page: page.name, error: igErr.message});
           page.instagram_business_account.follower_growth = 0;
         }
       }
+      delete page.access_token;
     }
 
-    res.status(200).json({data: pages});
+    res.status(200).json({data: pages, debug: debug});
   } catch (error) {
     res.status(500).json({error: error.message});
   }
