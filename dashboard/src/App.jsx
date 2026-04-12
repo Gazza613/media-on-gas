@@ -248,7 +248,7 @@ export default function MediaOnGas(){
 
               var rows=sel.map(function(camp){
                 var obj=getObj(camp.campaignName);var result=getResult(camp,obj);var spend=parseFloat(camp.spend||0);var clicks=parseFloat(camp.clicks||0);var costPer=result>0?spend/result:0;var convRate=clicks>0&&obj==="Leads"?(parseFloat(camp.leads||0)/clicks*100):0;
-                return{name:camp.campaignName,platform:camp.platform,objective:obj,spend:spend,clicks:clicks,result:result,resultLabel:getResultLabel(obj),costPer:costPer,costLabel:getCostLabel(obj),convRate:convRate};
+                var imps=parseFloat(camp.impressions||0);var ctrVal=imps>0?(clicks/imps*100):0;return{name:camp.campaignName,platform:camp.platform,objective:obj,spend:spend,clicks:clicks,impressions:imps,ctr:ctrVal,result:result,resultLabel:getResultLabel(obj),costPer:costPer,costLabel:getCostLabel(obj),convRate:convRate};
               });
               var platOrder={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
               var objOrder={"App Store Clicks":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
