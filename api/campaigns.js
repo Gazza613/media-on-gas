@@ -55,10 +55,11 @@ export default async function handler(req, res) {
             var appInstalls = 0;
             var landingPageViews = 0;
             var pageLikes = 0;
+            var pageFollows = 0;
             if (c.actions) {
               for (var a = 0; a < c.actions.length; a++) {
                 var act = c.actions[a];
-                if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead") {
+                if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") {
                   leads = Math.max(leads, parseInt(act.value));
                 }
                 if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install") {
@@ -67,8 +68,11 @@ export default async function handler(req, res) {
                 if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
                   landingPageViews = Math.max(landingPageViews, parseInt(act.value));
                 }
-                if (act.action_type === "like" || act.action_type === "page_engagement") {
-                  pageLikes = Math.max(pageLikes, parseInt(act.value));
+                if (act.action_type === "like") {
+                  pageLikes = parseInt(act.value);
+                }
+                if (act.action_type === "page_engagement") {
+                  pageFollows = parseInt(act.value);
                 }
               }
             }
@@ -93,6 +97,7 @@ export default async function handler(req, res) {
               appInstalls: appInstalls.toString(),
               landingPageViews: landingPageViews.toString(),
               pageLikes: pageLikes.toString(),
+              pageFollows: pageFollows.toString(),
               costPerLead: leads > 0 ? (parseFloat(c.spend) / leads).toFixed(2) : "0",
               costPerInstall: appInstalls > 0 ? (parseFloat(c.spend) / appInstalls).toFixed(2) : "0",
               actions: c.actions || [],
