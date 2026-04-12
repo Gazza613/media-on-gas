@@ -27,11 +27,9 @@ export default async function handler(req, res) {
           var igData = JSON.parse(igText);
           if (igData.data && igData.data[0] && igData.data[0].values && igData.data[0].values.length > 0) {
             var vals = igData.data[0].values;
-            var firstVal = vals[0].value;
-            var lastVal = vals[vals.length - 1].value;
-            page.instagram_business_account.follower_growth = lastVal - firstVal;
-            page.instagram_business_account.follower_start = firstVal;
-            page.instagram_business_account.follower_end = lastVal;
+            var totalGrowth = 0;
+            for (var v = 0; v < vals.length; v++) { totalGrowth += vals[v].value; }
+            page.instagram_business_account.follower_growth = totalGrowth;
           }
         } catch (igErr) {
           debug.push({page: page.name, error: igErr.message});
