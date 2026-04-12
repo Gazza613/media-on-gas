@@ -138,7 +138,7 @@ export default function MediaOnGas(){
   var openFlags=flags.filter(function(f){return f.status==="open";}).length;
 
   var tabs=[{id:"overview",label:"Reporting",icon:Ic.chart(P.orchid,16)},{id:"tof",label:"Ad Serving",icon:Ic.radar(P.ember,16)},{id:"mof",label:"Engagement",icon:Ic.pulse(P.mint,16)},{id:"bof",label:"Objectives",icon:Ic.target(P.rose,16)}];
-  tabs.push({id:"deepdive",label:"Deep Dive",icon:Ic.eye(P.cyan,16)});if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
+  tabs.push({id:"community",label:"Community",icon:Ic.users(P.mint,16)});tabs.push({id:"deepdive",label:"Deep Dive",icon:Ic.eye(P.cyan,16)});if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
 
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
@@ -323,68 +323,12 @@ export default function MediaOnGas(){
                   <Glass accent={P.tt} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWERS & LIKES</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(tFollows)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>CPF: {fR(tFollows>0?sFollows/tFollows:0)}</div></Glass>
                   
                 </div>
-                <Insight title="Objective Performance Assessment" accent={P.rose} icon={Ic.target(P.rose,16)}>{(function(){var p=[];p.push("The campaign\'s bottom-of-funnel performance represents the critical conversion layer where media investment translates into measurable business outcomes. Across "+sel.length+" active placements with "+fR(allSpend)+" total investment, the campaign generated "+fmt(allClicks)+" measurable actions.");if(tApp>0){var appEff=sApp>0?(tApp/sApp*1000).toFixed(0):"0";p.push("App install campaigns delivered "+fmt(tApp)+" clicks to the app store at "+fR(sApp/tApp)+" Cost Per Click, translating to approximately "+appEff+" app store clicks per R1,000 invested. Each click represents a user driven from ad exposure to the app store listing, the final measurable touchpoint before app download. The cost efficiency at "+fR(sApp/tApp)+" per store visit compares favourably against the target market mobile app acquisition benchmark of R2.50 to R5.00.");}if(tLp>0){p.push("Landing page campaigns generated "+fmt(tLp)+" qualified site visits at "+fR(sLp/tLp)+" cost per visit. These are high-intent users who have actively chosen to learn more, representing the warmest segment of the campaign\'s audience for remarketing and conversion optimisation.");}if(tLeads>0){var lClicks=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.clicks;},0);var convR=lClicks>0?(tLeads/lClicks*100).toFixed(1):"0";p.push("Lead generation campaigns produced "+fmt(tLeads)+" qualified leads at "+fR(sLeads/tLeads)+" cost per lead, converting "+convR+"% of "+fmt(lClicks)+" clicks into form submissions. "+(parseFloat(convR)>8?"The conversion rate exceeding 8% indicates exceptional funnel alignment, the ad creative, targeting, and landing page experience are working in concert to drive high-quality lead capture.":parseFloat(convR)>3?"The "+convR+"% conversion rate sits within healthy parameters, confirming the landing page experience is effectively converting paid traffic into actionable leads. ":"The "+convR+"% conversion rate demonstrates active lead capture from the campaign traffic.")+" Each lead represents a qualified prospect who has actively expressed interest and shared contact information, the most valuable first-party data signal in the acquisition funnel.");}if(tFollows>0){p.push("Community growth campaigns acquired "+fmt(tFollows)+" new followers and likes at "+fR(sFollows/tFollows)+" cost per acquisition. Unlike paid impressions which are transient, each community member represents a permanent organic distribution channel. Each new community member increases future organic content distribution, compounding in value over time as the brand's owned audience grows.");}return p.join(" ");})()}</Insight>
+                <Insight title="Objective Performance Assessment" accent={P.rose} icon={Ic.target(P.rose,16)}>{(function(){var p=[];p.push("The campaign\'s bottom-of-funnel performance represents the critical conversion layer where media investment translates into measurable business outcomes. Across "+sel.length+" active placements with "+fR(allSpend)+" total investment, the campaign generated "+fmt(allClicks)+" measurable actions.");if(tApp>0){var appEff=sApp>0?(tApp/sApp*1000).toFixed(0):"0";p.push("App install campaigns delivered "+fmt(tApp)+" clicks to the app store at "+fR(sApp/tApp)+" Cost Per Click, translating to approximately "+appEff+" app store clicks per R1,000 invested. Each click represents a user driven from ad exposure to the app store listing, the final measurable touchpoint before app download. The cost efficiency at "+fR(sApp/tApp)+" per app store click confirms strong acquisition economics for the campaign period.");}if(tLp>0){p.push("Landing page campaigns generated "+fmt(tLp)+" qualified site visits at "+fR(sLp/tLp)+" cost per visit. These are high-intent users who have actively chosen to learn more, representing the warmest segment of the campaign\'s audience for remarketing and conversion optimisation.");}if(tLeads>0){var lClicks=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.clicks;},0);var convR=lClicks>0?(tLeads/lClicks*100).toFixed(1):"0";p.push("Lead generation campaigns produced "+fmt(tLeads)+" qualified leads at "+fR(sLeads/tLeads)+" cost per lead, converting "+convR+"% of "+fmt(lClicks)+" clicks into form submissions. "+(parseFloat(convR)>8?"The conversion rate exceeding 8% indicates exceptional funnel alignment, the ad creative, targeting, and landing page experience are working in concert to drive high-quality lead capture.":parseFloat(convR)>3?"The "+convR+"% conversion rate sits within healthy parameters, confirming the landing page experience is effectively converting paid traffic into actionable leads. ":"The "+convR+"% conversion rate demonstrates active lead capture from the campaign traffic.")+" Each lead represents a qualified prospect who has actively expressed interest and shared contact information, the most valuable first-party data signal in the acquisition funnel.");}if(tFollows>0){p.push("Community growth campaigns acquired "+fmt(tFollows)+" new followers and likes at "+fR(sFollows/tFollows)+" cost per acquisition. Unlike paid impressions which are transient, each community member represents a permanent organic distribution channel. Each new community member increases future organic content distribution, compounding in value over time as the brand's owned audience grows.");}return p.join(" ");})()}</Insight>
               </div>;
             })()}
           </div>
 
-          {/* COMMUNITY GROWTH */}
-          <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>FOLLOWERS & LIKES EARNED THIS PERIOD</div></div>
-            {(function(){
-              var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
-              var fbEarned=0;var igEarned=0;var ttEarned=0;
-              var fbSpend=0;var igSpend=0;var ttSpend=0;
-              sel.forEach(function(camp){
-                var n=(camp.campaignName||"").toLowerCase();
-                var isFollowLike=n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0;
-                if(isFollowLike){
-                  if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
-                  if(camp.platform==="Instagram"){igEarned+=parseFloat(camp.pageFollows||camp.pageLikes||0)+parseFloat(camp.follows||0);igSpend+=parseFloat(camp.spend||0);}
-                  if(camp.platform==="TikTok"){ttEarned+=parseFloat(camp.follows||0);ttSpend+=parseFloat(camp.spend||0);}
-                }
-              });
-              var totalEarned=fbEarned+igEarned+ttEarned;
-              var totalSpend=fbSpend+igSpend+ttSpend;
-              return <div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
-                  <Glass accent={P.fb} hv={true} st={{padding:22}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.fb}}></span><span style={{fontSize:11,fontWeight:700,color:P.fb,fontFamily:fm}}>FACEBOOK</span></div>
-                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>PAGE LIKES EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(fbEarned)}</div></div>
-                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>SPEND</div><div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:fm}}>{fR(fbSpend)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER LIKE</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{fbEarned>0?fR(fbSpend/fbEarned):"\u2014"}</div></div></div>
-                  </Glass>
-                  <Glass accent={P.ig} hv={true} st={{padding:22}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.ig}}></span><span style={{fontSize:11,fontWeight:700,color:P.ig,fontFamily:fm}}>INSTAGRAM</span></div>
-                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWERS EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(igEarned)}</div></div>
-                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>SPEND</div><div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:fm}}>{fR(igSpend)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOW</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{igEarned>0?fR(igSpend/igEarned):"\u2014"}</div></div></div>
-                  </Glass>
-                  <Glass accent={P.tt} hv={true} st={{padding:22}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:11,fontWeight:700,color:P.tt,fontFamily:fm}}>TIKTOK</span></div>
-                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWS EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(ttEarned)}</div></div>
-                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>SPEND</div><div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:fm}}>{fR(ttSpend)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOW</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{ttEarned>0?fR(ttSpend/ttEarned):"\u2014"}</div></div></div>
-                  </Glass>
-                </div>
-                <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
-                  <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Community Growth by Platform</div>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={[{name:"FB Page Likes",value:fbEarned},{name:"IG Followers",value:igEarned},{name:"TT Follows",value:ttEarned}]} barSize={40}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
-                      <XAxis dataKey="name" tick={{fontSize:11,fill:P.txt,fontFamily:fm}} stroke="transparent"/>
-                      <YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/>
-                      <Tooltip content={Tip} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]}><Cell fill={P.fb}/><Cell fill={P.ig}/><Cell fill={P.tt}/></Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
-                  <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL EARNED</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(totalEarned)}</div></Glass>
-                  <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totalSpend)}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>BLENDED COST PER MEMBER</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{totalEarned>0?fR(totalSpend/totalEarned):"\u2014"}</div></Glass>
-                </div>
-                <Insight title="Community Growth Analysis" accent={P.mint} icon={Ic.users(P.mint,16)}>{(function(){var p=[];if(totalEarned===0){return "No follower or like campaigns are active in the selected campaigns for this period.";}p.push("The selected campaigns have grown the community by "+fmt(totalEarned)+" new members across all active platforms during this period, with "+fR(totalSpend)+" invested at a blended cost of "+fR(totalSpend/totalEarned)+" per new community member.");if(fbEarned>0){p.push("Facebook contributed "+fmt(fbEarned)+" new page likes at "+fR(fbSpend/fbEarned)+" cost per like. Each new page like permanently increases organic News Feed distribution, strengthening future campaign reach without additional paid investment.");}if(igEarned>0){p.push("Instagram delivered "+fmt(igEarned)+" new followers at "+fR(igSpend/igEarned)+" cost per follow. Instagram followers directly increase Stories, Reels, and Feed visibility, creating a compounding organic reach asset.");}if(ttEarned>0){p.push("TikTok generated "+fmt(ttEarned)+" new follows at "+fR(ttSpend/ttEarned)+" cost per follow. Each TikTok follower feeds directly into the For You page recommendation engine, increasing the probability of organic content amplification beyond the paid audience.");}return p.join(" ");})()}</Insight>
-              </div>;
-            })()}
-          </div>
+
 
         </div>)}
 
@@ -455,6 +399,68 @@ export default function MediaOnGas(){
         </div>)}
 
         {/* OPTIMISATION */}
+
+        {tab==="community"&&(<div>
+          <SH icon={Ic.users(P.mint,20)} title="Community Growth" sub={df+" to "+dt+" \u00b7 Followers & Likes by Platform"} accent={P.mint}/>
+          {/* COMMUNITY GROWTH */}
+          <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>FOLLOWERS & LIKES EARNED THIS PERIOD</div></div>
+            {(function(){
+              var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
+              var fbEarned=0;var igEarned=0;var ttEarned=0;
+              var fbSpend=0;var igSpend=0;var ttSpend=0;
+              sel.forEach(function(camp){
+                var n=(camp.campaignName||"").toLowerCase();
+                var isFollowLike=n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0;
+                if(isFollowLike){
+                  if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
+                  if(camp.platform==="Instagram"){igEarned+=parseFloat(camp.pageFollows||camp.pageLikes||0)+parseFloat(camp.follows||0);igSpend+=parseFloat(camp.spend||0);}
+                  if(camp.platform==="TikTok"){ttEarned+=parseFloat(camp.follows||0);ttSpend+=parseFloat(camp.spend||0);}
+                }
+              });
+              var totalEarned=fbEarned+igEarned+ttEarned;
+              var totalSpend=fbSpend+igSpend+ttSpend;
+              return <div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
+                  <Glass accent={P.fb} hv={true} st={{padding:22}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.fb}}></span><span style={{fontSize:11,fontWeight:700,color:P.fb,fontFamily:fm}}>FACEBOOK</span></div>
+                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>PAGE LIKES EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(fbEarned)}</div></div>
+                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>SPEND</div><div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:fm}}>{fR(fbSpend)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER LIKE</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{fbEarned>0?fR(fbSpend/fbEarned):"\u2014"}</div></div></div>
+                  </Glass>
+                  <Glass accent={P.ig} hv={true} st={{padding:22}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.ig}}></span><span style={{fontSize:11,fontWeight:700,color:P.ig,fontFamily:fm}}>INSTAGRAM</span></div>
+                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWERS EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(igEarned)}</div></div>
+                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>SPEND</div><div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:fm}}>{fR(igSpend)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOW</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{igEarned>0?fR(igSpend/igEarned):"\u2014"}</div></div></div>
+                  </Glass>
+                  <Glass accent={P.tt} hv={true} st={{padding:22}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:11,fontWeight:700,color:P.tt,fontFamily:fm}}>TIKTOK</span></div>
+                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWS EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(ttEarned)}</div></div>
+                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>SPEND</div><div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:fm}}>{fR(ttSpend)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOW</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{ttEarned>0?fR(ttSpend/ttEarned):"\u2014"}</div></div></div>
+                  </Glass>
+                </div>
+                <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
+                  <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Community Growth by Platform</div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={[{name:"FB Page Likes",value:fbEarned},{name:"IG Followers",value:igEarned},{name:"TT Follows",value:ttEarned}]} barSize={40}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
+                      <XAxis dataKey="name" tick={{fontSize:11,fill:P.txt,fontFamily:fm}} stroke="transparent"/>
+                      <YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/>
+                      <Tooltip content={Tip} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]}><Cell fill={P.fb}/><Cell fill={P.ig}/><Cell fill={P.tt}/></Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+                  <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL EARNED</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(totalEarned)}</div></Glass>
+                  <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totalSpend)}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>BLENDED COST PER MEMBER</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{totalEarned>0?fR(totalSpend/totalEarned):"\u2014"}</div></Glass>
+                </div>
+                <Insight title="Community Growth Analysis" accent={P.mint} icon={Ic.users(P.mint,16)}>{(function(){var p=[];if(totalEarned===0){return "No follower or like campaigns are active in the selected campaigns for this period.";}p.push("The selected campaigns have grown the community by "+fmt(totalEarned)+" new members across all active platforms during this period, with "+fR(totalSpend)+" invested at a blended cost of "+fR(totalSpend/totalEarned)+" per new community member.");if(fbEarned>0){p.push("Facebook contributed "+fmt(fbEarned)+" new page likes at "+fR(fbSpend/fbEarned)+" cost per like. Each new page like permanently increases organic News Feed distribution, strengthening future campaign reach without additional paid investment.");}if(igEarned>0){p.push("Instagram delivered "+fmt(igEarned)+" new followers at "+fR(igSpend/igEarned)+" cost per follow. Instagram followers directly increase Stories, Reels, and Feed visibility, creating a compounding organic reach asset.");}if(ttEarned>0){p.push("TikTok generated "+fmt(ttEarned)+" new follows at "+fR(ttSpend/ttEarned)+" cost per follow. Each TikTok follower feeds directly into the For You page recommendation engine, increasing the probability of organic content amplification beyond the paid audience.");}return p.join(" ");})()}</Insight>
+              </div>;
+            })()}
+          </div>
+        </div>)}
+
         {tab==="deepdive"&&(<div>
           <SH icon={Ic.eye(P.cyan,20)} title="Deep Dive" sub="Demographics, Creative Performance & Placement Analysis" accent={P.cyan}/>
           <Glass accent={P.cyan} st={{padding:"36px 32px",marginBottom:24}}>
