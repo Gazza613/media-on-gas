@@ -134,8 +134,8 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){setCampaigns(d.campaigns);setSelected(d.campaigns.filter(function(c){return parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0;}).map(function(c){return c.campaignId;}));}if(d.pages){setPages(d.pages);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});};
-  useEffect(function(){fetchData();},[]);
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}if(d.pages){setPages(d.pages);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});};
+  useEffect(function(){fetchData();},[df,dt]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
@@ -191,7 +191,7 @@ export default function MediaOnGas(){
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}}/>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
-      {showCampaigns&&<div style={{width:340,flexShrink:0}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div>}
+      {showCampaigns&&<div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start"}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div>}
 
       <div style={{flex:1,minWidth:0}}>
         {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:14,color:P.sub,fontFamily:fm}}>Pulling live data from Meta and TikTok…</div></div>):(<>
