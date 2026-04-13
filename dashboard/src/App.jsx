@@ -717,16 +717,17 @@ export default function MediaOnGas(){
               var totalSpend=fbSpend+igSpend+ttSpend;
               var fbPage=null;var igAccount=null;
               var bestScore3=0;
+              var matchedPages2=[];var matchedIds2={};
               for(var p=0;p<pages.length;p++){
                 var pg=pages[p];
                 for(var s=0;s<sel.length;s++){
                   var sc3=autoMatchPage(sel[s].campaignName,pg.name);
-                  if(sc3>bestScore3){bestScore3=sc3;fbPage=pg;}
                 }
               }
+              if(matchedPages2.length===1){fbPage=matchedPages2[0];}
               var fbTotal=0;var igTotal=0;
-              if(matchedPages.length>1){
-                matchedPages.forEach(function(mp){fbTotal+=mp.fan_count||0;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;}});
+              if(matchedPages2.length>1){
+                matchedPages2.forEach(function(mp){fbTotal+=mp.fan_count||0;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;}});
               }else if(fbPage){
                 fbTotal=fbPage.fan_count||0;
                 if(fbPage.instagram_business_account){igAccount=fbPage.instagram_business_account;igTotal=igAccount.followers_count||0;}
