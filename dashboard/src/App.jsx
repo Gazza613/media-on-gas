@@ -122,8 +122,9 @@ export default function MediaOnGas(){
   var ttBaselines={"momo":{followers:123995,asOf:"2026-03-31"}};
   var getTtTotal=function(campaignName,earnedFollows){
     var cn=(campaignName||"").toLowerCase();
+    var cumFollows=window._ttCumFollows||0;
     var keys=Object.keys(ttBaselines);
-    for(var ki=0;ki<keys.length;ki++){if(cn.indexOf(keys[ki])>=0)return ttBaselines[keys[ki]].followers+earnedFollows;}
+    for(var ki=0;ki<keys.length;ki++){if(cn.indexOf(keys[ki])>=0)return ttBaselines[keys[ki]].followers+(cumFollows>0?cumFollows:earnedFollows);}
     return earnedFollows;
   };
     var findBestPage=function(campaignName,pagesArr){
@@ -141,7 +142,7 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}if(d.pages){setPages(d.pages);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){window._ttCumFollows=d.ttCumulativeFollows;}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});};
   useEffect(function(){fetchData();},[df,dt]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
