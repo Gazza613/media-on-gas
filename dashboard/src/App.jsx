@@ -724,9 +724,13 @@ export default function MediaOnGas(){
                   if(sc3>bestScore3){bestScore3=sc3;fbPage=pg;}
                 }
               }
-              var fbTotal=fbPage?fbPage.fan_count:0;
-              if(fbPage&&fbPage.instagram_business_account){igAccount=fbPage.instagram_business_account;}
-              var igTotal=igAccount?igAccount.followers_count:0;
+              var fbTotal=0;var igTotal=0;
+              if(matchedPages.length>1){
+                matchedPages.forEach(function(mp){fbTotal+=mp.fan_count||0;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;}});
+              }else if(fbPage){
+                fbTotal=fbPage.fan_count||0;
+                if(fbPage.instagram_business_account){igAccount=fbPage.instagram_business_account;igTotal=igAccount.followers_count||0;}
+              }
               var ttTotal=(function(){var selNames2=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames2,ttEarned);})();var grandTotal=fbTotal+igTotal+ttTotal;
               return <div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
