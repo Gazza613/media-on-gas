@@ -111,7 +111,7 @@ export default async function handler(req, res) {
 
   // TIKTOK ADSETS
   try {
-    var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&dimensions=[%22adgroup_id%22,%22campaign_id%22]&data_level=AUCTION_ADGROUP&metrics=[%22campaign_name%22,%22adgroup_name%22,%22spend%22,%22impressions%22,%22reach%22,%22clicks%22,%22ctr%22,%22cpc%22,%22cpm%22,%22follows%22,%22likes%22,%22profile_visits%22]&start_date=" + from + "&end_date=" + to + "&page_size=200";
+    var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&dimensions=[%22adgroup_id%22]&data_level=AUCTION_ADGROUP&metrics=[%22campaign_name%22,%22adgroup_name%22,%22campaign_id%22,%22spend%22,%22impressions%22,%22reach%22,%22clicks%22,%22ctr%22,%22cpc%22,%22cpm%22,%22follows%22,%22likes%22,%22profile_visits%22]&start_date=" + from + "&end_date=" + to + "&page_size=200";
     var ttR = await fetch(ttUrl, { headers: { "Access-Token": ttToken } });
     var ttData = await ttR.json();
     if (ttData.data && ttData.data.list) {
@@ -124,7 +124,7 @@ export default async function handler(req, res) {
           platform: "TikTok",
           accountName: "MTN MoMo TikTok",
           campaignName: ttM.campaign_name || "",
-          campaignId: ttD.campaign_id,
+          campaignId: ttM.campaign_id || ttD.adgroup_id,
           adsetName: ttM.adgroup_name || "",
           adsetId: ttD.adgroup_id,
           impressions: ttM.impressions || "0",
