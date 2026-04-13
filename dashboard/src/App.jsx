@@ -480,62 +480,85 @@ export default function MediaOnGas(){
 
             var adsetFlags=[];
 
-            var renderTable=function(pRows,pc2,label){
-              if(pRows.length===0)return null;
-              var pSpend=pRows.reduce(function(a,r){return a+r.spend;},0);
-              var pImps=pRows.reduce(function(a,r){return a+r.impressions;},0);
-              var pClicks=pRows.reduce(function(a,r){return a+r.clicks;},0);
+            var platList3=["Facebook","Instagram","TikTok","Google Display"];
+            var platCol3={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd};
+            var platBdg3={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD"};
+            var objList3=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
+            var objCol3={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
+            var objRL3={"App Store Clicks":"App Clicks","Landing Page Clicks":"LP Clicks","Leads":"Leads","Followers & Likes":"Follows/Likes"};
+            var objCL3={"App Store Clicks":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
+            var platOrd3={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
+
+            var adsetTip=function(props){if(!props.active||!props.payload||!props.payload[0])return null;var d=props.payload[0].payload;return <div style={{background:"rgba(6,2,14,0.95)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",maxWidth:320}}><div style={{fontSize:11,fontWeight:700,color:P.txt,marginBottom:6,whiteSpace:"normal",wordBreak:"break-word"}}>{d.fullName||d.name}</div>{props.payload.map(function(p,i){return <div key={i} style={{fontSize:11,color:P.sub,fontFamily:fm}}>{p.name}: {typeof p.value==="number"&&p.name.indexOf("CTR")>=0?p.value.toFixed(2)+"%":typeof p.value==="number"?fR(p.value):p.value}</div>;})}</div>;};
+
+            var platSections=[];
+            platList3.forEach(function(plat){
+              var platRows=allRows.filter(function(r){return r.platform===plat;});
+              if(platRows.length===0)return;
+              var pc=platCol3[plat];
+              var pSpend=platRows.reduce(function(a,r){return a+r.spend;},0);
+              var pClicks=platRows.reduce(function(a,r){return a+r.clicks;},0);
+              var pImps=platRows.reduce(function(a,r){return a+r.impressions;},0);
               var pCtr=pImps>0?(pClicks/pImps*100):0;
               var pCpc=pClicks>0?pSpend/pClicks:0;
-              var sorted2=pRows.slice().sort(function(a,b){return b.spend-a.spend;});
 
-              sorted2.forEach(function(r){
-                if(r.spend>300&&r.ctr<0.5&&r.impressions>5000){adsetFlags.push({severity:"critical",platform:r.platform,adset:r.adsetName,campaign:r.campaignName,metric:"CTR below 0.5%",value:r.ctr.toFixed(2)+"%",spend:r.spend,message:"Adset '"+r.adsetName+"' has spent "+fR(r.spend)+" with only "+r.ctr.toFixed(2)+"% CTR across "+fmt(r.impressions)+" impressions. The targeting or creative is not resonating with this audience.",recommendation:"Pause this adset and reallocate budget to higher-performing targeting segments."});}
-                if(r.spend>500&&r.result===0){adsetFlags.push({severity:"critical",platform:r.platform,adset:r.adsetName,campaign:r.campaignName,metric:"Zero results with significant spend",value:fR(r.spend)+" spent, 0 results",spend:r.spend,message:"Adset '"+r.adsetName+"' has consumed "+fR(r.spend)+" budget without producing a single measurable result.",recommendation:"Immediately pause this adset. The targeting audience is not converting. Reallocate budget to proven performers."});}
-                if(r.costPer>0&&pRows.filter(function(x){return x.costPer>0;}).length>1){var avgCost=pRows.filter(function(x){return x.costPer>0;}).reduce(function(a,x){return a+x.costPer;},0)/pRows.filter(function(x){return x.costPer>0;}).length;if(r.costPer>avgCost*2){adsetFlags.push({severity:"warning",platform:r.platform,adset:r.adsetName,campaign:r.campaignName,metric:"Cost per result 2x above average",value:fR(r.costPer)+" vs "+fR(avgCost)+" avg",spend:r.spend,message:"Adset '"+r.adsetName+"' is delivering at "+fR(r.costPer)+" cost per result, more than double the "+fR(avgCost)+" platform average.",recommendation:"Reduce budget allocation on this adset by 50% and monitor. If cost per result does not improve within 48 hours, pause entirely."});}}
+              var objTables=[];
+              objList3.forEach(function(objName){
+                var oRows=platRows.filter(function(r){return r.objective===objName;});
+                if(objName==="Landing Page Clicks"){oRows=oRows.concat(platRows.filter(function(r){return r.objective==="Traffic";}));}
+                if(oRows.length===0)return;
+                var oc=objCol3[objName];
+                var sorted6=oRows.slice().sort(function(a,b){return b.result-a.result||b.spend-a.spend;});
+                var oSpend=sorted6.reduce(function(a,r){return a+r.spend;},0);
+                var oClicks=sorted6.reduce(function(a,r){return a+r.clicks;},0);
+                var oResults=sorted6.reduce(function(a,r){return a+r.result;},0);
+                var oImps=sorted6.reduce(function(a,r){return a+r.impressions;},0);
+                var oCtr=oImps>0?(oClicks/oImps*100):0;
+                var oCostPer=oResults>0?oSpend/oResults:0;
+                var bestAd=sorted6[0];
+                var worstAd=sorted6[sorted6.length-1];
+                var chartD=sorted6.map(function(r){return{name:r.adsetName.length>18?r.adsetName.substring(0,15)+"...":r.adsetName,fullName:r.adsetName,Results:r.result,CostPer:r.costPer,CTR:r.ctr};});
+
+                objTables.push(<div key={objName} style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:13,fontWeight:800,color:oc,fontFamily:ff}}>{objName}</span><span style={{fontSize:10,color:P.sub,fontFamily:fm}}>{sorted6.length} adset{sorted6.length>1?"s":""}</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+                    <Glass accent={oc} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:7,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:3}}>SPEND</div><div style={{fontSize:16,fontWeight:900,color:oc,fontFamily:fm}}>{fR(oSpend)}</div></Glass>
+                    <Glass accent={oc} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:7,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:3}}>{objRL3[objName]||"RESULTS"}</div><div style={{fontSize:16,fontWeight:900,color:oc,fontFamily:fm}}>{fmt(oResults)}</div></Glass>
+                    <Glass accent={oc} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:7,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:3}}>{objCL3[objName]||"COST PER"}</div><div style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:fm}}>{oResults>0?fR(oCostPer):"\u2014"}</div></Glass>
+                    <Glass accent={oc} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:7,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:3}}>CTR</div><div style={{fontSize:16,fontWeight:900,color:oCtr>2?P.mint:oCtr>1?P.txt:P.warning,fontFamily:fm}}>{oCtr.toFixed(2)+"%"}</div></Glass>
+                  </div>
+                  <table style={{width:"100%",borderCollapse:"collapse",marginBottom:12}}>
+                    <thead><tr>{["Adset (Targeting)","Spend","Impressions","Clicks",objRL3[objName]||"Results",objCL3[objName]||"Cost Per","CTR %"].map(function(h,hi){return <th key={hi} style={{padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
+                    <tbody>{sorted6.map(function(r,ri){
+                      var isBest3=ri===0&&r.result>0;
+                      return <tr key={ri} style={{background:ri%2===0?oc+"06":"transparent"}}>
+                        <td title={r.adsetName} style={{padding:"10px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:300,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div>{isBest3&&<span style={{background:P.mint,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:3,display:"inline-block"}}>BEST</span>}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.impressions)}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.clicks)}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:900,color:r.result>0?oc:P.dim}}>{fmt(r.result)}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:r.costPer>0?P.ember:P.dim}}>{r.costPer>0?fR(r.costPer):"\u2014"}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.ctr>2?P.mint:r.ctr>1?P.txt:r.ctr>0?P.warning:P.dim}}>{r.ctr.toFixed(2)+"%"}</td>
+                      </tr>;})}</tbody>
+                  </table>
+                  <div style={{background:"rgba(0,0,0,0.12)",borderRadius:10,padding:16,marginBottom:12}}><div style={{fontSize:9,fontWeight:800,color:"rgba(255,255,255,0.5)",letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Results by Adset</div><ResponsiveContainer width="100%" height={Math.max(100,chartD.length*32)}><BarChart data={chartD} layout="vertical" barSize={12}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis type="number" tick={{fontSize:9,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><YAxis type="category" dataKey="name" width={110} tick={{fontSize:8,fill:"rgba(255,255,255,0.65)",fontFamily:fm}} stroke="transparent"/><Tooltip content={adsetTip} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="Results" fill={oc} radius={[0,6,6,0]}/></BarChart></ResponsiveContainer></div>
+                  <Insight title={objName+" on "+plat} accent={oc} icon={Ic.radar(oc,16)}>{(function(){var p=[];p.push(plat+" "+objName.toLowerCase()+" targeting operates "+sorted6.length+" adset"+(sorted6.length>1?"s":"")+" with "+fR(oSpend)+" invested, delivering "+fmt(oResults)+" results at "+(oResults>0?fR(oCostPer):"no")+" cost per result and "+oCtr.toFixed(2)+"% Click Through Rate.");if(bestAd&&bestAd.result>0){p.push("The strongest adset is "+bestAd.adsetName+" with "+fmt(bestAd.result)+" results"+(bestAd.costPer>0?" at "+fR(bestAd.costPer)+" cost per result":"")+" and "+bestAd.ctr.toFixed(2)+"% CTR"+(bestAd.ctr>oCtr?" outperforming the objective average":"")+". "+(bestAd.ctr>3?"This audience segment demonstrates exceptional creative resonance, indicating strong alignment between the targeting parameters and the ad messaging.":bestAd.ctr>1.5?"This targeting is performing within the upper engagement band, confirming the audience definition is well-matched to the creative proposition.":"This targeting is delivering measurable results and contributing to the objective."));}if(sorted6.length>1&&worstAd.spend>100){var efficiency=bestAd.costPer>0&&worstAd.costPer>0?((worstAd.costPer/bestAd.costPer-1)*100).toFixed(0):"0";if(worstAd.result===0&&worstAd.spend>200){p.push("The adset "+worstAd.adsetName+" has invested "+fR(worstAd.spend)+" without producing a measurable result. This audience segment is not converting under the current creative and targeting configuration.");}else if(parseFloat(efficiency)>100){p.push("There is a "+efficiency+"% cost gap between the most and least efficient adsets, indicating significant performance variance across targeting segments.");}}return p.join(" ");})()}</Insight>
+                </div>);
               });
 
-              return <div key={label} style={{marginBottom:28}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{width:12,height:12,borderRadius:"50%",background:pc2}}></span><span style={{fontSize:16,fontWeight:800,color:pc2,fontFamily:ff}}>{label+" by Adset"}</span><span style={{fontSize:11,color:P.sub,fontFamily:fm,marginLeft:8}}>{sorted2.length} adsets</span></div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
-                  <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>SPEND</div><div style={{fontSize:20,fontWeight:900,color:pc2,fontFamily:fm}}>{fR(pSpend)}</div></Glass>
-                  <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CLICKS</div><div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(pClicks)}</div></Glass>
-                  <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CTR</div><div style={{fontSize:20,fontWeight:900,color:pCtr>2?P.mint:pCtr>1?P.txt:P.warning,fontFamily:fm}}>{pCtr.toFixed(2)+"%"}</div></Glass>
-                  <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CPC</div><div style={{fontSize:20,fontWeight:900,color:pCpc<2?P.mint:P.ember,fontFamily:fm}}>{fR(pCpc)}</div></Glass>
-                </div>
-                <table style={{width:"100%",borderCollapse:"collapse",marginBottom:14}}>
-                  <thead><tr>{["Adset (Targeting)","Platform","Spend","Impressions","Clicks","Results","Cost Per","CTR %","CPC"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
-                  <tbody>{sorted2.map(function(r,ri){
-                    var isBest=ri===0&&r.result>0;
-                    var isWorst=r.spend>300&&r.ctr<0.5&&r.impressions>5000;
-                    return <tr key={ri} style={{background:isWorst?"rgba(244,63,94,0.08)":ri%2===0?pc2+"06":"transparent",borderTop:ri>0&&sorted2[ri-1]&&r.platform!==sorted2[ri-1].platform?"3px solid "+pc2+"30":"none"}}>
-                      <td title={r.adsetName} style={{padding:"12px",fontSize:12,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:280,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div>{isBest&&<span style={{background:P.mint,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:4,display:"inline-block"}}>BEST PERFORMER</span>}{isWorst&&<span style={{background:P.rose,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:4,display:"inline-block",marginLeft:4}}>UNDERPERFORMING</span>}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:r.platform==="Facebook"?P.fb:r.platform==="Instagram"?P.ig:r.platform==="Google Display"?P.gd:P.tt,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{r.platform==="Facebook"?"FB":r.platform==="Instagram"?"IG":r.platform==="Google Display"?"GD":"TT"}</span></td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(r.impressions)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fmt(r.clicks)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:r.result>0?pc2:P.dim}}>{fmt(r.result)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:700,color:r.costPer>0?P.ember:P.dim}}>{r.costPer>0?fR(r.costPer):"\u2014"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:r.ctr>2?P.mint:r.ctr>1?P.txt:r.ctr>0?P.warning:P.dim}}>{r.ctr.toFixed(2)+"%"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:r.cpc>0&&r.cpc<2?P.mint:r.cpc>0?P.txt:P.dim}}>{r.cpc>0?fR(r.cpc):"\u2014"}</td>
-                    </tr>;})}
-                    <tr style={{background:pc2+"15"}}><td style={{padding:"10px 12px",border:"1px solid "+P.rule,fontWeight:900,color:pc2,fontSize:12}}>Platform Total</td><td style={{padding:"10px 12px",border:"1px solid "+P.rule}}></td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fR(pSpend)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fmt(pImps)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fmt(pClicks)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fmt(sorted2.reduce(function(a,r){return a+r.result;},0))}</td><td style={{padding:"10px 12px",border:"1px solid "+P.rule}}></td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{pCtr.toFixed(2)+"%"}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fR(pCpc)}</td></tr>
-                  </tbody>
-                </table>
-                <Insight title={label+" Targeting Assessment"} accent={pc2} icon={Ic.radar(pc2,16)}>{(function(){var p=[];var best=sorted2[0];var worst=sorted2[sorted2.length-1];p.push(label+" has "+sorted2.length+" active adsets with "+fR(pSpend)+" total investment generating "+fmt(pClicks)+" clicks at "+pCtr.toFixed(2)+"% blended Click Through Rate.");if(best&&best.spend>0){p.push("Top adset by spend: '"+best.adsetName+"' with "+fR(best.spend)+" invested, delivering "+fmt(best.clicks)+" clicks at "+best.ctr.toFixed(2)+"% CTR"+(best.result>0?" and "+fmt(best.result)+" objective results at "+fR(best.costPer)+" cost per result":"")+". "+(best.ctr>2?"This adset shows exceptional audience-creative alignment.":best.ctr>1?"Performance is within healthy engagement parameters.":"CTR is below the 1% benchmark, indicating room for creative or targeting optimisation."));}if(sorted2.length>1){var bestCtr2=sorted2.slice().sort(function(a,b){return b.ctr-a.ctr;})[0];if(bestCtr2.adsetName!==best.adsetName&&bestCtr2.ctr>best.ctr){p.push("Highest CTR adset: '"+bestCtr2.adsetName+"' at "+bestCtr2.ctr.toFixed(2)+"%, suggesting this audience segment has the strongest creative resonance..");}}return p.join(" ");})()}</Insight>
-              </div>;
-            };
-
-            var objList=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
-            var objColors3={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
-            var platOrd3={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
-            var platSections=objList.map(function(objName){
-              var objRows=allRows.filter(function(r){return r.objective===objName;});
-              if(objName==="Landing Page Clicks"){objRows=objRows.concat(allRows.filter(function(r){return r.objective==="Traffic";}));}
-              if(objRows.length===0)return null;
-              var sorted5=objRows.slice().sort(function(a,b){var po=(platOrd3[a.platform]||9)-(platOrd3[b.platform]||9);if(po!==0)return po;return b.spend-a.spend;});
-              return renderTable(sorted5,objColors3[objName],objName);
-            }).filter(function(x){return x!==null;});
+              if(objTables.length>0){
+                platSections.push(<div key={plat} style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 16px"}}><span style={{width:16,height:16,borderRadius:"50%",background:pc}}></span><span style={{fontSize:20,fontWeight:900,color:pc,fontFamily:ff,letterSpacing:1}}>{plat.toUpperCase()}</span><span style={{fontSize:11,color:P.sub,fontFamily:fm,marginLeft:8}}>{platRows.length} adsets across {objTables.length} objective{objTables.length>1?"s":""}</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                    <Glass accent={pc} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>SPEND</div><div style={{fontSize:20,fontWeight:900,color:pc,fontFamily:fm}}>{fR(pSpend)}</div></Glass>
+                    <Glass accent={pc} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CLICKS</div><div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(pClicks)}</div></Glass>
+                    <Glass accent={pc} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CTR</div><div style={{fontSize:20,fontWeight:900,color:pCtr>2?P.mint:pCtr>1?P.txt:P.warning,fontFamily:fm}}>{pCtr.toFixed(2)+"%"}</div></Glass>
+                    <Glass accent={pc} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CPC</div><div style={{fontSize:20,fontWeight:900,color:pCpc<2?P.mint:P.ember,fontFamily:fm}}>{fR(pCpc)}</div></Glass>
+                  </div>
+                  {objTables}
+                </div>);
+              }
+            });
 
             var combinedChartData=allRows.slice().sort(function(a,b){return b.spend-a.spend;}).slice(0,10).map(function(r){
               var short=r.adsetName.length>20?r.adsetName.substring(0,17)+"...":r.adsetName;
@@ -544,7 +567,7 @@ export default function MediaOnGas(){
 
             return <div>
               <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>ADSET PERFORMANCE BY PLATFORM</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TARGETING ANALYSIS</div></div>
+                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>ADSET PERFORMANCE BY PLATFORM & OBJECTIVE</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TARGETING ANALYSIS</div></div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
                   <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>ACTIVE ADSETS</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{allRows.length}</div></Glass>
                   <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL CLICKS</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(totalClicks)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CTR: {blendedCtr.toFixed(2)+"%"}</div></Glass>
