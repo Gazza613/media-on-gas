@@ -106,7 +106,14 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var isClient=window.location.pathname.indexOf("/view/")===0;
 
+  var pageOverrides=[
+    {campaign:"willowbrook",page:"flower foundation"},
+    {campaign:"flower",page:"flower foundation"}
+  ];
   var autoMatchPage=function(campaignName,pageName){
+    var cn=(campaignName||"").toLowerCase();
+    var pn=(pageName||"").toLowerCase();
+    for(var oi=0;oi<pageOverrides.length;oi++){if(cn.indexOf(pageOverrides[oi].campaign)>=0&&pn.indexOf(pageOverrides[oi].page)>=0)return 10;}
     var cn=(campaignName||"").toLowerCase().replace(/[|_\-]/g," ");
     var pn=(pageName||"").toLowerCase().replace(/[|_\-]/g," ");
     var cWords=cn.split(/\s+/).filter(function(w){return w.length>2&&["gas","the","and","for","from","apr","mar","may","jun","jul","aug","sep","oct","nov","dec","jan","feb","2026","2025","paid","social","facebook","instagram","tiktok","campaign","funnel","cycle","leads","lead","follower","like","appinstall","traffic","cold","warm","display","search"].indexOf(w)<0;});
