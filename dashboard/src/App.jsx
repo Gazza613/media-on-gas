@@ -100,7 +100,7 @@ export default function MediaOnGas(){
   var ss=useState([]),selected=ss[0],setSelected=ss[1];
   var rs=useState(""),search=rs[0],setSearch=rs[1];
   var ls=useState(true),loading=ls[0],setLoading=ls[1];
-  var sc=useState(false),showCampaigns=sc[0],setShowCampaigns=sc[1];
+  var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
   var ps=useState([]),pages=ps[0],setPages=ps[1];
