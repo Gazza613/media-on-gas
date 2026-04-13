@@ -165,8 +165,7 @@ export default function MediaOnGas(){
   var resolve=function(id){setFlags(function(p){return p.map(function(f){return f.id===id?Object.assign({},f,{status:"resolved"}):f;});});};
   var openFlags=flags.filter(function(f){return f.status==="open";}).length;
 
-  var tabs=[{id:"overview",label:"Reporting",icon:Ic.chart(P.orchid,16)},{id:"tof",label:"Ad Serving",icon:Ic.radar(P.ember,16)},{id:"mof",label:"Engagement",icon:Ic.pulse(P.mint,16)},{id:"bof",label:"Objectives",icon:Ic.target(P.rose,16)}];
-  tabs.push({id:"community",label:"Community",icon:Ic.users(P.mint,16)});tabs.push({id:"deepdive",label:"Deep Dive",icon:Ic.eye(P.cyan,16)});if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
+  var tabs=[{id:"overview",label:"Reporting",icon:Ic.chart(P.orchid,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"tof",label:"Ad Serving",icon:Ic.radar(P.ember,16)},{id:"mof",label:"Engagement",icon:Ic.pulse(P.mint,16)},{id:"bof",label:"Objectives",icon:Ic.target(P.rose,16)}];tabs.push({id:"deepdive",label:"Deep Dive",icon:Ic.eye(P.cyan,16)});if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
 
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
