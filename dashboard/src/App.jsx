@@ -446,7 +446,7 @@ export default function MediaOnGas(){
 
         
         {tab==="targeting"&&(<div>
-          <SH icon={Ic.radar(P.solar,20)} title="Targeting Performance" sub={df+" to "+dt+" \u00b7 Adset-Level Analysis by Platform"} accent={P.solar}/>
+          <SH icon={Ic.radar(P.solar,20)} title="Targeting Performance" sub={df+" to "+dt+" \u00b7 Adset-Level Analysis by Objective"} accent={P.solar}/>
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selIds=selCamps.map(function(x){return x.rawCampaignId||x.campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"");});
@@ -496,7 +496,7 @@ export default function MediaOnGas(){
               });
 
               return <div key={label} style={{marginBottom:28}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{width:12,height:12,borderRadius:"50%",background:pc2}}></span><span style={{fontSize:16,fontWeight:800,color:pc2,fontFamily:ff}}>{label}</span><span style={{fontSize:11,color:P.sub,fontFamily:fm,marginLeft:8}}>{sorted2.length} adsets</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{width:12,height:12,borderRadius:"50%",background:pc2}}></span><span style={{fontSize:16,fontWeight:800,color:pc2,fontFamily:ff}}>{label+" by Adset"}</span><span style={{fontSize:11,color:P.sub,fontFamily:fm,marginLeft:8}}>{sorted2.length} adsets</span></div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
                   <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>SPEND</div><div style={{fontSize:20,fontWeight:900,color:pc2,fontFamily:fm}}>{fR(pSpend)}</div></Glass>
                   <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CLICKS</div><div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(pClicks)}</div></Glass>
@@ -504,13 +504,13 @@ export default function MediaOnGas(){
                   <Glass accent={pc2} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>CPC</div><div style={{fontSize:20,fontWeight:900,color:pCpc<2?P.mint:P.ember,fontFamily:fm}}>{fR(pCpc)}</div></Glass>
                 </div>
                 <table style={{width:"100%",borderCollapse:"collapse",marginBottom:14}}>
-                  <thead><tr>{["Adset (Targeting)","Objective","Spend","Impressions","Clicks","Results","Cost Per","CTR %","CPC"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
+                  <thead><tr>{["Adset (Targeting)","Platform","Spend","Impressions","Clicks","Results","Cost Per","CTR %","CPC"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
                   <tbody>{sorted2.map(function(r,ri){
                     var isBest=ri===0&&r.result>0;
                     var isWorst=r.spend>300&&r.ctr<0.5&&r.impressions>5000;
-                    return <tr key={ri} style={{background:isWorst?"rgba(244,63,94,0.08)":ri%2===0?pc2+"06":"transparent"}}>
+                    return <tr key={ri} style={{background:isWorst?"rgba(244,63,94,0.08)":ri%2===0?pc2+"06":"transparent",borderTop:ri>0&&sorted2[ri-1]&&r.platform!==sorted2[ri-1].platform?"3px solid "+pc2+"30":"none"}}>
                       <td title={r.adsetName} style={{padding:"12px",fontSize:12,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:280,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div>{isBest&&<span style={{background:P.mint,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:4,display:"inline-block"}}>BEST PERFORMER</span>}{isWorst&&<span style={{background:P.rose,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:4,display:"inline-block",marginLeft:4}}>UNDERPERFORMING</span>}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontSize:10,color:P.sub}}>{r.objective}</td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:r.platform==="Facebook"?P.fb:r.platform==="Instagram"?P.ig:r.platform==="Google Display"?P.gd:P.tt,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{r.platform==="Facebook"?"FB":r.platform==="Instagram"?"IG":r.platform==="Google Display"?"GD":"TT"}</span></td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(r.impressions)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fmt(r.clicks)}</td>
@@ -522,13 +522,19 @@ export default function MediaOnGas(){
                     <tr style={{background:pc2+"15"}}><td style={{padding:"10px 12px",border:"1px solid "+P.rule,fontWeight:900,color:pc2,fontSize:12}}>Platform Total</td><td style={{padding:"10px 12px",border:"1px solid "+P.rule}}></td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fR(pSpend)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fmt(pImps)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fmt(pClicks)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fmt(sorted2.reduce(function(a,r){return a+r.result;},0))}</td><td style={{padding:"10px 12px",border:"1px solid "+P.rule}}></td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{pCtr.toFixed(2)+"%"}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:pc2}}>{fR(pCpc)}</td></tr>
                   </tbody>
                 </table>
-                <Insight title={label+" Targeting Assessment"} accent={pc2} icon={Ic.radar(pc2,16)}>{(function(){var p=[];var best=sorted2[0];var worst=sorted2[sorted2.length-1];p.push(label+" has "+sorted2.length+" active adsets with "+fR(pSpend)+" total investment generating "+fmt(pClicks)+" clicks at "+pCtr.toFixed(2)+"% blended Click Through Rate.");if(best&&best.spend>0){p.push("Top adset by spend: '"+best.adsetName+"' with "+fR(best.spend)+" invested, delivering "+fmt(best.clicks)+" clicks at "+best.ctr.toFixed(2)+"% CTR"+(best.result>0?" and "+fmt(best.result)+" objective results at "+fR(best.costPer)+" cost per result":"")+". "+(best.ctr>2?"This adset shows exceptional audience-creative alignment.":best.ctr>1?"Performance is within healthy engagement parameters.":"CTR is below the 1% benchmark, indicating room for creative or targeting optimisation."));}if(sorted2.length>1){var bestCtr2=sorted2.slice().sort(function(a,b){return b.ctr-a.ctr;})[0];if(bestCtr2.adsetName!==best.adsetName&&bestCtr2.ctr>best.ctr){p.push("Highest CTR adset: '"+bestCtr2.adsetName+"' at "+bestCtr2.ctr.toFixed(2)+"%, suggesting this audience segment has the strongest creative resonance. Consider increasing budget allocation to this targeting.");}}var zeroResult=sorted2.filter(function(r){return r.spend>200&&r.result===0;});if(zeroResult.length>0){p.push("Strategy: "+zeroResult.length+" adset"+(zeroResult.length>1?"s":"")+" have spent budget without producing results. Evaluate targeting parameters and creative relevance for these segments.");}return p.join(" ");})()}</Insight>
+                <Insight title={label+" Targeting Assessment"} accent={pc2} icon={Ic.radar(pc2,16)}>{(function(){var p=[];var best=sorted2[0];var worst=sorted2[sorted2.length-1];p.push(label+" has "+sorted2.length+" active adsets with "+fR(pSpend)+" total investment generating "+fmt(pClicks)+" clicks at "+pCtr.toFixed(2)+"% blended Click Through Rate.");if(best&&best.spend>0){p.push("Top adset by spend: '"+best.adsetName+"' with "+fR(best.spend)+" invested, delivering "+fmt(best.clicks)+" clicks at "+best.ctr.toFixed(2)+"% CTR"+(best.result>0?" and "+fmt(best.result)+" objective results at "+fR(best.costPer)+" cost per result":"")+". "+(best.ctr>2?"This adset shows exceptional audience-creative alignment.":best.ctr>1?"Performance is within healthy engagement parameters.":"CTR is below the 1% benchmark, indicating room for creative or targeting optimisation."));}if(sorted2.length>1){var bestCtr2=sorted2.slice().sort(function(a,b){return b.ctr-a.ctr;})[0];if(bestCtr2.adsetName!==best.adsetName&&bestCtr2.ctr>best.ctr){p.push("Highest CTR adset: '"+bestCtr2.adsetName+"' at "+bestCtr2.ctr.toFixed(2)+"%, suggesting this audience segment has the strongest creative resonance..");}}return p.join(" ");})()}</Insight>
               </div>;
             };
 
-            var platSections=platforms.map(function(plat){
-              var pRows=allRows.filter(function(r){return r.platform===plat;});
-              return renderTable(pRows,platColors[plat],plat);
+            var objList=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
+            var objColors3={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
+            var platOrd3={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
+            var platSections=objList.map(function(objName){
+              var objRows=allRows.filter(function(r){return r.objective===objName;});
+              if(objName==="Landing Page Clicks"){objRows=objRows.concat(allRows.filter(function(r){return r.objective==="Traffic";}));}
+              if(objRows.length===0)return null;
+              var sorted5=objRows.slice().sort(function(a,b){var po=(platOrd3[a.platform]||9)-(platOrd3[b.platform]||9);if(po!==0)return po;return b.spend-a.spend;});
+              return renderTable(sorted5,objColors3[objName],objName);
             }).filter(function(x){return x!==null;});
 
             var combinedChartData=allRows.slice().sort(function(a,b){return b.spend-a.spend;}).slice(0,10).map(function(r){
@@ -548,7 +554,7 @@ export default function MediaOnGas(){
                 {platSections}
               </div>
               <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMBINED CROSS-PLATFORM VIEW</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>ALL ADSETS RANKED BY INVESTMENT</div></div>
+                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMBINED ADSET PERFORMANCE</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>ALL ADSETS BY OBJECTIVE & PLATFORM</div></div>
                 <table style={{width:"100%",borderCollapse:"collapse",marginBottom:16}}>
                   <thead><tr>{["Adset (Targeting)","Platform","Objective","Spend","Impressions","Clicks","Results","Cost Per","CTR %","CPC"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
                   <tbody>{allRows.slice().sort(function(a,b){return b.spend-a.spend;}).map(function(r,ri){
@@ -556,7 +562,7 @@ export default function MediaOnGas(){
                     return <tr key={ri} style={{background:ri%2===0?pc3+"06":"transparent"}}>
                       <td title={r.adsetName} style={{padding:"12px",fontSize:12,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:260,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div></td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc3,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBadge[r.platform]||"?"}</span></td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontSize:10,color:P.sub}}>{r.objective}</td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:r.platform==="Facebook"?P.fb:r.platform==="Instagram"?P.ig:r.platform==="Google Display"?P.gd:P.tt,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{r.platform==="Facebook"?"FB":r.platform==="Instagram"?"IG":r.platform==="Google Display"?"GD":"TT"}</span></td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(r.impressions)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(r.clicks)}</td>
@@ -574,15 +580,7 @@ export default function MediaOnGas(){
                 </div>
                 <Insight title="Cross-Platform Targeting Assessment" accent={P.solar} icon={Ic.radar(P.solar,16)}>{(function(){var p=[];p.push("The campaign operates "+allRows.length+" adsets across "+platforms.filter(function(pl){return allRows.filter(function(r){return r.platform===pl;}).length>0;}).length+" platforms with "+fR(totalSpend)+" total investment, generating "+fmt(totalClicks)+" clicks at "+blendedCtr.toFixed(2)+"% blended Click Through Rate and "+fR(blendedCpc)+" blended Cost Per Click.");var bestOverall=allRows.slice().sort(function(a,b){return b.result-a.result;})[0];if(bestOverall&&bestOverall.result>0){p.push("The highest-performing adset across all platforms is '"+bestOverall.adsetName+"' on "+bestOverall.platform+" with "+fmt(bestOverall.result)+" results at "+fR(bestOverall.costPer)+" cost per result.");}platforms.forEach(function(pl){var pr=allRows.filter(function(r){return r.platform===pl;});if(pr.length===0)return;var pSpend2=pr.reduce(function(a,r){return a+r.spend;},0);var pct=totalSpend>0?((pSpend2/totalSpend)*100).toFixed(0):"0";p.push(pl+" receives "+pct+"% of budget ("+fR(pSpend2)+") across "+pr.length+" adsets.");});if(adsetFlags.length>0){p.push("Strategy: "+adsetFlags.filter(function(f){return f.severity==="critical";}).length+" critical and "+adsetFlags.filter(function(f){return f.severity==="warning";}).length+" warning flags have been identified. Review the Optimisation tab for detailed recommendations on underperforming adsets.");}return p.join(" ");})()}</Insight>
               </div>
-              {adsetFlags.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.warning,fontFamily:ff,letterSpacing:1}}>TARGETING ALERTS</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>ADSETS REQUIRING ATTENTION</div></div>
-                {adsetFlags.map(function(f,fi){return <div key={fi} style={{marginBottom:12,borderLeft:"4px solid "+(f.severity==="critical"?P.rose:P.warning),background:f.severity==="critical"?"rgba(244,63,94,0.06)":"rgba(255,171,0,0.06)",borderRadius:"0 10px 10px 0",padding:"14px 18px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{background:f.severity==="critical"?P.rose:P.warning,color:"#fff",fontSize:8,fontWeight:900,padding:"2px 8px",borderRadius:4,textTransform:"uppercase"}}>{f.severity}</span><span style={{fontSize:12,fontWeight:800,color:P.txt}}>{f.adset}</span><span style={{background:platColors[f.platform],color:"#fff",fontSize:8,fontWeight:700,padding:"2px 6px",borderRadius:8,marginLeft:"auto"}}>{platBadge[f.platform]}</span></div>
-                  <div style={{fontSize:11,color:P.sub,marginBottom:4}}>{f.metric}: {f.value}</div>
-                  <div style={{fontSize:12,color:P.txt,lineHeight:1.6,marginBottom:6}}>{f.message}</div>
-                  <div style={{fontSize:11,color:P.ember,fontWeight:600}}>{f.recommendation}</div>
-                </div>;})}
-              </div>}
+              
             </div>;
           })()}
         </div>)}        {tab==="community"&&(<div>
