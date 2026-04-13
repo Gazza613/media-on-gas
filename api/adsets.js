@@ -124,7 +124,7 @@ export default async function handler(req, res) {
           platform: "TikTok",
           accountName: "MTN MoMo TikTok",
           campaignName: ttM.campaign_name || "",
-          campaignId: ttM.campaign_id || ttD.adgroup_id,
+          campaignId: ttM.campaign_id || "",
           adsetName: ttM.adgroup_name || "",
           adsetId: ttD.adgroup_id,
           impressions: ttM.impressions || "0",
