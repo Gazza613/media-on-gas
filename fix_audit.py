@@ -1,163 +1,88 @@
 with open("/workspaces/media-on-gas/dashboard/src/App.jsx", "r") as f:
     c = f.read()
 
-fixes = 0
+# ============ FIX 1: BEST tag in targeting tab objective tables ============
+# Current: picks first per platform if result>0. Wrong - 1 result at R2969 is NOT best.
+# New: BEST only if result>=10 AND costPer is at or below objective average AND has meaningful spend
+old_best = 'var isBest=false;if(r.result>0){var firstInPlat=true;for(var bi=0;bi<ri;bi++){if(sorted6[bi].platform===r.platform){firstInPlat=false;break;}}isBest=firstInPlat;}'
 
-# ═══ FIX 1: Grand Total Reach in Awareness table - already correct in engagement ═══
-# The awareness table has: {fmt(m.reach+t.reach)}
-# Should include Google: {fmt(m.reach+t.reach+computed.gd.reach)}
-# But only in the AWARENESS Grand Total row (FFCB05 color row)
-old_aware_reach = """color:"#FFCB05",fontFamily:fm,fontSize:15,fontWeight:900}}>{fmt(m.reach+t.reach)}</td>"""
-new_aware_reach = """color:"#FFCB05",fontFamily:fm,fontSize:15,fontWeight:900}}>{fmt(m.reach+t.reach+computed.gd.reach)}</td>"""
-if old_aware_reach in c:
-    c = c.replace(old_aware_reach, new_aware_reach)
-    fixes += 1
-    print("FIX 1: Grand Total Reach now includes Google Display")
+new_best = """var isBest=false;if(r.result>=10&&r.costPer>0&&r.spend>=oSpend*0.03){
+                        var platRows2=sorted6.filter(function(x){return x.platform===r.platform&&x.result>=10;});
+                        if(platRows2.length>0){
+                          var platBestCost=platRows2.reduce(function(a2,x2){return x2.costPer>0&&x2.costPer<a2?x2.costPer:a2;},Infinity);
+                          if(r.costPer<=platBestCost*1.05){
+                            var alreadyBest=false;for(var bi=0;bi<ri;bi++){if(sorted6[bi].platform===r.platform){var prevR=sorted6[bi];if(prevR.result>=10&&prevR.costPer>0&&prevR.costPer<=platBestCost*1.05){alreadyBest=true;break;}}}
+                            if(!alreadyBest)isBest=true;
+                          }
+                        }
+                      }"""
 
-# ═══ FIX 2: Grand Total Frequency in Awareness - include Google reach ═══
-old_aware_freq = """{(m.reach+t.reach)>0?((m.impressions+t.impressions)/(m.reach+t.reach)).toFixed(2)+"x":"\\u2014"}"""
-new_aware_freq = """{(m.reach+t.reach)>0?((m.impressions+t.impressions+computed.gd.impressions)/(m.reach+t.reach)).toFixed(2)+"x":"\\u2014"}"""
-if old_aware_freq in c:
-    c = c.replace(old_aware_freq, new_aware_freq)
-    fixes += 1
-    print("FIX 2: Grand Total Frequency includes Google impressions")
+c = c.replace(old_best, new_best)
+print("Fix 1: BEST tag requires 10+ results, best cost per in platform, 3%+ spend share")
 
-# ═══ FIX 4: FB pageLikes - already correct, uses 'like' action type which is page likes ═══
-# Verified in campaigns.js - pageLikes comes from action_type "like" which IS page likes
-print("FIX 4: SKIP - pageLikes correctly uses 'like' action type (page likes only)")
+# ============ FIX 2: bestAd selection for insight text ============
+# Current: just picks highest result count regardless of efficiency
+old_bestAd = 'var bestAd=sorted6.reduce(function(a,r){return r.result>a.result?r:a;},{result:0,adsetName:"",platform:"",costPer:0,ctr:0,spend:0});'
 
-# ═══ FIX 5: TikTok Community card - change label to be clearer ═══
-old_tt_label = """<div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>FOLLOWS EARNED</div><div style={{fontSize:36,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(ttEarned)}</div>"""
-new_tt_label = """<div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>PERIOD FOLLOWS</div><div style={{fontSize:36,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(ttEarned)}</div>"""
-if old_tt_label in c:
-    c = c.replace(old_tt_label, new_tt_label)
-    fixes += 1
-    print("FIX 5: TikTok card label clarified to PERIOD FOLLOWS")
+new_bestAd = """var qualifiedAds=sorted6.filter(function(r){return r.result>=10&&r.costPer>0&&r.spend>=oSpend*0.03;});
+              var bestAd=qualifiedAds.length>0?qualifiedAds.reduce(function(a,r){var aScore=a.result>0?(a.result/a.spend):0;var rScore=r.result>0?(r.result/r.spend):0;return rScore>aScore?r:a;}):sorted6.reduce(function(a,r){return r.result>a.result?r:a;},{result:0,adsetName:"",platform:"",costPer:0,ctr:0,spend:0});"""
 
-# ═══ FIX 6: Remove "top quartile" claim - make conditional ═══
-old_quartile = """This positions the campaign within the top quartile of paid social CPM efficiency for the paid social market, where industry benchmarks typically range R12 to R25 Cost Per Thousand Ads Served."""
-new_quartile = """"+fR(computed.blendedCpm)+" blended Cost Per Thousand Ads Served "+(computed.blendedCpm<12?"positions the campaign well below the R12 to R25 paid social CPM benchmark range, confirming exceptional media value.":computed.blendedCpm<18?"sits within the efficient range of R12 to R25 for the paid social market.":"is at the upper end of the R12 to R25 paid social CPM range, reflecting the platform mix and audience targeting precision.")+""""
-c = c.replace(
-    'achieving a blended Cost Per Thousand Ads Served of "+fR(computed.blendedCpm)+". This positions the campaign within the top quartile of paid social CPM efficiency for the paid social market, where industry benchmarks typically range R12 to R25 Cost Per Thousand Ads Served.',
-    'achieving a ' + new_quartile
-)
-fixes += 1
-print("FIX 6: CPM benchmark claim now conditional on actual value")
+c = c.replace(old_bestAd, new_bestAd)
+print("Fix 2: bestAd uses results-per-rand efficiency, min 10 results")
 
-# ═══ FIX 7: TikTok CPM comparison - handle when TikTok is more expensive ═══
-old_tt_cpm = """t.cpm<computed.fb.cpm?" TikTok delivers a "+(((computed.fb.cpm-t.cpm)/computed.fb.cpm)*100).toFixed(0)+"% Cost Per Thousand Ads Served advantage over Facebook, confirming strong content relevance scores and favourable auction positioning.":" TikTok delivers comparable Cost Per Thousand Ads Served to Facebook at "+fR(t.cpm)+" versus "+fR(computed.fb.cpm)+", with TikTok\\'s value driven by higher video completion rates and native content engagement."""
-new_tt_cpm = """t.cpm<computed.fb.cpm*0.9?" TikTok delivers a "+(((computed.fb.cpm-t.cpm)/computed.fb.cpm)*100).toFixed(0)+"% Cost Per Thousand Ads Served advantage over Facebook, confirming strong content relevance scores and favourable auction positioning.":t.cpm>computed.fb.cpm*1.1?" TikTok Cost Per Thousand Ads Served at "+fR(t.cpm)+" is "+(((t.cpm-computed.fb.cpm)/computed.fb.cpm)*100).toFixed(0)+"% higher than Facebook, reflecting TikTok\\'s premium video inventory and higher engagement depth per impression.":" TikTok and Facebook deliver comparable Cost Per Thousand Ads Served at "+fR(t.cpm)+" and "+fR(computed.fb.cpm)+" respectively."""
+# ============ FIX 3: Scorecard assessment - fix for 1 result edge cases ============
+# The efficiency ratio breaks with tiny numbers. Add guards.
+old_promising = 'a.push("Promising early signal: "+fmt(r.result)+" results at "+fR(r.costPer)+" from "+fR(r.spend)+" spend ("+spendShare.toFixed(1)+"% of objective budget).");'
+new_promising = 'a.push("Early signal only: "+fmt(r.result)+" result"+(r.result>1?"s":"")+" at "+fR(r.costPer)+" from "+fR(r.spend)+" spend ("+spendShare.toFixed(1)+"% of objective budget). Not statistically meaningful.");'
+c = c.replace(old_promising, new_promising)
+print("Fix 3a: Promising -> Early signal for low volume")
 
-if old_tt_cpm in c:
-    c = c.replace(old_tt_cpm, new_tt_cpm)
-    fixes += 1
-    print("FIX 7: TikTok CPM comparison handles all scenarios")
-else:
-    # Try without escaped quote
-    old_tt_cpm2 = old_tt_cpm.replace("\\\\'", "\\'")
-    if old_tt_cpm2 in c:
-        c = c.replace(old_tt_cpm2, new_tt_cpm.replace("\\\\'", "\\'"))
-        fixes += 1
-        print("FIX 7: TikTok CPM comparison (alt quote)")
-    else:
-        print("FIX 7: SKIP - TikTok CPM text not found (may already be fixed)")
+# Fix the "Proven efficiency leader" to need 10+ results
+old_proven = 'if(hasScale&&efficiencyRatio>=1.5){'
+new_proven = 'if(hasScale&&efficiencyRatio>=1.5&&r.result>=10){'
+c = c.replace(old_proven, new_proven)
+print("Fix 3b: Proven leader needs 10+ results")
 
-# ═══ FIX 9: isFollowLike detection - add more patterns ═══
-old_follow = """var isFollowLike=n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0;"""
-new_follow = """var isFollowLike=n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0;"""
-if old_follow in c:
-    c = c.replace(old_follow, new_follow)
-    fixes += 1
-    print("FIX 9: isFollowLike detection expanded")
+# Fix "Strong performer" to need 5+ results
+old_strong = 'else if(hasScale&&efficiencyRatio>=1.0){'
+new_strong = 'else if(hasScale&&efficiencyRatio>=1.0&&r.result>=5){'
+c = c.replace(old_strong, new_strong)
+print("Fix 3c: Strong performer needs 5+ results")
 
-# ═══ FIX 10: fetchData re-runs on date change - not needed, REFRESH button works ═══
-print("FIX 10: SKIP - REFRESH button is intentional UX")
+# Fix "Above average" with some scale
+old_above = 'else if(hasSomeScale&&efficiencyRatio>=1.0){'
+new_above = 'else if(hasSomeScale&&efficiencyRatio>=1.0&&r.result>=3){'
+c = c.replace(old_above, new_above)
+print("Fix 3d: Above average needs 3+ results")
 
-# ═══ FIX 11: Variable name collision sc ═══
-old_sc = """var findBestPage=function(campaignName,pagesArr){
-    var bestPage=null;var bestScore=0;
-    for(var pi=0;pi<pagesArr.length;pi++){
-      var sc=autoMatchPage(campaignName,pagesArr[pi].name);
-      if(sc>bestScore){bestScore=sc;bestPage=pagesArr[pi];}
-    }"""
-new_sc = """var findBestPage=function(campaignName,pagesArr){
-    var bestPage=null;var bestScore=0;
-    for(var pi=0;pi<pagesArr.length;pi++){
-      var matchSc=autoMatchPage(campaignName,pagesArr[pi].name);
-      if(matchSc>bestScore){bestScore=matchSc;bestPage=pagesArr[pi];}
-    }"""
-if old_sc in c:
-    c = c.replace(old_sc, new_sc)
-    fixes += 1
-    print("FIX 11: Variable collision sc -> matchSc")
+# ============ FIX 4: Scorecard status - 1 result with high cost should be red ============
+# Add check: if costPer > 3x objective average, it's weak regardless
+old_status = "var status=score>=2?\"strong\":score>=0?\"average\":\"weak\";"
+new_status = """var status=score>=2?"strong":score>=0?"average":"weak";
+                    if(r.result>0&&r.result<3&&r.costPer>0&&objAvgCost>0&&r.costPer>objAvgCost*3){status="weak";statusColor="#ef4444";statusLabel="Action";assessment="Only "+fmt(r.result)+" result"+(r.result>1?"s":"")+" at "+fR(r.costPer)+" cost per result, which is "+((r.costPer/objAvgCost)).toFixed(0)+"x the "+fR(objAvgCost)+" objective average. Insufficient volume at excessive cost.";}
+                    if(r.result>=1&&r.result<3&&r.spend>500){status=status==="strong"?"average":status;if(status!=="weak"){statusColor="#f59e0b";statusLabel="Monitor";assessment="Only "+fmt(r.result)+" result"+(r.result>1?"s":"")+" from "+fR(r.spend)+" spend. Sample size too small to validate performance. Requires more data before drawing conclusions.";}}"""
 
-# ═══ FIX 12: Error handling on fetchData ═══
-old_catch = """.catch(function(){setLoading(false);});"""
-new_catch = """.catch(function(err){console.error("API Error:",err);setLoading(false);});"""
-if old_catch in c:
-    c = c.replace(old_catch, new_catch)
-    fixes += 1
-    print("FIX 12: Error logging added to fetchData")
+c = c.replace(old_status, new_status)
+print("Fix 4: 1-2 results with high cost = red, 1-2 results with big spend = monitor")
 
-# ═══ FIX 13+14: Remove dead variables tLikes and sLikes ═══
-c = c.replace("var tLikes=0;\n", "")
-c = c.replace("var sLikes=0;\n", "")
-# Also try without newline
-c = c.replace("var tLikes=0;", "")
-c = c.replace("var sLikes=0;", "")
-fixes += 1
-print("FIX 13+14: Dead variables tLikes/sLikes removed")
+# ============ FIX 5: Targeting insight - bestAd must be qualified ============
+old_bestAd_insight = 'if(bestAd.result>0&&bestAd.spend>=oSpend*0.05&&bestAd.impressions>=5000){p.push("Overall top performer with proven scale:'
+new_bestAd_insight = 'if(bestAd.result>=10&&bestAd.spend>=oSpend*0.05&&bestAd.impressions>=5000){p.push("Overall top performer with proven scale:'
+c = c.replace(old_bestAd_insight, new_bestAd_insight)
+print("Fix 5: Targeting insight bestAd needs 10+ results")
 
-# ═══ FIX 15: Pie chart filters out zero-spend segments ═══
-old_pie = """[{name:"Facebook",value:computed.fb.spend},{name:"Instagram",value:computed.ig.spend},{name:"TikTok",value:t.spend},{name:"Google",value:computed.gd.spend}]"""
-new_pie = """[{name:"Facebook",value:computed.fb.spend},{name:"Instagram",value:computed.ig.spend},{name:"TikTok",value:t.spend},{name:"Google",value:computed.gd.spend}].filter(function(x){return x.value>0;})"""
-if old_pie in c:
-    c = c.replace(old_pie, new_pie)
-    fixes += 1
-    print("FIX 15: Pie chart filters zero-spend platforms")
+old_bestAd_else = 'else if(bestAd.result>0){p.push("Highest result count is "+bestAd.adsetName+" on "+bestAd.platform+" with "+fmt(bestAd.result)+" results, though at "+fR(bestAd.spend)+" spend this requires further volume to confirm sustained efficiency.");}'
+new_bestAd_else = 'else if(bestAd.result>=3){p.push("Highest result count is "+bestAd.adsetName+" on "+bestAd.platform+" with "+fmt(bestAd.result)+" results at "+fR(bestAd.costPer)+" cost per result. "+(bestAd.result<10?"Volume is below the 10-result threshold for a confirmed performance read.":""));}else if(bestAd.result>0){p.push("No adset has yet reached the 10-result minimum required for a confirmed performance assessment. The highest count is "+fmt(bestAd.result)+" from "+bestAd.adsetName+" on "+bestAd.platform+".");}'
+c = c.replace(old_bestAd_else, new_bestAd_else)
+print("Fix 6: Insight caveats for low-result bestAd")
 
-# ═══ FIX 16: Google Reach bar chart - use 0 instead of null ═══
-old_google_bar = """{name:"Google",Impressions:computed.gd.impressions,Reach:null}"""
-new_google_bar = """{name:"Google",Impressions:computed.gd.impressions,Reach:0}"""
-if old_google_bar in c:
-    c = c.replace(old_google_bar, new_google_bar)
-    fixes += 1
-    print("FIX 16: Google bar chart Reach null -> 0")
-
-# ═══ FIX 17: IG CPC comparison guard against zero ═══
-old_ig_cpc = """computed.ig.cpc<computed.fb.cpc&&computed.fb.cpc>0"""
-new_ig_cpc = """computed.ig.cpc>0&&computed.ig.cpc<computed.fb.cpc&&computed.fb.cpc>0"""
-if old_ig_cpc in c:
-    c = c.replace(old_ig_cpc, new_ig_cpc, 1)  # Only first occurrence in engagement insight
-    fixes += 1
-    print("FIX 17: IG CPC comparison guards against zero clicks")
-
-# ═══ FIX 18: Combined Campaign Read - include Google Display ═══
-old_combined = """across Meta and TikTok against a combined investment"""
-new_combined = """across Meta, TikTok, and Google Display against a combined investment"""
-if old_combined in c:
-    c = c.replace(old_combined, new_combined)
-    fixes += 1
-    print("FIX 18: Combined read includes Google Display")
-
-# Also fix "dual-platform" to "multi-platform"
-old_dual = """The dual-platform architecture is delivering"""
-new_dual = """The multi-platform architecture is delivering"""
-if old_dual in c:
-    c = c.replace(old_dual, new_dual)
-    fixes += 1
-    print("FIX 18b: dual-platform -> multi-platform")
-
-# ═══ FIX 19: Community insight - include TikTok in total ═══
-old_comm = """across Facebook and Instagram."""
-new_comm = """across Facebook, Instagram, and TikTok."""
-if old_comm in c:
-    c = c.replace(old_comm, new_comm)
-    fixes += 1
-    print("FIX 19: Community insight includes TikTok")
+# ============ FIX 7: Reporting tab - platform insights with confidence ============
+# Fix scale platform insights - add result count check
+old_scale_eff = 'This platform delivers "+effR+"x more results per rand than its budget share, confirming strong efficiency at scale.'
+new_scale_eff = 'This platform delivers "+effR+"x more results per rand than its budget share"+(parseInt(pb.result)>=10?", confirmed across "+fmt(pb.imps)+" impressions and "+fmt(pb.result)+" results.":", though with "+fmt(pb.result)+" results this trend needs further volume to confirm.")+"'
+c = c.replace(old_scale_eff, new_scale_eff)
+print("Fix 7: Platform efficiency claim needs result count check")
 
 with open("/workspaces/media-on-gas/dashboard/src/App.jsx", "w") as f:
     f.write(c)
-print(f"\n{'='*50}")
-print(f"TOTAL FIXES APPLIED: {fixes}")
-print(f"{'='*50}")
+print("FULL AUDIT COMPLETE")
