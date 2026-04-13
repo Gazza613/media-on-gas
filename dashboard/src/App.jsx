@@ -456,7 +456,7 @@ export default function MediaOnGas(){
               for(var sn=0;sn<selNames.length;sn++){if(a.campaignName===selNames[sn])return true;}
               return false;
             }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
-            if(filtered.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view adset targeting performance.</div>;
+            if(filtered.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>{"Adsets loaded: "+adsets.length+" | Selected campaigns: "+selCamps.length+" | IDs: "+selIds.slice(0,3).join(", ")+" | Names: "+selNames.slice(0,2).join(", ")}</div>;
 
             var sorted=filtered.slice().sort(function(a,b){return parseFloat(b.spend||0)-parseFloat(a.spend||0);});
             var totalSpend=sorted.reduce(function(a,r){return a+parseFloat(r.spend||0);},0);
