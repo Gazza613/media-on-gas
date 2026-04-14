@@ -284,12 +284,17 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
-          <SH icon={Ic.crown(P.ember,20)} title="Media Insights" sub={df+" to "+dt+" \u00b7 Executive Performance Overview"} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} title="Media Insights" sub={df+" to "+dt+" \u00b7 Performance Intelligence Brief"} accent={P.ember}/>
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
             var totalDays2=Math.max(1,Math.round((new Date(dt)-new Date(df))/86400000)+1);
-            var dailySpend=computed.totalSpend>0?computed.totalSpend/totalDays2:0;
+            var todayStr=new Date().toISOString().split("T")[0];
+            var elapsedDays=Math.max(1,Math.round((new Date(todayStr>dt?dt:todayStr)-new Date(df))/86400000)+1);
+            var dailySpend=computed.totalSpend>0?computed.totalSpend/elapsedDays:0;
+            var projSpend=dailySpend*totalDays2;
+            var paceRatio=totalDays2>0?elapsedDays/totalDays2:1;
+            var pacePct=Math.min(100,Math.round(paceRatio*100));
             var blCpc=computed.totalClicks>0?computed.totalSpend/computed.totalClicks:0;
             var blCtr=computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):0;
 
@@ -310,155 +315,200 @@ export default function MediaOnGas(){
               platBreak[pl].spend+=parseFloat(camp.spend||0);platBreak[pl].clicks+=parseFloat(camp.clicks||0);platBreak[pl].imps+=parseFloat(camp.impressions||0);platBreak[pl].reach+=parseFloat(camp.reach||0);
             });
 
-            var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
-            var platCol4={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd};
+            var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
+            var platCol4={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
+            var platShort={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
             var objKeys=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
             var objCol4={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
             var objCL4={"App Store Clicks":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
 
+            var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
+            var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember};});
+
+            /* --- Executive Narrative --- */
+            var execLines=[];
+            var bestCpmPlat="";var bestCpmVal=Infinity;var worstCpmPlat="";var worstCpmVal=0;
+            sortedPlats.forEach(function(pl){var pb=platBreak[pl];var cpm=pb.imps>0?pb.spend/pb.imps*1000:0;if(cpm>0&&cpm<bestCpmVal){bestCpmVal=cpm;bestCpmPlat=pl;}if(cpm>worstCpmVal){worstCpmVal=cpm;worstCpmPlat=pl;}});
+            execLines.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms over "+elapsedDays+" of "+totalDays2+" days. At the current daily run rate of "+fR(dailySpend)+", projected end-of-period spend is "+fR(projSpend)+".");
+            if(bestCpmPlat&&sortedPlats.length>1)execLines.push(bestCpmPlat+" is delivering the most capital-efficient reach at "+fR(bestCpmVal)+" CPM"+(worstCpmPlat!==bestCpmPlat?", whilst "+worstCpmPlat+" runs at "+fR(worstCpmVal)+" CPM \u2014 a "+Math.round(worstCpmVal/bestCpmVal)+"x differential worth monitoring.":"."));
+            if(m.frequency>0)execLines.push("Meta frequency sits at "+m.frequency.toFixed(2)+"x \u2014 "+(freqStatus==="critical"?"above the 4x fatigue ceiling. Creative rotation is overdue.":freqStatus==="warning"?"approaching the 3x pressure point. Preemptive creative refresh recommended within 48 hours.":freqStatus==="healthy"?"within the 2\u20133x optimal recall window. Headroom remains for continued delivery.":"in early build phase with full headroom ahead."));
+            var activeObj=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
+            activeObj.forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;var bmV=cp>0&&bm?benchLabel(cp,bm):"";if(od.results>=10)execLines.push(objName+": "+fmt(od.results)+" conversions at "+fR(cp)+"/result, "+bmV+". Statistical confidence achieved.");else if(od.results>0)execLines.push(objName+": "+fmt(od.results)+" early conversions at "+fR(cp)+". Below the 10-result threshold for a confirmed read.");});
+
+            /* --- Standout Signals (flags + targeting) --- */
+            var activeFlags=flags.filter(function(f){return f.status==="open";});
+            var critFlags=activeFlags.filter(function(f){return f.severity==="critical";});
+            var warnFlags=activeFlags.filter(function(f){return f.severity==="warning";});
+            var posFlags=activeFlags.filter(function(f){return f.severity==="positive";});
+
+            var selAdsets2=adsets.filter(function(a){
+              for(var si3=0;si3<sel.length;si3++){if(a.campaignName===sel[si3].campaignName||a.campaignId===(sel[si3].rawCampaignId||sel[si3].campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"")))return true;}
+              return false;
+            }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
+            var topAdsets=selAdsets2.map(function(a){
+              var spend2=parseFloat(a.spend||0);var clicks2=parseFloat(a.clicks||0);var imps2=parseFloat(a.impressions||0);
+              var result2=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(result2===0)result2=clicks2;
+              return{name:a.adsetName,platform:a.platform,spend:spend2,result:result2,costPer:result2>0?spend2/result2:0,ctr:imps2>0?(clicks2/imps2*100):0};
+            }).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});
+            var worstAdsets=selAdsets2.map(function(a){
+              var spend2=parseFloat(a.spend||0);var clicks2=parseFloat(a.clicks||0);var imps2=parseFloat(a.impressions||0);
+              var result2=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(result2===0)result2=clicks2;
+              return{name:a.adsetName,platform:a.platform,spend:spend2,result:result2,ctr:imps2>0?(clicks2/imps2*100):0};
+            }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
+
+            /* --- Community --- */
+            var matchedPages3=[];var matchedIds3={};
+            for(var s3=0;s3<sel.length;s3++){var bestPg3=null;var bestSc3=0;for(var p3=0;p3<pages.length;p3++){var sc4=autoMatchPage(sel[s3].campaignName,pages[p3].name);if(sc4>bestSc3){bestSc3=sc4;bestPg3=pages[p3];}}if(bestPg3&&bestSc3>=2&&matchedIds3[bestPg3.id]!==true){matchedPages3.push(bestPg3);matchedIds3[bestPg3.id]=true;}}
+            var fbT2=0;var igT2=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;}});
+            var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"&&(camp.campaignName||"").toLowerCase().indexOf("follower")>=0){ttE2+=parseFloat(camp.follows||0);}});
+            var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
+            var grandT2=fbT2+igT2+ttT2;
+
+            var tHead={padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:P.ember,letterSpacing:1,background:"rgba(249,98,3,0.12)",border:"1px solid rgba(249,98,3,0.25)",fontFamily:fm};
+            var tCell=function(extra){return Object.assign({padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12},extra||{});};
+
             return <div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
-                <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL INVESTMENT</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>{fR(dailySpend)+"/day \u00b7 "+totalDays2+" days"}</div></Glass>
-                <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS SERVED</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(computed.totalImps)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>{Object.keys(platBreak).length+" platforms"}</div></Glass>
-                <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(computed.totalClicks)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>{sel.length+" campaigns"}</div></Glass>
-                <Glass accent={P.orchid} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CPM</div><div style={{fontSize:24,fontWeight:900,color:computed.blendedCpm<12?P.mint:computed.blendedCpm<25?P.solar:P.rose,fontFamily:fm}}>{fR(computed.blendedCpm)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>{benchLabel(computed.blendedCpm,benchmarks.meta.cpm)}</div></Glass>
-              </div>
 
-              <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.cyan}}></span><span style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:ff,letterSpacing:1}}>AWARENESS</span></div>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead><tr>{["Platform","Impressions","Reach","Frequency","CPM","CPM Benchmark"].map(function(h,hi){return <th key={hi} style={{padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
-                  <tbody>{Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);}).map(function(pl,pi){
-                    var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpm=pb.imps>0?(pb.spend/pb.imps*1000):0;var plFreq=pb.reach>0?pb.imps/pb.reach:0;
-                    var plBmCpm=pl==="TikTok"?benchmarks.tiktok.cpm:pl==="Google Display"?benchmarks.google.cpm:benchmarks.meta.cpm;
-                    return <tr key={pi} style={{background:pc+"08"}}>
-                      <td style={{padding:"10px 12px",border:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fmt(pb.imps)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(pb.reach)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:plFreq>4?P.rose:plFreq>3?P.warning:plFreq>2?P.mint:P.txt}}>{plFreq>0?plFreq.toFixed(2)+"x":"\u2014"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:plCpm>0&&plCpm<=plBmCpm.mid?P.mint:plCpm>plBmCpm.high?P.rose:P.txt}}>{plCpm>0?fR(plCpm):"\u2014"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontSize:9,color:P.sub}}>{plBmCpm.label}</td>
-                    </tr>;})}
-                  </tbody>
-                </table>
-              </div>
+              {/* ═══ 1. EXECUTIVE NARRATIVE ═══ */}
+              <Insight title="Executive Read" accent={P.ember} icon={Ic.crown(P.ember,16)}>{execLines.join(" ")}</Insight>
 
-              <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.mint}}></span><span style={{fontSize:16,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>ENGAGEMENT</span></div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
-                  <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>BLENDED CPC</div><div style={{fontSize:22,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.ember,fontFamily:fm}}>{fR(blCpc)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>{benchLabel(blCpc,benchmarks.meta.cpc)}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>BLENDED CTR</div><div style={{fontSize:22,fontWeight:900,color:blCtr>2?P.mint:blCtr>1?P.txt:P.warning,fontFamily:fm}}>{blCtr.toFixed(2)+"%"}</div></Glass>
-                  <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL REACH</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(m.reach+t.reach+computed.gd.reach)}</div></Glass>
+              {/* ═══ 2. SPEND PACING ═══ */}
+              <div style={{marginTop:28,marginBottom:28}}>
+                <div style={{background:P.glass,borderRadius:18,padding:"24px 28px",border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:14,height:14,borderRadius:"50%",background:P.ember}}></span><span style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1}}>SPEND PACING</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:16}}>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>DAILY RUN RATE</div><div style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(dailySpend)}</div></div>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>PROJECTED TOTAL</div><div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(projSpend)}</div></div>
+                    </div>
+                  </div>
+                  <div style={{position:"relative",height:32,background:"rgba(0,0,0,0.3)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule}}>
+                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:pacePct+"%",background:"linear-gradient(90deg,"+P.ember+","+P.solar+")",borderRadius:10,transition:"width 0.6s ease"}}/>
+                    <div style={{position:"absolute",left:pacePct+"%",top:-2,bottom:-2,width:2,background:P.txt,opacity:0.6,zIndex:2}}/>
+                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:3}}><span style={{fontSize:11,fontWeight:900,color:"#fff",fontFamily:fm,textShadow:"0 1px 4px rgba(0,0,0,0.8)"}}>{fR(computed.totalSpend)+" \u00b7 Day "+elapsedDays+" of "+totalDays2}</span></div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
+                    <span style={{fontSize:9,color:P.sub,fontFamily:fm}}>{df}</span>
+                    <span style={{fontSize:9,fontWeight:700,color:pacePct>90?P.rose:pacePct>60?P.solar:P.mint,fontFamily:fm}}>{pacePct+"% of period elapsed"}</span>
+                    <span style={{fontSize:9,color:P.sub,fontFamily:fm}}>{dt}</span>
+                  </div>
                 </div>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead><tr>{["Platform","Clicks","CPC","CTR %","Verdict"].map(function(h,hi){return <th key={hi} style={{padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
-                  <tbody>{Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);}).filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl,pi){
-                    var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpc=pb.clicks>0?pb.spend/pb.clicks:0;var plCtr=pb.imps>0?(pb.clicks/pb.imps*100):0;
-                    var plBm=pl==="TikTok"?benchmarks.tiktok.cpc:pl==="Google Display"?benchmarks.google.cpc:benchmarks.meta.cpc;
-                    var verdict=plCpc>0&&plCpc<=plBm.low?"Excellent":plCpc<=plBm.mid?"Good":plCpc<=plBm.high?"Average":"Review";
-                    var vCol=verdict==="Excellent"||verdict==="Good"?P.mint:verdict==="Average"?P.solar:P.rose;
-                    return <tr key={pi} style={{background:pc+"08"}}>
-                      <td style={{padding:"10px 12px",border:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:P.txt}}>{fmt(pb.clicks)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:vCol}}>{fR(plCpc)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:plCtr>2?P.mint:plCtr>1?P.txt:P.warning}}>{plCtr.toFixed(2)+"%"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:vCol,color:"#fff",fontSize:8,fontWeight:900,padding:"3px 8px",borderRadius:4}}>{verdict.toUpperCase()}</span></td>
-                    </tr>;})}
-                  </tbody>
-                </table>
               </div>
 
-              <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.rose}}></span><span style={{fontSize:16,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>OBJECTIVES</span></div>
+              {/* ═══ 3. EFFICIENCY SCORECARD ═══ */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:28}}>
+                <Glass accent={P.mint} hv={true} st={{padding:20,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:8}}>BLENDED CPC</div><div style={{fontSize:32,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}</div><div style={{marginTop:8}}><span style={{fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:4,color:"#fff",background:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"AVERAGE":"REVIEW"}</span></div></Glass>
+                <Glass accent={P.solar} hv={true} st={{padding:20,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:8}}>BLENDED CTR</div><div style={{fontSize:32,fontWeight:900,color:blCtr>2?P.mint:blCtr>1?P.txt:P.warning,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{"SA benchmark: 0.9\u20131.4%"}</div></Glass>
+                <Glass accent={P.orchid} hv={true} st={{padding:20,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:8}}>BLENDED CPM</div><div style={{fontSize:32,fontWeight:900,color:computed.blendedCpm<12?P.mint:computed.blendedCpm<25?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(computed.blendedCpm)}</div><div style={{marginTop:8}}><span style={{fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:4,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
+              </div>
+
+              {/* ═══ 4. PLATFORM PERFORMANCE + SPEND ALLOCATION ═══ */}
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16,marginBottom:28}}>
+                <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.cyan}}></span><span style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:ff,letterSpacing:1}}>PLATFORM PERFORMANCE</span></div>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr>{["Platform","Spend","Impressions","Clicks","CPC","CTR","Verdict"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead,{textAlign:hi===0?"left":"center"})}>{h}</th>;})}</tr></thead>
+                    <tbody>{sortedPlats.map(function(pl,pi){
+                      var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpc=pb.clicks>0?pb.spend/pb.clicks:0;var plCtr=pb.imps>0?(pb.clicks/pb.imps*100):0;
+                      var plBm=pl==="TikTok"?benchmarks.tiktok.cpc:pl==="Google Display"?benchmarks.google.cpc:benchmarks.meta.cpc;
+                      var verdict=plCpc>0&&plCpc<=plBm.low?"Excellent":plCpc<=plBm.mid?"Good":plCpc<=plBm.high?"Average":"Review";
+                      var vCol=verdict==="Excellent"||verdict==="Good"?P.mint:verdict==="Average"?P.solar:P.rose;
+                      return <tr key={pi} style={{background:pc+"06"}}>
+                        <td style={tCell({textAlign:"left"})}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
+                        <td style={tCell({fontWeight:700,color:P.txt})}>{fR(pb.spend)}</td>
+                        <td style={tCell({color:P.txt})}>{fmt(pb.imps)}</td>
+                        <td style={tCell({fontWeight:700,color:P.txt})}>{fmt(pb.clicks)}</td>
+                        <td style={tCell({fontWeight:700,color:vCol})}>{plCpc>0?fR(plCpc):"\u2014"}</td>
+                        <td style={tCell({color:plCtr>2?P.mint:plCtr>1?P.txt:P.warning})}>{plCtr>0?plCtr.toFixed(2)+"%":"\u2014"}</td>
+                        <td style={tCell()}><span style={{background:vCol,color:"#fff",fontSize:8,fontWeight:900,padding:"3px 8px",borderRadius:4}}>{verdict.toUpperCase()}</span></td>
+                      </tr>;})}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{background:P.glass,borderRadius:18,padding:"24px 20px",border:"1px solid "+P.rule,display:"flex",flexDirection:"column",alignItems:"center"}}>
+                  <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:16}}>SPEND ALLOCATION</div>
+                  <div style={{width:160,height:160,position:"relative"}}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart><Pie data={spendData} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} stroke="none">{spendData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie></PieChart>
+                    </ResponsiveContainer>
+                    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div><div style={{fontSize:8,color:P.sub,fontFamily:fm}}>TOTAL</div></div>
+                  </div>
+                  <div style={{marginTop:14,width:"100%"}}>
+                    {spendData.map(function(sd,si){var pct=computed.totalSpend>0?(sd.value/computed.totalSpend*100):0;return <div key={si} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:si<spendData.length-1?"1px solid "+P.rule:"none"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:sd.color}}></span><span style={{fontSize:10,color:P.txt,fontFamily:fm}}>{sd.name}</span></div>
+                      <span style={{fontSize:10,fontWeight:700,color:sd.color,fontFamily:fm}}>{pct.toFixed(0)+"%"}</span>
+                    </div>;})}
+                  </div>
+                </div>
+              </div>
+
+              {/* ═══ 5. OBJECTIVE DELIVERY ═══ */}
+              {objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.rose}}></span><span style={{fontSize:16,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>OBJECTIVE DELIVERY</span></div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14}}>
                   {objKeys.filter(function(k){return objectives4[k];}).map(function(objName){
                     var od=objectives4[objName];var oc=objCol4[objName]||P.ember;var costPer=od.results>0?od.spend/od.results:0;
                     var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
-                    var bmStatus=costPer>0&&bm?benchLabel(costPer,bm):"";
                     var bmCol=costPer>0&&bm&&costPer<=bm.mid?P.mint:costPer>0&&bm&&costPer>bm.high?P.rose:P.solar;
-                    return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"18px 16px",border:"1px solid "+oc+"30"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:11,fontWeight:800,color:oc,fontFamily:ff}}>{objName}</span></div>
-                      <div style={{fontSize:28,fontWeight:900,color:oc,fontFamily:fm,marginBottom:4}}>{fmt(od.results)}</div>
-                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10}}>results from {fR(od.spend)}</div>
-                      <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid "+P.rule,paddingTop:10}}>
-                        <div><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:16,fontWeight:900,color:costPer>0?P.ember:P.dim,fontFamily:fm}}>{costPer>0?fR(costPer):"\u2014"}</div></div>
-                        <div style={{textAlign:"right"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>BENCHMARK</div><div style={{fontSize:9,fontWeight:700,color:bmCol,fontFamily:fm,marginTop:2}}>{bmStatus||"\u2014"}</div></div>
+                    var bmTag=costPer>0&&bm?(costPer<=bm.low?"EXCELLENT":costPer<=bm.mid?"GOOD":costPer<=bm.high?"AVERAGE":"REVIEW"):"";
+                    return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{objName}</span></div>
+                      <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}</div>
+                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:14}}>from {fR(od.spend)} invested</div>
+                      <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <div><div style={{fontSize:8,color:"rgba(255,255,255,0.45)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?bmCol:P.dim,fontFamily:fm}}>{costPer>0?fR(costPer):"\u2014"}</div></div>
+                        {bmTag&&<span style={{fontSize:8,fontWeight:800,padding:"3px 8px",borderRadius:4,color:"#fff",background:bmCol}}>{bmTag}</span>}
                       </div>
                     </div>;})}
                 </div>
-              </div>
+              </div>}
 
-              {adsets.length>0&&(function(){
-                var selAdsets2=adsets.filter(function(a){
-                  for(var si3=0;si3<sel.length;si3++){if(a.campaignName===sel[si3].campaignName||a.campaignId===(sel[si3].rawCampaignId||sel[si3].campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"")))return true;}
-                  return false;
-                }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
-                if(selAdsets2.length===0)return null;
-                var topAdsets=selAdsets2.map(function(a){
-                  var spend2=parseFloat(a.spend||0);var clicks2=parseFloat(a.clicks||0);var imps2=parseFloat(a.impressions||0);
-                  var result2=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(result2===0)result2=clicks2;
-                  var costPer2=result2>0?spend2/result2:0;
-                  return{name:a.adsetName,platform:a.platform,spend:spend2,result:result2,costPer:costPer2,ctr:imps2>0?(clicks2/imps2*100):0};
-                }).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});
-                var worstAdsets=selAdsets2.map(function(a){
-                  var spend2=parseFloat(a.spend||0);var clicks2=parseFloat(a.clicks||0);var imps2=parseFloat(a.impressions||0);
-                  var result2=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(result2===0)result2=clicks2;
-                  return{name:a.adsetName,platform:a.platform,spend:spend2,result:result2,ctr:imps2>0?(clicks2/imps2*100):0};
-                }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
-                if(topAdsets.length===0&&worstAdsets.length===0)return null;
-                return <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.solar}}></span><span style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1}}>TARGETING</span></div>
-                  {topAdsets.length>0&&<div style={{marginBottom:16}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:fm,letterSpacing:2,marginBottom:10}}>TOP PERFORMERS</div>
-                    {topAdsets.slice(0,3).map(function(ta,ti){
-                      var pc7=ta.platform==="Facebook"?P.fb:ta.platform==="Instagram"?P.ig:ta.platform==="TikTok"?P.tt:P.gd;
-                      return <div key={ti} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:6,background:P.mint+"08",borderLeft:"3px solid "+P.mint,borderRadius:"0 8px 8px 0"}}>
-                        <span style={{background:pc7,color:"#fff",fontSize:8,fontWeight:700,padding:"2px 8px",borderRadius:8}}>{ta.platform==="Facebook"?"FB":ta.platform==="Instagram"?"IG":ta.platform==="TikTok"?"TT":"GD"}</span>
-                        <div style={{flex:1,fontSize:11,fontWeight:600,color:P.txt,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{ta.name}</div>
-                        <div style={{fontSize:14,fontWeight:900,color:P.mint,fontFamily:fm,whiteSpace:"nowrap"}}>{fmt(ta.result)}</div>
-                        <div style={{fontSize:10,color:P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{fR(ta.costPer)+"/result"}</div>
-                      </div>;})}
-                  </div>}
-                  {worstAdsets.length>0&&<div>
-                    <div style={{fontSize:10,fontWeight:800,color:P.rose,fontFamily:fm,letterSpacing:2,marginBottom:10}}>REQUIRES ATTENTION</div>
+              {/* ═══ 6. STANDOUT SIGNALS ═══ */}
+              {(critFlags.length>0||warnFlags.length>0||posFlags.length>0||topAdsets.length>0||worstAdsets.length>0)&&<div style={{display:"grid",gridTemplateColumns:topAdsets.length>0&&(critFlags.length>0||warnFlags.length>0)?"1fr 1fr":"1fr",gap:16,marginBottom:28}}>
+                {topAdsets.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.mint}}></span><span style={{fontSize:14,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>WINNING</span></div>
+                  {topAdsets.slice(0,4).map(function(ta,ti){
+                    var pc7=platCol4[ta.platform]||P.ember;
+                    return <div key={ti} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:P.mint+"06",borderLeft:"3px solid "+P.mint,borderRadius:"0 8px 8px 0"}}>
+                      <span style={{background:pc7,color:"#fff",fontSize:8,fontWeight:700,padding:"2px 8px",borderRadius:8,flexShrink:0}}>{platShort[ta.platform]||ta.platform}</span>
+                      <div style={{flex:1,fontSize:10,fontWeight:600,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis"}}>{ta.name}</div>
+                      <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(ta.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm}}>{fR(ta.costPer)+"/ea"}</div></div>
+                    </div>;})}
+                  {worstAdsets.length>0&&<div style={{marginTop:16}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:P.rose}}></span><span style={{fontSize:12,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>UNDERPERFORMING</span></div>
                     {worstAdsets.slice(0,3).map(function(wa,wi){
-                      var pc8=wa.platform==="Facebook"?P.fb:wa.platform==="Instagram"?P.ig:wa.platform==="TikTok"?P.tt:P.gd;
-                      return <div key={wi} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:6,background:P.rose+"08",borderLeft:"3px solid "+P.rose,borderRadius:"0 8px 8px 0"}}>
-                        <span style={{background:pc8,color:"#fff",fontSize:8,fontWeight:700,padding:"2px 8px",borderRadius:8}}>{wa.platform==="Facebook"?"FB":wa.platform==="Instagram"?"IG":wa.platform==="TikTok"?"TT":"GD"}</span>
-                        <div style={{flex:1,fontSize:11,fontWeight:600,color:P.txt,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{wa.name}</div>
-                        <div style={{fontSize:14,fontWeight:900,color:P.rose,fontFamily:fm,whiteSpace:"nowrap"}}>{wa.result===0?"No results":wa.ctr.toFixed(2)+"% CTR"}</div>
-                        <div style={{fontSize:10,color:P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{fR(wa.spend)+" spent"}</div>
+                      var pc8=platCol4[wa.platform]||P.ember;
+                      return <div key={wi} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:P.rose+"06",borderLeft:"3px solid "+P.rose,borderRadius:"0 8px 8px 0"}}>
+                        <span style={{background:pc8,color:"#fff",fontSize:8,fontWeight:700,padding:"2px 8px",borderRadius:8,flexShrink:0}}>{platShort[wa.platform]||wa.platform}</span>
+                        <div style={{flex:1,fontSize:10,fontWeight:600,color:P.txt,lineHeight:1.4}}>{wa.name}</div>
+                        <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:12,fontWeight:900,color:P.rose,fontFamily:fm}}>{wa.result===0?"No results":wa.ctr.toFixed(2)+"% CTR"}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm}}>{fR(wa.spend)+" spent"}</div></div>
                       </div>;})}
                   </div>}
-                </div>;
-              })()}
+                </div>}
+                {(critFlags.length>0||warnFlags.length>0||posFlags.length>0)&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.solar}}></span><span style={{fontSize:14,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1}}>SIGNALS</span></div>
+                  {critFlags.concat(warnFlags).concat(posFlags).slice(0,5).map(function(fl,fi){
+                    var sCol={critical:P.critical,warning:P.warning,positive:P.positive}[fl.severity]||P.info;
+                    return <div key={fi} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",marginBottom:6,background:sCol+"06",borderLeft:"3px solid "+sCol,borderRadius:"0 8px 8px 0"}}>
+                      <SevBadge s={fl.severity}/>
+                      <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4}}>{fl.metric}</div><div style={{fontSize:10,color:P.sub,marginTop:2}}>{fl.currentValue+" \u00b7 "+fl.platform}</div></div>
+                    </div>;})}
+                </div>}
+              </div>}
 
-              {(function(){
-                var matchedPages3=[];var matchedIds3={};
-                for(var s3=0;s3<sel.length;s3++){var bestPg3=null;var bestSc3=0;for(var p3=0;p3<pages.length;p3++){var sc4=autoMatchPage(sel[s3].campaignName,pages[p3].name);if(sc4>bestSc3){bestSc3=sc4;bestPg3=pages[p3];}}if(bestPg3&&bestSc3>=2&&matchedIds3[bestPg3.id]!==true){matchedPages3.push(bestPg3);matchedIds3[bestPg3.id]=true;}}
-                var fbT2=0;var igT2=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;}});
-                var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"&&(camp.campaignName||"").toLowerCase().indexOf("follower")>=0){ttE2+=parseFloat(camp.follows||0);}});
-                var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
-                var grandT2=fbT2+igT2+ttT2;
-                if(grandT2===0)return null;
-                return <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:ff,letterSpacing:1}}>COMMUNITY</span></div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-                    <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></Glass>
-                    <Glass accent={P.fb} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>FACEBOOK</div><div style={{fontSize:18,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(fbT2)}</div></Glass>
-                    <Glass accent={P.ig} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>INSTAGRAM</div><div style={{fontSize:18,fontWeight:900,color:P.ig,fontFamily:fm}}>{fmt(igT2)}</div></Glass>
-                    <Glass accent={P.tt} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TIKTOK</div><div style={{fontSize:18,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(ttT2)}</div></Glass>
+              {/* ═══ 7. COMMUNITY SNAPSHOT ═══ */}
+              {grandT2>0&&<div style={{background:P.glass,borderRadius:18,padding:"18px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:24}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:12,height:12,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:14,fontWeight:900,color:P.tt,fontFamily:ff,letterSpacing:1}}>COMMUNITY</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:20,flex:1,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                    <div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>TOTAL</div><div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></div>
+                    {fbT2>0&&<div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>FB</div><div style={{fontSize:16,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(fbT2)}</div></div>}
+                    {igT2>0&&<div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>IG</div><div style={{fontSize:16,fontWeight:900,color:P.ig,fontFamily:fm}}>{fmt(igT2)}</div></div>}
+                    {ttT2>0&&<div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>TT</div><div style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(ttT2)}</div></div>}
                   </div>
-                </div>;
-              })()}
+                </div>
+              </div>}
 
-              <Insight title="Executive Summary" accent={P.ember} icon={Ic.crown(P.ember,16)}>{(function(){
-                var p=[];
-                p.push(fR(computed.totalSpend)+" invested across "+Object.keys(platBreak).length+" platforms over "+totalDays2+" days, delivering "+fmt(computed.totalImps)+" impressions at "+fR(computed.blendedCpm)+" CPM ("+benchLabel(computed.blendedCpm,benchmarks.meta.cpm)+") and "+fmt(computed.totalClicks)+" clicks at "+fR(blCpc)+" CPC ("+benchLabel(blCpc,benchmarks.meta.cpc)+").");
-                if(m.frequency>0){p.push("Meta frequency at "+m.frequency.toFixed(2)+"x is "+(freqStatus==="critical"?"above the 4x fatigue ceiling, requiring urgent creative rotation.":freqStatus==="warning"?"approaching the 3x threshold, proactive creative refresh recommended.":freqStatus==="healthy"?"within the optimal 2-3x recall window.":"in early phase with headroom to build."));}
-                objKeys.forEach(function(objName){if(!objectives4[objName])return;var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;if(od.results>=10){p.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+", "+benchLabel(cp,bm)+". Confirmed at scale.");}else if(od.results>0){p.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+". Below 10-result threshold for confirmed read.");}else if(od.spend>0){p.push(objName+": "+fR(od.spend)+" invested, no results yet.");}});
-                return p.join(" ");
-              })()}</Insight>
             </div>;
           })()}
         </div>)}
