@@ -130,6 +130,19 @@ export default function MediaOnGas(){
   var au=useState(null),session=au[0],setSession=au[1];
   var ac=useState(true),authChecking=ac[0],setAuthChecking=ac[1];
   var ar=useState(null),authRole=ar[0],setAuthRole=ar[1];
+  var ts=useState("summary"),tab=ts[0],setTab=ts[1];
+  var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
+  var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
+  var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
+  var ss=useState([]),selected=ss[0],setSelected=ss[1];
+  var rs=useState(""),search=rs[0],setSearch=rs[1];
+  var ls=useState(true),loading=ls[0],setLoading=ls[1];
+  var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
+  var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
+  var fs=useState([]),flags=fs[0],setFlags=fs[1];
+  var ps=useState([]),pages=ps[0],setPages=ps[1];
+  var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
+  var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
 
   useEffect(function(){
     var saved=sessionStorage.getItem("gas_session");
@@ -146,19 +159,6 @@ export default function MediaOnGas(){
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
   if(!session)return(<LoginScreen onLogin={handleLogin}/>);
 
-  var ts=useState("summary"),tab=ts[0],setTab=ts[1];
-  var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
-  var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
-  var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
-  var ss=useState([]),selected=ss[0],setSelected=ss[1];
-  var rs=useState(""),search=rs[0],setSearch=rs[1];
-  var ls=useState(true),loading=ls[0],setLoading=ls[1];
-  var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
-  var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
-  var fs=useState([]),flags=fs[0],setFlags=fs[1];
-  var ps=useState([]),pages=ps[0],setPages=ps[1];
-  var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
-  var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
   var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client";
 
   var pageOverrides=[
