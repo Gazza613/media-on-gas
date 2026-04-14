@@ -1,5 +1,7 @@
+import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
+  if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
   const token = process.env.META_ACCESS_TOKEN;
   const url = "https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=" + token;

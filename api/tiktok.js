@@ -1,3 +1,4 @@
+import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates, ALLOWED_CLIENTS } from "./_validate.js";
 const clientAdvertisers = {
@@ -5,6 +6,7 @@ const clientAdvertisers = {
 };
 
 export default async function handler(req, res) {
+  if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
   if (!validateDates(req, res)) return;
   const token = process.env.TIKTOK_ACCESS_TOKEN;
