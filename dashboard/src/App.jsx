@@ -93,7 +93,7 @@ function genFlags(m,t,camps){
 }
 
 export default function MediaOnGas(){
-  var ts=useState("overview"),tab=ts[0],setTab=ts[1];
+  var ts=useState("summary"),tab=ts[0],setTab=ts[1];
   var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
