@@ -394,7 +394,7 @@ export default function MediaOnGas(){
                     <div style={{height:200}}>
                       <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>SPEND BY PLATFORM</div>
                       <ResponsiveContainer width="100%" height="85%">
-                        <PieChart><Pie data={spendData} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={68} paddingAngle={3} stroke="none" label={function(e){return e.name+" "+Math.round(e.value/computed.totalSpend*100)+"%";}} labelLine={false} style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:P.txt}}>{spendData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie><Tooltip content={<Tip/>}/></PieChart>
+                        <PieChart><Pie data={spendData} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={68} paddingAngle={3} stroke="none" label={function(e){return e.name+" "+Math.round(e.value/computed.totalSpend*100)+"%";}} labelLine={false} style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:P.txt}}>{spendData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie><Tooltip formatter={function(v){return fR(v);}} contentStyle={{background:"#121212",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,fontSize:11,fontFamily:fm}}/></PieChart>
                       </ResponsiveContainer>
                     </div>
                     <div style={{height:200}}>
@@ -500,7 +500,55 @@ export default function MediaOnGas(){
                 <Insight title="Objective Read" accent={P.rose} icon={Ic.target(P.rose,14)}>{(function(){var lines=[];objKeys.filter(function(k){return objectives4[k];}).forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;if(od.results>=10)lines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+"/result ("+benchLabel(cp,bm)+"). Delivering at scale with confirmed efficiency.");else if(od.results>0)lines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+". Sample size below 10 \u2014 allow the learning phase to complete before adjusting.");else if(od.spend>500)lines.push(objName+": "+fR(od.spend)+" invested with no attributable results yet. Review conversion tracking and landing page experience.");else if(od.spend>0)lines.push(objName+": "+fR(od.spend)+" invested, early delivery phase.");});return lines.join(" ")||"No active objectives detected.";})()}</Insight>
               </div>}
 
-              {/* ═══ 6. COMMUNITY GROWTH ═══ */}
+              {/* ═══ 6. TARGETING STANDOUTS ═══ */}
+              {selAdsets2.length>0&&(function(){
+                var topAd=selAdsets2.map(function(a){
+                  var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);
+                  var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;
+                  return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0,imps:im};
+                }).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});
+                var worstAd=selAdsets2.map(function(a){
+                  var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);
+                  var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;
+                  return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};
+                }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
+                if(topAd.length===0&&worstAd.length===0)return null;
+                var topChart=topAd.slice(0,5).map(function(a){return{name:a.name.length>25?a.name.substring(0,22)+"...":a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember};});
+                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(P.solar,"TARGETING STANDOUTS",Ic.radar(P.solar,18))}
+                  <div style={{display:"grid",gridTemplateColumns:topAd.length>0&&worstAd.length>0?"1fr 1fr":"1fr",gap:20,marginBottom:20}}>
+                    {topAd.length>0&&<div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.mint+"15",border:"1px solid "+P.mint+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.check(P.mint,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>TOP PERFORMERS</span></div>
+                      {topAd.slice(0,4).map(function(ta,ti){
+                        var pc7=platCol4[ta.platform]||P.ember;
+                        return <div key={ti} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",marginBottom:8,background:"linear-gradient(135deg,"+P.mint+"08,transparent)",borderLeft:"3px solid "+P.mint,borderRadius:"0 12px 12px 0",border:"1px solid "+P.mint+"15",borderLeftWidth:3}}>
+                          <span style={{background:pc7,color:"#fff",fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:8,flexShrink:0,letterSpacing:1}}>{platShort[ta.platform]||ta.platform}</span>
+                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ta.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmt(ta.imps)+" impressions \u00b7 "+ta.ctr.toFixed(2)+"% CTR"}</div></div>
+                          <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm,lineHeight:1}}>{fmt(ta.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(ta.costPer)+"/ea"}</div></div>
+                        </div>;})}
+                    </div>}
+                    {worstAd.length>0&&<div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.rose+"15",border:"1px solid "+P.rose+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.alert(P.rose,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>REQUIRES ATTENTION</span></div>
+                      {worstAd.slice(0,4).map(function(wa,wi){
+                        var pc8=platCol4[wa.platform]||P.ember;
+                        return <div key={wi} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",marginBottom:8,background:"linear-gradient(135deg,"+P.rose+"08,transparent)",borderLeft:"3px solid "+P.rose,borderRadius:"0 12px 12px 0",border:"1px solid "+P.rose+"15",borderLeftWidth:3}}>
+                          <span style={{background:pc8,color:"#fff",fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:8,flexShrink:0,letterSpacing:1}}>{platShort[wa.platform]||wa.platform}</span>
+                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{wa.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(wa.spend)+" spent \u00b7 "+wa.ctr.toFixed(2)+"% CTR"}</div></div>
+                          <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,fontWeight:900,color:P.rose,fontFamily:fm,lineHeight:1}}>{wa.result===0?"No results":fmt(wa.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{wa.result===0?"zero conversions":fR(wa.costPer)+"/ea"}</div></div>
+                        </div>;})}
+                    </div>}
+                  </div>
+                  {topChart.length>=2&&<div style={{height:220,marginBottom:16}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>TOP AD SET EFFICIENCY (RESULTS)</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <ComposedChart data={topChart} barSize={32}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:8,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]}>{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}/></ComposedChart>
+                    </ResponsiveContainer>
+                  </div>}
+                  <Insight title="Targeting Read" accent={P.solar} icon={Ic.radar(P.solar,14)}>{(function(){var lines=[];if(topAd.length>0){var best=topAd[0];lines.push("Strongest ad set: \""+best.name+"\" on "+best.platform+" \u2014 "+fmt(best.result)+" results at "+fR(best.costPer)+"/result with "+best.ctr.toFixed(2)+"% CTR. "+(topAd.length>1?"The top "+Math.min(topAd.length,4)+" ad sets are delivering above-benchmark efficiency and warrant increased budget allocation.":""));}if(worstAd.length>0){var worst=worstAd[0];lines.push((worstAd.length===1?"One ad set requires":""+worstAd.length+" ad sets require")+" attention. \""+worst.name+"\" has consumed "+fR(worst.spend)+" with "+(worst.result===0?"no attributable results":worst.ctr.toFixed(2)+"% CTR")+". "+(worstAd.length>1?"Recommend pausing underperformers and reallocating budget to the winning ad sets listed above.":"Review targeting parameters, creative alignment, and conversion tracking."));}return lines.join(" ")||"Insufficient ad set data for targeting analysis.";})()}</Insight>
+                </div>;
+              })()}
+
+              {/* ═══ 7. COMMUNITY GROWTH ═══ */}
               {grandT2>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.tt,"COMMUNITY GROWTH",Ic.users(P.tt,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
