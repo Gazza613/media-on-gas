@@ -2,6 +2,8 @@ import { validateSession } from "./auth.js";
 
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
+  "https://media.gasmarketing.co.za",
+  "http://media.gasmarketing.co.za",
   "http://localhost:5173",
   "http://localhost:3000"
 ];
