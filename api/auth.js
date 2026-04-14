@@ -1,5 +1,24 @@
-import { setCorsHeaders } from "./_auth.js";
 import { rateLimit } from "./_rateLimit.js";
+
+var ALLOWED_ORIGINS = [
+  "https://media-on-gas.vercel.app",
+  "https://media.gasmarketing.co.za",
+  "http://media.gasmarketing.co.za",
+  "http://localhost:5173",
+  "http://localhost:3000"
+];
+
+function setAuthCors(req, res) {
+  var origin = req.headers.origin || req.headers.Origin || "";
+  if (ALLOWED_ORIGINS.indexOf(origin) >= 0) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key, x-session-token");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+}
 
 var sessions = {};
 
@@ -42,7 +61,7 @@ export function getSessionRole(token) {
 }
 
 export default async function handler(req, res) {
-  setCorsHeaders(req, res);
+  setAuthCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 })) return;
 

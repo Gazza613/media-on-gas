@@ -1,5 +1,3 @@
-import { validateSession } from "./auth.js";
-
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
   "https://media.gasmarketing.co.za",
@@ -35,12 +33,7 @@ export function checkAuth(req, res) {
     res.status(200).end();
     return false;
   }
-  // Accept session token
-  var sessionToken = req.headers["x-session-token"] || "";
-  if (sessionToken && validateSession(sessionToken)) {
-    return true;
-  }
-  // Fall back to API key
+  // API key check (primary auth for serverless)
   var key = req.headers["x-api-key"] || req.query.api_key || "";
   var expected = process.env.DASHBOARD_API_KEY || "";
   if (key && expected && timingSafeEqual(key, expected)) {
