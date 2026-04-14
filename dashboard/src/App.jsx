@@ -297,6 +297,7 @@ export default function MediaOnGas(){
             var pacePct=Math.min(100,Math.round(paceRatio*100));
             var blCpc=computed.totalClicks>0?computed.totalSpend/computed.totalClicks:0;
             var blCtr=computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):0;
+            var blFreq=(m.reach+t.reach)>0?(m.impressions+t.impressions)/(m.reach+t.reach):0;
 
             var objectives4={};sel.forEach(function(camp){
               var n=(camp.campaignName||"").toLowerCase();var obj="Traffic";
@@ -324,128 +325,162 @@ export default function MediaOnGas(){
 
             var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
             var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember};});
+            var impData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,value:platBreak[pl].imps,color:platCol4[pl]||P.ember};});
+            var cpcData=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,cpc:pb.clicks>0?parseFloat((pb.spend/pb.clicks).toFixed(2)):0,color:platCol4[pl]||P.ember};});
+            var cpmData=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,cpm:pb.imps>0?parseFloat((pb.spend/pb.imps*1000).toFixed(2)):0,color:platCol4[pl]||P.ember};});
 
             /* --- Executive Narrative --- */
             var execLines=[];
             var bestCpmPlat="";var bestCpmVal=Infinity;var worstCpmPlat="";var worstCpmVal=0;
-            sortedPlats.forEach(function(pl){var pb=platBreak[pl];var cpm=pb.imps>0?pb.spend/pb.imps*1000:0;if(cpm>0&&cpm<bestCpmVal){bestCpmVal=cpm;bestCpmPlat=pl;}if(cpm>worstCpmVal){worstCpmVal=cpm;worstCpmPlat=pl;}});
-            execLines.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms over "+elapsedDays+" of "+totalDays2+" days. At the current daily run rate of "+fR(dailySpend)+", projected end-of-period spend is "+fR(projSpend)+".");
-            if(bestCpmPlat&&sortedPlats.length>1)execLines.push(bestCpmPlat+" is delivering the most capital-efficient reach at "+fR(bestCpmVal)+" CPM"+(worstCpmPlat!==bestCpmPlat?", whilst "+worstCpmPlat+" runs at "+fR(worstCpmVal)+" CPM \u2014 a "+Math.round(worstCpmVal/bestCpmVal)+"x differential worth monitoring.":"."));
-            if(m.frequency>0)execLines.push("Meta frequency sits at "+m.frequency.toFixed(2)+"x \u2014 "+(freqStatus==="critical"?"above the 4x fatigue ceiling. Creative rotation is overdue.":freqStatus==="warning"?"approaching the 3x pressure point. Preemptive creative refresh recommended within 48 hours.":freqStatus==="healthy"?"within the 2\u20133x optimal recall window. Headroom remains for continued delivery.":"in early build phase with full headroom ahead."));
+            var bestCpcPlat="";var bestCpcVal=Infinity;
+            sortedPlats.forEach(function(pl){var pb=platBreak[pl];var cpm=pb.imps>0?pb.spend/pb.imps*1000:0;var cpc=pb.clicks>0?pb.spend/pb.clicks:0;if(cpm>0&&cpm<bestCpmVal){bestCpmVal=cpm;bestCpmPlat=pl;}if(cpm>worstCpmVal){worstCpmVal=cpm;worstCpmPlat=pl;}if(cpc>0&&cpc<bestCpcVal){bestCpcVal=cpc;bestCpcPlat=pl;}});
+
+            execLines.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms over "+elapsedDays+" of "+totalDays2+" days, generating "+fmt(computed.totalImps)+" impressions and "+fmt(computed.totalClicks)+" clicks.");
+            execLines.push("Daily run rate stands at "+fR(dailySpend)+", projecting "+fR(projSpend)+" by period end"+(pacePct>=90?" \u2014 the flight is nearing completion.":(pacePct>=50?" \u2014 pacing is on track.":" \u2014 early in the delivery window with headroom to optimise.")));
+
             var activeObj=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
-            activeObj.forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;var bmV=cp>0&&bm?benchLabel(cp,bm):"";if(od.results>=10)execLines.push(objName+": "+fmt(od.results)+" conversions at "+fR(cp)+"/result, "+bmV+". Statistical confidence achieved.");else if(od.results>0)execLines.push(objName+": "+fmt(od.results)+" early conversions at "+fR(cp)+". Below the 10-result threshold for a confirmed read.");});
+            if(activeObj.length>0){
+              activeObj.forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;var bmV=cp>0&&bm?benchLabel(cp,bm):"";if(od.results>=10)execLines.push(objName+" objective is delivering "+fmt(od.results)+" results at "+fR(cp)+"/result, "+bmV+". Confirmed at scale with statistical confidence.");else if(od.results>0)execLines.push(objName+": "+fmt(od.results)+" early conversions at "+fR(cp)+". Below the 10-result threshold for a confirmed read \u2014 allow the learning phase to complete before drawing conclusions.");});
+            }
 
-            /* --- Standout Signals (flags + targeting) --- */
-            var activeFlags=flags.filter(function(f){return f.status==="open";});
-            var critFlags=activeFlags.filter(function(f){return f.severity==="critical";});
-            var warnFlags=activeFlags.filter(function(f){return f.severity==="warning";});
-            var posFlags=activeFlags.filter(function(f){return f.severity==="positive";});
+            if(bestCpmPlat&&sortedPlats.length>1&&worstCpmPlat!==bestCpmPlat){var cpmDiff=Math.round(worstCpmVal/bestCpmVal);execLines.push(bestCpmPlat+" delivers the most efficient reach at "+fR(bestCpmVal)+" CPM, whilst "+worstCpmPlat+" runs "+cpmDiff+"x higher at "+fR(worstCpmVal)+"."+(cpmDiff>=3?" This differential warrants a spend rebalance review towards the more efficient channel for awareness objectives.":""));}
+            if(m.frequency>0)execLines.push("Meta frequency sits at "+m.frequency.toFixed(2)+"x \u2014 "+(freqStatus==="critical"?"above the 4x fatigue ceiling. Creative rotation is overdue and audience fatigue is actively eroding engagement rates.":freqStatus==="warning"?"approaching the 3x pressure point. Preemptive creative refresh recommended within 48 hours to maintain delivery quality.":freqStatus==="healthy"?"within the 2\u20133x optimal recall window. The audience is being reached enough to build recognition without fatigue.":"in early build phase with full headroom ahead."));
 
+            /* --- Adset performance data --- */
             var selAdsets2=adsets.filter(function(a){
               for(var si3=0;si3<sel.length;si3++){if(a.campaignName===sel[si3].campaignName||a.campaignId===(sel[si3].rawCampaignId||sel[si3].campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"")))return true;}
               return false;
             }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
-            var topAdsets=selAdsets2.map(function(a){
-              var spend2=parseFloat(a.spend||0);var clicks2=parseFloat(a.clicks||0);var imps2=parseFloat(a.impressions||0);
-              var result2=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(result2===0)result2=clicks2;
-              return{name:a.adsetName,platform:a.platform,spend:spend2,result:result2,costPer:result2>0?spend2/result2:0,ctr:imps2>0?(clicks2/imps2*100):0};
-            }).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});
-            var worstAdsets=selAdsets2.map(function(a){
-              var spend2=parseFloat(a.spend||0);var clicks2=parseFloat(a.clicks||0);var imps2=parseFloat(a.impressions||0);
-              var result2=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(result2===0)result2=clicks2;
-              return{name:a.adsetName,platform:a.platform,spend:spend2,result:result2,ctr:imps2>0?(clicks2/imps2*100):0};
-            }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
 
             /* --- Community --- */
             var matchedPages3=[];var matchedIds3={};
             for(var s3=0;s3<sel.length;s3++){var bestPg3=null;var bestSc3=0;for(var p3=0;p3<pages.length;p3++){var sc4=autoMatchPage(sel[s3].campaignName,pages[p3].name);if(sc4>bestSc3){bestSc3=sc4;bestPg3=pages[p3];}}if(bestPg3&&bestSc3>=2&&matchedIds3[bestPg3.id]!==true){matchedPages3.push(bestPg3);matchedIds3[bestPg3.id]=true;}}
-            var fbT2=0;var igT2=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;}});
-            var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"&&(camp.campaignName||"").toLowerCase().indexOf("follower")>=0){ttE2+=parseFloat(camp.follows||0);}});
+            var fbT2=0;var igT2=0;var igGrowth=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;igGrowth+=mp.instagram_business_account.follower_growth||0;}});
+            var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"){ttE2+=parseFloat(camp.follows||0);}});
             var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
             var grandT2=fbT2+igT2+ttT2;
+            var earnedTotal=parseFloat(m.pageLikes||0)+igGrowth+ttE2;
+            var communityData=[];
+            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:parseFloat(m.pageLikes||0),color:P.fb});
+            if(igT2>0)communityData.push({name:"IG",total:igT2,earned:igGrowth,color:P.ig});
+            if(ttT2>0)communityData.push({name:"TT",total:ttT2,earned:ttE2,color:P.tt});
 
             var tHead={padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:P.ember,letterSpacing:1,background:"rgba(249,98,3,0.12)",border:"1px solid rgba(249,98,3,0.25)",fontFamily:fm};
             var tCell=function(extra){return Object.assign({padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12},extra||{});};
+            var secHead=function(color,title,icon){return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 14px"}}><div style={{display:"flex",alignItems:"center",gap:10}}>{icon||<span style={{width:14,height:14,borderRadius:"50%",background:color}}></span>}<span style={{fontSize:16,fontWeight:900,color:color,fontFamily:ff,letterSpacing:1}}>{title}</span></div></div>;};
 
             return <div>
 
-              {/* ═══ 1. EXECUTIVE NARRATIVE ═══ */}
-              <Insight title="Executive Read" accent={P.ember} icon={Ic.crown(P.ember,16)}>{execLines.join(" ")}</Insight>
+              {/* ═══ 1. EXECUTIVE SUMMARY ═══ */}
+              <Insight title="Executive Summary" accent={P.ember} icon={Ic.crown(P.ember,16)}>{execLines.join(" ")}</Insight>
 
-              {/* ═══ 2. SPEND PACING ═══ */}
+              {/* ═══ 2. BUDGET PACING ═══ */}
               <div style={{marginTop:28,marginBottom:28}}>
                 <div style={{background:P.glass,borderRadius:18,padding:"24px 28px",border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:14,height:14,borderRadius:"50%",background:P.ember}}></span><span style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1}}>SPEND PACING</span></div>
-                    <div style={{display:"flex",alignItems:"center",gap:16}}>
-                      <div style={{textAlign:"right"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>DAILY RUN RATE</div><div style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(dailySpend)}</div></div>
-                      <div style={{textAlign:"right"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>PROJECTED TOTAL</div><div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(projSpend)}</div></div>
+                  {secHead(P.ember,"BUDGET PACING",Ic.chart(P.ember,18))}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:14,marginBottom:20}}>
+                    <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div></Glass>
+                    <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>DAILY RUN RATE</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(dailySpend)}</div></Glass>
+                    <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>PROJECTED TOTAL</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fR(projSpend)}</div></Glass>
+                    <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>PLATFORMS</div><div style={{fontSize:22,fontWeight:900,color:P.orchid,fontFamily:fm}}>{sortedPlats.length}</div></Glass>
+                  </div>
+                  <div style={{position:"relative",height:36,background:"rgba(0,0,0,0.3)",borderRadius:12,overflow:"hidden",border:"1px solid "+P.rule,marginBottom:6}}>
+                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:pacePct+"%",background:"linear-gradient(90deg,"+P.ember+","+P.solar+")",borderRadius:12,transition:"width 0.6s ease"}}/>
+                    <div style={{position:"absolute",left:pacePct+"%",top:-2,bottom:-2,width:2,background:P.txt,opacity:0.6,zIndex:2}}/>
+                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:3}}><span style={{fontSize:12,fontWeight:900,color:"#fff",fontFamily:fm,textShadow:"0 1px 6px rgba(0,0,0,0.9)"}}>{"Day "+elapsedDays+" of "+totalDays2+" \u00b7 "+pacePct+"% elapsed"}</span></div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:9,color:P.sub,fontFamily:fm}}>{df}</span><span style={{fontSize:9,color:P.sub,fontFamily:fm}}>{dt}</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:20}}>
+                    <div style={{height:200}}>
+                      <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>SPEND BY PLATFORM</div>
+                      <ResponsiveContainer width="100%" height="85%">
+                        <PieChart><Pie data={spendData} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={68} paddingAngle={3} stroke="none" label={function(e){return e.name+" "+Math.round(e.value/computed.totalSpend*100)+"%";}} labelLine={false} style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:P.txt}}>{spendData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie><Tooltip content={<Tip/>}/></PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{height:200}}>
+                      <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>IMPRESSIONS BY PLATFORM</div>
+                      <ResponsiveContainer width="100%" height="85%">
+                        <BarChart data={impData} barSize={28}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>}/><Bar dataKey="value" name="Impressions" radius={[6,6,0,0]}>{impData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
-                  <div style={{position:"relative",height:32,background:"rgba(0,0,0,0.3)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule}}>
-                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:pacePct+"%",background:"linear-gradient(90deg,"+P.ember+","+P.solar+")",borderRadius:10,transition:"width 0.6s ease"}}/>
-                    <div style={{position:"absolute",left:pacePct+"%",top:-2,bottom:-2,width:2,background:P.txt,opacity:0.6,zIndex:2}}/>
-                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:3}}><span style={{fontSize:11,fontWeight:900,color:"#fff",fontFamily:fm,textShadow:"0 1px 4px rgba(0,0,0,0.8)"}}>{fR(computed.totalSpend)+" \u00b7 Day "+elapsedDays+" of "+totalDays2}</span></div>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
-                    <span style={{fontSize:9,color:P.sub,fontFamily:fm}}>{df}</span>
-                    <span style={{fontSize:9,fontWeight:700,color:pacePct>90?P.rose:pacePct>60?P.solar:P.mint,fontFamily:fm}}>{pacePct+"% of period elapsed"}</span>
-                    <span style={{fontSize:9,color:P.sub,fontFamily:fm}}>{dt}</span>
-                  </div>
+                  <Insight title="Pacing Read" accent={P.solar} icon={Ic.bolt(P.solar,14)}>{fR(computed.totalSpend)+" has been deployed across "+elapsedDays+" days at "+fR(dailySpend)+"/day. "+(pacePct>=90?"The flight is nearing completion \u2014 assess final performance against objectives before the next planning cycle.":pacePct>=50?"Delivery is pacing in line with the reporting window. Current trajectory projects "+fR(projSpend)+" by "+dt+".":"Early in the delivery window. Algorithms are still in learning phase \u2014 avoid premature optimisation calls until day 7 minimum.")}</Insight>
                 </div>
               </div>
 
-              {/* ═══ 3. EFFICIENCY SCORECARD ═══ */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:28}}>
-                <Glass accent={P.mint} hv={true} st={{padding:20,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:8}}>BLENDED CPC</div><div style={{fontSize:32,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}</div><div style={{marginTop:8}}><span style={{fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:4,color:"#fff",background:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"AVERAGE":"REVIEW"}</span></div></Glass>
-                <Glass accent={P.solar} hv={true} st={{padding:20,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:8}}>BLENDED CTR</div><div style={{fontSize:32,fontWeight:900,color:blCtr>2?P.mint:blCtr>1?P.txt:P.warning,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{"SA benchmark: 0.9\u20131.4%"}</div></Glass>
-                <Glass accent={P.orchid} hv={true} st={{padding:20,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:8}}>BLENDED CPM</div><div style={{fontSize:32,fontWeight:900,color:computed.blendedCpm<12?P.mint:computed.blendedCpm<25?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(computed.blendedCpm)}</div><div style={{marginTop:8}}><span style={{fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:4,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
+              {/* ═══ 3. AWARENESS HIGHLIGHTS ═══ */}
+              <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                {secHead(P.cyan,"AWARENESS HIGHLIGHTS",Ic.eye(P.cyan,18))}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                  <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(computed.totalImps)}</div></Glass>
+                  <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL REACH</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(m.reach+t.reach+computed.gd.reach)}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CPM</div><div style={{fontSize:24,fontWeight:900,color:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.high?P.solar:P.rose,fontFamily:fm}}>{fR(computed.blendedCpm)}</div><div style={{marginTop:4}}><span style={{fontSize:7,fontWeight:800,padding:"2px 8px",borderRadius:4,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
+                  <Glass accent={m.frequency>4?P.rose:m.frequency>3?P.warning:P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>META FREQUENCY</div><div style={{fontSize:24,fontWeight:900,color:m.frequency>4?P.rose:m.frequency>3?P.warning:m.frequency>2?P.mint:P.txt,fontFamily:fm}}>{m.frequency>0?m.frequency.toFixed(2)+"x":"\u2014"}</div><div style={{marginTop:4}}><span style={{fontSize:7,fontWeight:800,padding:"2px 8px",borderRadius:4,color:"#fff",background:m.frequency>4?P.rose:m.frequency>3?P.warning:P.mint}}>{m.frequency>4?"FATIGUE":m.frequency>3?"MONITOR":m.frequency>2?"OPTIMAL":"BUILDING"}</span></div></Glass>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                  <div style={{height:220}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>CPM BY PLATFORM</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <BarChart data={cpmData} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>}/><Bar dataKey="cpm" name="CPM" radius={[6,6,0,0]}>{cpmData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <table style={{width:"100%",borderCollapse:"collapse",alignSelf:"center"}}>
+                    <thead><tr>{["Platform","Impressions","Reach","Frequency","CPM"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead,{textAlign:hi===0?"left":"center"})}>{h}</th>;})}</tr></thead>
+                    <tbody>{sortedPlats.map(function(pl,pi){
+                      var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpm=pb.imps>0?(pb.spend/pb.imps*1000):0;var plFreq=pb.reach>0?pb.imps/pb.reach:0;
+                      var plBmCpm=pl==="TikTok"?benchmarks.tiktok.cpm:pl==="Google Display"?benchmarks.google.cpm:benchmarks.meta.cpm;
+                      return <tr key={pi} style={{background:pc+"06"}}>
+                        <td style={tCell({textAlign:"left"})}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
+                        <td style={tCell({fontWeight:700,color:P.txt})}>{fmt(pb.imps)}</td>
+                        <td style={tCell({color:P.txt})}>{fmt(pb.reach)}</td>
+                        <td style={tCell({fontWeight:700,color:plFreq>4?P.rose:plFreq>3?P.warning:plFreq>2?P.mint:P.txt})}>{plFreq>0?plFreq.toFixed(2)+"x":"\u2014"}</td>
+                        <td style={tCell({fontWeight:700,color:plCpm>0&&plCpm<=plBmCpm.mid?P.mint:plCpm>plBmCpm.high?P.rose:P.txt})}>{plCpm>0?fR(plCpm):"\u2014"}</td>
+                      </tr>;})}
+                    </tbody>
+                  </table>
+                </div>
+                <Insight title="Awareness Read" accent={P.cyan} icon={Ic.eye(P.cyan,14)}>{fmt(computed.totalImps)+" impressions delivered to "+fmt(m.reach+t.reach+computed.gd.reach)+" unique users at "+fR(computed.blendedCpm)+" blended CPM"+(bestCpmPlat?". "+bestCpmPlat+" leads on reach efficiency at "+fR(bestCpmVal)+" CPM":"")+(m.frequency>0?". Meta frequency at "+m.frequency.toFixed(2)+"x is "+(freqStatus==="critical"?"in the fatigue zone \u2014 creative rotation required immediately to protect engagement rates.":freqStatus==="warning"?"approaching pressure levels \u2014 schedule creative refresh within 48 hours.":freqStatus==="healthy"?"in the sweet spot for recall without fatigue.":"still building with full headroom."):"")+"."}</Insight>
               </div>
 
-              {/* ═══ 4. PLATFORM PERFORMANCE + SPEND ALLOCATION ═══ */}
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16,marginBottom:28}}>
-                <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.cyan}}></span><span style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:ff,letterSpacing:1}}>PLATFORM PERFORMANCE</span></div>
-                  <table style={{width:"100%",borderCollapse:"collapse"}}>
-                    <thead><tr>{["Platform","Spend","Impressions","Clicks","CPC","CTR","Verdict"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead,{textAlign:hi===0?"left":"center"})}>{h}</th>;})}</tr></thead>
-                    <tbody>{sortedPlats.map(function(pl,pi){
+              {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
+              <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS",Ic.bolt(P.mint,18))}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CPC</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}</div><div style={{marginTop:8}}><span style={{fontSize:7,fontWeight:800,padding:"2px 8px",borderRadius:4,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"AVERAGE":"REVIEW"}</span></div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:28,fontWeight:900,color:blCtr>2?P.mint:blCtr>1?P.txt:P.warning,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{"SA benchmark: 0.9\u20131.4%"}</div></Glass>
+                  <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                  <div style={{height:220}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>CPC BY PLATFORM</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <BarChart data={cpcData} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>}/><Bar dataKey="cpc" name="CPC" radius={[6,6,0,0]}>{cpcData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <table style={{width:"100%",borderCollapse:"collapse",alignSelf:"center"}}>
+                    <thead><tr>{["Platform","Clicks","CPC","CTR","Verdict"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead,{textAlign:hi===0?"left":"center"})}>{h}</th>;})}</tr></thead>
+                    <tbody>{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl,pi){
                       var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpc=pb.clicks>0?pb.spend/pb.clicks:0;var plCtr=pb.imps>0?(pb.clicks/pb.imps*100):0;
                       var plBm=pl==="TikTok"?benchmarks.tiktok.cpc:pl==="Google Display"?benchmarks.google.cpc:benchmarks.meta.cpc;
                       var verdict=plCpc>0&&plCpc<=plBm.low?"Excellent":plCpc<=plBm.mid?"Good":plCpc<=plBm.high?"Average":"Review";
                       var vCol=verdict==="Excellent"||verdict==="Good"?P.mint:verdict==="Average"?P.solar:P.rose;
                       return <tr key={pi} style={{background:pc+"06"}}>
-                        <td style={tCell({textAlign:"left"})}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
-                        <td style={tCell({fontWeight:700,color:P.txt})}>{fR(pb.spend)}</td>
-                        <td style={tCell({color:P.txt})}>{fmt(pb.imps)}</td>
+                        <td style={tCell({textAlign:"left"})}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
                         <td style={tCell({fontWeight:700,color:P.txt})}>{fmt(pb.clicks)}</td>
-                        <td style={tCell({fontWeight:700,color:vCol})}>{plCpc>0?fR(plCpc):"\u2014"}</td>
-                        <td style={tCell({color:plCtr>2?P.mint:plCtr>1?P.txt:P.warning})}>{plCtr>0?plCtr.toFixed(2)+"%":"\u2014"}</td>
+                        <td style={tCell({fontWeight:700,color:vCol})}>{fR(plCpc)}</td>
+                        <td style={tCell({color:plCtr>2?P.mint:plCtr>1?P.txt:P.warning})}>{plCtr.toFixed(2)+"%"}</td>
                         <td style={tCell()}><span style={{background:vCol,color:"#fff",fontSize:8,fontWeight:900,padding:"3px 8px",borderRadius:4}}>{verdict.toUpperCase()}</span></td>
                       </tr>;})}
                     </tbody>
                   </table>
                 </div>
-                <div style={{background:P.glass,borderRadius:18,padding:"24px 20px",border:"1px solid "+P.rule,display:"flex",flexDirection:"column",alignItems:"center"}}>
-                  <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:16}}>SPEND ALLOCATION</div>
-                  <div style={{width:160,height:160,position:"relative"}}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart><Pie data={spendData} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} stroke="none">{spendData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie></PieChart>
-                    </ResponsiveContainer>
-                    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:16,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div><div style={{fontSize:8,color:P.sub,fontFamily:fm}}>TOTAL</div></div>
-                  </div>
-                  <div style={{marginTop:14,width:"100%"}}>
-                    {spendData.map(function(sd,si){var pct=computed.totalSpend>0?(sd.value/computed.totalSpend*100):0;return <div key={si} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:si<spendData.length-1?"1px solid "+P.rule:"none"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:sd.color}}></span><span style={{fontSize:10,color:P.txt,fontFamily:fm}}>{sd.name}</span></div>
-                      <span style={{fontSize:10,fontWeight:700,color:sd.color,fontFamily:fm}}>{pct.toFixed(0)+"%"}</span>
-                    </div>;})}
-                  </div>
-                </div>
+                <Insight title="Engagement Read" accent={P.mint} icon={Ic.bolt(P.mint,14)}>{fmt(computed.totalClicks)+" clicks generated at "+fR(blCpc)+" blended CPC ("+benchLabel(blCpc,benchmarks.meta.cpc)+") and "+blCtr.toFixed(2)+"% CTR"+(bestCpcPlat?". "+bestCpcPlat+" delivers the strongest click efficiency at "+fR(bestCpcVal)+" CPC":"")+". "+(blCpc<=benchmarks.meta.cpc.low?"Click costs are well below benchmark \u2014 this is a scale signal. Consider increasing daily budgets 15\u201320% on top performers.":blCpc<=benchmarks.meta.cpc.mid?"Engagement efficiency sits within the healthy range. Focus on creative testing to push CPC below "+fR(benchmarks.meta.cpc.low)+".":"CPC is running above the efficient range. Audit creative performance and pause ad sets with CPC exceeding "+fR(benchmarks.meta.cpc.high)+".")}</Insight>
               </div>
 
-              {/* ═══ 5. OBJECTIVE DELIVERY ═══ */}
-              {objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.rose}}></span><span style={{fontSize:16,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>OBJECTIVE DELIVERY</span></div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14}}>
+              {/* ═══ 5. OBJECTIVE HIGHLIGHTS ═══ */}
+              {objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                {secHead(P.rose,"OBJECTIVE HIGHLIGHTS",Ic.target(P.rose,18))}
+                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14,marginBottom:20}}>
                   {objKeys.filter(function(k){return objectives4[k];}).map(function(objName){
                     var od=objectives4[objName];var oc=objCol4[objName]||P.ember;var costPer=od.results>0?od.spend/od.results:0;
                     var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
@@ -461,52 +496,34 @@ export default function MediaOnGas(){
                       </div>
                     </div>;})}
                 </div>
+                {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:200,marginBottom:16}}><div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="85%"><BarChart data={objData} barSize={40}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:9,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]}>{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart></ResponsiveContainer></div>;})()}
+                <Insight title="Objective Read" accent={P.rose} icon={Ic.target(P.rose,14)}>{(function(){var lines=[];objKeys.filter(function(k){return objectives4[k];}).forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;if(od.results>=10)lines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+"/result ("+benchLabel(cp,bm)+"). Delivering at scale with confirmed efficiency.");else if(od.results>0)lines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+". Sample size below 10 \u2014 allow the learning phase to complete before adjusting.");else if(od.spend>500)lines.push(objName+": "+fR(od.spend)+" invested with no attributable results yet. Review conversion tracking and landing page experience.");else if(od.spend>0)lines.push(objName+": "+fR(od.spend)+" invested, early delivery phase.");});return lines.join(" ")||"No active objectives detected.";})()}</Insight>
               </div>}
 
-              {/* ═══ 6. STANDOUT SIGNALS ═══ */}
-              {(critFlags.length>0||warnFlags.length>0||posFlags.length>0||topAdsets.length>0||worstAdsets.length>0)&&<div style={{display:"grid",gridTemplateColumns:topAdsets.length>0&&(critFlags.length>0||warnFlags.length>0)?"1fr 1fr":"1fr",gap:16,marginBottom:28}}>
-                {topAdsets.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.mint}}></span><span style={{fontSize:14,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>WINNING</span></div>
-                  {topAdsets.slice(0,4).map(function(ta,ti){
-                    var pc7=platCol4[ta.platform]||P.ember;
-                    return <div key={ti} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:P.mint+"06",borderLeft:"3px solid "+P.mint,borderRadius:"0 8px 8px 0"}}>
-                      <span style={{background:pc7,color:"#fff",fontSize:8,fontWeight:700,padding:"2px 8px",borderRadius:8,flexShrink:0}}>{platShort[ta.platform]||ta.platform}</span>
-                      <div style={{flex:1,fontSize:10,fontWeight:600,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis"}}>{ta.name}</div>
-                      <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(ta.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm}}>{fR(ta.costPer)+"/ea"}</div></div>
-                    </div>;})}
-                  {worstAdsets.length>0&&<div style={{marginTop:16}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><span style={{width:10,height:10,borderRadius:"50%",background:P.rose}}></span><span style={{fontSize:12,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>UNDERPERFORMING</span></div>
-                    {worstAdsets.slice(0,3).map(function(wa,wi){
-                      var pc8=platCol4[wa.platform]||P.ember;
-                      return <div key={wi} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:P.rose+"06",borderLeft:"3px solid "+P.rose,borderRadius:"0 8px 8px 0"}}>
-                        <span style={{background:pc8,color:"#fff",fontSize:8,fontWeight:700,padding:"2px 8px",borderRadius:8,flexShrink:0}}>{platShort[wa.platform]||wa.platform}</span>
-                        <div style={{flex:1,fontSize:10,fontWeight:600,color:P.txt,lineHeight:1.4}}>{wa.name}</div>
-                        <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:12,fontWeight:900,color:P.rose,fontFamily:fm}}>{wa.result===0?"No results":wa.ctr.toFixed(2)+"% CTR"}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm}}>{fR(wa.spend)+" spent"}</div></div>
-                      </div>;})}
-                  </div>}
-                </div>}
-                {(critFlags.length>0||warnFlags.length>0||posFlags.length>0)&&<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 14px"}}><span style={{width:14,height:14,borderRadius:"50%",background:P.solar}}></span><span style={{fontSize:14,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1}}>SIGNALS</span></div>
-                  {critFlags.concat(warnFlags).concat(posFlags).slice(0,5).map(function(fl,fi){
-                    var sCol={critical:P.critical,warning:P.warning,positive:P.positive}[fl.severity]||P.info;
-                    return <div key={fi} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",marginBottom:6,background:sCol+"06",borderLeft:"3px solid "+sCol,borderRadius:"0 8px 8px 0"}}>
-                      <SevBadge s={fl.severity}/>
-                      <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4}}>{fl.metric}</div><div style={{fontSize:10,color:P.sub,marginTop:2}}>{fl.currentValue+" \u00b7 "+fl.platform}</div></div>
-                    </div>;})}
-                </div>}
-              </div>}
-
-              {/* ═══ 7. COMMUNITY SNAPSHOT ═══ */}
-              {grandT2>0&&<div style={{background:P.glass,borderRadius:18,padding:"18px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:24}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:12,height:12,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:14,fontWeight:900,color:P.tt,fontFamily:ff,letterSpacing:1}}>COMMUNITY</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:20,flex:1,justifyContent:"flex-end",flexWrap:"wrap"}}>
-                    <div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>TOTAL</div><div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></div>
-                    {fbT2>0&&<div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>FB</div><div style={{fontSize:16,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(fbT2)}</div></div>}
-                    {igT2>0&&<div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>IG</div><div style={{fontSize:16,fontWeight:900,color:P.ig,fontFamily:fm}}>{fmt(igT2)}</div></div>}
-                    {ttT2>0&&<div style={{textAlign:"center"}}><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2}}>TT</div><div style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(ttT2)}</div></div>}
+              {/* ═══ 6. COMMUNITY GROWTH ═══ */}
+              {grandT2>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                {secHead(P.tt,"COMMUNITY GROWTH",Ic.users(P.tt,18))}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                  <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL COMMUNITY</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></Glass>
+                  <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>EARNED THIS PERIOD</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{earnedTotal>0?"+"+fmt(earnedTotal):"\u2014"}</div></Glass>
+                  <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>GROWTH RATE</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{grandT2>0&&earnedTotal>0?(earnedTotal/grandT2*100).toFixed(1)+"%":"\u2014"}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:8,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{earnedTotal>0?fR(computed.totalSpend/earnedTotal):"\u2014"}</div></Glass>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                  <div style={{height:220}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>COMMUNITY BY PLATFORM</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <BarChart data={communityData} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>}/><Bar dataKey="total" name="Total Followers" radius={[6,6,0,0]}>{communityData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{height:220}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>EARNED THIS PERIOD</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <BarChart data={communityData.filter(function(c){return c.earned>0;})} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>}/><Bar dataKey="earned" name="Earned Followers" radius={[6,6,0,0]}>{communityData.filter(function(c){return c.earned>0;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
+                <Insight title="Community Read" accent={P.tt} icon={Ic.users(P.tt,14)}>{"Total owned audience stands at "+fmt(grandT2)+" across "+(communityData.length)+" platforms"+(earnedTotal>0?", with "+fmt(earnedTotal)+" new members earned this period":"")+". "+(fbT2>0?"Facebook: "+fmt(fbT2)+" followers. ":"")+(igT2>0?"Instagram: "+fmt(igT2)+" followers"+(igGrowth>0?" (+"+fmt(igGrowth)+" growth)":"")+". ":"")+(ttT2>0?"TikTok: "+fmt(ttT2)+" followers"+(ttE2>0?" (+"+fmt(ttE2)+" earned via paid)":"")+". ":"")+(earnedTotal>0?"Every new follower reduces future paid reach costs and builds a compounding organic asset. "+(earnedTotal>100?"Community acquisition is delivering at meaningful scale \u2014 consider allocating dedicated budget to follower growth campaigns.":""):"")}</Insight>
               </div>}
 
             </div>;
