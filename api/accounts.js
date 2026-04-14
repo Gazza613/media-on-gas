@@ -1,4 +1,6 @@
+import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   const token = process.env.META_ACCESS_TOKEN;
   const url = "https://graph.facebook.com/v25.0/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=" + token;
 
@@ -36,7 +38,7 @@ export default async function handler(req, res) {
         accountId: a.id,
         slug: (nameMap[a.name] || a.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
       }));
-    res.setHeader("Access-Control-Allow-Origin", "*");
+
     res.status(200).json({ accounts: active });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -1,4 +1,6 @@
+import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   const clients = [
     {
       slug: "mtn-momo",
@@ -10,6 +12,6 @@ export default async function handler(req, res) {
       tiktokAdvertiserId: "7446793748044202000"
     }
   ];
-  res.setHeader("Access-Control-Allow-Origin", "*");
+
   res.status(200).json({ clients });
 }

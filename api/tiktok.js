@@ -1,8 +1,10 @@
+import { checkAuth } from "./_auth.js";
 const clientAdvertisers = {
   "mtn-momo": "7446793748044202000"
 };
 
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   const token = process.env.TIKTOK_ACCESS_TOKEN;
   const clientSlug = req.query.client || "mtn-momo";
   const advId = clientAdvertisers[clientSlug] || process.env.TIKTOK_ADVERTISER_ID;
@@ -14,7 +16,7 @@ export default async function handler(req, res) {
   try {
     const response = await fetch(url, {headers: {"Access-Token": token}});
     const data = await response.json();
-    res.setHeader("Access-Control-Allow-Origin", "*");
+
     res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });

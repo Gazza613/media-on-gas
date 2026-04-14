@@ -1,8 +1,10 @@
+import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   var token = process.env.META_ACCESS_TOKEN;
   var from = req.query.from || "";
   var to = req.query.to || "";
-  res.setHeader("Access-Control-Allow-Origin", "*");
+
 
   try {
     var pagesRes = await fetch("https://graph.facebook.com/v25.0/me/accounts?fields=name,id,fan_count,followers_count,access_token,instagram_business_account{id,username,followers_count}&limit=50&access_token=" + token);

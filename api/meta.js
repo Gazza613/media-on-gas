@@ -1,4 +1,6 @@
+import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   var token = process.env.META_ACCESS_TOKEN;
   var account = req.query.account || "act_8159212987434597";
   var from = req.query.from || "2026-04-01";
@@ -10,7 +12,7 @@ export default async function handler(req, res) {
   try {
     var response = await fetch(url);
     var data = await response.json();
-    res.setHeader("Access-Control-Allow-Origin", "*");
+
     res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });

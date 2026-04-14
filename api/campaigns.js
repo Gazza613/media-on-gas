@@ -1,3 +1,4 @@
+import { checkAuth } from "./_auth.js";
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
@@ -8,6 +9,7 @@ var metaAccounts = [
 ];
 
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
@@ -271,6 +273,6 @@ export default async function handler(req, res) {
     }
   } catch (pgErr) {}
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
+
   res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData });
 }

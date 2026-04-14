@@ -1,4 +1,6 @@
+import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-30";
   var metaToken = process.env.META_ACCESS_TOKEN;
