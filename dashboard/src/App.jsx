@@ -13,6 +13,39 @@ var fmt=function(n){var v=parseFloat(n);if(isNaN(v))return"0";if(v>=1e6)return(v
 var fR=function(n){var v=parseFloat(n);return isNaN(v)?"R0.00":"R"+v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});};
 var pc=function(n){var v=parseFloat(n);return isNaN(v)?"0.00%":v.toFixed(2)+"%";};
 
+function LoginScreen(props){
+  var es=useState(""),loginErr=es[0],setLoginErr=es[1];
+  var ps=useState(""),pw=ps[0],setPw=ps[1];
+  var ls=useState(false),busy=ls[0],setBusy=ls[1];
+  var handleLogin=function(){
+    if(!pw){setLoginErr("Please enter a password");return;}
+    setBusy(true);setLoginErr("");
+    fetch(API+"/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      setBusy(false);
+      if(d.token){sessionStorage.setItem("gas_session",d.token);sessionStorage.setItem("gas_role",d.role||"admin");props.onLogin(d.token,d.role);}
+      else{setLoginErr("Invalid password");}
+    }).catch(function(){setBusy(false);setLoginErr("Connection error");});
+  };
+  return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)",fontFamily:ff}}>
+    <div style={{position:"fixed",inset:0,pointerEvents:"none"}}><div style={{position:"absolute",inset:0,opacity:0.015,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
+    <div style={{width:"100%",maxWidth:380,padding:32,position:"relative",zIndex:1}}>
+      <div style={{textAlign:"center",marginBottom:40}}>
+        <div style={{width:72,height:72,borderRadius:"50%",overflow:"hidden",margin:"0 auto 20px",boxShadow:"0 0 40px rgba(249,98,3,0.3)"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
+        <div style={{fontSize:20,fontWeight:900,letterSpacing:6,fontFamily:fm,lineHeight:1,marginBottom:8}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div>
+        <div style={{fontSize:10,color:P.sub,letterSpacing:3,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Digital Performance Intelligence</div>
+      </div>
+      <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(20px)"}}>
+        <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:16,textAlign:"center"}}>Dashboard Access</div>
+        <input type="password" placeholder="Enter password" value={pw} onChange={function(e){setPw(e.target.value);setLoginErr("");}} onKeyDown={function(e){if(e.key==="Enter")handleLogin();}} autoFocus style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2}}/>
+        {loginErr&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center"}}>{loginErr}</div>}
+        <button onClick={handleLogin} disabled={busy} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2,opacity:busy?0.7:1}}>{busy?"AUTHENTICATING...":"ENTER"}</button>
+      </div>
+    </div>
+  </div>);
+}
+
 var Ic={
 chart:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><rect x="3" y="12" width="4" height="9" rx="1" stroke={c} strokeWidth="1.5" fill={c+"15"}/><rect x="10" y="6" width="4" height="15" rx="1" stroke={c} strokeWidth="1.5" fill={c+"15"}/><rect x="17" y="2" width="4" height="19" rx="1" stroke={c} strokeWidth="1.5" fill={c+"15"}/></svg>;},
 radar:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke={c} strokeWidth="1.5" opacity="0.3"/><circle cx="12" cy="12" r="6" stroke={c} strokeWidth="1.5" opacity="0.5"/><circle cx="12" cy="12" r="2" fill={c}/></svg>;},
@@ -94,6 +127,25 @@ function genFlags(m,t,camps){
 }
 
 export default function MediaOnGas(){
+  var au=useState(null),session=au[0],setSession=au[1];
+  var ac=useState(true),authChecking=ac[0],setAuthChecking=ac[1];
+  var ar=useState(null),authRole=ar[0],setAuthRole=ar[1];
+
+  useEffect(function(){
+    var saved=sessionStorage.getItem("gas_session");
+    if(!saved){setAuthChecking(false);return;}
+    fetch(API+"/api/auth",{headers:{"x-session-token":saved}})
+    .then(function(r){return r.json();})
+    .then(function(d){if(d.valid){setSession(saved);setAuthRole(d.role||sessionStorage.getItem("gas_role")||"admin");}else{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");}setAuthChecking(false);})
+    .catch(function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setAuthChecking(false);});
+  },[]);
+
+  var handleLogin=function(token,role){setSession(token);setAuthRole(role||"admin");};
+  var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setSession(null);setAuthRole(null);};
+
+  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
+  if(!session)return(<LoginScreen onLogin={handleLogin}/>);
+
   var ts=useState("summary"),tab=ts[0],setTab=ts[1];
   var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
@@ -107,7 +159,7 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
-  var isClient=window.location.pathname.indexOf("/view/")===0;
+  var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client";
 
   var pageOverrides=[
     {campaign:"willowbrook",page:"flower foundation"},
@@ -152,7 +204,7 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});};
   useEffect(function(){fetchData();},[df,dt]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
@@ -214,6 +266,7 @@ export default function MediaOnGas(){
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
+            <button onClick={handleLogout} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.dim,fontSize:10,fontWeight:600,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>LOGOUT</button>
           </div>
         </div>
       </div>

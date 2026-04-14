@@ -1,3 +1,5 @@
+import { validateSession } from "./auth.js";
+
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
   "http://localhost:5173",
@@ -19,7 +21,7 @@ export function setCorsHeaders(req, res) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key, x-session-token");
   res.setHeader("Access-Control-Max-Age", "86400");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -31,11 +33,17 @@ export function checkAuth(req, res) {
     res.status(200).end();
     return false;
   }
+  // Accept session token
+  var sessionToken = req.headers["x-session-token"] || "";
+  if (sessionToken && validateSession(sessionToken)) {
+    return true;
+  }
+  // Fall back to API key
   var key = req.headers["x-api-key"] || req.query.api_key || "";
   var expected = process.env.DASHBOARD_API_KEY || "";
-  if (!key || !expected || !timingSafeEqual(key, expected)) {
-    res.status(401).json({ error: "Unauthorized" });
-    return false;
+  if (key && expected && timingSafeEqual(key, expected)) {
+    return true;
   }
-  return true;
+  res.status(401).json({ error: "Unauthorized" });
+  return false;
 }
