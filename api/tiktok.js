@@ -1,12 +1,15 @@
 import { checkAuth } from "./_auth.js";
+import { validateDates, ALLOWED_CLIENTS } from "./_validate.js";
 const clientAdvertisers = {
   "mtn-momo": "7446793748044202000"
 };
 
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
+  if (!validateDates(req, res)) return;
   const token = process.env.TIKTOK_ACCESS_TOKEN;
   const clientSlug = req.query.client || "mtn-momo";
+  if (ALLOWED_CLIENTS.indexOf(clientSlug) < 0) { res.status(400).json({ error: "Invalid client" }); return; }
   const advId = clientAdvertisers[clientSlug] || process.env.TIKTOK_ADVERTISER_ID;
   const from = req.query.from || "2026-03-01";
   const to = req.query.to || "2026-04-07";
@@ -19,6 +22,7 @@ export default async function handler(req, res) {
 
     res.status(200).json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
   }
 }

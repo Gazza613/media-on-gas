@@ -1,4 +1,5 @@
 import { checkAuth } from "./_auth.js";
+import { validateDates } from "./_validate.js";
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
@@ -10,6 +11,7 @@ var metaAccounts = [
 
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
+  if (!validateDates(req, res)) return;
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
@@ -34,7 +36,7 @@ export default async function handler(req, res) {
           campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, created: new Date(camp.created_time), startTime: camp.start_time || null, stopTime: camp.stop_time || null };
         }
       }
-    } catch (err) {}
+    } catch (err) { console.error("Meta campaign list error for", account.name, err); }
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
@@ -110,7 +112,7 @@ export default async function handler(req, res) {
           }
         }
       }
-    } catch (err) {}
+    } catch (err) { console.error("Meta insights error for", account.name, err); }
 
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
@@ -153,14 +155,14 @@ export default async function handler(req, res) {
           }
         }
       }
-    } catch (parseErr) {}
+    } catch (parseErr) { console.error("TikTok parse error", parseErr); }
 
     Object.keys(ttNames).forEach(function(tid) {
       if (!ttSeenIds[tid]) {
         allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active" });
       }
     });
-  } catch (ttErr) {}
+  } catch (ttErr) { console.error("TikTok campaigns error", ttErr); }
 
   // Google Ads
   try {
@@ -237,7 +239,7 @@ export default async function handler(req, res) {
         }
       }
     }
-  } catch (gErr) {}
+  } catch (gErr) { console.error("Google Ads error", gErr); }
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 
@@ -265,13 +267,13 @@ export default async function handler(req, res) {
                 pg.instagram_business_account.follower_growth = totalGrowth;
               }
             }
-          } catch (igErr) {}
+          } catch (igErr) { console.error("IG insights error", igErr); }
         }
         delete pg.access_token;
       }
       pageData = pagesJson.data;
     }
-  } catch (pgErr) {}
+  } catch (pgErr) { console.error("Pages error", pgErr); }
 
 
   res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData });

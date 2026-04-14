@@ -1,6 +1,8 @@
 import { checkAuth } from "./_auth.js";
+import { validateDates } from "./_validate.js";
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
+  if (!validateDates(req, res)) return;
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-30";
   var metaToken = process.env.META_ACCESS_TOKEN;
@@ -108,7 +110,7 @@ export default async function handler(req, res) {
           }
         }
       }
-    } catch (err) {}
+    } catch (err) { console.error("Meta adsets error for", account.name, err); }
   }
 
   // TIKTOK ADSETS
@@ -146,7 +148,7 @@ export default async function handler(req, res) {
         });
       }
     }
-  } catch (err) {}
+  } catch (err) { console.error("TikTok adsets error", err); }
 
   // GOOGLE ADS AD GROUPS
   try {
@@ -214,7 +216,7 @@ export default async function handler(req, res) {
         }
       }
     }
-  } catch (err) {}
+  } catch (err) { console.error("Google Ads adsets error", err); }
 
   res.json({ adsets: allAdsets, total: allAdsets.length });
 }

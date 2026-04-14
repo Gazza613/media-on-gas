@@ -1,6 +1,8 @@
 import { checkAuth } from "./_auth.js";
+import { validateDates } from "./_validate.js";
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
+  if (!validateDates(req, res)) return;
   var token = process.env.META_ACCESS_TOKEN;
   var from = req.query.from || "";
   var to = req.query.to || "";
@@ -34,15 +36,16 @@ export default async function handler(req, res) {
             page.instagram_business_account.follower_growth = totalGrowth;
           }
         } catch (igErr) {
-          debug.push({page: page.name, error: igErr.message});
+          console.error("IG insights error for", page.name, igErr);
           page.instagram_business_account.follower_growth = 0;
         }
       }
       delete page.access_token;
     }
 
-    res.status(200).json({data: pages, debug: debug});
+    res.status(200).json({data: pages});
   } catch (error) {
-    res.status(500).json({error: error.message});
+    console.error(error);
+    res.status(500).json({error: "Internal server error"});
   }
 }
