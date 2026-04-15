@@ -140,7 +140,7 @@ export default async function handler(req, res) {
       var creativesByAdId = {};
       for (var b = 0; b < uniqAdIds.length; b += 50) {
         var batch = uniqAdIds.slice(b, b + 50);
-        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
+        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash,asset_feed_spec,object_story_spec}";
         var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + batch.join(",") + "&fields=" + encodeURIComponent(adFields) + "&access_token=" + metaToken;
         try {
           var batchRes = await fetch(batchUrl);
@@ -339,11 +339,25 @@ export default async function handler(req, res) {
             var ot = (cr.object_type || "").toUpperCase();
             if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
             if (ot === "VIDEO") return "MP4";
+            // Dynamic Creative / Flexible ads keep media in asset_feed_spec
+            var afs = cr.asset_feed_spec || {};
+            var afsVideos = (afs.videos && afs.videos.length) || 0;
+            var afsImages = (afs.images && afs.images.length) || 0;
+            if (afsVideos > 0) return "MP4";
+            if (afsImages > 1) return "CAROUSEL";
+            // object_story_spec link_data / video_data
+            var oss = cr.object_story_spec || {};
+            if (oss.video_data) return "MP4";
+            if (oss.link_data) {
+              if (oss.link_data.child_attachments && oss.link_data.child_attachments.length > 1) return "CAROUSEL";
+              if (oss.link_data.video_id) return "MP4";
+            }
             // For SHARE/empty object_types, Meta hides the real format — look at the post attachment shape
             var postType = sid ? storyToType[sid] : "";
             if (postType) return postType;
             var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
             if (url.indexOf(".gif") >= 0) return "GIF";
+            if (afsImages === 1) return "STATIC";
             if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
             return ot;
           })(),
