@@ -55,7 +55,7 @@ function CampaignSelector(props){
   </div>);
 }
 
-function ShareModal(props){var cs=useState(false);var copy=function(){navigator.clipboard.writeText(window.location.href);cs[1](true);setTimeout(function(){cs[1](false);},2000);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={props.onClose}><div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:480,maxWidth:"90vw"}}><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6}}>Share with Client</div><div style={{fontSize:12,color:P.sub,marginBottom:16}}>Client gets read-only access with date toggles. No campaign selector, no optimisation tab.</div><div style={{display:"flex",gap:8}}><input readOnly value={window.location.href} style={{flex:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/><button onClick={copy} style={{background:cs[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,cursor:"pointer"}}>{cs[0]?"Copied!":"Copy"}</button></div></div></div>);}
+function ShareModal(props){var shareUrl=window.location.origin+'/view/?from='+props.dateFrom+'&to='+props.dateTo+'&campaigns='+props.selected.join(',');var cs=useState(false);var copy=function(){navigator.clipboard.writeText(shareUrl);cs[1](true);setTimeout(function(){cs[1](false);},2000);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={props.onClose}><div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:480,maxWidth:"90vw"}}><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6}}>Share with Client</div><div style={{fontSize:12,color:P.sub,marginBottom:16}}>Client gets read-only access with date toggles. No campaign selector, no optimisation tab.</div><div style={{display:"flex",gap:8}}><input readOnly value={shareUrl} style={{flex:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/><button onClick={copy} style={{background:cs[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,cursor:"pointer"}}>{cs[0]?"Copied!":"Copy"}</button></div></div></div>);}
 
 function genFlags(m,t,camps){
   var fl=[],id=1;
@@ -76,6 +76,7 @@ export default function MediaOnGas(){
   var de=useState("2026-04-07"),dt=de[0],setDt=de[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
   var ss=useState([]),selected=ss[0],setSelected=ss[1];
+  var us=useState(null),urlSelected=us[0],setUrlSelected=us[1];
   var rs=useState(""),search=rs[0],setSearch=rs[1];
   var ls=useState(true),loading=ls[0],setLoading=ls[1];
   var sc=useState(false),showCampaigns=sc[0],setShowCampaigns=sc[1];
@@ -83,8 +84,9 @@ export default function MediaOnGas(){
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
   var isClient=window.location.pathname.indexOf("/view/")===0;
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){setCampaigns(d.campaigns);setSelected(d.campaigns.map(function(c){return c.campaignId;}));}setLoading(false);}).catch(function(){setLoading(false);});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt).then(function(r){return r.json();}).then(function(d){if(d.campaigns){setCampaigns(d.campaigns);if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.map(function(c){return c.campaignId;}));}else{setSelected(d.campaigns.map(function(c){return c.campaignId;}));}}setLoading(false);}).catch(function(){setLoading(false);});};
   useEffect(function(){fetchData();},[]);
+  useEffect(function(){var params=new URLSearchParams(window.location.search);var camps=params.get('campaigns');if(camps){var ids=camps.split(',').map(function(id){return id.trim();}).filter(function(id){return id;});setUrlSelected(ids);}var from=params.get('from');if(from)setDf(from);var to=params.get('to');if(to)setDt(to);},[]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0;});setSelected(f.map(function(c){return c.campaignId;}));};
@@ -134,7 +136,7 @@ export default function MediaOnGas(){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1}}>{tabs.map(function(tb){return<button key={tb.id} onClick={function(){setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:tab===tb.id?P.ember+"10":"transparent",border:"none",borderBottom:tab===tb.id?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:"pointer",color:tab===tb.id?P.ember:P.sub,fontSize:11,fontWeight:tab===tb.id?800:500,fontFamily:fm}}>{tb.icon}<span>{tb.label}</span></button>;})}</div></div>
     </header>
 
-    {showShare&&<ShareModal onClose={function(){setShowShare(false);}}/>}
+    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} dateFrom={df} dateTo={dt}/>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
       {showCampaigns&&<div style={{width:340,flexShrink:0}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div>}

@@ -93,7 +93,7 @@ function CampaignSelector(props){
   </div>);
 }
 
-function ShareModal(props){var cs=useState(false);var copy=function(){navigator.clipboard.writeText(window.location.href);cs[1](true);setTimeout(function(){cs[1](false);},2000);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={props.onClose}><div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:480,maxWidth:"90vw"}}><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6}}>Share with Client</div><div style={{fontSize:12,color:P.sub,marginBottom:16}}>Client gets read-only access with date toggles. No campaign selector, no optimisation tab.</div><div style={{display:"flex",gap:8}}><input readOnly value={window.location.href} style={{flex:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/><button onClick={copy} style={{background:cs[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,cursor:"pointer"}}>{cs[0]?"Copied!":"Copy"}</button></div></div></div>);}
+function ShareModal(props){var shareUrl=window.location.origin+'/view/?from='+props.dateFrom+'&to='+props.dateTo+'&campaigns='+props.selected.join(',');var cs=useState(false);var copy=function(){navigator.clipboard.writeText(shareUrl);cs[1](true);setTimeout(function(){cs[1](false);},2000);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={props.onClose}><div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:480,maxWidth:"90vw"}}><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6}}>Share with Client</div><div style={{fontSize:12,color:P.sub,marginBottom:16}}>Client gets read-only access with date toggles. No campaign selector, no optimisation tab.</div><div style={{display:"flex",gap:8}}><input readOnly value={shareUrl} style={{flex:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/><button onClick={copy} style={{background:cs[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,cursor:"pointer"}}>{cs[0]?"Copied!":"Copy"}</button></div></div></div>);}
 
 function genFlags(m,t,camps){
   var fl=[],id=1;
@@ -136,6 +136,7 @@ export default function MediaOnGas(){
   var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
   var ss=useState([]),selected=ss[0],setSelected=ss[1];
+  var us=useState(null),urlSelected=us[0],setUrlSelected=us[1];
   var rs=useState(""),search=rs[0],setSearch=rs[1];
   var ls=useState(true),loading=ls[0],setLoading=ls[1];
   var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
@@ -152,6 +153,19 @@ export default function MediaOnGas(){
     .then(function(r){return r.json();})
     .then(function(d){if(d.valid){setSession(saved);setAuthRole(d.role||sessionStorage.getItem("gas_role")||"admin");}else{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");}setAuthChecking(false);})
     .catch(function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setAuthChecking(false);});
+  },[]);
+
+  useEffect(function(){
+    var params=new URLSearchParams(window.location.search);
+    var camps=params.get('campaigns');
+    if(camps){
+      var ids=camps.split(',').map(function(id){return id.trim();}).filter(function(id){return id;});
+      setUrlSelected(ids);
+    }
+    var from=params.get('from');
+    if(from)setDf(from);
+    var to=params.get('to');
+    if(to)setDt(to);
   },[]);
 
   var handleLogin=function(token,role){setSession(token);setAuthRole(role||"admin");};
@@ -202,7 +216,7 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});};
   useEffect(function(){if(session){fetchData();}},[df,dt,session]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
@@ -274,7 +288,7 @@ export default function MediaOnGas(){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1}}>{tabs.map(function(tb){return<button key={tb.id} onClick={function(){setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:tab===tb.id?P.ember+"10":"transparent",border:"none",borderBottom:tab===tb.id?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:"pointer",color:tab===tb.id?P.ember:P.sub,fontSize:13,fontWeight:tab===tb.id?800:500,fontFamily:ff,letterSpacing:0.3}}>{tb.icon}<span>{tb.label}</span></button>;})}</div></div>
     </header>
 
-    {showShare&&<ShareModal onClose={function(){setShowShare(false);}}/>}
+    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} dateFrom={df} dateTo={dt}/>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
       {showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
@@ -369,11 +383,8 @@ export default function MediaOnGas(){
 
             return <div>
 
-              {/* ═══ 1. EXECUTIVE SUMMARY ═══ */}
-              <Insight title="Executive Summary" accent={P.ember} icon={Ic.crown(P.ember,16)}>{execLines.join(" ")}</Insight>
-
-              {/* ═══ 2. BUDGET PACING ═══ */}
-              <div style={{marginTop:28,marginBottom:28}}>
+              {/* ═══ 1. BUDGET PACING ═══ */}
+              <div style={{marginBottom:28}}>
                 <div style={{background:P.glass,borderRadius:18,padding:"24px 28px",border:"1px solid "+P.rule}}>
                   {secHead(P.ember,"BUDGET PACING",Ic.chart(P.ember,18))}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:14,marginBottom:20}}>
@@ -402,11 +413,10 @@ export default function MediaOnGas(){
                       </ResponsiveContainer>
                     </div>
                   </div>
-                  <Insight title="Budget & Pacing Analysis" accent={P.solar} icon={Ic.bolt(P.solar,14)}>{fR(computed.totalSpend)+" deployed over "+elapsedDays+" days at "+fR(dailySpend)+"/day. Projected: "+fR(projSpend)+" by "+dt+". Split: "+(function(){return sortedPlats.map(function(pl){return pl+" "+Math.round(platBreak[pl].spend/computed.totalSpend*100)+"%";}).join(", ");})()+(pacePct>=90?". Final stretch \u2014 consolidate learnings, lock bid strategies, compile results against brief objectives.":pacePct>=50?". Mid-flight optimisation window \u2014 reallocate from underperformers to proven winners, test one creative variable at a time.":". Early delivery \u2014 algorithms in learning phase. Set review checkpoint at day 7 or 50% spend, avoid manual bid changes.")+"."}</Insight>
                 </div>
               </div>
 
-              {/* ═══ 3. AWARENESS HIGHLIGHTS ═══ */}
+              {/* ═══ 2. AWARENESS HIGHLIGHTS ═══ */}
               <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.cyan,"AWARENESS HIGHLIGHTS",Ic.eye(P.cyan,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
@@ -415,29 +425,20 @@ export default function MediaOnGas(){
                   <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CPM</div><div style={{fontSize:24,fontWeight:900,color:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.high?P.solar:P.rose,fontFamily:fm}}>{fR(computed.blendedCpm)}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
                   <Glass accent={m.frequency>4?P.rose:m.frequency>3?P.warning:P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>META FREQUENCY</div><div style={{fontSize:24,fontWeight:900,color:m.frequency>4?P.rose:m.frequency>3?P.warning:m.frequency>2?P.mint:P.txt,fontFamily:fm}}>{m.frequency>0?m.frequency.toFixed(2)+"x":"\u2014"}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:m.frequency>4?P.rose:m.frequency>3?P.warning:P.mint}}>{m.frequency>4?"FATIGUE":m.frequency>3?"MONITOR":m.frequency>2?"OPTIMAL":"BUILDING"}</span></div></Glass>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-                  <div style={{height:220}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                  <div style={{height:260}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CPM BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="85%">
-                      <BarChart data={cpmData} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="cpm" name="CPM" radius={[6,6,0,0]}>{cpmData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                      <BarChart data={cpmData} barSize={44}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="cpm" name="CPM" radius={[6,6,0,0]}>{cpmData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <table style={{width:"100%",borderCollapse:"collapse",alignSelf:"center"}}>
-                    <thead><tr>{["Platform","Impressions","Reach","Frequency","CPM"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead,{textAlign:hi===0?"left":"center"})}>{h}</th>;})}</tr></thead>
-                    <tbody>{sortedPlats.map(function(pl,pi){
-                      var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpm=pb.imps>0?(pb.spend/pb.imps*1000):0;var plFreq=pb.reach>0?pb.imps/pb.reach:0;
-                      var plBmCpm=pl==="TikTok"?benchmarks.tiktok.cpm:pl==="Google Display"?benchmarks.google.cpm:benchmarks.meta.cpm;
-                      return <tr key={pi} style={{background:pc+"06"}}>
-                        <td style={tCell({textAlign:"left"})}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
-                        <td style={tCell({fontWeight:700,color:P.txt})}>{fmt(pb.imps)}</td>
-                        <td style={tCell({color:P.txt})}>{fmt(pb.reach)}</td>
-                        <td style={tCell({fontWeight:700,color:plFreq>4?P.rose:plFreq>3?P.warning:plFreq>2?P.mint:P.txt})}>{plFreq>0?plFreq.toFixed(2)+"x":"\u2014"}</td>
-                        <td style={tCell({fontWeight:700,color:plCpm>0&&plCpm<=plBmCpm.mid?P.mint:plCpm>plBmCpm.high?P.rose:P.txt})}>{plCpm>0?fR(plCpm):"\u2014"}</td>
-                      </tr>;})}
-                    </tbody>
-                  </table>
+                  <div style={{height:260}}>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>REACH BY PLATFORM</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].reach>0;}).map(function(pl){return{name:platShort[pl]||pl,reach:platBreak[pl].reach,color:platCol4[pl]||P.ember};})} barSize={44}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="reach" name="Reach" radius={[6,6,0,0]}>{sortedPlats.filter(function(pl){return platBreak[pl].reach>0;}).map(function(pl,i){return <Cell key={i} fill={platCol4[pl]||P.ember}/>;})}</Bar></BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-                <Insight title="Awareness & Reach Analysis" accent={P.cyan} icon={Ic.eye(P.cyan,14)}>{fmt(computed.totalImps)+" impressions served to "+fmt(m.reach+t.reach+computed.gd.reach)+" unique users at "+fR(computed.blendedCpm)+" blended CPM ("+benchLabel(computed.blendedCpm,benchmarks.meta.cpm)+"). "+(function(){return sortedPlats.map(function(pl){var pb=platBreak[pl];var cpm=pb.imps>0?pb.spend/pb.imps*1000:0;var freq=pb.reach>0?pb.imps/pb.reach:0;return pl+": "+fmt(pb.imps)+" at "+fR(cpm)+" CPM"+(freq>0?", "+freq.toFixed(2)+"x freq":"");}).join(". ")+". ";})()+(m.frequency>3?"Meta frequency is the primary risk signal \u2014 elevated levels correlate with rising CPC and declining CTR. Prioritise audience expansion and creative rotation.":m.frequency>2?"Meta frequency in the recall sweet spot. Monitor weekly, plan creative rotation as it approaches 3x.":"Frequency still building \u2014 reach footprint expanding as expected.")}</Insight>
               </div>
 
               {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
@@ -448,31 +449,20 @@ export default function MediaOnGas(){
                   <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:28,fontWeight:900,color:blCtr>2?P.mint:blCtr>1?P.txt:P.warning,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{"SA benchmark: 0.9\u20131.4%"}</div></Glass>
                   <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-                  <div style={{height:220}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                  <div style={{height:260}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CPC BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="85%">
-                      <BarChart data={cpcData} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="cpc" name="CPC" radius={[6,6,0,0]}>{cpcData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
+                      <BarChart data={cpcData} barSize={44}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="cpc" name="CPC" radius={[6,6,0,0]}>{cpcData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <table style={{width:"100%",borderCollapse:"collapse",alignSelf:"center"}}>
-                    <thead><tr>{["Platform","Clicks","CPC","CTR","Verdict"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead,{textAlign:hi===0?"left":"center"})}>{h}</th>;})}</tr></thead>
-                    <tbody>{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl,pi){
-                      var pb=platBreak[pl];var pc=platCol4[pl]||P.ember;var plCpc=pb.clicks>0?pb.spend/pb.clicks:0;var plCtr=pb.imps>0?(pb.clicks/pb.imps*100):0;
-                      var plBm=pl==="TikTok"?benchmarks.tiktok.cpc:pl==="Google Display"?benchmarks.google.cpc:benchmarks.meta.cpc;
-                      var verdict=plCpc>0&&plCpc<=plBm.low?"Excellent":plCpc<=plBm.mid?"Good":plCpc<=plBm.high?"Average":"Review";
-                      var vCol=verdict==="Excellent"||verdict==="Good"?P.mint:verdict==="Average"?P.solar:P.rose;
-                      return <tr key={pi} style={{background:pc+"06"}}>
-                        <td style={tCell({textAlign:"left"})}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:pc}}></span><span style={{fontSize:11,fontWeight:700,color:pc,fontFamily:ff}}>{pl}</span></div></td>
-                        <td style={tCell({fontWeight:700,color:P.txt})}>{fmt(pb.clicks)}</td>
-                        <td style={tCell({fontWeight:700,color:vCol})}>{fR(plCpc)}</td>
-                        <td style={tCell({color:plCtr>2?P.mint:plCtr>1?P.txt:P.warning})}>{plCtr.toFixed(2)+"%"}</td>
-                        <td style={tCell()}><span style={{background:vCol,color:"#fff",fontSize:9,fontWeight:900,padding:"4px 10px",borderRadius:5}}>{verdict.toUpperCase()}</span></td>
-                      </tr>;})}
-                    </tbody>
-                  </table>
+                  <div style={{height:260}}>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CTR BY PLATFORM</div>
+                    <ResponsiveContainer width="100%" height="85%">
+                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};})} barSize={44}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]}>{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl,i){return <Cell key={i} fill={platCol4[pl]||P.ember}/>;})}</Bar></BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-                <Insight title="Engagement & Click Efficiency" accent={P.mint} icon={Ic.bolt(P.mint,14)}>{fmt(computed.totalClicks)+" clicks at "+fR(blCpc)+" blended CPC ("+benchLabel(blCpc,benchmarks.meta.cpc)+"), "+blCtr.toFixed(2)+"% CTR (SA benchmark: 0.9\u20131.4%). "+(function(){return sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];var cpc=pb.clicks>0?pb.spend/pb.clicks:0;var ctr=pb.imps>0?(pb.clicks/pb.imps*100):0;return pl+": "+fmt(pb.clicks)+" at "+fR(cpc)+" CPC, "+ctr.toFixed(2)+"% CTR";}).join(". ")+". ";})()+(blCpc<=benchmarks.meta.cpc.low?"Strong efficiency signal \u2014 scale opportunity. Increase daily budgets 15\u201320% on top ad sets and monitor CPC stability.":blCpc<=benchmarks.meta.cpc.mid?"Within healthy range. Push further via creative testing \u2014 alternative hooks, CTA copy, format variations.":"Above benchmark midpoint. Audit bottom 25% of ad sets by CPC, review creative thumb-stop rates, test broader placements (Reels, Stories).")}</Insight>
               </div>
 
               {/* ═══ 5. OBJECTIVE HIGHLIGHTS ═══ */}
@@ -494,8 +484,7 @@ export default function MediaOnGas(){
                       </div>
                     </div>;})}
                 </div>
-                {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:200,marginBottom:16}}><div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="85%"><BarChart data={objData} barSize={40}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:9,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]}>{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart></ResponsiveContainer></div>;})()}
-                <Insight title="Objective Performance" accent={P.rose} icon={Ic.target(P.rose,14)}>{(function(){var lines=[];objKeys.filter(function(k){return objectives4[k];}).forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;if(od.results>=10)lines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+"/result ("+benchLabel(cp,bm)+"). Confirmed at scale."+(cp>0&&bm&&cp<=bm.low?" Top-tier efficiency \u2014 increase investment.":""));else if(od.results>0)lines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+". Below 10-result threshold \u2014 allow learning phase to complete.");else if(od.spend>500)lines.push(objName+": "+fR(od.spend)+" invested, no results. Verify pixel tracking and landing page experience.");else if(od.spend>0)lines.push(objName+": "+fR(od.spend)+", early delivery phase.");});return lines.join(" ")||"No active objectives detected.";})()}</Insight>
+                {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:240}}><div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="85%"><BarChart data={objData} barSize={48}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]}>{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar></BarChart></ResponsiveContainer></div>;})()}
               </div>}
 
               {/* ═══ 6. TARGETING STANDOUTS ═══ */}
@@ -536,13 +525,12 @@ export default function MediaOnGas(){
                         </div>;})}
                     </div>}
                   </div>
-                  {topChart.length>=2&&<div style={{height:220,marginBottom:16}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>TOP AD SET EFFICIENCY (RESULTS)</div>
+                  {topChart.length>=2&&<div style={{height:260}}>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>TOP AD SET EFFICIENCY (RESULTS VS COST)</div>
                     <ResponsiveContainer width="100%" height="85%">
-                      <ComposedChart data={topChart} barSize={32}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:8,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:9,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]}>{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}/></ComposedChart>
+                      <ComposedChart data={topChart} barSize={36}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:9,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]}>{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}/></ComposedChart>
                     </ResponsiveContainer>
                   </div>}
-                  <Insight title="Targeting & Ad Set Analysis" accent={P.solar} icon={Ic.radar(P.solar,14)}>{(function(){var lines=[];lines.push(selAdsets2.length+" active ad sets analysed.");if(topAd.length>0){var best=topAd[0];lines.push("Top performer: \""+best.name+"\" ("+best.platform+") \u2014 "+fmt(best.result)+" results at "+fR(best.costPer)+"/ea, "+best.ctr.toFixed(2)+"% CTR."+(topAd.length>1?" The top "+Math.min(topAd.length,4)+" ad sets confirm responsive audience segments. Scale budgets 15\u201325% on these winners.":""));}if(worstAd.length>0){var worst=worstAd[0];var totalWaste=0;worstAd.forEach(function(w){totalWaste+=w.spend;});lines.push(worstAd.length+" ad set"+(worstAd.length>1?"s":"")+" underperforming ("+fR(totalWaste)+" combined spend). Weakest: \""+worst.name+"\" \u2014 "+(worst.result===0?"zero results":""+worst.ctr.toFixed(2)+"% CTR")+". Pause and reallocate to top performers.");}if(topAd.length===0&&worstAd.length===0)lines.push("Insufficient data for ad set classification \u2014 reassess at mid-flight.");return lines.join(" ");})()}</Insight>
                 </div>;
               })()}
 
@@ -569,8 +557,27 @@ export default function MediaOnGas(){
                     </ResponsiveContainer>
                   </div>
                 </div>
-                <Insight title="Community Growth" accent={P.tt} icon={Ic.users(P.tt,14)}>{"Owned audience: "+fmt(grandT2)+" across "+communityData.length+" platforms. "+(fbT2>0?"Facebook: "+fmt(fbT2)+(parseFloat(m.pageLikes||0)>0?" (+"+fmt(parseFloat(m.pageLikes||0))+" earned)":"")+". ":"")+(igT2>0?"Instagram: "+fmt(igT2)+(igGrowth>0?" (+"+fmt(igGrowth)+" growth)":"")+". ":"")+(ttT2>0?"TikTok: "+fmt(ttT2)+(ttE2>0?" (+"+fmt(ttE2)+" earned"+(t.follows>0?", "+fR(t.spend/t.follows)+" CPF":"")+")":"")+". ":"")+(earnedTotal>0?fmt(earnedTotal)+" new members this period \u2014 each reduces future paid reach costs and builds organic distribution. "+(earnedTotal>100?"Community acquisition at meaningful scale. Maintain follower budget whilst CPF holds within benchmark.":"Early momentum building."):"")}</Insight>
               </div>}
+
+              {/* ═══ 7. EXECUTIVE SUMMARY (consolidated at bottom) ═══ */}
+              {(function(){
+                var bestCpcPlatLocal="";var bestCpcValLocal=Infinity;
+                sortedPlats.forEach(function(pl){var pb=platBreak[pl];var cpc=pb.clicks>0?pb.spend/pb.clicks:0;if(cpc>0&&cpc<bestCpcValLocal){bestCpcValLocal=cpc;bestCpcPlatLocal=pl;}});
+                var awarenessRead=fmt(computed.totalImps)+" impressions to "+fmt(m.reach+t.reach+computed.gd.reach)+" unique users at "+fR(computed.blendedCpm)+" blended CPM ("+benchLabel(computed.blendedCpm,benchmarks.meta.cpm)+")."+(bestCpmPlat&&sortedPlats.length>1?" "+bestCpmPlat+" leads reach efficiency at "+fR(bestCpmVal)+" CPM"+(worstCpmPlat!==bestCpmPlat?" vs "+worstCpmPlat+" at "+fR(worstCpmVal):"")+".":"")+(m.frequency>0?" Meta frequency "+m.frequency.toFixed(2)+"x \u2014 "+(freqStatus==="critical"?"above 4x fatigue ceiling, creative rotation overdue.":freqStatus==="warning"?"approaching 3x, refresh creative within 48h.":freqStatus==="healthy"?"in the 2\u20133x recall sweet spot.":"early build phase, full headroom."):"");
+                var engagementRead=fmt(computed.totalClicks)+" clicks at "+fR(blCpc)+" blended CPC ("+benchLabel(blCpc,benchmarks.meta.cpc)+"), "+blCtr.toFixed(2)+"% CTR against SA benchmark 0.9\u20131.4%."+(bestCpcPlatLocal?" "+bestCpcPlatLocal+" leads click efficiency at "+fR(bestCpcValLocal)+" CPC.":"")+" "+(blCpc<=benchmarks.meta.cpc.low?"Strong efficiency \u2014 scale opportunity, increase top-performer budgets 15\u201320%.":blCpc<=benchmarks.meta.cpc.mid?"Within healthy range \u2014 push further via creative testing on hooks and CTAs.":"Above benchmark midpoint \u2014 audit bottom 25% of ad sets, test broader placements.");
+                var objectiveRead=(function(){var lines=[];objKeys.filter(function(k){return objectives4[k];}).forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;if(od.results>=10)lines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+" ("+benchLabel(cp,bm)+"), confirmed at scale."+(cp>0&&bm&&cp<=bm.low?" Top-tier \u2014 scale investment.":""));else if(od.results>0)lines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+". Below 10-result threshold, allow learning phase to complete.");else if(od.spend>500)lines.push(objName+": "+fR(od.spend)+" invested, no results. Verify pixel and landing page.");else if(od.spend>0)lines.push(objName+": "+fR(od.spend)+", early delivery phase.");});return lines.join(" ")||"No active objectives detected.";})();
+                var targetingRead=(function(){if(selAdsets2.length===0)return"No ad set data available for targeting analysis.";var topAd2=selAdsets2.map(function(a){var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};}).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});var worstAd2=selAdsets2.map(function(a){var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;return{name:a.adsetName,platform:a.platform,spend:sp,result:res,ctr:im>0?(cl/im*100):0};}).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});var parts=[selAdsets2.length+" active ad sets analysed."];if(topAd2.length>0){var best=topAd2[0];parts.push("Top performer: \""+best.name+"\" ("+best.platform+") \u2014 "+fmt(best.result)+" results at "+fR(best.costPer)+"/ea, "+best.ctr.toFixed(2)+"% CTR."+(topAd2.length>1?" Scale budgets 15\u201325% on the top "+Math.min(topAd2.length,4)+".":""));}if(worstAd2.length>0){var worst=worstAd2[0];var totalWaste=0;worstAd2.forEach(function(w){totalWaste+=w.spend;});parts.push(worstAd2.length+" underperforming ("+fR(totalWaste)+" combined). Weakest: \""+worst.name+"\" \u2014 "+(worst.result===0?"zero results":worst.ctr.toFixed(2)+"% CTR")+". Pause and reallocate.");}return parts.join(" ");})();
+                var communityRead=grandT2===0?"No community data in the selected campaigns.":"Owned audience: "+fmt(grandT2)+" across "+communityData.length+" platforms. "+(fbT2>0?"Facebook "+fmt(fbT2)+(parseFloat(m.pageLikes||0)>0?" (+"+fmt(parseFloat(m.pageLikes||0))+")":"")+". ":"")+(igT2>0?"Instagram "+fmt(igT2)+(igGrowth>0?" (+"+fmt(igGrowth)+")":"")+". ":"")+(ttT2>0?"TikTok "+fmt(ttT2)+(ttE2>0?" (+"+fmt(ttE2)+(t.follows>0?" at "+fR(t.spend/t.follows)+" CPF":"")+")":"")+". ":"")+(earnedTotal>0?fmt(earnedTotal)+" new members this period \u2014 each reduces future paid reach cost and builds organic distribution. "+(earnedTotal>100?"Meaningful scale \u2014 maintain follower budget whilst CPF holds within benchmark.":"Early momentum."):"");
+                var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
+                return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:2}}>{df+" to "+dt+" \u00b7 "+fR(computed.totalSpend)+" spend \u00b7 "+sortedPlats.length+" platforms"}</div></div></div>
+                  {subSec(P.cyan,Ic.eye(P.cyan,16),"Awareness",awarenessRead)}
+                  {subSec(P.mint,Ic.bolt(P.mint,16),"Engagement",engagementRead)}
+                  {subSec(P.rose,Ic.target(P.rose,16),"Objectives",objectiveRead)}
+                  {subSec(P.solar,Ic.radar(P.solar,16),"Targeting",targetingRead)}
+                  <div><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{Ic.users(P.tt,16)}<span style={{fontSize:12,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Community Growth</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.tt+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{communityRead}</div></div>
+                </div>;
+              })()}
 
             </div>;
           })()}
