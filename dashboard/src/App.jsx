@@ -688,14 +688,29 @@ export default function MediaOnGas(){
               if(imps>=1000)return 1;
               return 0.5;
             };
+            var hasKpiResults=function(a){return a.results>0&&(a.resultType==="leads"||a.resultType==="installs"||a.resultType==="follows"||a.resultType==="conversions");};
             var scoreAd=function(a,platAvgCtr){
               var bm=platBench[a.platform]||benchmarks.meta;
               var sCtr=smoothedCtr(a,platAvgCtr);
               var ctrS=sCtr>=2.0?4:sCtr>=1.4?3.4:sCtr>=0.9?2.5:sCtr>=0.5?1.5:0.5;
               var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
               var vS=volScore(a.impressions);
+              if(hasKpiResults(a)){
+                var costPer=a.spend/a.results;
+                var resultBm=a.resultType==="leads"?bm.cpl:a.resultType==="follows"?bm.cpf:null;
+                var resultS;
+                if(resultBm){
+                  resultS=costPer<=resultBm.low?4:costPer<=resultBm.mid?3:costPer<=resultBm.high?2:1;
+                }else{
+                  resultS=a.results>=100?4:a.results>=30?3:a.results>=10?2.5:a.results>=3?1.5:1;
+                }
+                // KPI results dominate scoring when present
+                return resultS*0.50+ctrS*0.20+cpcS*0.15+vS*0.15;
+              }
               return ctrS*0.40+cpcS*0.30+vS*0.30;
             };
+            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":"RESULTS";};
+            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":"CPR";};
 
             var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube"];
             var grandSpend=0,grandImps=0,grandClicks=0;
@@ -782,6 +797,10 @@ export default function MediaOnGas(){
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:12}}>{ad.ctr.toFixed(2)+"%"}</div></div>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
                       </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:10,padding:"8px 10px",background:hasKpiResults(ad)?P.mint+"10":"rgba(255,255,255,0.03)",border:"1px solid "+(hasKpiResults(ad)?P.mint+"30":P.rule),borderRadius:8}}>
+                        <div><div style={{color:hasKpiResults(ad)?P.mint:P.sub,marginBottom:3,letterSpacing:1,fontSize:9,fontWeight:800}}>{resultLabel(ad.resultType)}</div><div style={{color:hasKpiResults(ad)?P.mint:P.dim,fontWeight:900,fontSize:14}}>{ad.results>0?fmt(ad.results):"-"}</div></div>
+                        <div><div style={{color:hasKpiResults(ad)?P.mint:P.sub,marginBottom:3,letterSpacing:1,fontSize:9,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:hasKpiResults(ad)?P.mint:P.dim,fontWeight:900,fontSize:14}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div></div>
+                      </div>
                       {ad.placements&&Object.keys(ad.placements).length>0&&<div style={{marginBottom:10,display:"flex",flexWrap:"wrap",gap:4}}>{Object.keys(ad.placements).slice(0,4).map(function(pk){return <span key={pk} style={{fontSize:8,fontWeight:800,color:P.cyan,background:P.cyan+"15",border:"1px solid "+P.cyan+"30",padding:"2px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,textTransform:"uppercase"}}>{pk}</span>;})}{Object.keys(ad.placements).length>4&&<span style={{fontSize:8,color:P.sub,fontFamily:fm,padding:"2px 4px"}}>{"+"+(Object.keys(ad.placements).length-4)}</span>}</div>}
                       {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"10px 12px",background:platC,border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 8px "+platC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW</div>}
                     </div>
@@ -790,11 +809,12 @@ export default function MediaOnGas(){
 
                 var compactRow=function(ad,idx){
                   var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
+                  var hasRes=hasKpiResults(ad);
                   return <tr key={ad.adId} style={{background:idx%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
                     <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
                       {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:44,height:44,background:"#1a0f2a",borderRadius:6}}/>}
                     </td>
-                    <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
+                    <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:240}}>
                       <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
                       <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.campaignName}</div>
                     </td>
@@ -803,6 +823,8 @@ export default function MediaOnGas(){
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fmt(ad.results):"-"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:platC,color:"#fff",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
                   </tr>;
                 };
@@ -828,14 +850,15 @@ export default function MediaOnGas(){
                     return <div style={{marginBottom:18}}>
                       <div style={{padding:"10px 14px",marginBottom:14,background:platC+"10",border:"1px solid "+platC+"25",borderRadius:8,fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6}}>{"TikTok ad previews and creative thumbnails are not publicly available via the API. All "+ttAll.length+" qualifying ads listed below, sorted by performance score (smoothed CTR + CPC + volume confidence)."}</div>
                       <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-                        <thead><tr>{["Rank","Ad","Format","Spend","Impressions","CTR","CPC","Score"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                        <thead><tr>{["Rank","Ad","Format","Spend","Imps","CTR","CPC","Follows","CPF","Score"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
                         <tbody>{ttAll.map(function(ad,ri){
                           var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
                           var rankBadge=ri<5?"WINNER":ri<10?"STRONG":"";
                           var rankCol=ri<5?P.mint:ri<10?P.positive:P.sub;
+                          var hasRes=hasKpiResults(ad);
                           return <tr key={ad.adId} style={{background:ri%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:rankCol}}>{(ri+1)+(rankBadge?" "+rankBadge:"")}</td>
-                            <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:340}}>
+                            <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:300}}>
                               <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
                               <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.campaignName}</div>
                             </td>
@@ -844,6 +867,8 @@ export default function MediaOnGas(){
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fmt(ad.results):"-"}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:rankCol}}>{ad._score.toFixed(2)}</td>
                           </tr>;
                         })}</tbody>
@@ -867,7 +892,7 @@ export default function MediaOnGas(){
                     {rest.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.chart(P.solar,16)}<span style={{fontSize:12,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1.5}}>{"REMAINING ADS ("+rest.length+")"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"30, transparent)"}}/></div>
                       <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-                        <thead><tr>{["Thumb","Ad","Format","Spend","Impressions","CTR","CPC","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                        <thead><tr>{["Thumb","Ad","Format","Spend","Imps","CTR","CPC","Results","Cost/Result","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
                         <tbody>{rest.map(function(ad,ri){return compactRow(ad,ri);})}</tbody>
                       </table></div>
                     </div>}
@@ -880,12 +905,19 @@ export default function MediaOnGas(){
 
                   <Insight title={pl+" Creative Assessment"} accent={platC} icon={Ic.fire(platC,14)}>{(function(){
                     var lines=[];
+                    var totalRes=0;var resType="";
+                    pads.forEach(function(a){if(hasKpiResults(a)){totalRes+=a.results;if(!resType)resType=a.resultType;}});
+                    var avgCpr=totalRes>0?pSpend/totalRes:0;
                     lines.push(pads.length+" "+pl+" ads with "+fR(pSpend)+" spent, "+fmt(pImps)+" impressions and "+pCtr.toFixed(2)+"% blended CTR.");
+                    if(totalRes>0)lines.push("Delivered "+fmt(totalRes)+" "+resType+" at "+fR(avgCpr)+" cost per "+resType.replace(/s$/,"")+", the headline KPI for client reporting.");
                     lines.push(winners.length+" winners, "+strong.length+" strong, "+rest.length+" other, "+tooEarly.length+" too early to assess.");
-                    if(topAd)lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,60)+"\" ("+fR(topAd.spend)+" spent, "+topAd.ctr.toFixed(2)+"% CTR, "+fR(topAd.cpc)+" CPC).");
-                    if(winners.length>0)lines.push("Scale top winners by increasing budget 15 to 25% on the parent ad sets.");
-                    if(rest.length>0)lines.push("Review the bottom of the rankings, pause any ads under 0.8% CTR with material spend.");
-                    if(tooEarly.length>3)lines.push("Allow the too-early cohort to accumulate 500+ impressions before assessing.");
+                    if(topAd){
+                      var topRes=hasKpiResults(topAd)?", "+fmt(topAd.results)+" "+topAd.resultType+" at "+fR(topAd.spend/topAd.results)+"/"+topAd.resultType.replace(/s$/,""):"";
+                      lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,60)+"\" ("+fR(topAd.spend)+" spent, "+topAd.ctr.toFixed(2)+"% CTR, "+fR(topAd.cpc)+" CPC"+topRes+").");
+                    }
+                    if(winners.length>0)lines.push("Scale top winners by increasing budget 15 to 25 percent on the parent ad sets.");
+                    if(rest.length>0)lines.push("Review the bottom of the rankings, pause any ads under 0.8 percent CTR with material spend.");
+                    if(tooEarly.length>3)lines.push("Allow the too-early cohort to accumulate 1,000+ impressions before assessing.");
                     return lines.join(" ");
                   })()}</Insight>
                 </div>;
