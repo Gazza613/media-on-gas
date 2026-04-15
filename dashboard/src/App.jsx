@@ -147,8 +147,7 @@ export default function MediaOnGas(){
   var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
   var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
   var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
-  var cf3=useState("all"),crFiltPl=cf3[0],setCrFiltPl=cf3[1];
-  useEffect(function(){setCrFiltPl("all");},[crFiltP,crFiltF]);
+  var cf3=useState("all"),crFiltObj=cf3[0],setCrFiltObj=cf3[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
 
   useEffect(function(){
@@ -652,29 +651,16 @@ export default function MediaOnGas(){
             allFilteredAds.forEach(function(a){availPlatforms[a.platform]=true;});
             var availFormats={};
             allFilteredAds.forEach(function(a){availFormats[(a.format||"OTHER").toUpperCase()]=true;});
-            // Placements: only show those actually used (spend or imps > 0) in ads matching current platform + format filters
-            var availPlacements={};
-            allFilteredAds.forEach(function(a){
-              if(crFiltP!=="all"&&a.platform!==crFiltP)return;
-              if(crFiltF!=="all"){var f=(a.format||"OTHER").toUpperCase();if(f!==crFiltF)return;}
-              if(!a.placements)return;
-              Object.keys(a.placements).forEach(function(pk){
-                var pl=a.placements[pk];
-                if(pl&&((pl.spend||0)>0||(pl.impressions||0)>0))availPlacements[pk]=true;
-              });
-            });
+            // Objectives: only show objectives actually present in the data
+            var availObjectives={};
+            allFilteredAds.forEach(function(a){if(a.objective)availObjectives[a.objective]=true;});
 
-            // Filter ads, then re-derive metrics from placement data when placement filter is active
+            // Filter ads by platform, format, objective
             var filteredAds=allFilteredAds.filter(function(a){
               if(crFiltP!=="all"&&a.platform!==crFiltP)return false;
               if(crFiltF!=="all"){var f=(a.format||"OTHER").toUpperCase();if(f!==crFiltF)return false;}
-              if(crFiltPl!=="all"){if(!a.placements||!a.placements[crFiltPl])return false;}
+              if(crFiltObj!=="all"&&a.objective!==crFiltObj)return false;
               return true;
-            }).map(function(a){
-              if(crFiltPl==="all"||!a.placements||!a.placements[crFiltPl])return a;
-              var pl=a.placements[crFiltPl];
-              var sp=pl.spend||0;var im=pl.impressions||0;var cl=pl.clicks||0;
-              return Object.assign({},a,{spend:sp,impressions:im,clicks:cl,ctr:im>0?(cl/im*100):0,cpc:cl>0?sp/cl:0,cpm:im>0?(sp/im*1000):0});
             });
 
             var platCol5={"Meta":P.fb,"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava,"Google Search":P.solar,"Performance Max":P.violet,"Demand Gen":P.fuchsia};
@@ -798,9 +784,16 @@ export default function MediaOnGas(){
                 </div>
                 <div style={{width:1,height:24,background:P.rule}}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>PLACEMENT:</span>
-                  {FilterBtn(crFiltPl==="all","All",function(){setCrFiltPl("all");},P.cyan)}
-                  {Object.keys(availPlacements).sort().map(function(pk){return <span key={pk}>{FilterBtn(crFiltPl===pk,pk,function(){setCrFiltPl(pk);},P.cyan)}</span>;})}
+                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>OBJECTIVE:</span>
+                  {FilterBtn(crFiltObj==="all","All",function(){setCrFiltObj("all");},P.ember)}
+                  {(function(){
+                    var objOrder=["leads","appinstall","followers","traffic"];
+                    var objLabels={leads:"Lead Gen",appinstall:"App Install",followers:"Followers / Likes",traffic:"Traffic"};
+                    var objColors={leads:P.rose,appinstall:P.fb,followers:P.tt,traffic:P.cyan};
+                    return objOrder.filter(function(o){return availObjectives[o];}).map(function(o){
+                      return <span key={o}>{FilterBtn(crFiltObj===o,objLabels[o],function(){setCrFiltObj(o);},objColors[o])}</span>;
+                    });
+                  })()}
                 </div>
               </div>
 
