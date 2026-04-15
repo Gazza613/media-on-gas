@@ -491,8 +491,37 @@ export default async function handler(req, res) {
           var gData = await gRes.json();
           googleDebug.resultCount = (gData.results || []).length;
           googleDebug.sampleAd = (gData.results && gData.results[0] && gData.results[0].adGroupAd) ? gData.results[0].adGroupAd.ad : null;
+          // Secondary query: ad_group_ad_asset_view joins ads to their assets (images, YouTube videos)
+          var adToAssets = {};
+          try {
+            var assetQuery = "SELECT ad_group_ad_asset_view.ad_group_ad, ad_group_ad_asset_view.field_type, asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM ad_group_ad_asset_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
+            var aRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+              method: "POST",
+              headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
+              body: JSON.stringify({ query: assetQuery })
+            });
+            googleDebug.assetStatus = aRes.status;
+            if (aRes.status === 200) {
+              var aData = await aRes.json();
+              googleDebug.assetCount = (aData.results || []).length;
+              (aData.results || []).forEach(function(ar) {
+                var adRes = ar.adGroupAdAssetView && ar.adGroupAdAssetView.adGroupAd;
+                if (!adRes) return;
+                if (!adToAssets[adRes]) adToAssets[adRes] = { image: "", youtubeId: "" };
+                if (ar.asset && ar.asset.imageAsset && ar.asset.imageAsset.fullSize && ar.asset.imageAsset.fullSize.url && !adToAssets[adRes].image) {
+                  adToAssets[adRes].image = ar.asset.imageAsset.fullSize.url;
+                }
+                if (ar.asset && ar.asset.youtubeVideoAsset && ar.asset.youtubeVideoAsset.youtubeVideoId && !adToAssets[adRes].youtubeId) {
+                  adToAssets[adRes].youtubeId = ar.asset.youtubeVideoAsset.youtubeVideoId;
+                }
+              });
+            } else {
+              try { googleDebug.assetError = (await aRes.text()).substring(0, 500); } catch(e) {}
+            }
+          } catch (aErr) { googleDebug.assetCatch = String(aErr); }
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
+            var adAssets = adToAssets[ad.resourceName] || {};
             var sp = parseFloat(r.metrics.costMicros || 0) / 1000000;
             var imps = parseInt(r.metrics.impressions || 0);
             var clk = parseInt(r.metrics.clicks || 0);
@@ -501,17 +530,25 @@ export default async function handler(req, res) {
             var preview = "";
             var adType = (ad.type || "").toUpperCase();
             var format = "STATIC";
-            if (ad.imageAd) {
-              thumb = ad.imageAd.previewImageUrl || ad.imageAd.imageUrl || "";
-              preview = ad.imageAd.imageUrl || thumb;
-              format = (thumb.toLowerCase().indexOf(".gif") >= 0) ? "GIF" : "STATIC";
-            } else if (adType === "VIDEO_AD" || adType === "VIDEO_RESPONSIVE_AD" || adType === "VIDEO_BUMPER_AD" || adType === "VIDEO_NON_SKIPPABLE_IN_STREAM_AD" || adType === "VIDEO_TRUEVIEW_IN_STREAM_AD" || adType === "IN_FEED_VIDEO_AD") {
+            var isVideo = adType === "VIDEO_AD" || adType === "VIDEO_RESPONSIVE_AD" || adType === "VIDEO_BUMPER_AD" || adType === "VIDEO_NON_SKIPPABLE_IN_STREAM_AD" || adType === "VIDEO_TRUEVIEW_IN_STREAM_AD" || adType === "IN_FEED_VIDEO_AD";
+            if (isVideo && adAssets.youtubeId) {
+              thumb = "https://img.youtube.com/vi/" + adAssets.youtubeId + "/hqdefault.jpg";
+              preview = "https://www.youtube.com/watch?v=" + adAssets.youtubeId;
               format = "MP4";
-              // Video asset URL not selectable directly in V21 GAQL - could fetch via separate query but kept simple for now
+            } else if (adAssets.image) {
+              thumb = adAssets.image;
+              preview = adAssets.image;
+              format = isVideo ? "MP4" : "STATIC";
+            } else if (ad.imageAd) {
+              thumb = ad.imageAd.imageUrl || "";
+              preview = ad.imageAd.imageUrl || "";
+              format = (thumb.toLowerCase().indexOf(".gif") >= 0) ? "GIF" : "STATIC";
             } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
               thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
               preview = thumb;
               format = "RESPONSIVE";
+            } else if (isVideo) {
+              format = "MP4";
             }
             // Allow text-only Search ads through so spend totals reconcile. Format flagged TEXT, no thumbnail rendered.
             if (!thumb && (adType === "EXPANDED_TEXT_AD" || adType === "RESPONSIVE_SEARCH_AD" || adType === "TEXT_AD")) {
