@@ -677,9 +677,9 @@ export default function MediaOnGas(){
               return Object.assign({},a,{spend:sp,impressions:im,clicks:cl,ctr:im>0?(cl/im*100):0,cpc:cl>0?sp/cl:0,cpm:im>0?(sp/im*1000):0});
             });
 
-            var platCol5={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
-            var platShort2={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
-            var platBench={"Facebook":benchmarks.meta,"Instagram":benchmarks.meta,"TikTok":benchmarks.tiktok,"Google Display":benchmarks.google,"YouTube":benchmarks.google};
+            var platCol5={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava,"Google Search":P.solar,"Performance Max":P.violet,"Demand Gen":P.fuchsia};
+            var platShort2={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT","Google Search":"GS","Performance Max":"PMAX","Demand Gen":"DG"};
+            var platBench={"Facebook":benchmarks.meta,"Instagram":benchmarks.meta,"TikTok":benchmarks.tiktok,"Google Display":benchmarks.google,"YouTube":benchmarks.google,"Google Search":benchmarks.google,"Performance Max":benchmarks.google,"Demand Gen":benchmarks.google};
             var platforms5={};
             filteredAds.forEach(function(a){if(!platforms5[a.platform])platforms5[a.platform]=[];platforms5[a.platform].push(a);});
 
@@ -732,7 +732,7 @@ export default function MediaOnGas(){
             var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS / LIKES":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
             var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
 
-            var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube"];
+            var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube","Performance Max","Demand Gen","Google Search"];
             var grandSpend=0,grandImps=0,grandClicks=0;
             filteredAds.forEach(function(a){grandSpend+=a.spend;grandImps+=a.impressions;grandClicks+=a.clicks;});
 
@@ -780,12 +780,11 @@ export default function MediaOnGas(){
                 var pCtr=pImps>0?(pClicks/pImps*100):0;
                 var pCpc=pClicks>0?pSpend/pClicks:0;
 
-                // Score and split. Winners must have meaningful sample size (5000+ imps).
-                var ranked=[],tooEarly=[];
+                // Score ads with sufficient sample size only. Sub-1000 imp ads are excluded entirely.
+                var ranked=[];
                 pads.forEach(function(a){
-                  var copy=Object.assign({},a,{_score:scoreAd(a,pCtr),_smCtr:smoothedCtr(a,pCtr)});
-                  if(a.impressions<RANKED_MIN_IMPS)tooEarly.push(copy);
-                  else ranked.push(copy);
+                  if(a.impressions<RANKED_MIN_IMPS)return;
+                  ranked.push(Object.assign({},a,{_score:scoreAd(a,pCtr),_smCtr:smoothedCtr(a,pCtr)}));
                 });
                 // Comparator: KPI-converting ads always rank above traffic-only ads, then by score
                 var rankCmp=function(a,b){
@@ -794,7 +793,6 @@ export default function MediaOnGas(){
                   return b._score-a._score;
                 };
                 ranked.sort(rankCmp);
-                tooEarly.sort(function(a,b){return b.spend-a.spend;});
 
                 // Winners: top scorers WITH at least 5000 impressions
                 var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,5);
@@ -891,7 +889,6 @@ export default function MediaOnGas(){
                       {winners.length>0&&<span style={{background:P.mint,color:"#062014",fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1}}>{winners.length+" WINNER"+(winners.length>1?"S":"")}</span>}
                       {strong.length>0&&<span style={{background:P.positive,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1}}>{strong.length+" STRONG"}</span>}
                       {rest.length>0&&<span style={{background:P.solar+"30",color:P.solar,fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1,border:"1px solid "+P.solar+"50"}}>{rest.length+" OTHER"}</span>}
-                      {tooEarly.length>0&&<span style={{background:"rgba(255,255,255,0.05)",color:P.sub,fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1,border:"1px solid "+P.rule}}>{tooEarly.length+" TOO EARLY"}</span>}
                     </div>
                   </div>
 
@@ -957,10 +954,6 @@ export default function MediaOnGas(){
                     </div>}
                   </div>}
 
-                  {tooEarly.length>0&&<div style={{marginBottom:18,padding:"14px 18px",background:"rgba(0,0,0,0.2)",borderRadius:10,border:"1px dashed "+P.rule}}>
-                    <div style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:1.5,marginBottom:8}}>{"TOO EARLY TO ASSESS ("+tooEarly.length+" ads under "+RANKED_MIN_IMPS.toLocaleString()+" impressions)"}</div>
-                    <div style={{fontSize:10,color:P.dim,fontFamily:fm,lineHeight:1.7}}>{tooEarly.slice(0,8).map(function(ad){return ad.adName+" ("+fmt(ad.impressions)+" imps)";}).join(", ")+(tooEarly.length>8?", and "+(tooEarly.length-8)+" more.":".")}</div>
-                  </div>}
 
                   <Insight title={pl+" Creative Assessment"} accent={platC} icon={Ic.fire(platC,14)}>{(function(){
                     var lines=[];
@@ -969,14 +962,13 @@ export default function MediaOnGas(){
                     var avgCpr=totalRes>0?pSpend/totalRes:0;
                     lines.push(pads.length+" "+pl+" ads with "+fR(pSpend)+" spent, "+fmt(pImps)+" impressions and "+pCtr.toFixed(2)+"% blended CTR.");
                     if(totalRes>0)lines.push("Delivered "+fmt(totalRes)+" "+resType+" at "+fR(avgCpr)+" cost per "+resType.replace(/s$/,"")+", the headline KPI for client reporting.");
-                    lines.push(winners.length+" winners, "+strong.length+" strong, "+rest.length+" other, "+tooEarly.length+" too early to assess.");
+                    lines.push(winners.length+" winners, "+strong.length+" strong, "+rest.length+" other (ads under 1,000 impressions excluded).");
                     if(topAd){
                       var topRes=hasKpiResults(topAd)?", "+fmt(topAd.results)+" "+topAd.resultType+" at "+fR(topAd.spend/topAd.results)+"/"+topAd.resultType.replace(/s$/,""):"";
                       lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,60)+"\" ("+fR(topAd.spend)+" spent, "+topAd.ctr.toFixed(2)+"% CTR, "+fR(topAd.cpc)+" CPC"+topRes+").");
                     }
                     if(winners.length>0)lines.push("Scale top winners by increasing budget 15 to 25 percent on the parent ad sets.");
                     if(rest.length>0)lines.push("Review the bottom of the rankings, pause any ads under 0.8 percent CTR with material spend.");
-                    if(tooEarly.length>3)lines.push("Allow the too-early cohort to accumulate 1,000+ impressions before assessing.");
                     return lines.join(" ");
                   })()}</Insight>
                 </div>;

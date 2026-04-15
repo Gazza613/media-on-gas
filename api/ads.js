@@ -451,7 +451,7 @@ export default async function handler(req, res) {
       });
       var gTokenData = await gTokenRes.json();
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.impressions > 0";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.impressions > 0";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -472,7 +472,8 @@ export default async function handler(req, res) {
             if (!(imps > 0 || sp > 0)) return;
             var thumb = "";
             var preview = "";
-            var format = ad.type || "IMAGE";
+            var adType = (ad.type || "").toUpperCase();
+            var format = "STATIC";
             if (ad.imageAd) {
               thumb = ad.imageAd.previewImageUrl || ad.imageAd.imageUrl || "";
               preview = ad.imageAd.imageUrl || thumb;
@@ -481,18 +482,47 @@ export default async function handler(req, res) {
               thumb = "https://img.youtube.com/vi/" + ad.videoAd.video.id + "/hqdefault.jpg";
               preview = "https://www.youtube.com/watch?v=" + ad.videoAd.video.id;
               format = "MP4";
-            } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
-              thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
+            } else if (ad.responsiveDisplayAd) {
+              var rda = ad.responsiveDisplayAd;
+              if (rda.marketingImages && rda.marketingImages.length > 0) {
+                thumb = rda.marketingImages[0].url || "";
+              } else if (rda.squareMarketingImages && rda.squareMarketingImages.length > 0) {
+                thumb = rda.squareMarketingImages[0].url || "";
+              }
               preview = thumb;
               format = "RESPONSIVE";
+            } else if (ad.appAd) {
+              if (ad.appAd.youtubeVideos && ad.appAd.youtubeVideos.length > 0) {
+                thumb = "https://img.youtube.com/vi/" + ad.appAd.youtubeVideos[0].id + "/hqdefault.jpg";
+                preview = "https://www.youtube.com/watch?v=" + ad.appAd.youtubeVideos[0].id;
+                format = "MP4";
+              } else if (ad.appAd.images && ad.appAd.images.length > 0) {
+                thumb = ad.appAd.images[0].url || "";
+                preview = thumb;
+                format = "STATIC";
+              }
             }
-            var gPlatform = (r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0 ? "YouTube" : "Google Display";
-            var gPlace = gPlatform === "YouTube" ? "YouTube" : "Display";
+            // Skip text-only ads (Search) since they have no visual creative for the gallery
+            if (!thumb && (adType === "EXPANDED_TEXT_AD" || adType === "RESPONSIVE_SEARCH_AD" || adType === "TEXT_AD")) return;
+            // Classify platform by Google channel type
+            var chType = (r.campaign.advertisingChannelType || "").toUpperCase();
+            var chSubType = (r.campaign.advertisingChannelSubType || "").toUpperCase();
+            var gPlatform = "Google Display";
+            if (chType === "VIDEO" || chSubType.indexOf("VIDEO") >= 0) gPlatform = "YouTube";
+            else if (chType === "DISPLAY") gPlatform = "Google Display";
+            else if (chType === "SEARCH") gPlatform = "Google Search";
+            else if (chType === "PERFORMANCE_MAX") gPlatform = "Performance Max";
+            else if (chType === "DISCOVERY" || chType === "DEMAND_GEN") gPlatform = "Demand Gen";
+            else if ((r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0) gPlatform = "YouTube";
+            var gPlace = gPlatform === "YouTube" ? "YouTube" : gPlatform === "Google Search" ? "Search" : gPlatform === "Performance Max" ? "Pmax" : gPlatform === "Demand Gen" ? "Demand" : "Display";
             var gConv = Math.round(parseFloat(r.metrics.conversions || 0));
-            var gObjective = detectObjective(r.campaign.name);
+            var nameObj = detectObjective(r.campaign.name);
+            // Channel sub-type can hint at app campaigns
+            var gObjective = (chSubType.indexOf("APP") >= 0 || chSubType.indexOf("APP_INSTALL") >= 0) ? "appinstall" : nameObj;
             var gResCount, gResType;
-            if (gConv > 0) { gResCount = gConv; gResType = "conversions"; }
-            else if (gObjective === "leads") { gResCount = clk; gResType = "leads"; }
+            if (gConv > 0) { gResCount = gConv; gResType = gObjective === "leads" ? "leads" : gObjective === "appinstall" ? "installs" : "conversions"; }
+            else if (gObjective === "appinstall") { gResCount = clk; gResType = "store_clicks"; }
+            else if (gObjective === "leads") { gResCount = clk; gResType = "clicks"; }
             else { gResCount = clk; gResType = "clicks"; }
             allAds.push({
               platform: gPlatform,
