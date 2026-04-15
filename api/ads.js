@@ -470,7 +470,7 @@ export default async function handler(req, res) {
       var gTokenData = await gTokenRes.json();
       googleDebug.tokenOk = !!gTokenData.access_token;
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -504,10 +504,9 @@ export default async function handler(req, res) {
               thumb = ad.imageAd.previewImageUrl || ad.imageAd.imageUrl || "";
               preview = ad.imageAd.imageUrl || thumb;
               format = (thumb.toLowerCase().indexOf(".gif") >= 0) ? "GIF" : "STATIC";
-            } else if (ad.videoAd && ad.videoAd.video && ad.videoAd.video.id) {
-              thumb = "https://img.youtube.com/vi/" + ad.videoAd.video.id + "/hqdefault.jpg";
-              preview = "https://www.youtube.com/watch?v=" + ad.videoAd.video.id;
+            } else if (adType === "VIDEO_AD" || adType === "VIDEO_RESPONSIVE_AD" || adType === "VIDEO_BUMPER_AD" || adType === "VIDEO_NON_SKIPPABLE_IN_STREAM_AD" || adType === "VIDEO_TRUEVIEW_IN_STREAM_AD" || adType === "IN_FEED_VIDEO_AD") {
               format = "MP4";
+              // Video asset URL not selectable directly in V21 GAQL - could fetch via separate query but kept simple for now
             } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
               thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
               preview = thumb;
