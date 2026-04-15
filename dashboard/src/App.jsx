@@ -874,7 +874,6 @@ export default function MediaOnGas(){
                         <div><div style={{color:hasKpiResults(ad)?P.mint:P.sub,marginBottom:3,letterSpacing:1,fontSize:9,fontWeight:800}}>{resultLabel(ad.resultType)}</div><div style={{color:hasKpiResults(ad)?P.mint:P.dim,fontWeight:900,fontSize:14}}>{ad.results>0?fmt(ad.results):"-"}</div></div>
                         <div><div style={{color:hasKpiResults(ad)?P.mint:P.sub,marginBottom:3,letterSpacing:1,fontSize:9,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:hasKpiResults(ad)?P.mint:P.dim,fontWeight:900,fontSize:14}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div></div>
                       </div>
-                      {ad.placements&&Object.keys(ad.placements).length>0&&<div style={{marginBottom:10,display:"flex",flexWrap:"wrap",gap:4}}>{Object.keys(ad.placements).slice(0,4).map(function(pk){return <span key={pk} style={{fontSize:8,fontWeight:800,color:P.cyan,background:P.cyan+"15",border:"1px solid "+P.cyan+"30",padding:"2px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,textTransform:"uppercase"}}>{pk}</span>;})}{Object.keys(ad.placements).length>4&&<span style={{fontSize:8,color:P.sub,fontFamily:fm,padding:"2px 4px"}}>{"+"+(Object.keys(ad.placements).length-4)}</span>}</div>}
                       {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"10px 12px",background:adPlatC,border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 8px "+adPlatC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW</div>}
                     </div>
                   </div>;
@@ -968,14 +967,14 @@ export default function MediaOnGas(){
                   })():<div>
                     {winners.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>TOP WINNERS</span><span style={{fontSize:9,color:P.sub,fontFamily:fm,marginLeft:4,fontStyle:"italic"}}>{"5,000+ impressions, top performers"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,200px)",gap:12,justifyContent:"center"}}>
                         {winners.map(function(ad){return bigCard(ad,true);})}
                       </div>
                     </div>}
 
                     {strong.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.bolt(P.positive,18)}<span style={{fontSize:13,fontWeight:900,color:P.positive,fontFamily:ff,letterSpacing:1.5}}>STRONG PERFORMERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.positive+"40, transparent)"}}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,200px)",gap:12,justifyContent:"center"}}>
                         {strong.map(function(ad){return bigCard(ad,false);})}
                       </div>
                     </div>}
