@@ -490,6 +490,7 @@ export default async function handler(req, res) {
         } else {
           var gData = await gRes.json();
           googleDebug.resultCount = (gData.results || []).length;
+          googleDebug.sampleAd = (gData.results && gData.results[0] && gData.results[0].adGroupAd) ? gData.results[0].adGroupAd.ad : null;
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
             var sp = parseFloat(r.metrics.costMicros || 0) / 1000000;
@@ -568,5 +569,5 @@ export default async function handler(req, res) {
     console.error("Google ads error", gErr);
   }
 
-  res.status(200).json({ ads: allAds, total: allAds.length, _googleDebug: googleDebug });
+  res.status(200).json({ ads: allAds, total: allAds.length, _gDebug: googleDebug });
 }
