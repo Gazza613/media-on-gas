@@ -144,6 +144,7 @@ export default function MediaOnGas(){
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
+  var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
 
   useEffect(function(){
@@ -216,7 +217,7 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});};
   useEffect(function(){if(session){fetchData();}},[df,dt,session]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
@@ -261,7 +262,7 @@ export default function MediaOnGas(){
   var resolve=function(id){setFlags(function(p){return p.map(function(f){return f.id===id?Object.assign({},f,{status:"resolved"}):f;});});};
   var openFlags=flags.filter(function(f){return f.status==="open";}).length;
 
-  var tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Reporting",icon:Ic.chart(P.orchid,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)}];if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
+  var tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Reporting",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)}];if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
 
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
   if(!session)return(<LoginScreen onLogin={handleLogin}/>);
@@ -617,6 +618,124 @@ export default function MediaOnGas(){
                 </div>;
               })()}
 
+            </div>;
+          })()}
+        </div>)}
+
+        {tab==="creative"&&(<div>
+          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" \u00b7 Ad-level intelligence with thumbnails and live previews"} accent={P.blaze}/>
+          {(function(){
+            var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
+            if(selCamps.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns on the left to view ad-level creative performance.</div>;
+            var selCampIds={};
+            selCamps.forEach(function(c){
+              selCampIds[String(c.rawCampaignId||"")]=true;
+              selCampIds[String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;
+              selCampIds[String(c.campaignId||"")]=true;
+            });
+            var selCampNames={};
+            selCamps.forEach(function(c){if(c.campaignName)selCampNames[c.campaignName]=true;});
+
+            var filteredAds=adsList.filter(function(a){
+              if(selCampIds[String(a.campaignId||"")])return true;
+              if(selCampNames[a.campaignName])return true;
+              return false;
+            });
+
+            if(filteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.sub,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data is still loading, try refreshing, or the selected campaigns may not have ad-level insights available yet.</div></div>;
+
+            var platCol5={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
+            var platShort2={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
+            var platBench={"Facebook":benchmarks.meta,"Instagram":benchmarks.meta,"TikTok":benchmarks.tiktok,"Google Display":benchmarks.google,"YouTube":benchmarks.google};
+            var platforms5={};
+            filteredAds.forEach(function(a){if(!platforms5[a.platform])platforms5[a.platform]=[];platforms5[a.platform].push(a);});
+
+            var scoreAd=function(a){
+              var bm=platBench[a.platform]||benchmarks.meta;
+              var ctrS=a.ctr>=2.0?4:a.ctr>=1.2?3:a.ctr>=0.8?2:1;
+              var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
+              var volS=a.impressions>=50000?3:a.impressions>=10000?2:1;
+              return ctrS*0.4+cpcS*0.4+volS*0.2;
+            };
+            var gradeFor=function(s){return s>=3.5?{label:"A",color:P.mint,word:"Excellent"}:s>=2.8?{label:"B",color:P.positive,word:"Good"}:s>=2.0?{label:"C",color:P.solar,word:"Average"}:{label:"D",color:P.rose,word:"Review"};};
+
+            var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube"];
+            var grandSpend=0,grandImps=0,grandClicks=0;
+            filteredAds.forEach(function(a){grandSpend+=a.spend;grandImps+=a.impressions;grandClicks+=a.clicks;});
+
+            return <div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+                <Glass accent={P.blaze} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS ANALYSED</div><div style={{fontSize:24,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
+                <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(grandSpend)}</div></Glass>
+                <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(grandImps)}</div></Glass>
+                <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{grandImps>0?(grandClicks/grandImps*100).toFixed(2)+"%":"-"}</div></Glass>
+              </div>
+
+              {platformOrder.filter(function(p){return platforms5[p]&&platforms5[p].length>0;}).map(function(pl){
+                var platC=platCol5[pl]||P.ember;
+                var pads=platforms5[pl].map(function(a){return Object.assign({},a,{_score:scoreAd(a)});}).sort(function(a,b){return b._score-a._score;});
+                var pSpend=0,pImps=0,pClicks=0;
+                pads.forEach(function(a){pSpend+=a.spend;pImps+=a.impressions;pClicks+=a.clicks;});
+                var pCtr=pImps>0?(pClicks/pImps*100):0;
+                var pCpc=pClicks>0?pSpend/pClicks:0;
+                var aCount=pads.filter(function(x){return x._score>=3.5;}).length;
+                var bCount=pads.filter(function(x){return x._score>=2.8&&x._score<3.5;}).length;
+                var cCount=pads.filter(function(x){return x._score>=2.0&&x._score<2.8;}).length;
+                var dCount=pads.filter(function(x){return x._score<2.0;}).length;
+                var topAd=pads[0];
+                var worstAd=pads[pads.length-1];
+
+                return <div key={pl} style={{marginBottom:32,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22}}>
+                    <div style={{display:"flex",alignItems:"center",gap:14}}>
+                      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+platC+"25,"+platC+"08)",border:"1px solid "+platC+"40",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:platC,fontFamily:fm,letterSpacing:1}}>{platShort2[pl]||pl}</div>
+                      <div><div style={{fontSize:19,fontWeight:900,color:platC,fontFamily:ff,letterSpacing:1}}>{pl}</div><div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>{pads.length+" ads, "+fR(pSpend)+" spent, "+fmt(pImps)+" impressions, "+pCtr.toFixed(2)+"% CTR, "+fR(pCpc)+" CPC"}</div></div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      {aCount>0&&<span style={{background:P.mint,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"A\u00d7"+aCount}</span>}
+                      {bCount>0&&<span style={{background:P.positive,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"B\u00d7"+bCount}</span>}
+                      {cCount>0&&<span style={{background:P.solar,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"C\u00d7"+cCount}</span>}
+                      {dCount>0&&<span style={{background:P.rose,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"D\u00d7"+dCount}</span>}
+                    </div>
+                  </div>
+
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:18,marginBottom:22}}>
+                    {pads.map(function(ad,ai){
+                      var g=gradeFor(ad._score);
+                      return <div key={ai} style={{background:"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+P.rule,overflow:"hidden",transition:"all 0.2s ease",display:"flex",flexDirection:"column"}}>
+                        <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
+                          {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">Preview unavailable</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview available</div>}
+                          <div style={{position:"absolute",top:10,left:10,background:g.color,color:"#fff",padding:"5px 11px",borderRadius:6,fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{g.label}</div>
+                          <div style={{position:"absolute",top:10,right:10,background:platC,color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{platShort2[pl]||pl}</div>
+                          <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.8)",color:"#fff",padding:"3px 9px",borderRadius:4,fontSize:9,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
+                        </div>
+                        <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
+                          <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                          <div style={{fontSize:12,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:12,lineHeight:1.4,minHeight:34,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:12}}>
+                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.spend)}</div></div>
+                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fmt(ad.impressions)}</div></div>
+                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:12}}>{ad.ctr.toFixed(2)+"%"}</div></div>
+                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
+                          </div>
+                          {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD \u2192</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
+                        </div>
+                      </div>;
+                    })}
+                  </div>
+
+                  <Insight title={pl+" Creative Assessment"} accent={platC} icon={Ic.fire(platC,14)}>{(function(){
+                    var lines=[];
+                    lines.push(pads.length+" "+pl+" ads analysed with "+fR(pSpend)+" combined spend, "+fmt(pImps)+" impressions and "+pCtr.toFixed(2)+"% blended CTR.");
+                    lines.push("Grade distribution: "+aCount+" A-grade (excellent), "+bCount+" B-grade (good), "+cCount+" C-grade (average), "+dCount+" D-grade (review).");
+                    if(topAd)lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,60)+"\" ("+fR(topAd.spend)+" spent, "+topAd.ctr.toFixed(2)+"% CTR, "+fR(topAd.cpc)+" CPC).");
+                    if(dCount>0&&worstAd&&worstAd!==topAd)lines.push("Weakest: \""+(worstAd.adName||"Unnamed").substring(0,60)+"\" at "+worstAd.ctr.toFixed(2)+"% CTR, "+fR(worstAd.cpc)+" CPC, "+fR(worstAd.spend)+" already spent.");
+                    if(aCount>0)lines.push("Scale winning A-grade creatives by increasing adset budgets 15 to 25%.");
+                    if(dCount>0)lines.push("Pause D-grade ads below 0.8% CTR and reallocate to proven performers.");
+                    return lines.join(" ");
+                  })()}</Insight>
+                </div>;
+              })}
             </div>;
           })()}
         </div>)}

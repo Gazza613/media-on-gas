@@ -1,0 +1,268 @@
+import { rateLimit } from "./_rateLimit.js";
+import { checkAuth } from "./_auth.js";
+import { validateDates } from "./_validate.js";
+
+var metaAccounts = [
+  { name: "MTN MoMo", id: "act_8159212987434597" },
+  { name: "MTN Khava", id: "act_3600654450252189" },
+  { name: "Concord College", id: "act_825253026181227" },
+  { name: "Eden College", id: "act_1187886635852303" },
+  { name: "Psycho Bunny ZA", id: "act_9001636663181231" },
+  { name: "GAS Agency", id: "act_542990539806888" }
+];
+
+export default async function handler(req, res) {
+  if (!rateLimit(req, res)) return;
+  if (!checkAuth(req, res)) return;
+  if (!validateDates(req, res)) return;
+
+  var from = req.query.from || "2026-04-01";
+  var to = req.query.to || "2026-04-14";
+  var metaToken = process.env.META_ACCESS_TOKEN;
+  var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
+  var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
+  var allAds = [];
+
+  /* ═══ META (Facebook + Instagram) ═══ */
+  for (var i = 0; i < metaAccounts.length; i++) {
+    var account = metaAccounts[i];
+    try {
+      var timeRange = JSON.stringify({ since: from, until: to });
+      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+      var insRes = await fetch(insUrl);
+      var insData = await insRes.json();
+      var insights = [];
+      if (insData.data) {
+        insData.data.forEach(function(ins) {
+          var pub = ins.publisher_platform || "facebook";
+          if (pub !== "facebook" && pub !== "instagram") return;
+          if (!(parseFloat(ins.impressions || 0) > 0 || parseFloat(ins.spend || 0) > 0)) return;
+          insights.push(Object.assign({}, ins, { _pub: pub }));
+        });
+      }
+
+      // Unique ad IDs to fetch creative for
+      var uniqAdIds = [];
+      insights.forEach(function(x) { if (uniqAdIds.indexOf(x.ad_id) < 0) uniqAdIds.push(x.ad_id); });
+
+      // Batch fetch creatives (up to 50 ids per request)
+      var creativesByAdId = {};
+      for (var b = 0; b < uniqAdIds.length; b += 50) {
+        var batch = uniqAdIds.slice(b, b + 50);
+        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
+        var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + batch.join(",") + "&fields=" + encodeURIComponent(adFields) + "&access_token=" + metaToken;
+        try {
+          var batchRes = await fetch(batchUrl);
+          var batchData = await batchRes.json();
+          Object.keys(batchData).forEach(function(adId) {
+            if (batchData[adId] && batchData[adId].creative) {
+              creativesByAdId[adId] = batchData[adId].creative;
+            }
+          });
+        } catch (bErr) { console.error("Meta batch creative error", account.name, bErr); }
+      }
+
+      insights.forEach(function(ins) {
+        var cr = creativesByAdId[ins.ad_id] || {};
+        var pub = ins._pub;
+        var platform = pub === "instagram" ? "Instagram" : "Facebook";
+        var thumb = cr.image_url || cr.thumbnail_url || "";
+        var preview = "";
+        if (pub === "instagram" && cr.instagram_permalink_url) {
+          preview = cr.instagram_permalink_url;
+        } else if (cr.effective_object_story_id) {
+          preview = "https://www.facebook.com/" + cr.effective_object_story_id;
+        }
+        var leads = 0, installs = 0;
+        if (ins.actions) {
+          ins.actions.forEach(function(a) {
+            if (a.action_type === "lead" || a.action_type === "onsite_web_lead" || a.action_type === "offsite_conversion.fb_pixel_lead" || a.action_type === "onsite_conversion.lead_grouped") {
+              leads = Math.max(leads, parseInt(a.value || 0));
+            }
+            if (a.action_type === "app_install" || a.action_type === "app_custom_event.fb_mobile_activate_app") {
+              installs += parseInt(a.value || 0);
+            }
+          });
+        }
+        allAds.push({
+          platform: platform,
+          accountName: account.name,
+          campaignId: ins.campaign_id,
+          campaignName: ins.campaign_name,
+          adsetName: ins.adset_name,
+          adId: ins.ad_id,
+          adName: ins.ad_name,
+          thumbnail: thumb,
+          previewUrl: preview,
+          format: cr.video_id ? "VIDEO" : (cr.object_type || "IMAGE"),
+          spend: parseFloat(ins.spend || 0),
+          impressions: parseInt(ins.impressions || 0),
+          clicks: parseInt(ins.clicks || 0),
+          reach: parseInt(ins.reach || 0),
+          ctr: parseFloat(ins.ctr || 0),
+          cpc: parseFloat(ins.cpc || 0),
+          cpm: parseFloat(ins.cpm || 0),
+          results: leads + installs,
+          resultType: leads > 0 ? "leads" : (installs > 0 ? "installs" : "clicks")
+        });
+      });
+    } catch (err) {
+      console.error("Meta ads error for", account.name, err);
+    }
+  }
+
+  /* ═══ TIKTOK ═══ */
+  try {
+    if (ttToken && ttAdvId) {
+      var ttAdFields = encodeURIComponent(JSON.stringify(["ad_id", "ad_name", "campaign_id", "campaign_name", "adgroup_id", "adgroup_name", "video_id", "image_ids"]));
+      var ttAdsUrl = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + ttAdvId + "&page_size=100&fields=" + ttAdFields;
+      var ttAdsRes = await fetch(ttAdsUrl, { headers: { "Access-Token": ttToken } });
+      var ttAdsData = await ttAdsRes.json();
+      var ttAdsByAdId = {};
+      var videoIds = [];
+      if (ttAdsData.data && ttAdsData.data.list) {
+        ttAdsData.data.list.forEach(function(ad) {
+          ttAdsByAdId[ad.ad_id] = ad;
+          if (ad.video_id && videoIds.indexOf(ad.video_id) < 0) videoIds.push(ad.video_id);
+        });
+      }
+
+      // Batch fetch video info for thumbnails
+      var videoInfoByVid = {};
+      for (var v = 0; v < videoIds.length; v += 60) {
+        var vBatch = videoIds.slice(v, v + 60);
+        var vidUrl = "https://business-api.tiktok.com/open_api/v1.3/file/video/ad/info/?advertiser_id=" + ttAdvId + "&video_ids=" + encodeURIComponent(JSON.stringify(vBatch));
+        try {
+          var vRes = await fetch(vidUrl, { headers: { "Access-Token": ttToken } });
+          var vData = await vRes.json();
+          if (vData.data && vData.data.list) {
+            vData.data.list.forEach(function(vi) { videoInfoByVid[vi.video_id] = vi; });
+          }
+        } catch (vErr) { console.error("TT video info error", vErr); }
+      }
+
+      // Ad-level insights
+      var ttDims = encodeURIComponent(JSON.stringify(["ad_id"]));
+      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "adgroup_name", "ad_name", "spend", "impressions", "clicks", "cpm", "cpc", "ctr", "reach", "follows", "likes", "video_views_p100"]));
+      var ttInsUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_AD&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=200";
+      var ttInsRes = await fetch(ttInsUrl, { headers: { "Access-Token": ttToken } });
+      var ttInsData = await ttInsRes.json();
+      if (ttInsData.data && ttInsData.data.list) {
+        ttInsData.data.list.forEach(function(ins) {
+          var ad = ttAdsByAdId[ins.dimensions.ad_id] || {};
+          var mt = ins.metrics;
+          if (!(parseFloat(mt.impressions || 0) > 0 || parseFloat(mt.spend || 0) > 0)) return;
+          var video = ad.video_id ? (videoInfoByVid[ad.video_id] || {}) : {};
+          var follows = parseInt(mt.follows || 0);
+          allAds.push({
+            platform: "TikTok",
+            accountName: "MTN MoMo TikTok",
+            campaignId: String(mt.campaign_id || ""),
+            campaignName: mt.campaign_name,
+            adsetName: mt.adgroup_name,
+            adId: ins.dimensions.ad_id,
+            adName: mt.ad_name,
+            thumbnail: video.poster_url || video.video_cover_url || "",
+            previewUrl: video.preview_url || ("https://ads.tiktok.com/i18n/perf/creation?aadvid=" + ttAdvId),
+            format: ad.video_id ? "VIDEO" : "IMAGE",
+            spend: parseFloat(mt.spend || 0),
+            impressions: parseInt(mt.impressions || 0),
+            clicks: parseInt(mt.clicks || 0),
+            reach: parseInt(mt.reach || 0),
+            ctr: parseFloat(mt.ctr || 0),
+            cpc: parseFloat(mt.cpc || 0),
+            cpm: parseFloat(mt.cpm || 0),
+            results: follows,
+            resultType: follows > 0 ? "follows" : "clicks"
+          });
+        });
+      }
+    }
+  } catch (ttErr) {
+    console.error("TikTok ads error", ttErr);
+  }
+
+  /* ═══ GOOGLE DISPLAY / YOUTUBE ═══ */
+  try {
+    var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
+    var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
+    var gRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+    var gDevToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+    var gManagerId = process.env.GOOGLE_ADS_MANAGER_ID;
+    var gCustomerId = "9587382256";
+
+    if (gClientId && gRefreshToken && gDevToken) {
+      var gTokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "client_id=" + gClientId + "&client_secret=" + gClientSecret + "&refresh_token=" + gRefreshToken + "&grant_type=refresh_token"
+      });
+      var gTokenData = await gTokenRes.json();
+      if (gTokenData.access_token) {
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.impressions > 0";
+        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + gTokenData.access_token,
+            "developer-token": gDevToken,
+            "login-customer-id": gManagerId,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ query: gQuery })
+        });
+        if (gRes.status === 200) {
+          var gData = await gRes.json();
+          (gData.results || []).forEach(function(r) {
+            var ad = r.adGroupAd.ad;
+            var sp = parseFloat(r.metrics.costMicros || 0) / 1000000;
+            var imps = parseInt(r.metrics.impressions || 0);
+            var clk = parseInt(r.metrics.clicks || 0);
+            if (!(imps > 0 || sp > 0)) return;
+            var thumb = "";
+            var preview = "";
+            var format = ad.type || "IMAGE";
+            if (ad.imageAd) {
+              thumb = ad.imageAd.previewImageUrl || ad.imageAd.imageUrl || "";
+              preview = ad.imageAd.imageUrl || thumb;
+              format = "IMAGE";
+            } else if (ad.videoAd && ad.videoAd.video && ad.videoAd.video.id) {
+              thumb = "https://img.youtube.com/vi/" + ad.videoAd.video.id + "/hqdefault.jpg";
+              preview = "https://www.youtube.com/watch?v=" + ad.videoAd.video.id;
+              format = "VIDEO";
+            } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
+              thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
+              preview = thumb;
+              format = "RESPONSIVE";
+            }
+            var gPlatform = (r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0 ? "YouTube" : "Google Display";
+            allAds.push({
+              platform: gPlatform,
+              accountName: "MTN MoMo Google",
+              campaignId: String(r.campaign.id || ""),
+              campaignName: r.campaign.name,
+              adsetName: r.adGroup.name,
+              adId: ad.id,
+              adName: ad.name || ("Ad " + ad.id),
+              thumbnail: thumb,
+              previewUrl: preview,
+              format: format,
+              spend: sp,
+              impressions: imps,
+              clicks: clk,
+              reach: 0,
+              ctr: imps > 0 ? (clk / imps * 100) : 0,
+              cpc: clk > 0 ? sp / clk : 0,
+              cpm: imps > 0 ? (sp / imps * 1000) : 0,
+              results: Math.round(parseFloat(r.metrics.conversions || 0)),
+              resultType: "conversions"
+            });
+          });
+        }
+      }
+    }
+  } catch (gErr) {
+    console.error("Google ads error", gErr);
+  }
+
+  res.status(200).json({ ads: allAds, total: allAds.length });
+}
