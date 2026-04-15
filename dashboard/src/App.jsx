@@ -690,24 +690,33 @@ export default function MediaOnGas(){
             };
             var hasKpiResults=function(a){return a.results>0;};
             var isHighValueKpi=function(a){return a.results>0&&(a.resultType==="leads"||a.resultType==="installs"||a.resultType==="follows"||a.resultType==="conversions");};
+            var isObjectiveKpi=function(a){return a.results>0&&(a.objective==="leads"||a.objective==="followers"||a.objective==="appinstall");};
             var scoreAd=function(a,platAvgCtr){
               var bm=platBench[a.platform]||benchmarks.meta;
               var sCtr=smoothedCtr(a,platAvgCtr);
               var ctrS=sCtr>=2.0?4:sCtr>=1.4?3.4:sCtr>=0.9?2.5:sCtr>=0.5?1.5:0.5;
               var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
               var vS=volScore(a.impressions);
-              if(hasKpiResults(a)){
+              // KPI-driven scoring for lead, follower, install campaigns
+              if(isObjectiveKpi(a)){
                 var costPer=a.spend/a.results;
-                var resultBm=a.resultType==="leads"?bm.cpl:a.resultType==="follows"?bm.cpf:null;
-                var resultS;
-                if(resultBm){
-                  resultS=costPer<=resultBm.low?4:costPer<=resultBm.mid?3:costPer<=resultBm.high?2:1;
+                var efficS,volS;
+                if(a.objective==="leads"){
+                  efficS=bm.cpl?(costPer<=bm.cpl.low?4:costPer<=bm.cpl.mid?3:costPer<=bm.cpl.high?2:1):2;
+                  volS=a.results>=100?4:a.results>=50?3.5:a.results>=25?3:a.results>=10?2.5:a.results>=5?1.5:1;
+                }else if(a.objective==="followers"){
+                  efficS=bm.cpf?(costPer<=bm.cpf.low?4:costPer<=bm.cpf.mid?3:costPer<=bm.cpf.high?2:1):2;
+                  volS=a.results>=1000?4:a.results>=500?3.5:a.results>=200?3:a.results>=50?2.5:a.results>=10?1.5:1;
                 }else{
-                  resultS=a.results>=100?4:a.results>=30?3:a.results>=10?2.5:a.results>=3?1.5:1;
+                  efficS=bm.cpc?(costPer<=bm.cpc.low?4:costPer<=bm.cpc.mid?3:costPer<=bm.cpc.high?2:1):2;
+                  volS=a.results>=500?4:a.results>=200?3.5:a.results>=100?3:a.results>=50?2.5:a.results>=20?1.5:1;
                 }
-                // KPI results dominate scoring when present
-                return resultS*0.50+ctrS*0.20+cpcS*0.15+vS*0.15;
+                // Result component: 60 percent KPI volume, 40 percent KPI efficiency
+                var resultS=volS*0.60+efficS*0.40;
+                // Total: 70 percent KPI result + 12 percent CTR + 8 percent CPC + 10 percent impression volume confidence
+                return resultS*0.70+ctrS*0.12+cpcS*0.08+volScore(a.impressions)*0.10;
               }
+              // Traffic / click-only campaigns: pure engagement scoring
               return ctrS*0.40+cpcS*0.30+vS*0.30;
             };
             var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS / LIKES":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
@@ -768,17 +777,33 @@ export default function MediaOnGas(){
                   if(a.impressions<RANKED_MIN_IMPS)tooEarly.push(copy);
                   else ranked.push(copy);
                 });
-                // Sort by score for selecting top winners/strong tier
-                ranked.sort(function(a,b){return b._score-a._score;});
+                // Comparator: KPI-converting ads always rank above traffic-only ads, then by score
+                var rankCmp=function(a,b){
+                  var aKpi=isObjectiveKpi(a),bKpi=isObjectiveKpi(b);
+                  if(aKpi!==bKpi)return aKpi?-1:1;
+                  return b._score-a._score;
+                };
+                ranked.sort(rankCmp);
                 tooEarly.sort(function(a,b){return b.spend-a.spend;});
 
-                // Winners: top scorers WITH at least 5000 impressions, then re-sort by KPI results DESC
+                // Winners: top scorers WITH at least 5000 impressions
                 var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,5);
-                winners.sort(function(a,b){if(b.results!==a.results)return b.results-a.results;return b._score-a._score;});
+                // Within winners, sort by results DESC for KPI ads, score DESC otherwise
+                winners.sort(function(a,b){
+                  var aKpi=isObjectiveKpi(a),bKpi=isObjectiveKpi(b);
+                  if(aKpi!==bKpi)return aKpi?-1:1;
+                  if(aKpi&&bKpi&&b.results!==a.results)return b.results-a.results;
+                  return b._score-a._score;
+                });
                 var winnerSet={};winners.forEach(function(a){winnerSet[a.adId]=true;});
-                // Strong: next 5 by score, then re-sort by KPI results DESC
+                // Strong: next 5 by rankCmp
                 var strong=ranked.filter(function(a){return !winnerSet[a.adId];}).slice(0,5);
-                strong.sort(function(a,b){if(b.results!==a.results)return b.results-a.results;return b._score-a._score;});
+                strong.sort(function(a,b){
+                  var aKpi=isObjectiveKpi(a),bKpi=isObjectiveKpi(b);
+                  if(aKpi!==bKpi)return aKpi?-1:1;
+                  if(aKpi&&bKpi&&b.results!==a.results)return b.results-a.results;
+                  return b._score-a._score;
+                });
                 var strongSet={};strong.forEach(function(a){strongSet[a.adId]=true;});
                 // Rest: everything ranked but not winner/strong, sorted by spend DESC
                 var rest=ranked.filter(function(a){return !winnerSet[a.adId]&&!strongSet[a.adId];});
@@ -794,7 +819,8 @@ export default function MediaOnGas(){
                       <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.8)",color:"#fff",padding:"3px 9px",borderRadius:4,fontSize:10,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
                     </div>
                     <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
-                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                      {ad.objective&&<div style={{marginBottom:8}}>{(function(){var oc=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;var ol=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS / LIKES":"TRAFFIC";return <span style={{fontSize:9,fontWeight:900,color:oc,background:oc+"15",border:"1px solid "+oc+"35",padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1.2,textTransform:"uppercase"}}>{ol}</span>;})()}</div>}
                       <div style={{fontSize:12,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:12,lineHeight:1.4,minHeight:34,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:10}}>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.spend)}</div></div>
