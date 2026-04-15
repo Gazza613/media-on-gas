@@ -707,6 +707,31 @@ export default function MediaOnGas(){
 
             var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
             var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
+            // Format badge color + label
+            var fmtMeta=function(f){
+              var ff=(f||"STATIC").toUpperCase();
+              if(ff==="MP4"||ff==="VIDEO")return{label:"VIDEO",color:P.rose};
+              if(ff==="CAROUSEL")return{label:"CAROUSEL",color:P.orchid};
+              if(ff==="GIF")return{label:"GIF",color:P.warning};
+              if(ff==="RESPONSIVE")return{label:"RESPONSIVE",color:P.blaze};
+              if(ff==="TEXT")return{label:"TEXT",color:P.dim};
+              return{label:"STATIC",color:P.cyan};
+            };
+            // Option C fallback tile: gradient platform-color background, logo watermark, hero metric, format chip
+            var renderFallback=function(ad,sec){
+              var pc=platCol5[ad.platform]||P.ember;
+              var ps=platShort2[ad.platform]||ad.platform;
+              var fm2=fmtMeta(ad.format);
+              return <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+pc+"55,"+pc+"15 55%,#0a0618 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:56,fontWeight:900,letterSpacing:4,color:pc,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{ps.toUpperCase()}</div>
+                <div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 14px"}}>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:2,marginBottom:4,fontWeight:800}}>{resultLabel(ad.resultType)}</div>
+                  <div style={{fontSize:34,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"—"}</div>
+                  {ad.results>0&&<div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:6,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)}</div>}
+                </div>
+                <div style={{position:"absolute",bottom:10,left:10,background:fm2.color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)"}}>{fm2.label}</div>
+              </div>;
+            };
             var FilterBtn=function(active,label,onClick,color){
               return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"7px 14px",color:active?color:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",transition:"all 0.2s"}}>{label}</button>;
             };
@@ -718,11 +743,12 @@ export default function MediaOnGas(){
               var isTop=rank===1;
               return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
-                  {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">No preview</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview</div>}
-                  {isTop&&<div style={{position:"absolute",top:10,left:10,background:P.mint,color:"#062014",padding:"5px 12px",borderRadius:6,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(0,0,0,0.5)",textTransform:"uppercase"}}>{"\u2605 Top Performer"}</div>}
-                  {!isTop&&<div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{"#"+rank}</div>}
-                  <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{adPlatShort}</div>
-                  <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.85)",color:"#fff",padding:"3px 8px",borderRadius:4,fontSize:9,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
+                  {renderFallback(ad,sec)}
+                  {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
+                  {isTop&&<div style={{position:"absolute",top:10,left:10,background:P.mint,color:"#062014",padding:"5px 12px",borderRadius:6,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(0,0,0,0.5)",textTransform:"uppercase",zIndex:3}}>{"\u2605 Top Performer"}</div>}
+                  {!isTop&&<div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>}
+                  <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
+                  <div style={{position:"absolute",bottom:10,left:10,background:fmtMeta(ad.format).color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.5)",zIndex:3}}>{fmtMeta(ad.format).label}</div>
                 </div>
                 <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
                   <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
@@ -750,14 +776,14 @@ export default function MediaOnGas(){
               return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.sub}}>{"#"+rank}</td>
                 <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
-                  {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:48,height:48,background:"#1a0f2a",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:8,fontFamily:fm}}>NO IMG</div>}
+                  {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
                   <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
                 </td>
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:"#fff",fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
-                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub,letterSpacing:0.5}}>{ad.format||"AD"}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{(function(){var fm2=fmtMeta(ad.format);return <span style={{background:fm2.color,color:"#fff",fontSize:9,fontWeight:900,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{fm2.label}</span>;})()}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fmt(ad.results):"-"}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>

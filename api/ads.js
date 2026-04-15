@@ -223,6 +223,7 @@ export default async function handler(req, res) {
       }
       // Optional secondary attempt: get hi-res from attachments edge separately so a failure here does not lose full_picture
       var storyToPicHi = {};
+      var storyToType = {};
       for (var si2 = 0; si2 < storyIds.length; si2 += 25) {
         var sBatch2 = storyIds.slice(si2, si2 + 25);
         var spUrl2 = "https://graph.facebook.com/v25.0/?ids=" + sBatch2.join(",") + "&fields=attachments&access_token=" + metaToken;
@@ -240,6 +241,13 @@ export default async function handler(req, res) {
               if (sub.media && sub.media.image && sub.media.image.src) src = sub.media.image.src;
             }
             if (src) storyToPicHi[sid] = src;
+            // Infer post format from attachment shape
+            var atype = (att.type || "").toLowerCase();
+            var hasSubs = att.subattachments && att.subattachments.data && att.subattachments.data.length > 0;
+            var hasVideoSrc = att.media && att.media.source;
+            if (hasSubs || atype === "album" || atype === "carousel" || atype === "new_album") storyToType[sid] = "CAROUSEL";
+            else if (atype.indexOf("video") >= 0 || hasVideoSrc) storyToType[sid] = "MP4";
+            else if (atype === "photo" || atype === "profile_media") storyToType[sid] = "STATIC";
           });
         } catch (spErr2) { /* silent fail, full_picture is the fallback */ }
       }
@@ -330,6 +338,10 @@ export default async function handler(req, res) {
             if (cr.video_id) return "MP4";
             var ot = (cr.object_type || "").toUpperCase();
             if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
+            if (ot === "VIDEO") return "MP4";
+            // For SHARE/empty object_types, Meta hides the real format — look at the post attachment shape
+            var postType = sid ? storyToType[sid] : "";
+            if (postType) return postType;
             var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
             if (url.indexOf(".gif") >= 0) return "GIF";
             if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
