@@ -517,8 +517,10 @@ export default async function handler(req, res) {
                 format = "STATIC";
               }
             }
-            // Skip text-only ads (Search) since they have no visual creative for the gallery
-            if (!thumb && (adType === "EXPANDED_TEXT_AD" || adType === "RESPONSIVE_SEARCH_AD" || adType === "TEXT_AD")) return;
+            // Allow text-only Search ads through so spend totals reconcile. Format flagged TEXT, no thumbnail rendered.
+            if (!thumb && (adType === "EXPANDED_TEXT_AD" || adType === "RESPONSIVE_SEARCH_AD" || adType === "TEXT_AD")) {
+              format = "TEXT";
+            }
             // Classify platform by Google channel type
             var chType = (r.campaign.advertisingChannelType || "").toUpperCase();
             var chSubType = (r.campaign.advertisingChannelSubType || "").toUpperCase();

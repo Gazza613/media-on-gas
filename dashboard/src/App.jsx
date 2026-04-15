@@ -741,8 +741,12 @@ export default function MediaOnGas(){
             var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
 
             var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube","Performance Max","Demand Gen","Google Search"];
+            // Top KPI totals come from selected campaigns (matches Summary tab)
             var grandSpend=0,grandImps=0,grandClicks=0;
-            filteredAds.forEach(function(a){grandSpend+=a.spend;grandImps+=a.impressions;grandClicks+=a.clicks;});
+            selCamps.forEach(function(c){grandSpend+=parseFloat(c.spend||0);grandImps+=parseFloat(c.impressions||0);grandClicks+=parseFloat(c.clicks||0);});
+            // Ad-level totals (subset, only ads with insights returned)
+            var adsSpend=0;
+            filteredAds.forEach(function(a){adsSpend+=a.spend;});
 
             var WINNER_MIN_IMPS=5000;
             var RANKED_MIN_IMPS=1000;
@@ -751,12 +755,45 @@ export default function MediaOnGas(){
               return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"6px 12px",color:active?color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{label}</button>;
             };
 
+            // Campaign objective detection per selected campaign (uses real platform/objective from ad data when available)
+            var campObjMap2={};
+            allFilteredAds.forEach(function(a){if(a.campaignId&&a.objective)campObjMap2[String(a.campaignId)]=a.objective;});
+            var campObjForName=function(name){
+              var n=(name||"").toLowerCase();
+              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "appinstall";
+              if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "followers";
+              if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "leads";
+              if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "traffic";
+              return "traffic";
+            };
+            var objLabelOf=function(o){return o==="leads"?"LEAD GEN":o==="appinstall"?"APP INSTALL":o==="followers"?"FOLLOWERS / LIKES":"TRAFFIC";};
+            var objColOf=function(o){return o==="leads"?P.rose:o==="appinstall"?P.fb:o==="followers"?P.tt:P.cyan;};
+
             return <div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
-                <Glass accent={P.blaze} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS ANALYSED</div><div style={{fontSize:24,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
-                <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(grandSpend)}</div></Glass>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
+                <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(grandSpend)}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>{selCamps.length+" campaigns"}</div></Glass>
                 <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(grandImps)}</div></Glass>
                 <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{grandImps>0?(grandClicks/grandImps*100).toFixed(2)+"%":"-"}</div></Glass>
+                <Glass accent={P.blaze} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS WITH CREATIVES</div><div style={{fontSize:24,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>{fR(adsSpend)+" of total"}</div></Glass>
+              </div>
+
+              {/* Campaign objectives detected panel */}
+              <div style={{background:P.glass,borderRadius:14,padding:"14px 18px",marginBottom:24,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                  <span style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Campaign Objectives Detected</span>
+                  <span style={{fontSize:9,color:P.dim,fontFamily:fm}}>{"Used to set KPI per ad. Flag any wrong classification."}</span>
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {selCamps.map(function(c){
+                    var detectedObj=campObjMap2[String(c.rawCampaignId||c.campaignId.replace(/_facebook$/,"").replace(/_instagram$/,""))]||campObjMap2[String(c.campaignId)]||campObjForName(c.campaignName);
+                    var oc=objColOf(detectedObj);
+                    return <div key={c.campaignId} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:8,maxWidth:"100%"}}>
+                      <span style={{fontSize:9,fontWeight:800,color:oc,background:oc+"15",border:"1px solid "+oc+"35",padding:"2px 6px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,whiteSpace:"nowrap",flexShrink:0}}>{objLabelOf(detectedObj)}</span>
+                      <span style={{fontSize:10,color:P.txt,fontFamily:ff,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:340}} title={c.campaignName}>{c.campaignName}</span>
+                      <span style={{fontSize:9,color:P.sub,fontFamily:fm,whiteSpace:"nowrap",flexShrink:0}}>{fR(parseFloat(c.spend||0))}</span>
+                    </div>;
+                  })}
+                </div>
               </div>
 
               {/* Filter row */}
