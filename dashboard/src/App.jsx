@@ -145,6 +145,8 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
   var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
+  var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
+  var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
 
   useEffect(function(){
@@ -623,7 +625,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {tab==="creative"&&(<div>
-          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" \u00b7 Ad-level intelligence with thumbnails and live previews"} accent={P.blaze}/>
+          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" \u00b7 Top winners, strong performers, and full ad inventory"} accent={P.blaze}/>
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(selCamps.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns on the left to view ad-level creative performance.</div>;
@@ -636,13 +638,24 @@ export default function MediaOnGas(){
             var selCampNames={};
             selCamps.forEach(function(c){if(c.campaignName)selCampNames[c.campaignName]=true;});
 
-            var filteredAds=adsList.filter(function(a){
+            var allFilteredAds=adsList.filter(function(a){
               if(selCampIds[String(a.campaignId||"")])return true;
               if(selCampNames[a.campaignName])return true;
               return false;
             });
 
-            if(filteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.sub,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data is still loading, try refreshing, or the selected campaigns may not have ad-level insights available yet.</div></div>;
+            if(allFilteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.sub,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data may still be loading or the selected campaigns have no ad-level insights yet.</div></div>;
+
+            var availPlatforms={};
+            allFilteredAds.forEach(function(a){availPlatforms[a.platform]=true;});
+            var availFormats={};
+            allFilteredAds.forEach(function(a){availFormats[(a.format||"OTHER").toUpperCase()]=true;});
+
+            var filteredAds=allFilteredAds.filter(function(a){
+              if(crFiltP!=="all"&&a.platform!==crFiltP)return false;
+              if(crFiltF!=="all"){var f=(a.format||"OTHER").toUpperCase();if(f!==crFiltF)return false;}
+              return true;
+            });
 
             var platCol5={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
             var platShort2={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
@@ -650,88 +663,169 @@ export default function MediaOnGas(){
             var platforms5={};
             filteredAds.forEach(function(a){if(!platforms5[a.platform])platforms5[a.platform]=[];platforms5[a.platform].push(a);});
 
-            var scoreAd=function(a){
-              var bm=platBench[a.platform]||benchmarks.meta;
-              var ctrS=a.ctr>=2.0?4:a.ctr>=1.2?3:a.ctr>=0.8?2:1;
-              var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
-              var volS=a.impressions>=50000?3:a.impressions>=10000?2:1;
-              return ctrS*0.4+cpcS*0.4+volS*0.2;
+            // Bayesian smoothed CTR — pulls low-volume CTRs toward platform average
+            var PRIOR_IMPS=2000;
+            var smoothedCtr=function(ad,platAvgCtr){
+              var priorClicks=platAvgCtr*PRIOR_IMPS/100;
+              return (ad.clicks+priorClicks)/(ad.impressions+PRIOR_IMPS)*100;
             };
-            var gradeFor=function(s){return s>=3.5?{label:"A",color:P.mint,word:"Excellent"}:s>=2.8?{label:"B",color:P.positive,word:"Good"}:s>=2.0?{label:"C",color:P.solar,word:"Average"}:{label:"D",color:P.rose,word:"Review"};};
+            var scoreAd=function(a,platAvgCtr){
+              var bm=platBench[a.platform]||benchmarks.meta;
+              var sCtr=smoothedCtr(a,platAvgCtr);
+              var ctrS=sCtr>=2.0?4:sCtr>=1.2?3:sCtr>=0.8?2:1;
+              var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
+              var volS=a.impressions>=50000?3:a.impressions>=10000?2.4:a.impressions>=2000?1.8:1;
+              return ctrS*0.45+cpcS*0.35+volS*0.20;
+            };
 
             var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube"];
             var grandSpend=0,grandImps=0,grandClicks=0;
             filteredAds.forEach(function(a){grandSpend+=a.spend;grandImps+=a.impressions;grandClicks+=a.clicks;});
 
+            var TooEarlyThreshold=500;
+
+            var FilterBtn=function(active,label,onClick,color){
+              return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"6px 12px",color:active?color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{label}</button>;
+            };
+
             return <div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
                 <Glass accent={P.blaze} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS ANALYSED</div><div style={{fontSize:24,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
                 <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(grandSpend)}</div></Glass>
                 <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(grandImps)}</div></Glass>
                 <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{grandImps>0?(grandClicks/grandImps*100).toFixed(2)+"%":"-"}</div></Glass>
               </div>
 
-              {platformOrder.filter(function(p){return platforms5[p]&&platforms5[p].length>0;}).map(function(pl){
+              {/* Filter row */}
+              <div style={{background:P.glass,borderRadius:14,padding:"14px 18px",marginBottom:24,border:"1px solid "+P.rule,display:"flex",flexWrap:"wrap",gap:18,alignItems:"center"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>PLATFORM:</span>
+                  {FilterBtn(crFiltP==="all","All",function(){setCrFiltP("all");},P.ember)}
+                  {Object.keys(availPlatforms).sort(function(a,b){return (platformOrder.indexOf(a)>=0?platformOrder.indexOf(a):99)-(platformOrder.indexOf(b)>=0?platformOrder.indexOf(b):99);}).map(function(pl){return <span key={pl}>{FilterBtn(crFiltP===pl,pl,function(){setCrFiltP(pl);},platCol5[pl]||P.ember)}</span>;})}
+                </div>
+                <div style={{width:1,height:24,background:P.rule}}/>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>FORMAT:</span>
+                  {FilterBtn(crFiltF==="all","All",function(){setCrFiltF("all");},P.orchid)}
+                  {Object.keys(availFormats).sort().map(function(fmt2){return <span key={fmt2}>{FilterBtn(crFiltF===fmt2,fmt2,function(){setCrFiltF(fmt2);},P.orchid)}</span>;})}
+                </div>
+              </div>
+
+              {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12}}>No ads match the current filters. Adjust filters above.</div>:platformOrder.filter(function(p){return platforms5[p]&&platforms5[p].length>0;}).map(function(pl){
                 var platC=platCol5[pl]||P.ember;
-                var pads=platforms5[pl].map(function(a){return Object.assign({},a,{_score:scoreAd(a)});}).sort(function(a,b){return b._score-a._score;});
+                var pads=platforms5[pl];
                 var pSpend=0,pImps=0,pClicks=0;
                 pads.forEach(function(a){pSpend+=a.spend;pImps+=a.impressions;pClicks+=a.clicks;});
                 var pCtr=pImps>0?(pClicks/pImps*100):0;
                 var pCpc=pClicks>0?pSpend/pClicks:0;
-                var aCount=pads.filter(function(x){return x._score>=3.5;}).length;
-                var bCount=pads.filter(function(x){return x._score>=2.8&&x._score<3.5;}).length;
-                var cCount=pads.filter(function(x){return x._score>=2.0&&x._score<2.8;}).length;
-                var dCount=pads.filter(function(x){return x._score<2.0;}).length;
-                var topAd=pads[0];
-                var worstAd=pads[pads.length-1];
+
+                // Score and split into ranked vs too-early
+                var ranked=[],tooEarly=[];
+                pads.forEach(function(a){
+                  var copy=Object.assign({},a,{_score:scoreAd(a,pCtr),_smCtr:smoothedCtr(a,pCtr)});
+                  if(a.impressions<TooEarlyThreshold)tooEarly.push(copy);
+                  else ranked.push(copy);
+                });
+                ranked.sort(function(a,b){return b._score-a._score;});
+                tooEarly.sort(function(a,b){return b.spend-a.spend;});
+
+                var winners=ranked.slice(0,5);
+                var strong=ranked.slice(5,10);
+                var rest=ranked.slice(10);
+                var topAd=winners[0];
+
+                var bigCard=function(ad,gold){
+                  return <div key={ad.adId} style={{background:gold?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:16,border:"1px solid "+(gold?P.mint+"50":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:gold?"0 8px 32px rgba(52,211,153,0.12)":"none"}}>
+                    <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
+                      {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">Preview unavailable</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview available</div>}
+                      {gold&&<div style={{position:"absolute",top:10,left:10,background:P.mint,color:"#062014",padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1.5,boxShadow:"0 2px 10px rgba(0,0,0,0.5)"}}>WINNER</div>}
+                      <div style={{position:"absolute",top:10,right:10,background:platC,color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:10,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{platShort2[pl]||pl}</div>
+                      <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.8)",color:"#fff",padding:"3px 9px",borderRadius:4,fontSize:10,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
+                    </div>
+                    <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
+                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:12,lineHeight:1.4,minHeight:34,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:12}}>
+                        <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.spend)}</div></div>
+                        <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fmt(ad.impressions)}</div></div>
+                        <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:12}}>{ad.ctr.toFixed(2)+"%"}</div></div>
+                        <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
+                      </div>
+                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD \u2192</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
+                    </div>
+                  </div>;
+                };
+
+                var compactRow=function(ad,idx){
+                  var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
+                  return <tr key={ad.adId} style={{background:idx%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
+                    <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
+                      {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:44,height:44,background:"#1a0f2a",borderRadius:6}}/>}
+                    </td>
+                    <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
+                      <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
+                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.campaignName}</div>
+                    </td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub}}>{ad.format||"AD"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none"}}>VIEW \u2192</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
+                  </tr>;
+                };
+
+                var tHead2={padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:platC,letterSpacing:1.5,background:platC+"15",border:"1px solid "+platC+"30",fontFamily:fm};
 
                 return <div key={pl} style={{marginBottom:32,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22,flexWrap:"wrap",gap:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:14}}>
                       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+platC+"25,"+platC+"08)",border:"1px solid "+platC+"40",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:platC,fontFamily:fm,letterSpacing:1}}>{platShort2[pl]||pl}</div>
                       <div><div style={{fontSize:19,fontWeight:900,color:platC,fontFamily:ff,letterSpacing:1}}>{pl}</div><div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>{pads.length+" ads, "+fR(pSpend)+" spent, "+fmt(pImps)+" impressions, "+pCtr.toFixed(2)+"% CTR, "+fR(pCpc)+" CPC"}</div></div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      {aCount>0&&<span style={{background:P.mint,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"A\u00d7"+aCount}</span>}
-                      {bCount>0&&<span style={{background:P.positive,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"B\u00d7"+bCount}</span>}
-                      {cCount>0&&<span style={{background:P.solar,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"C\u00d7"+cCount}</span>}
-                      {dCount>0&&<span style={{background:P.rose,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 10px",borderRadius:6,fontFamily:fm}}>{"D\u00d7"+dCount}</span>}
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      {winners.length>0&&<span style={{background:P.mint,color:"#062014",fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1}}>{winners.length+" WINNER"+(winners.length>1?"S":"")}</span>}
+                      {strong.length>0&&<span style={{background:P.positive,color:"#fff",fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1}}>{strong.length+" STRONG"}</span>}
+                      {rest.length>0&&<span style={{background:P.solar+"30",color:P.solar,fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1,border:"1px solid "+P.solar+"50"}}>{rest.length+" OTHER"}</span>}
+                      {tooEarly.length>0&&<span style={{background:"rgba(255,255,255,0.05)",color:P.sub,fontSize:10,fontWeight:900,padding:"5px 11px",borderRadius:6,fontFamily:fm,letterSpacing:1,border:"1px solid "+P.rule}}>{tooEarly.length+" TOO EARLY"}</span>}
                     </div>
                   </div>
 
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:18,marginBottom:22}}>
-                    {pads.map(function(ad,ai){
-                      var g=gradeFor(ad._score);
-                      return <div key={ai} style={{background:"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+P.rule,overflow:"hidden",transition:"all 0.2s ease",display:"flex",flexDirection:"column"}}>
-                        <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
-                          {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">Preview unavailable</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview available</div>}
-                          <div style={{position:"absolute",top:10,left:10,background:g.color,color:"#fff",padding:"5px 11px",borderRadius:6,fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{g.label}</div>
-                          <div style={{position:"absolute",top:10,right:10,background:platC,color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{platShort2[pl]||pl}</div>
-                          <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.8)",color:"#fff",padding:"3px 9px",borderRadius:4,fontSize:9,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
-                        </div>
-                        <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
-                          <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
-                          <div style={{fontSize:12,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:12,lineHeight:1.4,minHeight:34,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:12}}>
-                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.spend)}</div></div>
-                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fmt(ad.impressions)}</div></div>
-                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:12}}>{ad.ctr.toFixed(2)+"%"}</div></div>
-                            <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
-                          </div>
-                          {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD \u2192</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
-                        </div>
-                      </div>;
-                    })}
-                  </div>
+                  {winners.length>0&&<div style={{marginBottom:24}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>TOP WINNERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}/></div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:18}}>
+                      {winners.map(function(ad){return bigCard(ad,true);})}
+                    </div>
+                  </div>}
+
+                  {strong.length>0&&<div style={{marginBottom:24}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.bolt(P.positive,18)}<span style={{fontSize:13,fontWeight:900,color:P.positive,fontFamily:ff,letterSpacing:1.5}}>STRONG PERFORMERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.positive+"40, transparent)"}}/></div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
+                      {strong.map(function(ad){return bigCard(ad,false);})}
+                    </div>
+                  </div>}
+
+                  {rest.length>0&&<div style={{marginBottom:24}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.chart(P.solar,16)}<span style={{fontSize:12,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1.5}}>{"REMAINING ADS ("+rest.length+")"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"30, transparent)"}}/></div>
+                    <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead><tr>{["Thumb","Ad","Format","Spend","Impressions","CTR","CPC","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                      <tbody>{rest.map(function(ad,ri){return compactRow(ad,ri);})}</tbody>
+                    </table></div>
+                  </div>}
+
+                  {tooEarly.length>0&&<div style={{marginBottom:18,padding:"14px 18px",background:"rgba(0,0,0,0.2)",borderRadius:10,border:"1px dashed "+P.rule}}>
+                    <div style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:1.5,marginBottom:8}}>{"TOO EARLY TO ASSESS ("+tooEarly.length+" ads under 500 impressions)"}</div>
+                    <div style={{fontSize:10,color:P.dim,fontFamily:fm,lineHeight:1.7}}>{tooEarly.slice(0,8).map(function(ad){return ad.adName+" ("+fmt(ad.impressions)+" imps)";}).join(", ")+(tooEarly.length>8?", and "+(tooEarly.length-8)+" more.":".")}</div>
+                  </div>}
 
                   <Insight title={pl+" Creative Assessment"} accent={platC} icon={Ic.fire(platC,14)}>{(function(){
                     var lines=[];
-                    lines.push(pads.length+" "+pl+" ads analysed with "+fR(pSpend)+" combined spend, "+fmt(pImps)+" impressions and "+pCtr.toFixed(2)+"% blended CTR.");
-                    lines.push("Grade distribution: "+aCount+" A-grade (excellent), "+bCount+" B-grade (good), "+cCount+" C-grade (average), "+dCount+" D-grade (review).");
+                    lines.push(pads.length+" "+pl+" ads with "+fR(pSpend)+" spent, "+fmt(pImps)+" impressions and "+pCtr.toFixed(2)+"% blended CTR.");
+                    lines.push(winners.length+" winners, "+strong.length+" strong, "+rest.length+" other, "+tooEarly.length+" too early to assess.");
                     if(topAd)lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,60)+"\" ("+fR(topAd.spend)+" spent, "+topAd.ctr.toFixed(2)+"% CTR, "+fR(topAd.cpc)+" CPC).");
-                    if(dCount>0&&worstAd&&worstAd!==topAd)lines.push("Weakest: \""+(worstAd.adName||"Unnamed").substring(0,60)+"\" at "+worstAd.ctr.toFixed(2)+"% CTR, "+fR(worstAd.cpc)+" CPC, "+fR(worstAd.spend)+" already spent.");
-                    if(aCount>0)lines.push("Scale winning A-grade creatives by increasing adset budgets 15 to 25%.");
-                    if(dCount>0)lines.push("Pause D-grade ads below 0.8% CTR and reallocate to proven performers.");
+                    if(winners.length>0)lines.push("Scale top winners by increasing budget 15 to 25% on the parent ad sets.");
+                    if(rest.length>0)lines.push("Review the bottom of the rankings, pause any ads under 0.8% CTR with material spend.");
+                    if(tooEarly.length>3)lines.push("Allow the too-early cohort to accumulate 500+ impressions before assessing.");
                     return lines.join(" ");
                   })()}</Insight>
                 </div>;

@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       var creativesByAdId = {};
       for (var b = 0; b < uniqAdIds.length; b += 50) {
         var batch = uniqAdIds.slice(b, b + 50);
-        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
+        var adFields = "id,name,creative{id,thumbnail_url.height(600).width(600),image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
         var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + batch.join(",") + "&fields=" + encodeURIComponent(adFields) + "&access_token=" + metaToken;
         try {
           var batchRes = await fetch(batchUrl);
@@ -62,11 +62,38 @@ export default async function handler(req, res) {
         } catch (bErr) { console.error("Meta batch creative error", account.name, bErr); }
       }
 
+      // Collect unique video IDs for high-res thumbnail fetch
+      var videoIds = [];
+      Object.keys(creativesByAdId).forEach(function(adId) {
+        var vid = creativesByAdId[adId].video_id;
+        if (vid && videoIds.indexOf(vid) < 0) videoIds.push(vid);
+      });
+      var videoThumbs = {};
+      for (var vb = 0; vb < videoIds.length; vb += 50) {
+        var vBatch = videoIds.slice(vb, vb + 50);
+        var vUrl = "https://graph.facebook.com/v25.0/?ids=" + vBatch.join(",") + "&fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken;
+        try {
+          var vRes = await fetch(vUrl);
+          var vData = await vRes.json();
+          Object.keys(vData).forEach(function(vid) {
+            var v = vData[vid];
+            if (!v) return;
+            var best = "";
+            if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
+              var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
+              best = largest.uri || "";
+            }
+            videoThumbs[vid] = best || v.picture || "";
+          });
+        } catch (vbErr) { console.error("Meta video thumb error", account.name, vbErr); }
+      }
+
       insights.forEach(function(ins) {
         var cr = creativesByAdId[ins.ad_id] || {};
         var pub = ins._pub;
         var platform = pub === "instagram" ? "Instagram" : "Facebook";
-        var thumb = cr.image_url || cr.thumbnail_url || "";
+        var vidThumb = cr.video_id ? videoThumbs[cr.video_id] : "";
+        var thumb = vidThumb || cr.image_url || cr.thumbnail_url || "";
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;
@@ -162,7 +189,7 @@ export default async function handler(req, res) {
             adsetName: mt.adgroup_name,
             adId: ins.dimensions.ad_id,
             adName: mt.ad_name,
-            thumbnail: video.poster_url || video.video_cover_url || "",
+            thumbnail: video.video_cover_url || video.poster_url || "",
             previewUrl: video.preview_url || ("https://ads.tiktok.com/i18n/perf/creation?aadvid=" + ttAdvId),
             format: ad.video_id ? "VIDEO" : "IMAGE",
             spend: parseFloat(mt.spend || 0),
