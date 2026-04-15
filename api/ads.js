@@ -99,7 +99,7 @@ export default async function handler(req, res) {
       var creativesByAdId = {};
       for (var b = 0; b < uniqAdIds.length; b += 50) {
         var batch = uniqAdIds.slice(b, b + 50);
-        var adFields = "id,name,creative{id,thumbnail_url.height(600).width(600),image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
+        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
         var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + batch.join(",") + "&fields=" + encodeURIComponent(adFields) + "&access_token=" + metaToken;
         try {
           var batchRes = await fetch(batchUrl);
@@ -138,12 +138,21 @@ export default async function handler(req, res) {
         } catch (vbErr) { console.error("Meta video thumb error", account.name, vbErr); }
       }
 
+      var upsizeFb = function(url) {
+        if (!url) return url;
+        if (url.indexOf("fbcdn.net") < 0 && url.indexOf("cdninstagram.com") < 0) return url;
+        var sep = url.indexOf("?") >= 0 ? "&" : "?";
+        if (url.indexOf("width=") >= 0) return url;
+        return url + sep + "width=600";
+      };
+
       insights.forEach(function(ins) {
         var cr = creativesByAdId[ins.ad_id] || {};
         var pub = ins._pub;
         var platform = pub === "instagram" ? "Instagram" : "Facebook";
         var vidThumb = cr.video_id ? videoThumbs[cr.video_id] : "";
-        var thumb = vidThumb || cr.image_url || cr.thumbnail_url || "";
+        // Prefer high-res sources: video thumbnail > image_url > thumbnail_url (small fallback)
+        var thumb = upsizeFb(vidThumb || cr.image_url || cr.thumbnail_url || "");
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;

@@ -673,26 +673,36 @@ export default function MediaOnGas(){
             var platforms5={};
             filteredAds.forEach(function(a){if(!platforms5[a.platform])platforms5[a.platform]=[];platforms5[a.platform].push(a);});
 
-            // Bayesian smoothed CTR — pulls low-volume CTRs toward platform average
-            var PRIOR_IMPS=2000;
+            // Bayesian smoothed CTR with strong prior, pulls small samples to platform mean
+            var PRIOR_IMPS=5000;
             var smoothedCtr=function(ad,platAvgCtr){
               var priorClicks=platAvgCtr*PRIOR_IMPS/100;
               return (ad.clicks+priorClicks)/(ad.impressions+PRIOR_IMPS)*100;
             };
+            var volScore=function(imps){
+              if(imps>=50000)return 4;
+              if(imps>=25000)return 3.5;
+              if(imps>=10000)return 3;
+              if(imps>=5000)return 2.5;
+              if(imps>=2000)return 1.5;
+              if(imps>=1000)return 1;
+              return 0.5;
+            };
             var scoreAd=function(a,platAvgCtr){
               var bm=platBench[a.platform]||benchmarks.meta;
               var sCtr=smoothedCtr(a,platAvgCtr);
-              var ctrS=sCtr>=2.0?4:sCtr>=1.2?3:sCtr>=0.8?2:1;
+              var ctrS=sCtr>=2.0?4:sCtr>=1.4?3.4:sCtr>=0.9?2.5:sCtr>=0.5?1.5:0.5;
               var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
-              var volS=a.impressions>=50000?3:a.impressions>=10000?2.4:a.impressions>=2000?1.8:1;
-              return ctrS*0.45+cpcS*0.35+volS*0.20;
+              var vS=volScore(a.impressions);
+              return ctrS*0.40+cpcS*0.30+vS*0.30;
             };
 
             var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube"];
             var grandSpend=0,grandImps=0,grandClicks=0;
             filteredAds.forEach(function(a){grandSpend+=a.spend;grandImps+=a.impressions;grandClicks+=a.clicks;});
 
-            var TooEarlyThreshold=500;
+            var WINNER_MIN_IMPS=5000;
+            var RANKED_MIN_IMPS=1000;
 
             var FilterBtn=function(active,label,onClick,color){
               return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"6px 12px",color:active?color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{label}</button>;
@@ -735,20 +745,25 @@ export default function MediaOnGas(){
                 var pCtr=pImps>0?(pClicks/pImps*100):0;
                 var pCpc=pClicks>0?pSpend/pClicks:0;
 
-                // Score and split into ranked vs too-early
+                // Score and split. Winners must have meaningful sample size (5000+ imps).
                 var ranked=[],tooEarly=[];
                 pads.forEach(function(a){
                   var copy=Object.assign({},a,{_score:scoreAd(a,pCtr),_smCtr:smoothedCtr(a,pCtr)});
-                  if(a.impressions<TooEarlyThreshold)tooEarly.push(copy);
+                  if(a.impressions<RANKED_MIN_IMPS)tooEarly.push(copy);
                   else ranked.push(copy);
                 });
                 ranked.sort(function(a,b){return b._score-a._score;});
                 tooEarly.sort(function(a,b){return b.spend-a.spend;});
 
-                var winners=ranked.slice(0,5);
-                var strong=ranked.slice(5,10);
-                var rest=ranked.slice(10);
-                var topAd=winners[0];
+                // Winners: top scorers WITH at least 5000 impressions
+                var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,5);
+                var winnerSet={};winners.forEach(function(a){winnerSet[a.adId]=true;});
+                // Strong: next 5 by score (regardless of imps tier, as long as ranked)
+                var strong=ranked.filter(function(a){return !winnerSet[a.adId];}).slice(0,5);
+                var strongSet={};strong.forEach(function(a){strongSet[a.adId]=true;});
+                // Rest: everything ranked but not winner/strong
+                var rest=ranked.filter(function(a){return !winnerSet[a.adId]&&!strongSet[a.adId];});
+                var topAd=winners[0]||strong[0];
 
                 var bigCard=function(ad,gold){
                   return <div key={ad.adId} style={{background:gold?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:16,border:"1px solid "+(gold?P.mint+"50":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:gold?"0 8px 32px rgba(52,211,153,0.12)":"none"}}>
@@ -768,7 +783,7 @@ export default function MediaOnGas(){
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
                       </div>
                       {ad.placements&&Object.keys(ad.placements).length>0&&<div style={{marginBottom:10,display:"flex",flexWrap:"wrap",gap:4}}>{Object.keys(ad.placements).slice(0,4).map(function(pk){return <span key={pk} style={{fontSize:8,fontWeight:800,color:P.cyan,background:P.cyan+"15",border:"1px solid "+P.cyan+"30",padding:"2px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,textTransform:"uppercase"}}>{pk}</span>;})}{Object.keys(ad.placements).length>4&&<span style={{fontSize:8,color:P.sub,fontFamily:fm,padding:"2px 4px"}}>{"+"+(Object.keys(ad.placements).length-4)}</span>}</div>}
-                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
+                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"10px 12px",background:platC,border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 8px "+platC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW</div>}
                     </div>
                   </div>;
                 };
@@ -788,7 +803,7 @@ export default function MediaOnGas(){
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
-                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none"}}>VIEW</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:platC,color:"#fff",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
                   </tr>;
                 };
 
@@ -808,30 +823,58 @@ export default function MediaOnGas(){
                     </div>
                   </div>
 
-                  {winners.length>0&&<div style={{marginBottom:24}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>TOP WINNERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}/></div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:18}}>
-                      {winners.map(function(ad){return bigCard(ad,true);})}
-                    </div>
-                  </div>}
+                  {pl==="TikTok"?(function(){
+                    var ttAll=ranked.slice();
+                    return <div style={{marginBottom:18}}>
+                      <div style={{padding:"10px 14px",marginBottom:14,background:platC+"10",border:"1px solid "+platC+"25",borderRadius:8,fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6}}>{"TikTok ad previews and creative thumbnails are not publicly available via the API. All "+ttAll.length+" qualifying ads listed below, sorted by performance score (smoothed CTR + CPC + volume confidence)."}</div>
+                      <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+                        <thead><tr>{["Rank","Ad","Format","Spend","Impressions","CTR","CPC","Score"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                        <tbody>{ttAll.map(function(ad,ri){
+                          var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
+                          var rankBadge=ri<5?"WINNER":ri<10?"STRONG":"";
+                          var rankCol=ri<5?P.mint:ri<10?P.positive:P.sub;
+                          return <tr key={ad.adId} style={{background:ri%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:rankCol}}>{(ri+1)+(rankBadge?" "+rankBadge:"")}</td>
+                            <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:340}}>
+                              <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
+                              <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.campaignName}</div>
+                            </td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub}}>{ad.format||"AD"}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:rankCol}}>{ad._score.toFixed(2)}</td>
+                          </tr>;
+                        })}</tbody>
+                      </table></div>
+                    </div>;
+                  })():<div>
+                    {winners.length>0&&<div style={{marginBottom:24}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>TOP WINNERS</span><span style={{fontSize:9,color:P.sub,fontFamily:fm,marginLeft:4,fontStyle:"italic"}}>{"5,000+ impressions, top performers"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}/></div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:18}}>
+                        {winners.map(function(ad){return bigCard(ad,true);})}
+                      </div>
+                    </div>}
 
-                  {strong.length>0&&<div style={{marginBottom:24}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.bolt(P.positive,18)}<span style={{fontSize:13,fontWeight:900,color:P.positive,fontFamily:ff,letterSpacing:1.5}}>STRONG PERFORMERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.positive+"40, transparent)"}}/></div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
-                      {strong.map(function(ad){return bigCard(ad,false);})}
-                    </div>
-                  </div>}
+                    {strong.length>0&&<div style={{marginBottom:24}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.bolt(P.positive,18)}<span style={{fontSize:13,fontWeight:900,color:P.positive,fontFamily:ff,letterSpacing:1.5}}>STRONG PERFORMERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.positive+"40, transparent)"}}/></div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
+                        {strong.map(function(ad){return bigCard(ad,false);})}
+                      </div>
+                    </div>}
 
-                  {rest.length>0&&<div style={{marginBottom:24}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.chart(P.solar,16)}<span style={{fontSize:12,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1.5}}>{"REMAINING ADS ("+rest.length+")"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"30, transparent)"}}/></div>
-                    <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-                      <thead><tr>{["Thumb","Ad","Format","Spend","Impressions","CTR","CPC","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
-                      <tbody>{rest.map(function(ad,ri){return compactRow(ad,ri);})}</tbody>
-                    </table></div>
+                    {rest.length>0&&<div style={{marginBottom:24}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.chart(P.solar,16)}<span style={{fontSize:12,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1.5}}>{"REMAINING ADS ("+rest.length+")"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"30, transparent)"}}/></div>
+                      <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+                        <thead><tr>{["Thumb","Ad","Format","Spend","Impressions","CTR","CPC","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                        <tbody>{rest.map(function(ad,ri){return compactRow(ad,ri);})}</tbody>
+                      </table></div>
+                    </div>}
                   </div>}
 
                   {tooEarly.length>0&&<div style={{marginBottom:18,padding:"14px 18px",background:"rgba(0,0,0,0.2)",borderRadius:10,border:"1px dashed "+P.rule}}>
-                    <div style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:1.5,marginBottom:8}}>{"TOO EARLY TO ASSESS ("+tooEarly.length+" ads under 500 impressions)"}</div>
+                    <div style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:1.5,marginBottom:8}}>{"TOO EARLY TO ASSESS ("+tooEarly.length+" ads under "+RANKED_MIN_IMPS.toLocaleString()+" impressions)"}</div>
                     <div style={{fontSize:10,color:P.dim,fontFamily:fm,lineHeight:1.7}}>{tooEarly.slice(0,8).map(function(ad){return ad.adName+" ("+fmt(ad.impressions)+" imps)";}).join(", ")+(tooEarly.length>8?", and "+(tooEarly.length-8)+" more.":".")}</div>
                   </div>}
 
