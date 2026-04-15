@@ -613,5 +613,5 @@ export default async function handler(req, res) {
     console.error("Google ads error", gErr);
   }
 
-  res.status(200).json({ ads: allAds, total: allAds.length, _gDebug: googleDebug, _ttDebug: typeof ttVideoDebug !== 'undefined' ? ttVideoDebug : null });
+  res.status(200).json({ ads: allAds, total: allAds.length });
 }
