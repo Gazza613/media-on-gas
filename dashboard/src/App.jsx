@@ -626,7 +626,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {tab==="creative"&&(<div>
-          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" \u00b7 Ranked by impressions, then CTR \u2014 click any ad to view live"} accent={P.blaze}/>
+          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" \u00b7 Ad-level performance grouped by campaign objective"} accent={P.blaze}/>
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(selCamps.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns on the left to view ad-level creative performance.</div>;
@@ -670,15 +670,37 @@ export default function MediaOnGas(){
               return true;
             });
 
-            // Sort: impressions DESC then CTR DESC
-            var sortedAds=filteredAds.slice().sort(function(a,b){
-              if(b.impressions!==a.impressions)return b.impressions-a.impressions;
-              return b.ctr-a.ctr;
+            // Objective sections in fixed order
+            var objSections=[
+              {key:"leads",label:"LEAD GEN",accent:P.rose,icon:Ic.target(P.rose,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
+              {key:"appinstall",label:"APP INSTALL",accent:P.fb,icon:Ic.bolt(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on store clicks delivered and cost per click"},
+              {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.tt,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
+              {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.cyan,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
+            ];
+
+            // Group ads by objective
+            var byObj={};
+            filteredAds.forEach(function(a){
+              var o=a.objective||"landingpage";
+              if(!byObj[o])byObj[o]=[];
+              byObj[o].push(a);
             });
 
-            var top5=sortedAds.slice(0,5);
-            var rest=sortedAds.slice(5);
+            // Aggregate totals per objective
+            var totalsForSec=function(arr){
+              var s={spend:0,imps:0,clicks:0,results:0,costPerSum:0,withCpr:0};
+              arr.forEach(function(a){
+                s.spend+=a.spend||0;
+                s.imps+=a.impressions||0;
+                s.clicks+=a.clicks||0;
+                s.results+=a.results||0;
+              });
+              s.cpr=s.results>0?s.spend/s.results:0;
+              s.ctr=s.imps>0?(s.clicks/s.imps*100):0;
+              return s;
+            };
 
+            // Top-of-tab KPI strip (overall)
             var totalSpend=0,totalImps=0,totalClicks=0;
             filteredAds.forEach(function(a){totalSpend+=a.spend;totalImps+=a.impressions;totalClicks+=a.clicks;});
             var blendedCtr=totalImps>0?(totalClicks/totalImps*100):0;
@@ -687,7 +709,61 @@ export default function MediaOnGas(){
               return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"7px 14px",color:active?color:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",transition:"all 0.2s"}}>{label}</button>;
             };
 
-            var rankStyles={1:{bg:"linear-gradient(135deg,#FFD700,#FFA500)",text:"#1a0f00",label:"#1 TOP"},2:{bg:"linear-gradient(135deg,#E8E8E8,#BDBDBD)",text:"#1a1a1a",label:"#2"},3:{bg:"linear-gradient(135deg,#CD7F32,#A0522D)",text:"#fff",label:"#3"},4:{bg:"rgba(255,255,255,0.15)",text:P.txt,label:"#4"},5:{bg:"rgba(255,255,255,0.15)",text:P.txt,label:"#5"}};
+            // Render an ad card
+            var renderCard=function(ad,rank,sec){
+              var adPlatC=platCol5[ad.platform]||P.ember;
+              var adPlatShort=platShort2[ad.platform]||ad.platform;
+              var isTop=rank===1;
+              return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
+                <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
+                  {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">No preview</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview</div>}
+                  {isTop&&<div style={{position:"absolute",top:10,left:10,background:P.mint,color:"#062014",padding:"5px 12px",borderRadius:6,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(0,0,0,0.5)",textTransform:"uppercase"}}>{"\u2605 Top Performer"}</div>}
+                  {!isTop&&<div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{"#"+rank}</div>}
+                  <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{adPlatShort}</div>
+                  <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.85)",color:"#fff",padding:"3px 8px",borderRadius:4,fontSize:9,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
+                </div>
+                <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
+                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:10,lineHeight:1.4,minHeight:30,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10,padding:"8px 10px",background:sec.accent+"10",border:"1px solid "+sec.accent+"30",borderRadius:8}}>
+                    <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{resultLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{ad.results>0?fmt(ad.results):"-"}</div></div>
+                    <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div></div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10}}>
+                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.spend)}</div></div>
+                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fmt(ad.impressions)}</div></div>
+                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:11}}>{ad.ctr.toFixed(2)+"%"}</div></div>
+                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
+                  </div>
+                  {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"9px 10px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:6,color:P.dim,fontSize:9,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO LINK</div>}
+                </div>
+              </div>;
+            };
+
+            // Render an ad row in the per-section table
+            var renderRow=function(ad,rank,sec,idx){
+              var adPlatC=platCol5[ad.platform]||P.ember;
+              var adPlatShort=platShort2[ad.platform]||ad.platform;
+              var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
+              return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.sub}}>{"#"+rank}</td>
+                <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
+                  {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:48,height:48,background:"#1a0f2a",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:8,fontFamily:fm}}>NO IMG</div>}
+                </td>
+                <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
+                  <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
+                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                </td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:"#fff",fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub,letterSpacing:0.5}}>{ad.format||"AD"}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fmt(ad.results):"-"}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:adPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
+              </tr>;
+            };
 
             return <div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
@@ -711,92 +787,104 @@ export default function MediaOnGas(){
                 </div>
               </div>
 
-              {sortedAds.length===0?<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:<div>
+              {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:objSections.map(function(sec){
+                var arr=byObj[sec.key]||[];
+                if(arr.length===0)return null;
+                // Sort: results DESC (KPI volume), then by cost-per-result ASC for ties (more efficient first)
+                var sorted=arr.slice().sort(function(a,b){
+                  if(b.results!==a.results)return b.results-a.results;
+                  var ac=a.results>0?a.spend/a.results:Infinity;
+                  var bc=b.results>0?b.spend/b.results:Infinity;
+                  if(ac!==bc)return ac-bc;
+                  return b.impressions-a.impressions;
+                });
+                var top10=sorted.slice(0,10);
+                var rest=sorted.slice(10);
+                var totals=totalsForSec(arr);
+                var bm=sec.bench;
+                var verdict="";
+                if(totals.cpr>0&&bm){
+                  if(totals.cpr<=bm.low)verdict="WELL BELOW SA BENCHMARK";
+                  else if(totals.cpr<=bm.mid)verdict="WITHIN BENCHMARK RANGE";
+                  else if(totals.cpr<=bm.high)verdict="ABOVE BENCHMARK MIDPOINT";
+                  else verdict="ABOVE BENCHMARK CEILING";
+                }
 
-                {top5.length>0&&<div style={{marginBottom:32}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                    {Ic.crown(P.solar,20)}
-                    <span style={{fontSize:14,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1.5}}>TOP 5 ADS</span>
-                    <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"40, transparent)"}}/>
-                    <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>by impressions, ctr tiebreak</span>
+                return <div key={sec.key} style={{marginBottom:36,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22,flexWrap:"wrap",gap:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:14}}>
+                      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+sec.accent+"25,"+sec.accent+"08)",border:"1px solid "+sec.accent+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{sec.icon}</div>
+                      <div>
+                        <div style={{fontSize:19,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1}}>{sec.label}</div>
+                        <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>{sec.desc}</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>ADS</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{arr.length}</div></div>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totals.spend)}</div></div>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>{resultLabel(arr[0]?arr[0].resultType:sec.metric)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.results>0?fmt(totals.results):"-"}</div></div>
+                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>{costPerLabel(arr[0]?arr[0].resultType:sec.metric)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.cpr>0?fR(totals.cpr):"-"}</div></div>
+                    </div>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
-                    {top5.map(function(ad,idx){
-                      var rank=idx+1;
-                      var rs=rankStyles[rank];
-                      var adPlatC=platCol5[ad.platform]||P.ember;
-                      var adPlatShort=platShort2[ad.platform]||ad.platform;
-                      var isTop=rank===1;
-                      return <div key={ad.adId} style={{background:isTop?"linear-gradient(135deg,rgba(255,215,0,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?"rgba(255,215,0,0.45)":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(255,215,0,0.18)":"none",transition:"all 0.2s"}}>
-                        <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
-                          {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">No preview</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview</div>}
-                          <div style={{position:"absolute",top:10,left:10,background:rs.bg,color:rs.text,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 10px rgba(0,0,0,0.5)"}}>{rs.label}</div>
-                          <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{adPlatShort}</div>
-                          <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.85)",color:"#fff",padding:"3px 8px",borderRadius:4,fontSize:9,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
-                        </div>
-                        <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
-                          <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
-                          <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:10,lineHeight:1.4,minHeight:30,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10}}>
-                            <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>IMPS</div><div style={{color:P.cyan,fontWeight:800,fontSize:13}}>{fmt(ad.impressions)}</div></div>
-                            <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:800,fontSize:13}}>{ad.ctr.toFixed(2)+"%"}</div></div>
-                            <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.spend)}</div></div>
-                            <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
-                          </div>
-                          {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"9px 10px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:6,color:P.dim,fontSize:9,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO LINK</div>}
-                        </div>
-                      </div>;
-                    })}
-                  </div>
-                </div>}
 
-                {rest.length>0&&<div style={{background:P.glass,borderRadius:14,padding:"6px 24px 24px",border:"1px solid "+P.rule}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 16px"}}>
-                    {Ic.chart(P.cyan,18)}
-                    <span style={{fontSize:14,fontWeight:900,color:P.cyan,fontFamily:ff,letterSpacing:1.5}}>{"ALL OTHER ADS ("+rest.length+")"}</span>
-                    <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"30, transparent)"}}/>
-                    <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>ranked 6+</span>
-                  </div>
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse"}}>
-                      <thead>
-                        <tr>{["Rank","Thumb","Ad","Platform","Format","Spend","Impressions","CTR","Clicks","CPC","View"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:P.cyan,letterSpacing:1.5,textAlign:hi===2?"left":"center",background:"rgba(34,211,238,0.08)",border:"1px solid rgba(34,211,238,0.18)",fontFamily:fm}}>{h}</th>;})}</tr>
-                      </thead>
-                      <tbody>
-                        {rest.map(function(ad,ri){
-                          var rank=ri+6;
-                          var rowPlatC=platCol5[ad.platform]||P.ember;
-                          var rowPlatShort=platShort2[ad.platform]||ad.platform;
-                          var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
-                          return <tr key={ad.adId} style={{background:ri%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
-                            <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.sub}}>{"#"+rank}</td>
-                            <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
-                              {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:48,height:48,background:"#1a0f2a",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:8,fontFamily:fm}}>NO IMG</div>}
-                            </td>
-                            <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
-                              <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
-                              <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
-                            </td>
-                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:rowPlatC,color:"#fff",fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{rowPlatShort}</span></td>
-                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub,letterSpacing:0.5}}>{ad.format||"AD"}</td>
-                            <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
-                            <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.cyan}}>{fmt(ad.impressions)}</td>
-                            <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
-                            <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.clicks)}</td>
-                            <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
-                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:rowPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
-                          </tr>;
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>}
+                  {top10.length>0&&<div style={{marginBottom:22}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                      {Ic.crown(sec.accent,16)}
+                      <span style={{fontSize:12,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{"TOP "+Math.min(10,top10.length)+" CREATIVES"}</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
+                      <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{"by "+resultLabel(arr[0]?arr[0].resultType:sec.metric)+", then "+sec.costLabel}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
+                      {top10.map(function(ad,i){return renderCard(ad,i+1,sec);})}
+                    </div>
+                  </div>}
 
-              </div>}
+                  {rest.length>0&&<div style={{marginBottom:18}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      {Ic.chart(P.sub,14)}
+                      <span style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{"All other ads ("+rest.length+")"}</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.rule+", transparent)"}}/>
+                    </div>
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse"}}>
+                        <thead>
+                          <tr>{["Rank","Thumb","Ad","Platform","Format",resultLabel(arr[0]?arr[0].resultType:sec.metric),costPerLabel(arr[0]?arr[0].resultType:sec.metric),"Spend","Imps","CTR","View"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:sec.accent,letterSpacing:1.5,textAlign:hi===2?"left":"center",background:sec.accent+"10",border:"1px solid "+sec.accent+"25",fontFamily:fm}}>{h}</th>;})}</tr>
+                        </thead>
+                        <tbody>{rest.map(function(ad,ri){return renderRow(ad,ri+11,sec,ri);})}</tbody>
+                      </table>
+                    </div>
+                  </div>}
+
+                  <Insight title={sec.label+" Read"} accent={sec.accent} icon={sec.icon}>{(function(){
+                    var lines=[];
+                    var topAd=top10[0];
+                    lines.push(arr.length+" "+sec.label.toLowerCase()+" creatives delivered "+(totals.results>0?fmt(totals.results)+" "+resultLabel(arr[0]?arr[0].resultType:sec.metric).toLowerCase():"no measurable results yet")+" from "+fR(totals.spend)+" spend"+(totals.cpr>0?", a blended "+sec.costLabel+" of "+fR(totals.cpr):"")+(verdict?" ("+verdict.toLowerCase()+")":"")+".");
+                    if(topAd&&topAd.results>0){
+                      lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,70)+"\" on "+topAd.platform+", delivering "+fmt(topAd.results)+" "+resultLabel(topAd.resultType).toLowerCase()+" at "+fR(topAd.spend/topAd.results)+" "+sec.costLabel+" with "+topAd.ctr.toFixed(2)+"% CTR.");
+                    }else if(topAd){
+                      lines.push("Top performer by spend: \""+(topAd.adName||"Unnamed").substring(0,70)+"\" with "+fR(topAd.spend)+" invested but no measurable conversions yet \u2014 verify pixel tracking and landing page experience.");
+                    }
+                    if(totals.cpr>0&&bm){
+                      if(totals.cpr<=bm.low)lines.push("Cost efficiency is excellent. Scale by increasing budget 15 to 25 percent on the top 3 ad sets feeding these creatives.");
+                      else if(totals.cpr<=bm.mid)lines.push("Cost efficiency is in the healthy range. Test creative variants on the top 5 ads to push "+sec.costLabel+" lower.");
+                      else lines.push(sec.costLabel+" is above the benchmark midpoint. Audit the bottom of the rankings, pause underperformers, and reallocate budget to the top winners.");
+                    }
+                    if(rest.length>top10.length)lines.push("The "+rest.length+" lower-ranked creatives represent the long tail. Worth reviewing the bottom 25 percent for fatigue or targeting issues.");
+                    return lines.join(" ");
+                  })()}</Insight>
+                </div>;
+              })}
+
+              {(function(){
+                // Show ads that didn't match any objective bucket (rare)
+                var matched=Object.keys(byObj);
+                var unmatched=filteredAds.filter(function(a){return matched.indexOf(a.objective||"landingpage")<0;});
+                if(unmatched.length===0)return null;
+                return <div style={{padding:14,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:11}}>{unmatched.length+" ads not matched to a known objective category."}</div>;
+              })()}
             </div>;
           })()}
         </div>)}
-
         {tab==="overview"&&(<div>
 
           <SH icon={Ic.chart(P.orchid,20)} title="Campaign Overview" sub={df+" to "+dt+" · "+selected.length+" campaigns · Funnel Performance Report"} accent={P.orchid}/>

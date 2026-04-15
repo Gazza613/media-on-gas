@@ -500,7 +500,7 @@ export default async function handler(req, res) {
           var adToAssets = {};
           googleDebug.firstAdResource = (gData.results && gData.results[0] && gData.results[0].adGroupAd) ? gData.results[0].adGroupAd.resourceName : null;
           try {
-            var assetQuery = "SELECT ad_group_ad_asset_view.ad_group_ad, ad_group_ad_asset_view.field_type, asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM ad_group_ad_asset_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
+            var assetQuery = "SELECT ad_group_ad_asset_view.ad_group_ad, ad_group_ad_asset_view.field_type, asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM ad_group_ad_asset_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND asset.type IN ('IMAGE','YOUTUBE_VIDEO')";
             var aRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
               method: "POST",
               headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
