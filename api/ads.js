@@ -108,7 +108,7 @@ export default async function handler(req, res) {
       var creativesByAdId = {};
       for (var b = 0; b < uniqAdIds.length; b += 50) {
         var batch = uniqAdIds.slice(b, b + 50);
-        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash}";
+        var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash,object_story_spec{link_data{image_url,image_hash,picture,child_attachments{image_url,image_hash,picture}},video_data{image_url,image_hash,video_id},photo_data{image_hash,url}}}";
         var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + batch.join(",") + "&fields=" + encodeURIComponent(adFields) + "&access_token=" + metaToken;
         try {
           var batchRes = await fetch(batchUrl);
@@ -148,10 +148,21 @@ export default async function handler(req, res) {
       }
 
       // Resolve image_hash to full-resolution uploaded asset URL via /adimages
+      // Collect hashes from creative.image_hash AND object_story_spec sub-creatives
       var imageHashes = [];
+      var addHash = function(h) { if (h && imageHashes.indexOf(h) < 0) imageHashes.push(h); };
       Object.keys(creativesByAdId).forEach(function(adId) {
-        var hash = creativesByAdId[adId].image_hash;
-        if (hash && imageHashes.indexOf(hash) < 0) imageHashes.push(hash);
+        var c = creativesByAdId[adId];
+        addHash(c.image_hash);
+        if (c.object_story_spec) {
+          var oss = c.object_story_spec;
+          if (oss.video_data) addHash(oss.video_data.image_hash);
+          if (oss.link_data) addHash(oss.link_data.image_hash);
+          if (oss.photo_data) addHash(oss.photo_data.image_hash);
+          if (oss.link_data && oss.link_data.child_attachments) {
+            oss.link_data.child_attachments.forEach(function(ca) { addHash(ca.image_hash); });
+          }
+        }
       });
       var hashToUrl = {};
       for (var ih = 0; ih < imageHashes.length; ih += 50) {
@@ -178,14 +189,25 @@ export default async function handler(req, res) {
       var storyToPic = {};
       for (var si = 0; si < storyIds.length; si += 50) {
         var sBatch = storyIds.slice(si, si + 50);
-        var spUrl = "https://graph.facebook.com/v25.0/?ids=" + sBatch.join(",") + "&fields=full_picture,picture&access_token=" + metaToken;
+        var spUrl = "https://graph.facebook.com/v25.0/?ids=" + sBatch.join(",") + "&fields=full_picture,picture,attachments{media{image{src,height,width},source},subattachments{media{image{src,height,width}}}}&access_token=" + metaToken;
         try {
           var spRes = await fetch(spUrl);
           var spData = await spRes.json();
           Object.keys(spData).forEach(function(sid) {
             var s = spData[sid];
             if (!s) return;
-            storyToPic[sid] = s.full_picture || s.picture || "";
+            // Prefer attachments.media.image.src (original upload) over full_picture (preview-sized)
+            var best = "";
+            if (s.attachments && s.attachments.data && s.attachments.data.length > 0) {
+              var att = s.attachments.data[0];
+              if (att.media && att.media.image && att.media.image.src) {
+                best = att.media.image.src;
+              } else if (att.subattachments && att.subattachments.data && att.subattachments.data.length > 0) {
+                var sub = att.subattachments.data[0];
+                if (sub.media && sub.media.image && sub.media.image.src) best = sub.media.image.src;
+              }
+            }
+            storyToPic[sid] = best || s.full_picture || s.picture || "";
           });
         } catch (spErr) { console.error("Meta post picture error", account.name, spErr); }
       }
@@ -209,9 +231,30 @@ export default async function handler(req, res) {
         var platform = pub === "instagram" ? "Instagram" : "Facebook";
         var vidThumb = cr.video_id ? videoThumbs[cr.video_id] : "";
         var hashThumb = cr.image_hash ? hashToUrl[cr.image_hash] : "";
+        // Try object_story_spec sub-image hashes too (for ads using Advantage+ creative or carousel)
+        var ossHashThumb = "";
+        if (cr.object_story_spec) {
+          var oss = cr.object_story_spec;
+          var ossHashCandidates = [];
+          if (oss.video_data && oss.video_data.image_hash) ossHashCandidates.push(oss.video_data.image_hash);
+          if (oss.link_data && oss.link_data.image_hash) ossHashCandidates.push(oss.link_data.image_hash);
+          if (oss.photo_data && oss.photo_data.image_hash) ossHashCandidates.push(oss.photo_data.image_hash);
+          if (oss.link_data && oss.link_data.child_attachments) {
+            oss.link_data.child_attachments.forEach(function(ca) { if (ca.image_hash) ossHashCandidates.push(ca.image_hash); });
+          }
+          for (var oi = 0; oi < ossHashCandidates.length; oi++) {
+            if (hashToUrl[ossHashCandidates[oi]]) { ossHashThumb = hashToUrl[ossHashCandidates[oi]]; break; }
+          }
+        }
+        // Try object_story_spec sub-image URLs as fallback
+        var ossUrlThumb = "";
+        if (cr.object_story_spec) {
+          var o = cr.object_story_spec;
+          ossUrlThumb = (o.video_data && o.video_data.image_url) || (o.link_data && o.link_data.image_url) || (o.photo_data && o.photo_data.url) || "";
+        }
         var postThumb = cr.effective_object_story_id ? storyToPic[cr.effective_object_story_id] : "";
-        // Priority: video thumbnail > /adimages permalink > post full_picture > image_url > thumbnail_url
-        var thumb = upsizeFb(vidThumb || hashThumb || postThumb || cr.image_url || cr.thumbnail_url || "");
+        // Priority: video thumbnail > /adimages permalink > OSS hash via /adimages > post attachments > OSS image_url > creative image_url > thumbnail_url
+        var thumb = upsizeFb(vidThumb || hashThumb || ossHashThumb || postThumb || ossUrlThumb || cr.image_url || cr.thumbnail_url || "");
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;
