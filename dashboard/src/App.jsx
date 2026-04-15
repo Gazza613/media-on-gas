@@ -794,12 +794,25 @@ export default function MediaOnGas(){
             };
 
             return <div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:18}}>
-                <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div><div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
-                <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:26,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totalSpend)}</div></Glass>
-                <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:26,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(totalImps)}</div></Glass>
-                <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:26,fontWeight:900,color:P.mint,fontFamily:fm}}>{blendedCtr.toFixed(2)+"%"}</div></Glass>
-              </div>
+              {(function(){
+                // When no platform/format filter is applied, show authoritative campaign-level totals
+                // (same source as Summary deep dive). With filters applied, show ad-level filtered totals
+                // so the numbers reflect what is actually visible on the page.
+                var filtered=crFiltP!=="all"||crFiltF!=="all";
+                var spendVal=filtered?totalSpend:(computed.totalSpend||totalSpend);
+                var impsVal=filtered?totalImps:(computed.totalImps||totalImps);
+                var ctrVal=filtered?blendedCtr:(computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):blendedCtr);
+                var note=filtered?"FILTERED AD-LEVEL TOTALS":"MATCHES SUMMARY · ALL SELECTED CAMPAIGNS";
+                return <div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:8}}>
+                    <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div><div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
+                    <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:26,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(spendVal)}</div></Glass>
+                    <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:26,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(impsVal)}</div></Glass>
+                    <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:26,fontWeight:900,color:P.mint,fontFamily:fm}}>{ctrVal.toFixed(2)+"%"}</div></Glass>
+                  </div>
+                  <div style={{textAlign:"center",fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:1.5,marginBottom:18}}>{note}</div>
+                </div>;
+              })()}
 
               <div style={{background:P.glass,borderRadius:14,padding:"14px 20px",marginBottom:24,border:"1px solid "+P.rule,display:"flex",flexWrap:"wrap",gap:18,alignItems:"center"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
