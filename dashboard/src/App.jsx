@@ -839,8 +839,8 @@ export default function MediaOnGas(){
                 };
                 ranked.sort(rankCmp);
 
-                // Winners: top scorers WITH at least 5000 impressions
-                var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,5);
+                // Winners: top 10 scorers WITH at least 5000 impressions
+                var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,10);
                 // Within winners, sort by results DESC for KPI ads, score DESC otherwise
                 winners.sort(function(a,b){
                   var aKpi=isKpiCampaign(a),bKpi=isKpiCampaign(b);
@@ -849,8 +849,8 @@ export default function MediaOnGas(){
                   return b._score-a._score;
                 });
                 var winnerSet={};winners.forEach(function(a){winnerSet[a.adId]=true;});
-                // Strong: next 5 by rankCmp
-                var strong=ranked.filter(function(a){return !winnerSet[a.adId];}).slice(0,5);
+                // Strong: next 10 by rankCmp
+                var strong=ranked.filter(function(a){return !winnerSet[a.adId];}).slice(0,10);
                 strong.sort(function(a,b){
                   var aKpi=isKpiCampaign(a),bKpi=isKpiCampaign(b);
                   if(aKpi!==bKpi)return aKpi?-1:1;
@@ -978,14 +978,14 @@ export default function MediaOnGas(){
                   })():<div>
                     {winners.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>TOP WINNERS</span><span style={{fontSize:9,color:P.sub,fontFamily:fm,marginLeft:4,fontStyle:"italic"}}>{"5,000+ impressions, top performers"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:18}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
                         {winners.map(function(ad){return bigCard(ad,true);})}
                       </div>
                     </div>}
 
                     {strong.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.bolt(P.positive,18)}<span style={{fontSize:13,fontWeight:900,color:P.positive,fontFamily:ff,letterSpacing:1.5}}>STRONG PERFORMERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.positive+"40, transparent)"}}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
                         {strong.map(function(ad){return bigCard(ad,false);})}
                       </div>
                     </div>}
