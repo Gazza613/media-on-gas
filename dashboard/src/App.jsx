@@ -688,7 +688,8 @@ export default function MediaOnGas(){
               if(imps>=1000)return 1;
               return 0.5;
             };
-            var hasKpiResults=function(a){return a.results>0&&(a.resultType==="leads"||a.resultType==="installs"||a.resultType==="follows"||a.resultType==="conversions");};
+            var hasKpiResults=function(a){return a.results>0;};
+            var isHighValueKpi=function(a){return a.results>0&&(a.resultType==="leads"||a.resultType==="installs"||a.resultType==="follows"||a.resultType==="conversions");};
             var scoreAd=function(a,platAvgCtr){
               var bm=platBench[a.platform]||benchmarks.meta;
               var sCtr=smoothedCtr(a,platAvgCtr);
@@ -709,8 +710,8 @@ export default function MediaOnGas(){
               }
               return ctrS*0.40+cpcS*0.30+vS*0.30;
             };
-            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":"RESULTS";};
-            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":"CPR";};
+            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS / LIKES":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
+            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
 
             var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube"];
             var grandSpend=0,grandImps=0,grandClicks=0;
@@ -767,17 +768,21 @@ export default function MediaOnGas(){
                   if(a.impressions<RANKED_MIN_IMPS)tooEarly.push(copy);
                   else ranked.push(copy);
                 });
+                // Sort by score for selecting top winners/strong tier
                 ranked.sort(function(a,b){return b._score-a._score;});
                 tooEarly.sort(function(a,b){return b.spend-a.spend;});
 
-                // Winners: top scorers WITH at least 5000 impressions
+                // Winners: top scorers WITH at least 5000 impressions, then re-sort by KPI results DESC
                 var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,5);
+                winners.sort(function(a,b){if(b.results!==a.results)return b.results-a.results;return b._score-a._score;});
                 var winnerSet={};winners.forEach(function(a){winnerSet[a.adId]=true;});
-                // Strong: next 5 by score (regardless of imps tier, as long as ranked)
+                // Strong: next 5 by score, then re-sort by KPI results DESC
                 var strong=ranked.filter(function(a){return !winnerSet[a.adId];}).slice(0,5);
+                strong.sort(function(a,b){if(b.results!==a.results)return b.results-a.results;return b._score-a._score;});
                 var strongSet={};strong.forEach(function(a){strongSet[a.adId]=true;});
-                // Rest: everything ranked but not winner/strong
+                // Rest: everything ranked but not winner/strong, sorted by spend DESC
                 var rest=ranked.filter(function(a){return !winnerSet[a.adId]&&!strongSet[a.adId];});
+                rest.sort(function(a,b){return b.spend-a.spend;});
                 var topAd=winners[0]||strong[0];
 
                 var bigCard=function(ad,gold){

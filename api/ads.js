@@ -11,6 +11,15 @@ var metaAccounts = [
   { name: "GAS Agency", id: "act_542990539806888" }
 ];
 
+function detectObjective(campaignName) {
+  var n = (campaignName || "").toLowerCase();
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
+  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "traffic";
+  return "traffic";
+}
+
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
@@ -141,9 +150,14 @@ export default async function handler(req, res) {
       var upsizeFb = function(url) {
         if (!url) return url;
         if (url.indexOf("fbcdn.net") < 0 && url.indexOf("cdninstagram.com") < 0) return url;
-        var sep = url.indexOf("?") >= 0 ? "&" : "?";
-        if (url.indexOf("width=") >= 0) return url;
-        return url + sep + "width=600";
+        // Replace small CDN size patterns in path (p64x64, s100x100, etc) with larger
+        url = url.replace(/\/p\d+x\d+\//g, "/p1080x1080/");
+        url = url.replace(/\/s\d+x\d+\//g, "/s1080x1080/");
+        if (url.indexOf("width=") < 0) {
+          var sep = url.indexOf("?") >= 0 ? "&" : "?";
+          url = url + sep + "width=1080";
+        }
+        return url;
       };
 
       insights.forEach(function(ins) {
@@ -159,19 +173,31 @@ export default async function handler(req, res) {
         } else if (cr.effective_object_story_id) {
           preview = "https://www.facebook.com/" + cr.effective_object_story_id;
         }
-        var leads = 0, installs = 0;
+        var leads = 0, installs = 0, pageLikes = 0, follows = 0;
         Object.keys(ins.actionsAgg || {}).forEach(function(at) {
           var v = ins.actionsAgg[at];
-          if (at === "lead" || at === "onsite_web_lead" || at === "offsite_conversion.fb_pixel_lead" || at === "onsite_conversion.lead_grouped") {
+          if (at === "lead" || at === "onsite_web_lead" || at === "offsite_conversion.fb_pixel_lead" || at === "onsite_conversion.lead_grouped" || at === "offsite_complete_registration_add_meta_leads") {
             leads = Math.max(leads, v);
           }
           if (at === "app_install" || at === "app_custom_event.fb_mobile_activate_app") {
             installs += v;
           }
+          if (at === "like" || at === "page_like") {
+            pageLikes = Math.max(pageLikes, v);
+          }
+          if (at === "page_engagement" || at === "follow") {
+            follows += v;
+          }
         });
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
+        var objective = detectObjective(ins.campaign_name);
+        var resCount, resType;
+        if (objective === "leads") { resCount = leads; resType = "leads"; }
+        else if (objective === "appinstall") { resCount = installs > 0 ? installs : ins.clicks; resType = installs > 0 ? "installs" : "store_clicks"; }
+        else if (objective === "followers") { resCount = pageLikes + follows; resType = "follows"; }
+        else { resCount = ins.clicks; resType = "clicks"; }
         allAds.push({
           platform: platform,
           accountName: account.name,
@@ -198,8 +224,9 @@ export default async function handler(req, res) {
           ctr: ctr,
           cpc: cpc,
           cpm: cpm,
-          results: leads + installs,
-          resultType: leads > 0 ? "leads" : (installs > 0 ? "installs" : "clicks"),
+          objective: objective,
+          results: resCount,
+          resultType: resType,
           placements: ins.placements
         });
       });
@@ -251,9 +278,15 @@ export default async function handler(req, res) {
           if (!(parseFloat(mt.impressions || 0) > 0 || parseFloat(mt.spend || 0) > 0)) return;
           var video = ad.video_id ? (videoInfoByVid[ad.video_id] || {}) : {};
           var follows = parseInt(mt.follows || 0);
+          var likes = parseInt(mt.likes || 0);
           var ttSpend = parseFloat(mt.spend || 0);
           var ttImps = parseInt(mt.impressions || 0);
           var ttClicks = parseInt(mt.clicks || 0);
+          var ttObjective = detectObjective(mt.campaign_name);
+          var ttResCount, ttResType;
+          if (ttObjective === "followers") { ttResCount = follows + likes; ttResType = "follows"; }
+          else if (ttObjective === "appinstall") { ttResCount = ttClicks; ttResType = "store_clicks"; }
+          else { ttResCount = ttClicks; ttResType = "clicks"; }
           allAds.push({
             platform: "TikTok",
             accountName: "MTN MoMo TikTok",
@@ -272,8 +305,9 @@ export default async function handler(req, res) {
             ctr: parseFloat(mt.ctr || 0),
             cpc: parseFloat(mt.cpc || 0),
             cpm: parseFloat(mt.cpm || 0),
-            results: follows,
-            resultType: follows > 0 ? "follows" : "clicks",
+            objective: ttObjective,
+            results: ttResCount,
+            resultType: ttResType,
             placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });
         });
@@ -337,6 +371,12 @@ export default async function handler(req, res) {
             }
             var gPlatform = (r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0 ? "YouTube" : "Google Display";
             var gPlace = gPlatform === "YouTube" ? "YouTube" : "Display";
+            var gConv = Math.round(parseFloat(r.metrics.conversions || 0));
+            var gObjective = detectObjective(r.campaign.name);
+            var gResCount, gResType;
+            if (gConv > 0) { gResCount = gConv; gResType = "conversions"; }
+            else if (gObjective === "leads") { gResCount = clk; gResType = "leads"; }
+            else { gResCount = clk; gResType = "clicks"; }
             allAds.push({
               platform: gPlatform,
               accountName: "MTN MoMo Google",
@@ -355,8 +395,9 @@ export default async function handler(req, res) {
               ctr: imps > 0 ? (clk / imps * 100) : 0,
               cpc: clk > 0 ? sp / clk : 0,
               cpm: imps > 0 ? (sp / imps * 1000) : 0,
-              results: Math.round(parseFloat(r.metrics.conversions || 0)),
-              resultType: "conversions",
+              objective: gObjective,
+              results: gResCount,
+              resultType: gResType,
               placements: (function(){ var p={}; p[gPlace]={spend:sp,impressions:imps,clicks:clk}; return p; })()
             });
           });
