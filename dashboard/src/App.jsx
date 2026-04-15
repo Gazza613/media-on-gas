@@ -700,29 +700,37 @@ export default function MediaOnGas(){
             };
             var hasKpiResults=function(a){return a.results>0;};
             var isHighValueKpi=function(a){return a.results>0&&(a.resultType==="leads"||a.resultType==="installs"||a.resultType==="follows"||a.resultType==="conversions");};
-            var isObjectiveKpi=function(a){return a.results>0&&(a.objective==="leads"||a.objective==="followers"||a.objective==="appinstall");};
+            // Objective-based KPI flag (not dependent on result count). A lead gen campaign with 0 leads is still measured against its objective.
+            var isKpiCampaign=function(a){return a.objective==="leads"||a.objective==="followers"||a.objective==="appinstall";};
+            var isObjectiveKpi=function(a){return a.results>0&&isKpiCampaign(a);};
             var scoreAd=function(a,platAvgCtr){
               var bm=platBench[a.platform]||benchmarks.meta;
               var sCtr=smoothedCtr(a,platAvgCtr);
               var ctrS=sCtr>=2.0?4:sCtr>=1.4?3.4:sCtr>=0.9?2.5:sCtr>=0.5?1.5:0.5;
               var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
               var vS=volScore(a.impressions);
-              // KPI-driven scoring for lead, follower, install campaigns
-              if(isObjectiveKpi(a)){
-                var costPer=a.spend/a.results;
-                var efficS,volS;
-                if(a.objective==="leads"){
-                  efficS=bm.cpl?(costPer<=bm.cpl.low?4:costPer<=bm.cpl.mid?3:costPer<=bm.cpl.high?2:1):2;
-                  volS=a.results>=100?4:a.results>=50?3.5:a.results>=25?3:a.results>=10?2.5:a.results>=5?1.5:1;
-                }else if(a.objective==="followers"){
-                  efficS=bm.cpf?(costPer<=bm.cpf.low?4:costPer<=bm.cpf.mid?3:costPer<=bm.cpf.high?2:1):2;
-                  volS=a.results>=1000?4:a.results>=500?3.5:a.results>=200?3:a.results>=50?2.5:a.results>=10?1.5:1;
+              // KPI campaigns: score is dominated by objective achievement.
+              // Lead Gen / Followers with 0 results = failed at objective, score very low.
+              if(isKpiCampaign(a)){
+                var efficS,volS,resultS;
+                if(a.results===0){
+                  // Failed to deliver any KPI results - bottom tier for the result component.
+                  resultS=0.5;
                 }else{
-                  efficS=bm.cpc?(costPer<=bm.cpc.low?4:costPer<=bm.cpc.mid?3:costPer<=bm.cpc.high?2:1):2;
-                  volS=a.results>=500?4:a.results>=200?3.5:a.results>=100?3:a.results>=50?2.5:a.results>=20?1.5:1;
+                  var costPer=a.spend/a.results;
+                  if(a.objective==="leads"){
+                    efficS=bm.cpl?(costPer<=bm.cpl.low?4:costPer<=bm.cpl.mid?3:costPer<=bm.cpl.high?2:1):2;
+                    volS=a.results>=100?4:a.results>=50?3.5:a.results>=25?3:a.results>=10?2.5:a.results>=5?1.5:1;
+                  }else if(a.objective==="followers"){
+                    efficS=bm.cpf?(costPer<=bm.cpf.low?4:costPer<=bm.cpf.mid?3:costPer<=bm.cpf.high?2:1):2;
+                    volS=a.results>=1000?4:a.results>=500?3.5:a.results>=200?3:a.results>=50?2.5:a.results>=10?1.5:1;
+                  }else{
+                    efficS=bm.cpc?(costPer<=bm.cpc.low?4:costPer<=bm.cpc.mid?3:costPer<=bm.cpc.high?2:1):2;
+                    volS=a.results>=500?4:a.results>=200?3.5:a.results>=100?3:a.results>=50?2.5:a.results>=20?1.5:1;
+                  }
+                  // Result component: 60 percent KPI volume, 40 percent KPI efficiency
+                  resultS=volS*0.60+efficS*0.40;
                 }
-                // Result component: 60 percent KPI volume, 40 percent KPI efficiency
-                var resultS=volS*0.60+efficS*0.40;
                 // Total: 70 percent KPI result + 12 percent CTR + 8 percent CPC + 10 percent impression volume confidence
                 return resultS*0.70+ctrS*0.12+cpcS*0.08+volScore(a.impressions)*0.10;
               }
@@ -788,7 +796,7 @@ export default function MediaOnGas(){
                 });
                 // Comparator: KPI-converting ads always rank above traffic-only ads, then by score
                 var rankCmp=function(a,b){
-                  var aKpi=isObjectiveKpi(a),bKpi=isObjectiveKpi(b);
+                  var aKpi=isKpiCampaign(a),bKpi=isKpiCampaign(b);
                   if(aKpi!==bKpi)return aKpi?-1:1;
                   return b._score-a._score;
                 };
@@ -798,7 +806,7 @@ export default function MediaOnGas(){
                 var winners=ranked.filter(function(a){return a.impressions>=WINNER_MIN_IMPS;}).slice(0,5);
                 // Within winners, sort by results DESC for KPI ads, score DESC otherwise
                 winners.sort(function(a,b){
-                  var aKpi=isObjectiveKpi(a),bKpi=isObjectiveKpi(b);
+                  var aKpi=isKpiCampaign(a),bKpi=isKpiCampaign(b);
                   if(aKpi!==bKpi)return aKpi?-1:1;
                   if(aKpi&&bKpi&&b.results!==a.results)return b.results-a.results;
                   return b._score-a._score;
@@ -807,7 +815,7 @@ export default function MediaOnGas(){
                 // Strong: next 5 by rankCmp
                 var strong=ranked.filter(function(a){return !winnerSet[a.adId];}).slice(0,5);
                 strong.sort(function(a,b){
-                  var aKpi=isObjectiveKpi(a),bKpi=isObjectiveKpi(b);
+                  var aKpi=isKpiCampaign(a),bKpi=isKpiCampaign(b);
                   if(aKpi!==bKpi)return aKpi?-1:1;
                   if(aKpi&&bKpi&&b.results!==a.results)return b.results-a.results;
                   return b._score-a._score;

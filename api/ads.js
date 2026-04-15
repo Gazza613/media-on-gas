@@ -277,16 +277,27 @@ export default async function handler(req, res) {
         var leads = 0, installs = 0, pageLikes = 0, follows = 0;
         Object.keys(ins.actionsAgg || {}).forEach(function(at) {
           var v = ins.actionsAgg[at];
-          if (at === "lead" || at === "onsite_web_lead" || at === "offsite_conversion.fb_pixel_lead" || at === "onsite_conversion.lead_grouped" || at === "offsite_complete_registration_add_meta_leads") {
+          var atLow = at.toLowerCase();
+          // Lead detection: catch all lead-like actions, exclude installs and irrelevant
+          var isLead = (atLow === "lead" ||
+                        atLow === "onsite_web_lead" ||
+                        atLow === "offsite_conversion.fb_pixel_lead" ||
+                        atLow === "onsite_conversion.lead_grouped" ||
+                        atLow === "onsite_conversion.flow_complete" ||
+                        atLow === "offsite_complete_registration_add_meta_leads" ||
+                        atLow === "offsite_conversion.fb_pixel_complete_registration" ||
+                        atLow === "complete_registration" ||
+                        (atLow.indexOf("lead") >= 0 && atLow.indexOf("install") < 0 && atLow.indexOf("video") < 0 && atLow.indexOf("post") < 0));
+          if (isLead) {
             leads = Math.max(leads, v);
           }
-          if (at === "app_install" || at === "app_custom_event.fb_mobile_activate_app") {
+          if (at === "app_install" || at === "app_custom_event.fb_mobile_activate_app" || at === "mobile_app_install" || at === "omni_app_install") {
             installs += v;
           }
-          if (at === "like" || at === "page_like") {
+          if (at === "like" || at === "page_like" || at === "follow") {
             pageLikes = Math.max(pageLikes, v);
           }
-          if (at === "page_engagement" || at === "follow") {
+          if (at === "page_engagement" || at === "onsite_conversion.post_save") {
             follows += v;
           }
         });
@@ -297,9 +308,13 @@ export default async function handler(req, res) {
         var apiObj = mapMetaObjective(campObjMap[ins.campaign_id]);
         var objective = apiObj || detectObjective(ins.campaign_name);
         var resCount, resType;
-        if (objective === "leads") { resCount = leads > 0 ? leads : ins.clicks; resType = leads > 0 ? "leads" : "clicks"; }
+        // For Lead Gen: ALWAYS show leads count (even 0). Never fall back to clicks.
+        if (objective === "leads") { resCount = leads; resType = "leads"; }
+        // For App Install: prefer installs, fall back to store_clicks (relabel CPC) since both are valid app KPIs
         else if (objective === "appinstall") { resCount = installs > 0 ? installs : ins.clicks; resType = installs > 0 ? "installs" : "store_clicks"; }
+        // For Followers/Likes: ALWAYS show follows count (even 0). Never fall back.
         else if (objective === "followers") { resCount = pageLikes + follows; resType = "follows"; }
+        // Traffic: clicks
         else { resCount = ins.clicks; resType = "clicks"; }
         allAds.push({
           platform: platform,
