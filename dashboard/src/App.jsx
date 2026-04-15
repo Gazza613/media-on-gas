@@ -777,24 +777,6 @@ export default function MediaOnGas(){
                 <Glass accent={P.blaze} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS WITH CREATIVES</div><div style={{fontSize:24,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:4}}>{fR(adsSpend)+" of total"}</div></Glass>
               </div>
 
-              {/* Campaign objectives detected panel */}
-              <div style={{background:P.glass,borderRadius:14,padding:"14px 18px",marginBottom:24,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                  <span style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Campaign Objectives Detected</span>
-                  <span style={{fontSize:9,color:P.dim,fontFamily:fm}}>{"Used to set KPI per ad. Flag any wrong classification."}</span>
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {selCamps.map(function(c){
-                    var detectedObj=campObjMap2[String(c.rawCampaignId||c.campaignId.replace(/_facebook$/,"").replace(/_instagram$/,""))]||campObjMap2[String(c.campaignId)]||campObjForName(c.campaignName);
-                    var oc=objColOf(detectedObj);
-                    return <div key={c.campaignId} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:8,maxWidth:"100%"}}>
-                      <span style={{fontSize:9,fontWeight:800,color:oc,background:oc+"15",border:"1px solid "+oc+"35",padding:"2px 6px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,whiteSpace:"nowrap",flexShrink:0}}>{objLabelOf(detectedObj)}</span>
-                      <span style={{fontSize:10,color:P.txt,fontFamily:ff,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:340}} title={c.campaignName}>{c.campaignName}</span>
-                      <span style={{fontSize:9,color:P.sub,fontFamily:fm,whiteSpace:"nowrap",flexShrink:0}}>{fR(parseFloat(c.spend||0))}</span>
-                    </div>;
-                  })}
-                </div>
-              </div>
 
               {/* Filter row */}
               <div style={{background:P.glass,borderRadius:14,padding:"14px 18px",marginBottom:24,border:"1px solid "+P.rule,display:"flex",flexWrap:"wrap",gap:18,alignItems:"center"}}>
