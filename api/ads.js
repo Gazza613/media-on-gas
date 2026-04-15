@@ -466,7 +466,7 @@ export default async function handler(req, res) {
       });
       var gTokenData = await gTokenRes.json();
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.impressions > 0";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -512,7 +512,7 @@ export default async function handler(req, res) {
             }
             // Classify platform by Google channel type
             var chType = (r.campaign.advertisingChannelType || "").toUpperCase();
-            var chSubType = (r.campaign.advertisingChannelSubType || "").toUpperCase();
+            var chSubType = "";
             var gPlatform = "Google Display";
             if (chType === "VIDEO" || chSubType.indexOf("VIDEO") >= 0) gPlatform = "YouTube";
             else if (chType === "DISPLAY") gPlatform = "Google Display";
