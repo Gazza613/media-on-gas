@@ -383,16 +383,21 @@ export default async function handler(req, res) {
 
       // Batch fetch video info for thumbnails
       var videoInfoByVid = {};
+      var ttVideoDebug = { videoIdsCount: videoIds.length, batches: [], sampleVideo: null };
       for (var v = 0; v < videoIds.length; v += 60) {
         var vBatch = videoIds.slice(v, v + 60);
         var vidUrl = "https://business-api.tiktok.com/open_api/v1.3/file/video/ad/info/?advertiser_id=" + ttAdvId + "&video_ids=" + encodeURIComponent(JSON.stringify(vBatch));
         try {
           var vRes = await fetch(vidUrl, { headers: { "Access-Token": ttToken } });
           var vData = await vRes.json();
+          ttVideoDebug.batches.push({ status: vRes.status, code: vData.code, message: vData.message, listLen: vData.data && vData.data.list ? vData.data.list.length : 0 });
           if (vData.data && vData.data.list) {
-            vData.data.list.forEach(function(vi) { videoInfoByVid[vi.video_id] = vi; });
+            vData.data.list.forEach(function(vi) {
+              videoInfoByVid[vi.video_id] = vi;
+              if (!ttVideoDebug.sampleVideo) ttVideoDebug.sampleVideo = vi;
+            });
           }
-        } catch (vErr) { console.error("TT video info error", vErr); }
+        } catch (vErr) { console.error("TT video info error", vErr); ttVideoDebug.batches.push({ error: String(vErr) }); }
       }
 
       // Ad-level insights
@@ -493,6 +498,7 @@ export default async function handler(req, res) {
           googleDebug.sampleAd = (gData.results && gData.results[0] && gData.results[0].adGroupAd) ? gData.results[0].adGroupAd.ad : null;
           // Secondary query: ad_group_ad_asset_view joins ads to their assets (images, YouTube videos)
           var adToAssets = {};
+          googleDebug.firstAdResource = (gData.results && gData.results[0] && gData.results[0].adGroupAd) ? gData.results[0].adGroupAd.resourceName : null;
           try {
             var assetQuery = "SELECT ad_group_ad_asset_view.ad_group_ad, ad_group_ad_asset_view.field_type, asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM ad_group_ad_asset_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
             var aRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
@@ -504,6 +510,7 @@ export default async function handler(req, res) {
             if (aRes.status === 200) {
               var aData = await aRes.json();
               googleDebug.assetCount = (aData.results || []).length;
+              googleDebug.firstAssetRow = aData.results && aData.results[0] ? aData.results[0] : null;
               (aData.results || []).forEach(function(ar) {
                 var adRes = ar.adGroupAdAssetView && ar.adGroupAdAssetView.adGroupAd;
                 if (!adRes) return;
@@ -606,5 +613,5 @@ export default async function handler(req, res) {
     console.error("Google ads error", gErr);
   }
 
-  res.status(200).json({ ads: allAds, total: allAds.length, _gDebug: googleDebug });
+  res.status(200).json({ ads: allAds, total: allAds.length, _gDebug: googleDebug, _ttDebug: typeof ttVideoDebug !== 'undefined' ? ttVideoDebug : null });
 }
