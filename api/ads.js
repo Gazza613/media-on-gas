@@ -147,6 +147,49 @@ export default async function handler(req, res) {
         } catch (vbErr) { console.error("Meta video thumb error", account.name, vbErr); }
       }
 
+      // Resolve image_hash to full-resolution uploaded asset URL via /adimages
+      var imageHashes = [];
+      Object.keys(creativesByAdId).forEach(function(adId) {
+        var hash = creativesByAdId[adId].image_hash;
+        if (hash && imageHashes.indexOf(hash) < 0) imageHashes.push(hash);
+      });
+      var hashToUrl = {};
+      for (var ih = 0; ih < imageHashes.length; ih += 50) {
+        var hBatch = imageHashes.slice(ih, ih + 50);
+        var hashStr = encodeURIComponent(JSON.stringify(hBatch));
+        var aiUrl = "https://graph.facebook.com/v25.0/" + account.id + "/adimages?hashes=" + hashStr + "&fields=hash,url,permalink_url,width,height&access_token=" + metaToken;
+        try {
+          var aiRes = await fetch(aiUrl);
+          var aiData = await aiRes.json();
+          if (aiData.data) {
+            aiData.data.forEach(function(img) {
+              hashToUrl[img.hash] = img.url || img.permalink_url || "";
+            });
+          }
+        } catch (aiErr) { console.error("Meta adimages error", account.name, aiErr); }
+      }
+
+      // Resolve effective_object_story_id to post.full_picture for higher-res post images
+      var storyIds = [];
+      Object.keys(creativesByAdId).forEach(function(adId) {
+        var sid = creativesByAdId[adId].effective_object_story_id;
+        if (sid && storyIds.indexOf(sid) < 0) storyIds.push(sid);
+      });
+      var storyToPic = {};
+      for (var si = 0; si < storyIds.length; si += 50) {
+        var sBatch = storyIds.slice(si, si + 50);
+        var spUrl = "https://graph.facebook.com/v25.0/?ids=" + sBatch.join(",") + "&fields=full_picture,picture&access_token=" + metaToken;
+        try {
+          var spRes = await fetch(spUrl);
+          var spData = await spRes.json();
+          Object.keys(spData).forEach(function(sid) {
+            var s = spData[sid];
+            if (!s) return;
+            storyToPic[sid] = s.full_picture || s.picture || "";
+          });
+        } catch (spErr) { console.error("Meta post picture error", account.name, spErr); }
+      }
+
       var upsizeFb = function(url) {
         if (!url) return url;
         if (url.indexOf("fbcdn.net") < 0 && url.indexOf("cdninstagram.com") < 0) return url;
@@ -165,8 +208,10 @@ export default async function handler(req, res) {
         var pub = ins._pub;
         var platform = pub === "instagram" ? "Instagram" : "Facebook";
         var vidThumb = cr.video_id ? videoThumbs[cr.video_id] : "";
-        // Prefer high-res sources: video thumbnail > image_url > thumbnail_url (small fallback)
-        var thumb = upsizeFb(vidThumb || cr.image_url || cr.thumbnail_url || "");
+        var hashThumb = cr.image_hash ? hashToUrl[cr.image_hash] : "";
+        var postThumb = cr.effective_object_story_id ? storyToPic[cr.effective_object_story_id] : "";
+        // Priority: video thumbnail > /adimages permalink > post full_picture > image_url > thumbnail_url
+        var thumb = upsizeFb(vidThumb || hashThumb || postThumb || cr.image_url || cr.thumbnail_url || "");
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;
