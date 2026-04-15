@@ -339,25 +339,27 @@ export default async function handler(req, res) {
             var ot = (cr.object_type || "").toUpperCase();
             if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
             if (ot === "VIDEO") return "MP4";
-            // Dynamic Creative / Flexible ads keep media in asset_feed_spec
+            // Dynamic Creative / Flexible ads keep media in asset_feed_spec.
+            // NOTE: asset_feed_spec.images with length>1 is NOT a carousel — it's flexible variants
+            // where Meta picks one image per impression. Only child_attachments / MULTI_SHARE / CAROUSEL
+            // object types indicate a true carousel.
             var afs = cr.asset_feed_spec || {};
             var afsVideos = (afs.videos && afs.videos.length) || 0;
             var afsImages = (afs.images && afs.images.length) || 0;
             if (afsVideos > 0) return "MP4";
-            if (afsImages > 1) return "CAROUSEL";
-            // object_story_spec link_data / video_data
+            // object_story_spec: child_attachments is the real carousel signal
             var oss = cr.object_story_spec || {};
             if (oss.video_data) return "MP4";
             if (oss.link_data) {
               if (oss.link_data.child_attachments && oss.link_data.child_attachments.length > 1) return "CAROUSEL";
               if (oss.link_data.video_id) return "MP4";
             }
-            // For SHARE/empty object_types, Meta hides the real format — look at the post attachment shape
+            // For SHARE/empty object_types, infer from post attachment shape
             var postType = sid ? storyToType[sid] : "";
             if (postType) return postType;
             var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
             if (url.indexOf(".gif") >= 0) return "GIF";
-            if (afsImages === 1) return "STATIC";
+            if (afsImages >= 1) return "STATIC";
             if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
             return ot;
           })(),
