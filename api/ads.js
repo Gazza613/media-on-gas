@@ -121,7 +121,15 @@ export default async function handler(req, res) {
           adName: ins.ad_name,
           thumbnail: thumb,
           previewUrl: preview,
-          format: cr.video_id ? "VIDEO" : (cr.object_type || "IMAGE"),
+          format: (function(){
+            if (cr.video_id) return "MP4";
+            var ot = (cr.object_type || "").toUpperCase();
+            if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
+            var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
+            if (url.indexOf(".gif") >= 0) return "GIF";
+            if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
+            return ot;
+          })(),
           spend: parseFloat(ins.spend || 0),
           impressions: parseInt(ins.impressions || 0),
           clicks: parseInt(ins.clicks || 0),
@@ -191,7 +199,7 @@ export default async function handler(req, res) {
             adName: mt.ad_name,
             thumbnail: video.video_cover_url || video.poster_url || "",
             previewUrl: video.preview_url || ("https://ads.tiktok.com/i18n/perf/creation?aadvid=" + ttAdvId),
-            format: ad.video_id ? "VIDEO" : "IMAGE",
+            format: ad.video_id ? "MP4" : (ad.image_ids && ad.image_ids.length > 1 ? "CAROUSEL" : "STATIC"),
             spend: parseFloat(mt.spend || 0),
             impressions: parseInt(mt.impressions || 0),
             clicks: parseInt(mt.clicks || 0),
@@ -251,11 +259,11 @@ export default async function handler(req, res) {
             if (ad.imageAd) {
               thumb = ad.imageAd.previewImageUrl || ad.imageAd.imageUrl || "";
               preview = ad.imageAd.imageUrl || thumb;
-              format = "IMAGE";
+              format = (thumb.toLowerCase().indexOf(".gif") >= 0) ? "GIF" : "STATIC";
             } else if (ad.videoAd && ad.videoAd.video && ad.videoAd.video.id) {
               thumb = "https://img.youtube.com/vi/" + ad.videoAd.video.id + "/hqdefault.jpg";
               preview = "https://www.youtube.com/watch?v=" + ad.videoAd.video.id;
-              format = "VIDEO";
+              format = "MP4";
             } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
               thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
               preview = thumb;

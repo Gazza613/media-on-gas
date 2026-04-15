@@ -264,7 +264,7 @@ export default function MediaOnGas(){
   var resolve=function(id){setFlags(function(p){return p.map(function(f){return f.id===id?Object.assign({},f,{status:"resolved"}):f;});});};
   var openFlags=flags.filter(function(f){return f.status==="open";}).length;
 
-  var tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Reporting",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)}];if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
+  var tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)}];if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
 
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
   if(!session)return(<LoginScreen onLogin={handleLogin}/>);
@@ -751,7 +751,7 @@ export default function MediaOnGas(){
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:12}}>{ad.ctr.toFixed(2)+"%"}</div></div>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
                       </div>
-                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD \u2192</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
+                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
                     </div>
                   </div>;
                 };
@@ -771,7 +771,7 @@ export default function MediaOnGas(){
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
-                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none"}}>VIEW \u2192</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none"}}>VIEW</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
                   </tr>;
                 };
 
