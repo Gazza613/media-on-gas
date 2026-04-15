@@ -677,11 +677,16 @@ export default function MediaOnGas(){
               return Object.assign({},a,{spend:sp,impressions:im,clicks:cl,ctr:im>0?(cl/im*100):0,cpc:cl>0?sp/cl:0,cpm:im>0?(sp/im*1000):0});
             });
 
-            var platCol5={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava,"Google Search":P.solar,"Performance Max":P.violet,"Demand Gen":P.fuchsia};
-            var platShort2={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT","Google Search":"GS","Performance Max":"PMAX","Demand Gen":"DG"};
-            var platBench={"Facebook":benchmarks.meta,"Instagram":benchmarks.meta,"TikTok":benchmarks.tiktok,"Google Display":benchmarks.google,"YouTube":benchmarks.google,"Google Search":benchmarks.google,"Performance Max":benchmarks.google,"Demand Gen":benchmarks.google};
+            var platCol5={"Meta":P.fb,"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava,"Google Search":P.solar,"Performance Max":P.violet,"Demand Gen":P.fuchsia};
+            var platShort2={"Meta":"META","Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT","Google Search":"GS","Performance Max":"PMAX","Demand Gen":"DG"};
+            var platBench={"Meta":benchmarks.meta,"Facebook":benchmarks.meta,"Instagram":benchmarks.meta,"TikTok":benchmarks.tiktok,"Google Display":benchmarks.google,"YouTube":benchmarks.google,"Google Search":benchmarks.google,"Performance Max":benchmarks.google,"Demand Gen":benchmarks.google};
+            // Group ads by platform, combining Facebook and Instagram into a single "Meta" section so the top 10 winners span both
             var platforms5={};
-            filteredAds.forEach(function(a){if(!platforms5[a.platform])platforms5[a.platform]=[];platforms5[a.platform].push(a);});
+            filteredAds.forEach(function(a){
+              var sectionKey=(a.platform==="Facebook"||a.platform==="Instagram")?"Meta":a.platform;
+              if(!platforms5[sectionKey])platforms5[sectionKey]=[];
+              platforms5[sectionKey].push(a);
+            });
 
             // Bayesian smoothed CTR with strong prior, pulls small samples to platform mean
             var PRIOR_IMPS=5000;
@@ -740,7 +745,7 @@ export default function MediaOnGas(){
             var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS / LIKES":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
             var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
 
-            var platformOrder=["Facebook","Instagram","TikTok","Google Display","YouTube","Performance Max","Demand Gen","Google Search"];
+            var platformOrder=["Meta","TikTok","Google Display","YouTube","Performance Max","Demand Gen","Google Search"];
             // Top KPI totals come from selected campaigns (matches Summary tab)
             var grandSpend=0,grandImps=0,grandClicks=0;
             selCamps.forEach(function(c){grandSpend+=parseFloat(c.spend||0);grandImps+=parseFloat(c.impressions||0);grandClicks+=parseFloat(c.clicks||0);});
@@ -846,11 +851,13 @@ export default function MediaOnGas(){
                 var topAd=winners[0]||strong[0];
 
                 var bigCard=function(ad,gold){
+                  var adPlatC=platCol5[ad.platform]||platC;
+                  var adPlatShort=platShort2[ad.platform]||ad.platform;
                   return <div key={ad.adId} style={{background:gold?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:16,border:"1px solid "+(gold?P.mint+"50":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:gold?"0 8px 32px rgba(52,211,153,0.12)":"none"}}>
                     <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                       {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.parentElement.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:'+P.dim+';font-size:11px;font-family:'+fm+'">Preview unavailable</div>';}}/></a>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No preview available</div>}
                       {gold&&<div style={{position:"absolute",top:10,left:10,background:P.mint,color:"#062014",padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1.5,boxShadow:"0 2px 10px rgba(0,0,0,0.5)"}}>WINNER</div>}
-                      <div style={{position:"absolute",top:10,right:10,background:platC,color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:10,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{platShort2[pl]||pl}</div>
+                      <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:10,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>{adPlatShort}</div>
                       <div style={{position:"absolute",bottom:10,left:10,background:"rgba(0,0,0,0.8)",color:"#fff",padding:"3px 9px",borderRadius:4,fontSize:10,fontWeight:700,fontFamily:fm,letterSpacing:1}}>{ad.format||"AD"}</div>
                     </div>
                     <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
@@ -868,7 +875,7 @@ export default function MediaOnGas(){
                         <div><div style={{color:hasKpiResults(ad)?P.mint:P.sub,marginBottom:3,letterSpacing:1,fontSize:9,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:hasKpiResults(ad)?P.mint:P.dim,fontWeight:900,fontSize:14}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div></div>
                       </div>
                       {ad.placements&&Object.keys(ad.placements).length>0&&<div style={{marginBottom:10,display:"flex",flexWrap:"wrap",gap:4}}>{Object.keys(ad.placements).slice(0,4).map(function(pk){return <span key={pk} style={{fontSize:8,fontWeight:800,color:P.cyan,background:P.cyan+"15",border:"1px solid "+P.cyan+"30",padding:"2px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,textTransform:"uppercase"}}>{pk}</span>;})}{Object.keys(ad.placements).length>4&&<span style={{fontSize:8,color:P.sub,fontFamily:fm,padding:"2px 4px"}}>{"+"+(Object.keys(ad.placements).length-4)}</span>}</div>}
-                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"10px 12px",background:platC,border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 8px "+platC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW</div>}
+                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"10px 12px",background:adPlatC,border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 8px "+adPlatC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"10px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW</div>}
                     </div>
                   </div>;
                 };
@@ -878,6 +885,7 @@ export default function MediaOnGas(){
                   var hasRes=hasKpiResults(ad);
                   var objLabel=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS":"TRAFFIC";
                   var objCol=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;
+                  var rowPlatC=platCol5[ad.platform]||platC;
                   return <tr key={ad.adId} style={{background:idx%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
                     <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
                       {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:44,height:44,background:"#1a0f2a",borderRadius:6}}/>}
@@ -900,7 +908,7 @@ export default function MediaOnGas(){
                       <div style={{fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div>
                       <div style={{fontSize:8,color:P.sub,marginTop:1,letterSpacing:0.5}}>{costPerLabel(ad.resultType)}</div>
                     </td>
-                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:platC,color:"#fff",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:rowPlatC,color:"#fff",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
                   </tr>;
                 };
 
@@ -909,7 +917,7 @@ export default function MediaOnGas(){
                 return <div key={pl} style={{marginBottom:32,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22,flexWrap:"wrap",gap:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:14}}>
-                      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+platC+"25,"+platC+"08)",border:"1px solid "+platC+"40",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:platC,fontFamily:fm,letterSpacing:1}}>{platShort2[pl]||pl}</div>
+                      <div style={{width:44,height:44,borderRadius:12,background:pl==="Meta"?"linear-gradient(135deg,"+P.fb+"30,"+P.ig+"30)":"linear-gradient(135deg,"+platC+"25,"+platC+"08)",border:"1px solid "+(pl==="Meta"?P.fb+"40":platC+"40"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:platC,fontFamily:fm,letterSpacing:1}}>{platShort2[pl]||pl}</div>
                       <div><div style={{fontSize:19,fontWeight:900,color:platC,fontFamily:ff,letterSpacing:1}}>{pl}</div><div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>{pads.length+" ads, "+fR(pSpend)+" spent, "+fmt(pImps)+" impressions, "+pCtr.toFixed(2)+"% CTR, "+fR(pCpc)+" CPC"}</div></div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
