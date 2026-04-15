@@ -20,6 +20,27 @@ function detectObjective(campaignName) {
   return "traffic";
 }
 
+function mapMetaObjective(metaObj) {
+  if (!metaObj) return null;
+  var o = String(metaObj).toUpperCase();
+  if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
+  if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
+  if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
+  if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "traffic";
+  if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
+  return null;
+}
+
+function mapTikTokObjective(ttObj) {
+  if (!ttObj) return null;
+  var o = String(ttObj).toUpperCase();
+  if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "appinstall";
+  if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "leads";
+  if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "followers";
+  if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "traffic";
+  return null;
+}
+
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
@@ -36,6 +57,17 @@ export default async function handler(req, res) {
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
     try {
+      // Fetch real campaign objectives for this account
+      var campObjMap = {};
+      try {
+        var campUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,name&limit=300&access_token=" + metaToken;
+        var campRes = await fetch(campUrl);
+        var campData = await campRes.json();
+        if (campData.data) {
+          campData.data.forEach(function(c) { campObjMap[c.id] = c.objective || ""; });
+        }
+      } catch (cErr) { console.error("Meta campaign objective fetch error", account.name, cErr); }
+
       var timeRange = JSON.stringify({ since: from, until: to });
       var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform,platform_position&limit=500&access_token=" + metaToken;
       var insRes = await fetch(insUrl);
@@ -261,9 +293,11 @@ export default async function handler(req, res) {
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
-        var objective = detectObjective(ins.campaign_name);
+        // Use actual API objective if available, fall back to name detection
+        var apiObj = mapMetaObjective(campObjMap[ins.campaign_id]);
+        var objective = apiObj || detectObjective(ins.campaign_name);
         var resCount, resType;
-        if (objective === "leads") { resCount = leads; resType = "leads"; }
+        if (objective === "leads") { resCount = leads > 0 ? leads : ins.clicks; resType = leads > 0 ? "leads" : "clicks"; }
         else if (objective === "appinstall") { resCount = installs > 0 ? installs : ins.clicks; resType = installs > 0 ? "installs" : "store_clicks"; }
         else if (objective === "followers") { resCount = pageLikes + follows; resType = "follows"; }
         else { resCount = ins.clicks; resType = "clicks"; }
@@ -307,6 +341,18 @@ export default async function handler(req, res) {
   /* ═══ TIKTOK ═══ */
   try {
     if (ttToken && ttAdvId) {
+      // Fetch campaigns with their objective_type
+      var ttCampObjMap = {};
+      try {
+        var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "objective_type"]));
+        var ttCampUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=200&fields=" + ttCampFields;
+        var ttCampRes = await fetch(ttCampUrl, { headers: { "Access-Token": ttToken } });
+        var ttCampData = await ttCampRes.json();
+        if (ttCampData.data && ttCampData.data.list) {
+          ttCampData.data.list.forEach(function(c) { ttCampObjMap[String(c.campaign_id)] = c.objective_type || ""; });
+        }
+      } catch (ttcErr) { console.error("TikTok campaign objective fetch error", ttcErr); }
+
       var ttAdFields = encodeURIComponent(JSON.stringify(["ad_id", "ad_name", "campaign_id", "campaign_name", "adgroup_id", "adgroup_name", "video_id", "image_ids"]));
       var ttAdsUrl = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + ttAdvId + "&page_size=100&fields=" + ttAdFields;
       var ttAdsRes = await fetch(ttAdsUrl, { headers: { "Access-Token": ttToken } });
@@ -351,10 +397,12 @@ export default async function handler(req, res) {
           var ttSpend = parseFloat(mt.spend || 0);
           var ttImps = parseInt(mt.impressions || 0);
           var ttClicks = parseInt(mt.clicks || 0);
-          var ttObjective = detectObjective(mt.campaign_name);
+          var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
+          var ttObjective = ttApiObj || detectObjective(mt.campaign_name);
           var ttResCount, ttResType;
           if (ttObjective === "followers") { ttResCount = follows + likes; ttResType = "follows"; }
           else if (ttObjective === "appinstall") { ttResCount = ttClicks; ttResType = "store_clicks"; }
+          else if (ttObjective === "leads") { ttResCount = ttClicks; ttResType = "clicks"; }
           else { ttResCount = ttClicks; ttResType = "clicks"; }
           allAds.push({
             platform: "TikTok",

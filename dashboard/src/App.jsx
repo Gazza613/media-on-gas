@@ -851,21 +851,30 @@ export default function MediaOnGas(){
                 var compactRow=function(ad,idx){
                   var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
                   var hasRes=hasKpiResults(ad);
+                  var objLabel=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS":"TRAFFIC";
+                  var objCol=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;
                   return <tr key={ad.adId} style={{background:idx%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
                     <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
                       {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:44,height:44,background:"#1a0f2a",borderRadius:6}}/>}
                     </td>
-                    <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:240}}>
+                    <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:220}}>
                       <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
                       <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.campaignName}</div>
                     </td>
+                    <td style={{padding:"8px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{fontSize:9,fontWeight:800,color:objCol,background:objCol+"15",border:"1px solid "+objCol+"35",padding:"3px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5}}>{objLabel}</span></td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub}}>{ad.format||"AD"}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
-                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fmt(ad.results):"-"}</td>
-                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>
+                      <div style={{fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fmt(ad.results):"-"}</div>
+                      <div style={{fontSize:8,color:P.sub,marginTop:1,letterSpacing:0.5}}>{resultLabel(ad.resultType)}</div>
+                    </td>
+                    <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>
+                      <div style={{fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div>
+                      <div style={{fontSize:8,color:P.sub,marginTop:1,letterSpacing:0.5}}>{costPerLabel(ad.resultType)}</div>
+                    </td>
                     <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:platC,color:"#fff",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
                   </tr>;
                 };
@@ -891,25 +900,34 @@ export default function MediaOnGas(){
                     return <div style={{marginBottom:18}}>
                       <div style={{padding:"10px 14px",marginBottom:14,background:platC+"10",border:"1px solid "+platC+"25",borderRadius:8,fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6}}>{"TikTok ad previews and creative thumbnails are not publicly available via the API. All "+ttAll.length+" qualifying ads listed below, sorted by performance score (smoothed CTR + CPC + volume confidence)."}</div>
                       <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-                        <thead><tr>{["Rank","Ad","Format","Spend","Imps","CTR","CPC","Follows","CPF","Score"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                        <thead><tr>{["Rank","Ad","Objective","Format","Spend","Imps","CTR","CPC","Results","Cost/Result","Score"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
                         <tbody>{ttAll.map(function(ad,ri){
                           var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
                           var rankBadge=ri<5?"WINNER":ri<10?"STRONG":"";
                           var rankCol=ri<5?P.mint:ri<10?P.positive:P.sub;
                           var hasRes=hasKpiResults(ad);
+                          var objLabel=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS":"TRAFFIC";
+                          var objCol=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;
                           return <tr key={ad.adId} style={{background:ri%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:rankCol}}>{(ri+1)+(rankBadge?" "+rankBadge:"")}</td>
-                            <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:300}}>
+                            <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                               <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
                               <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad.campaignName}</div>
                             </td>
+                            <td style={{padding:"8px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{fontSize:9,fontWeight:800,color:objCol,background:objCol+"15",border:"1px solid "+objCol+"35",padding:"3px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5}}>{objLabel}</span></td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:10,color:P.sub}}>{ad.format||"AD"}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fR(ad.cpc)}</td>
-                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fmt(ad.results):"-"}</td>
-                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>
+                              <div style={{fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fmt(ad.results):"-"}</div>
+                              <div style={{fontSize:8,color:P.sub,marginTop:1,letterSpacing:0.5}}>{resultLabel(ad.resultType)}</div>
+                            </td>
+                            <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>
+                              <div style={{fontSize:11,fontWeight:hasRes?900:400,color:hasRes?P.mint:P.dim}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div>
+                              <div style={{fontSize:8,color:P.sub,marginTop:1,letterSpacing:0.5}}>{costPerLabel(ad.resultType)}</div>
+                            </td>
                             <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:rankCol}}>{ad._score.toFixed(2)}</td>
                           </tr>;
                         })}</tbody>
@@ -933,7 +951,7 @@ export default function MediaOnGas(){
                     {rest.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.chart(P.solar,16)}<span style={{fontSize:12,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1.5}}>{"REMAINING ADS ("+rest.length+")"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"30, transparent)"}}/></div>
                       <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
-                        <thead><tr>{["Thumb","Ad","Format","Spend","Imps","CTR","CPC","Results","Cost/Result","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
+                        <thead><tr>{["Thumb","Ad","Objective","Format","Spend","Imps","CTR","CPC","Results","Cost/Result","Preview"].map(function(h,hi){return <th key={hi} style={Object.assign({},tHead2,{textAlign:hi===1?"left":"center"})}>{h}</th>;})}</tr></thead>
                         <tbody>{rest.map(function(ad,ri){return compactRow(ad,ri);})}</tbody>
                       </table></div>
                     </div>}
