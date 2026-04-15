@@ -960,14 +960,14 @@ export default function MediaOnGas(){
                   })():<div>
                     {winners.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>TOP WINNERS</span><span style={{fontSize:9,color:P.sub,fontFamily:fm,marginLeft:4,fontStyle:"italic"}}>{"5,000+ impressions, top performers"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,200px)",gap:12,justifyContent:"center"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
                         {winners.map(function(ad){return bigCard(ad,true);})}
                       </div>
                     </div>}
 
                     {strong.length>0&&<div style={{marginBottom:24}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.bolt(P.positive,18)}<span style={{fontSize:13,fontWeight:900,color:P.positive,fontFamily:ff,letterSpacing:1.5}}>STRONG PERFORMERS</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.positive+"40, transparent)"}}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,200px)",gap:12,justifyContent:"center"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
                         {strong.map(function(ad){return bigCard(ad,false);})}
                       </div>
                     </div>}
