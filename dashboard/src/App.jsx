@@ -148,6 +148,7 @@ export default function MediaOnGas(){
   var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
   var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
   var cf3=useState("all"),crFiltPl=cf3[0],setCrFiltPl=cf3[1];
+  useEffect(function(){setCrFiltPl("all");},[crFiltP,crFiltF]);
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
 
   useEffect(function(){
@@ -651,8 +652,17 @@ export default function MediaOnGas(){
             allFilteredAds.forEach(function(a){availPlatforms[a.platform]=true;});
             var availFormats={};
             allFilteredAds.forEach(function(a){availFormats[(a.format||"OTHER").toUpperCase()]=true;});
+            // Placements: only show those actually used (spend or imps > 0) in ads matching current platform + format filters
             var availPlacements={};
-            allFilteredAds.forEach(function(a){if(a.placements){Object.keys(a.placements).forEach(function(pk){availPlacements[pk]=true;});}});
+            allFilteredAds.forEach(function(a){
+              if(crFiltP!=="all"&&a.platform!==crFiltP)return;
+              if(crFiltF!=="all"){var f=(a.format||"OTHER").toUpperCase();if(f!==crFiltF)return;}
+              if(!a.placements)return;
+              Object.keys(a.placements).forEach(function(pk){
+                var pl=a.placements[pk];
+                if(pl&&((pl.spend||0)>0||(pl.impressions||0)>0))availPlacements[pk]=true;
+              });
+            });
 
             // Filter ads, then re-derive metrics from placement data when placement filter is active
             var filteredAds=allFilteredAds.filter(function(a){
