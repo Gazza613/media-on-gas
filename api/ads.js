@@ -521,7 +521,7 @@ export default async function handler(req, res) {
           } catch (aErr) { googleDebug.assetCatch = String(aErr); }
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
-            var adAssets = adToAssets[ad.resourceName] || {};
+            var adAssets = adToAssets[r.adGroupAd.resourceName] || {};
             var sp = parseFloat(r.metrics.costMicros || 0) / 1000000;
             var imps = parseInt(r.metrics.impressions || 0);
             var clk = parseInt(r.metrics.clicks || 0);
