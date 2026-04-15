@@ -16,8 +16,8 @@ function detectObjective(campaignName) {
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
-  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "traffic";
-  return "traffic";
+  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
+  return "landingpage";
 }
 
 function mapMetaObjective(metaObj) {
@@ -26,7 +26,7 @@ function mapMetaObjective(metaObj) {
   if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
   if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
   if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
-  if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "traffic";
+  if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
   if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
   return null;
 }
@@ -37,7 +37,7 @@ function mapTikTokObjective(ttObj) {
   if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "appinstall";
   if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "leads";
   if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "followers";
-  if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "traffic";
+  if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "landingpage";
   return null;
 }
 
@@ -312,10 +312,10 @@ export default async function handler(req, res) {
         if (objective === "leads") { resCount = leads; resType = "leads"; }
         // For App Install: prefer installs, fall back to store_clicks (relabel CPC) since both are valid app KPIs
         else if (objective === "appinstall") { resCount = installs > 0 ? installs : ins.clicks; resType = installs > 0 ? "installs" : "store_clicks"; }
-        // For Followers/Likes: ALWAYS show follows count (even 0). Never fall back.
+        // For Followers: ALWAYS show follows count (even 0). Never fall back.
         else if (objective === "followers") { resCount = pageLikes + follows; resType = "follows"; }
-        // Traffic: clicks
-        else { resCount = ins.clicks; resType = "clicks"; }
+        // Landing Page: clicks to landing page
+        else { resCount = ins.clicks; resType = "lp_clicks"; }
         allAds.push({
           platform: platform,
           accountName: account.name,
@@ -418,7 +418,7 @@ export default async function handler(req, res) {
           if (ttObjective === "followers") { ttResCount = follows + likes; ttResType = "follows"; }
           else if (ttObjective === "appinstall") { ttResCount = ttClicks; ttResType = "store_clicks"; }
           else if (ttObjective === "leads") { ttResCount = ttClicks; ttResType = "clicks"; }
-          else { ttResCount = ttClicks; ttResType = "clicks"; }
+          else { ttResCount = ttClicks; ttResType = "lp_clicks"; }
           allAds.push({
             platform: "TikTok",
             accountName: "MTN MoMo TikTok",
@@ -540,7 +540,7 @@ export default async function handler(req, res) {
             if (gConv > 0) { gResCount = gConv; gResType = gObjective === "leads" ? "leads" : gObjective === "appinstall" ? "installs" : "conversions"; }
             else if (gObjective === "appinstall") { gResCount = clk; gResType = "store_clicks"; }
             else if (gObjective === "leads") { gResCount = clk; gResType = "clicks"; }
-            else { gResCount = clk; gResType = "clicks"; }
+            else { gResCount = clk; gResType = "lp_clicks"; }
             allAds.push({
               platform: gPlatform,
               accountName: "MTN MoMo Google",

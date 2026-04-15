@@ -692,7 +692,7 @@ export default function MediaOnGas(){
             var hasKpiResults=function(a){return a.results>0;};
             var isHighValueKpi=function(a){return a.results>0&&(a.resultType==="leads"||a.resultType==="installs"||a.resultType==="follows"||a.resultType==="conversions");};
             // Objective-based KPI flag (not dependent on result count). A lead gen campaign with 0 leads is still measured against its objective.
-            var isKpiCampaign=function(a){return a.objective==="leads"||a.objective==="followers"||a.objective==="appinstall";};
+            var isKpiCampaign=function(a){return a.objective==="leads"||a.objective==="followers"||a.objective==="appinstall"||a.objective==="landingpage";};
             var isObjectiveKpi=function(a){return a.results>0&&isKpiCampaign(a);};
             var scoreAd=function(a,platAvgCtr){
               var bm=platBench[a.platform]||benchmarks.meta;
@@ -701,11 +701,10 @@ export default function MediaOnGas(){
               var cpcS=bm.cpc&&a.cpc>0?(a.cpc<=bm.cpc.low?4:a.cpc<=bm.cpc.mid?3:a.cpc<=bm.cpc.high?2:1):2;
               var vS=volScore(a.impressions);
               // KPI campaigns: score is dominated by objective achievement.
-              // Lead Gen / Followers with 0 results = failed at objective, score very low.
+              // Lead Gen / Followers / App Install / Landing Page with 0 results = failed at objective.
               if(isKpiCampaign(a)){
                 var efficS,volS,resultS;
                 if(a.results===0){
-                  // Failed to deliver any KPI results - bottom tier for the result component.
                   resultS=0.5;
                 }else{
                   var costPer=a.spend/a.results;
@@ -715,21 +714,22 @@ export default function MediaOnGas(){
                   }else if(a.objective==="followers"){
                     efficS=bm.cpf?(costPer<=bm.cpf.low?4:costPer<=bm.cpf.mid?3:costPer<=bm.cpf.high?2:1):2;
                     volS=a.results>=1000?4:a.results>=500?3.5:a.results>=200?3:a.results>=50?2.5:a.results>=10?1.5:1;
-                  }else{
+                  }else if(a.objective==="appinstall"){
                     efficS=bm.cpc?(costPer<=bm.cpc.low?4:costPer<=bm.cpc.mid?3:costPer<=bm.cpc.high?2:1):2;
                     volS=a.results>=500?4:a.results>=200?3.5:a.results>=100?3:a.results>=50?2.5:a.results>=20?1.5:1;
+                  }else{
+                    // landingpage: clicks to landing page as KPI
+                    efficS=bm.cpc?(costPer<=bm.cpc.low?4:costPer<=bm.cpc.mid?3:costPer<=bm.cpc.high?2:1):2;
+                    volS=a.results>=2000?4:a.results>=1000?3.5:a.results>=500?3:a.results>=200?2.5:a.results>=50?1.5:1;
                   }
-                  // Result component: 60 percent KPI volume, 40 percent KPI efficiency
                   resultS=volS*0.60+efficS*0.40;
                 }
-                // Total: 70 percent KPI result + 12 percent CTR + 8 percent CPC + 10 percent impression volume confidence
                 return resultS*0.70+ctrS*0.12+cpcS*0.08+volScore(a.impressions)*0.10;
               }
-              // Traffic / click-only campaigns: pure engagement scoring
               return ctrS*0.40+cpcS*0.30+vS*0.30;
             };
-            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS / LIKES":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
-            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
+            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
+            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
 
             var platformOrder=["Meta","TikTok","Google Display","YouTube","Performance Max","Demand Gen","Google Search"];
             // Top KPI totals come from selected campaigns (matches Summary tab)
@@ -787,9 +787,9 @@ export default function MediaOnGas(){
                   <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>OBJECTIVE:</span>
                   {FilterBtn(crFiltObj==="all","All",function(){setCrFiltObj("all");},P.ember)}
                   {(function(){
-                    var objOrder=["leads","appinstall","followers","traffic"];
-                    var objLabels={leads:"Lead Gen",appinstall:"App Install",followers:"Followers / Likes",traffic:"Traffic"};
-                    var objColors={leads:P.rose,appinstall:P.fb,followers:P.tt,traffic:P.cyan};
+                    var objOrder=["leads","appinstall","followers","landingpage"];
+                    var objLabels={leads:"Lead Gen",appinstall:"App Install",followers:"Followers",landingpage:"Landing Page"};
+                    var objColors={leads:P.rose,appinstall:P.fb,followers:P.tt,landingpage:P.cyan};
                     return objOrder.filter(function(o){return availObjectives[o];}).map(function(o){
                       return <span key={o}>{FilterBtn(crFiltObj===o,objLabels[o],function(){setCrFiltObj(o);},objColors[o])}</span>;
                     });
@@ -855,7 +855,7 @@ export default function MediaOnGas(){
                     </div>
                     <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
                       <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
-                      {ad.objective&&<div style={{marginBottom:8}}>{(function(){var oc=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;var ol=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS / LIKES":"TRAFFIC";return <span style={{fontSize:9,fontWeight:900,color:oc,background:oc+"15",border:"1px solid "+oc+"35",padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1.2,textTransform:"uppercase"}}>{ol}</span>;})()}</div>}
+                      {ad.objective&&<div style={{marginBottom:8}}>{(function(){var oc=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;var ol=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS":"LANDING PAGE";return <span style={{fontSize:9,fontWeight:900,color:oc,background:oc+"15",border:"1px solid "+oc+"35",padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1.2,textTransform:"uppercase"}}>{ol}</span>;})()}</div>}
                       <div style={{fontSize:12,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:12,lineHeight:1.4,minHeight:34,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:10}}>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.spend)}</div></div>
@@ -875,7 +875,7 @@ export default function MediaOnGas(){
                 var compactRow=function(ad,idx){
                   var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
                   var hasRes=hasKpiResults(ad);
-                  var objLabel=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS":"TRAFFIC";
+                  var objLabel=ad.objective==="leads"?"LEAD GEN":ad.objective==="appinstall"?"APP INSTALL":ad.objective==="followers"?"FOLLOWERS":"LANDING PAGE";
                   var objCol=ad.objective==="leads"?P.rose:ad.objective==="appinstall"?P.fb:ad.objective==="followers"?P.tt:P.cyan;
                   var rowPlatC=platCol5[ad.platform]||platC;
                   return <tr key={ad.adId} style={{background:idx%2===0?"rgba(0,0,0,0.15)":"transparent"}}>
