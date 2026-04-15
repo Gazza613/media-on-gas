@@ -466,7 +466,7 @@ export default async function handler(req, res) {
       });
       var gTokenData = await gTokenRes.json();
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.impressions > 0";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.preview_image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.impressions > 0";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -477,7 +477,11 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({ query: gQuery })
         });
-        if (gRes.status === 200) {
+        if (gRes.status !== 200) {
+          var gErrText = "";
+          try { gErrText = await gRes.text(); } catch (e) { gErrText = "could not read body"; }
+          console.error("Google Ads API error", gRes.status, gErrText.substring(0, 500));
+        } else {
           var gData = await gRes.json();
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
@@ -497,25 +501,10 @@ export default async function handler(req, res) {
               thumb = "https://img.youtube.com/vi/" + ad.videoAd.video.id + "/hqdefault.jpg";
               preview = "https://www.youtube.com/watch?v=" + ad.videoAd.video.id;
               format = "MP4";
-            } else if (ad.responsiveDisplayAd) {
-              var rda = ad.responsiveDisplayAd;
-              if (rda.marketingImages && rda.marketingImages.length > 0) {
-                thumb = rda.marketingImages[0].url || "";
-              } else if (rda.squareMarketingImages && rda.squareMarketingImages.length > 0) {
-                thumb = rda.squareMarketingImages[0].url || "";
-              }
+            } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
+              thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
               preview = thumb;
               format = "RESPONSIVE";
-            } else if (ad.appAd) {
-              if (ad.appAd.youtubeVideos && ad.appAd.youtubeVideos.length > 0) {
-                thumb = "https://img.youtube.com/vi/" + ad.appAd.youtubeVideos[0].id + "/hqdefault.jpg";
-                preview = "https://www.youtube.com/watch?v=" + ad.appAd.youtubeVideos[0].id;
-                format = "MP4";
-              } else if (ad.appAd.images && ad.appAd.images.length > 0) {
-                thumb = ad.appAd.images[0].url || "";
-                preview = thumb;
-                format = "STATIC";
-              }
             }
             // Allow text-only Search ads through so spend totals reconcile. Format flagged TEXT, no thumbnail rendered.
             if (!thumb && (adType === "EXPANDED_TEXT_AD" || adType === "RESPONSIVE_SEARCH_AD" || adType === "TEXT_AD")) {
