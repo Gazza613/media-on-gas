@@ -450,6 +450,7 @@ export default async function handler(req, res) {
   }
 
   /* ═══ GOOGLE DISPLAY / YOUTUBE ═══ */
+  var googleDebug = { attempted: false, tokenOk: false, queryStatus: null, errorBody: "", resultCount: 0, hadError: null };
   try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
@@ -457,14 +458,17 @@ export default async function handler(req, res) {
     var gDevToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     var gManagerId = process.env.GOOGLE_ADS_MANAGER_ID;
     var gCustomerId = "9587382256";
+    googleDebug.envPresent = !!(gClientId && gRefreshToken && gDevToken && gDevToken && gManagerId);
 
     if (gClientId && gRefreshToken && gDevToken) {
+      googleDebug.attempted = true;
       var gTokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "client_id=" + gClientId + "&client_secret=" + gClientSecret + "&refresh_token=" + gRefreshToken + "&grant_type=refresh_token"
       });
       var gTokenData = await gTokenRes.json();
+      googleDebug.tokenOk = !!gTokenData.access_token;
       if (gTokenData.access_token) {
         var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.video_ad.video.id, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
@@ -477,12 +481,15 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({ query: gQuery })
         });
+        googleDebug.queryStatus = gRes.status;
         if (gRes.status !== 200) {
           var gErrText = "";
           try { gErrText = await gRes.text(); } catch (e) { gErrText = "could not read body"; }
+          googleDebug.errorBody = gErrText.substring(0, 800);
           console.error("Google Ads API error", gRes.status, gErrText.substring(0, 500));
         } else {
           var gData = await gRes.json();
+          googleDebug.resultCount = (gData.results || []).length;
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
             var sp = parseFloat(r.metrics.costMicros || 0) / 1000000;
@@ -558,8 +565,9 @@ export default async function handler(req, res) {
       }
     }
   } catch (gErr) {
+    googleDebug.hadError = String(gErr && gErr.message ? gErr.message : gErr);
     console.error("Google ads error", gErr);
   }
 
-  res.status(200).json({ ads: allAds, total: allAds.length });
+  res.status(200).json({ ads: allAds, total: allAds.length, _googleDebug: googleDebug });
 }
