@@ -147,6 +147,7 @@ export default function MediaOnGas(){
   var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
   var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
   var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
+  var cf3=useState("all"),crFiltPl=cf3[0],setCrFiltPl=cf3[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
 
   useEffect(function(){
@@ -650,11 +651,20 @@ export default function MediaOnGas(){
             allFilteredAds.forEach(function(a){availPlatforms[a.platform]=true;});
             var availFormats={};
             allFilteredAds.forEach(function(a){availFormats[(a.format||"OTHER").toUpperCase()]=true;});
+            var availPlacements={};
+            allFilteredAds.forEach(function(a){if(a.placements){Object.keys(a.placements).forEach(function(pk){availPlacements[pk]=true;});}});
 
+            // Filter ads, then re-derive metrics from placement data when placement filter is active
             var filteredAds=allFilteredAds.filter(function(a){
               if(crFiltP!=="all"&&a.platform!==crFiltP)return false;
               if(crFiltF!=="all"){var f=(a.format||"OTHER").toUpperCase();if(f!==crFiltF)return false;}
+              if(crFiltPl!=="all"){if(!a.placements||!a.placements[crFiltPl])return false;}
               return true;
+            }).map(function(a){
+              if(crFiltPl==="all"||!a.placements||!a.placements[crFiltPl])return a;
+              var pl=a.placements[crFiltPl];
+              var sp=pl.spend||0;var im=pl.impressions||0;var cl=pl.clicks||0;
+              return Object.assign({},a,{spend:sp,impressions:im,clicks:cl,ctr:im>0?(cl/im*100):0,cpc:cl>0?sp/cl:0,cpm:im>0?(sp/im*1000):0});
             });
 
             var platCol5={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
@@ -709,6 +719,12 @@ export default function MediaOnGas(){
                   {FilterBtn(crFiltF==="all","All",function(){setCrFiltF("all");},P.orchid)}
                   {Object.keys(availFormats).sort().map(function(fmt2){return <span key={fmt2}>{FilterBtn(crFiltF===fmt2,fmt2,function(){setCrFiltF(fmt2);},P.orchid)}</span>;})}
                 </div>
+                <div style={{width:1,height:24,background:P.rule}}/>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>PLACEMENT:</span>
+                  {FilterBtn(crFiltPl==="all","All",function(){setCrFiltPl("all");},P.cyan)}
+                  {Object.keys(availPlacements).sort().map(function(pk){return <span key={pk}>{FilterBtn(crFiltPl===pk,pk,function(){setCrFiltPl(pk);},P.cyan)}</span>;})}
+                </div>
               </div>
 
               {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12}}>No ads match the current filters. Adjust filters above.</div>:platformOrder.filter(function(p){return platforms5[p]&&platforms5[p].length>0;}).map(function(pl){
@@ -745,12 +761,13 @@ export default function MediaOnGas(){
                     <div style={{padding:"14px 16px",flex:1,display:"flex",flexDirection:"column"}}>
                       <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
                       <div style={{fontSize:12,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:12,lineHeight:1.4,minHeight:34,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:12}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:10,fontFamily:fm,marginBottom:10}}>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.spend)}</div></div>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fmt(ad.impressions)}</div></div>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:12}}>{ad.ctr.toFixed(2)+"%"}</div></div>
                         <div><div style={{color:P.sub,marginBottom:3,letterSpacing:1,fontSize:9}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:12}}>{fR(ad.cpc)}</div></div>
                       </div>
+                      {ad.placements&&Object.keys(ad.placements).length>0&&<div style={{marginBottom:10,display:"flex",flexWrap:"wrap",gap:4}}>{Object.keys(ad.placements).slice(0,4).map(function(pk){return <span key={pk} style={{fontSize:8,fontWeight:800,color:P.cyan,background:P.cyan+"15",border:"1px solid "+P.cyan+"30",padding:"2px 7px",borderRadius:4,fontFamily:fm,letterSpacing:0.5,textTransform:"uppercase"}}>{pk}</span>;})}{Object.keys(ad.placements).length>4&&<span style={{fontSize:8,color:P.sub,fontFamily:fm,padding:"2px 4px"}}>{"+"+(Object.keys(ad.placements).length-4)}</span>}</div>}
                       {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 12px",background:platC+"18",border:"1px solid "+platC+"40",borderRadius:8,color:platC,fontSize:10,fontWeight:800,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"9px 12px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:8,color:P.dim,fontSize:10,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO PREVIEW LINK</div>}
                     </div>
                   </div>;

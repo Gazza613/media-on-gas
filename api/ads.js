@@ -28,18 +28,68 @@ export default async function handler(req, res) {
     var account = metaAccounts[i];
     try {
       var timeRange = JSON.stringify({ since: from, until: to });
-      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform,platform_position&limit=500&access_token=" + metaToken;
       var insRes = await fetch(insUrl);
       var insData = await insRes.json();
-      var insights = [];
+      // Aggregate placement-level rows back to one record per ad+publisher
+      var insMap = {};
+      var normalizePlace = function(pos) {
+        var p = (pos || "").toLowerCase();
+        if (!p) return "Other";
+        if (p === "feed" || p === "facebook_feed" || p === "instagram_feed") return "Feed";
+        if (p.indexOf("reels") >= 0) return "Reels";
+        if (p.indexOf("stories") >= 0 || p.indexOf("story") >= 0) return "Stories";
+        if (p.indexOf("explore") >= 0 || p === "instagram_search" || p === "search") return "Explore/Search";
+        if (p === "marketplace") return "Marketplace";
+        if (p.indexOf("messenger") >= 0) return "Messenger";
+        if (p === "instream_video" || p === "video_feeds" || p.indexOf("video") >= 0) return "In-Stream Video";
+        if (p === "right_hand_column") return "Right Column";
+        if (p.indexOf("shop") >= 0) return "Shop";
+        if (p === "biz_disco_feed") return "Business Feed";
+        return p.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+      };
       if (insData.data) {
         insData.data.forEach(function(ins) {
           var pub = ins.publisher_platform || "facebook";
           if (pub !== "facebook" && pub !== "instagram") return;
-          if (!(parseFloat(ins.impressions || 0) > 0 || parseFloat(ins.spend || 0) > 0)) return;
-          insights.push(Object.assign({}, ins, { _pub: pub }));
+          var spend = parseFloat(ins.spend || 0);
+          var imps = parseInt(ins.impressions || 0);
+          if (!(imps > 0 || spend > 0)) return;
+          var place = normalizePlace(ins.platform_position);
+          var key = ins.ad_id + "_" + pub;
+          if (!insMap[key]) {
+            insMap[key] = {
+              ad_id: ins.ad_id,
+              ad_name: ins.ad_name,
+              campaign_id: ins.campaign_id,
+              campaign_name: ins.campaign_name,
+              adset_id: ins.adset_id,
+              adset_name: ins.adset_name,
+              _pub: pub,
+              spend: 0, impressions: 0, clicks: 0, reach: 0,
+              actionsAgg: {},
+              placements: {}
+            };
+          }
+          var cur = insMap[key];
+          var clk = parseInt(ins.clicks || 0);
+          cur.spend += spend;
+          cur.impressions += imps;
+          cur.clicks += clk;
+          cur.reach += parseInt(ins.reach || 0);
+          if (ins.actions) {
+            ins.actions.forEach(function(a) {
+              if (!cur.actionsAgg[a.action_type]) cur.actionsAgg[a.action_type] = 0;
+              cur.actionsAgg[a.action_type] += parseInt(a.value || 0);
+            });
+          }
+          if (!cur.placements[place]) cur.placements[place] = { spend: 0, impressions: 0, clicks: 0 };
+          cur.placements[place].spend += spend;
+          cur.placements[place].impressions += imps;
+          cur.placements[place].clicks += clk;
         });
       }
+      var insights = Object.keys(insMap).map(function(k) { return insMap[k]; });
 
       // Unique ad IDs to fetch creative for
       var uniqAdIds = [];
@@ -101,16 +151,18 @@ export default async function handler(req, res) {
           preview = "https://www.facebook.com/" + cr.effective_object_story_id;
         }
         var leads = 0, installs = 0;
-        if (ins.actions) {
-          ins.actions.forEach(function(a) {
-            if (a.action_type === "lead" || a.action_type === "onsite_web_lead" || a.action_type === "offsite_conversion.fb_pixel_lead" || a.action_type === "onsite_conversion.lead_grouped") {
-              leads = Math.max(leads, parseInt(a.value || 0));
-            }
-            if (a.action_type === "app_install" || a.action_type === "app_custom_event.fb_mobile_activate_app") {
-              installs += parseInt(a.value || 0);
-            }
-          });
-        }
+        Object.keys(ins.actionsAgg || {}).forEach(function(at) {
+          var v = ins.actionsAgg[at];
+          if (at === "lead" || at === "onsite_web_lead" || at === "offsite_conversion.fb_pixel_lead" || at === "onsite_conversion.lead_grouped") {
+            leads = Math.max(leads, v);
+          }
+          if (at === "app_install" || at === "app_custom_event.fb_mobile_activate_app") {
+            installs += v;
+          }
+        });
+        var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
+        var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
+        var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
         allAds.push({
           platform: platform,
           accountName: account.name,
@@ -130,15 +182,16 @@ export default async function handler(req, res) {
             if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
             return ot;
           })(),
-          spend: parseFloat(ins.spend || 0),
-          impressions: parseInt(ins.impressions || 0),
-          clicks: parseInt(ins.clicks || 0),
-          reach: parseInt(ins.reach || 0),
-          ctr: parseFloat(ins.ctr || 0),
-          cpc: parseFloat(ins.cpc || 0),
-          cpm: parseFloat(ins.cpm || 0),
+          spend: ins.spend,
+          impressions: ins.impressions,
+          clicks: ins.clicks,
+          reach: ins.reach,
+          ctr: ctr,
+          cpc: cpc,
+          cpm: cpm,
           results: leads + installs,
-          resultType: leads > 0 ? "leads" : (installs > 0 ? "installs" : "clicks")
+          resultType: leads > 0 ? "leads" : (installs > 0 ? "installs" : "clicks"),
+          placements: ins.placements
         });
       });
     } catch (err) {
@@ -189,6 +242,9 @@ export default async function handler(req, res) {
           if (!(parseFloat(mt.impressions || 0) > 0 || parseFloat(mt.spend || 0) > 0)) return;
           var video = ad.video_id ? (videoInfoByVid[ad.video_id] || {}) : {};
           var follows = parseInt(mt.follows || 0);
+          var ttSpend = parseFloat(mt.spend || 0);
+          var ttImps = parseInt(mt.impressions || 0);
+          var ttClicks = parseInt(mt.clicks || 0);
           allAds.push({
             platform: "TikTok",
             accountName: "MTN MoMo TikTok",
@@ -200,15 +256,16 @@ export default async function handler(req, res) {
             thumbnail: video.video_cover_url || video.poster_url || "",
             previewUrl: video.preview_url || ("https://ads.tiktok.com/i18n/perf/creation?aadvid=" + ttAdvId),
             format: ad.video_id ? "MP4" : (ad.image_ids && ad.image_ids.length > 1 ? "CAROUSEL" : "STATIC"),
-            spend: parseFloat(mt.spend || 0),
-            impressions: parseInt(mt.impressions || 0),
-            clicks: parseInt(mt.clicks || 0),
+            spend: ttSpend,
+            impressions: ttImps,
+            clicks: ttClicks,
             reach: parseInt(mt.reach || 0),
             ctr: parseFloat(mt.ctr || 0),
             cpc: parseFloat(mt.cpc || 0),
             cpm: parseFloat(mt.cpm || 0),
             results: follows,
-            resultType: follows > 0 ? "follows" : "clicks"
+            resultType: follows > 0 ? "follows" : "clicks",
+            placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });
         });
       }
@@ -270,6 +327,7 @@ export default async function handler(req, res) {
               format = "RESPONSIVE";
             }
             var gPlatform = (r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0 ? "YouTube" : "Google Display";
+            var gPlace = gPlatform === "YouTube" ? "YouTube" : "Display";
             allAds.push({
               platform: gPlatform,
               accountName: "MTN MoMo Google",
@@ -289,7 +347,8 @@ export default async function handler(req, res) {
               cpc: clk > 0 ? sp / clk : 0,
               cpm: imps > 0 ? (sp / imps * 1000) : 0,
               results: Math.round(parseFloat(r.metrics.conversions || 0)),
-              resultType: "conversions"
+              resultType: "conversions",
+              placements: (function(){ var p={}; p[gPlace]={spend:sp,impressions:imps,clicks:clk}; return p; })()
             });
           });
         }
