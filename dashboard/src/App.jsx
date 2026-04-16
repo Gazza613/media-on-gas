@@ -749,6 +749,7 @@ export default function MediaOnGas(){
                   {!isTop&&<div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>}
                   <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
                   <div style={{position:"absolute",bottom:10,left:10,background:fmtMeta(ad.format).color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.5)",zIndex:3}}>{fmtMeta(ad.format).label}</div>
+                  {ad._scale&&<div style={{position:"absolute",bottom:10,right:10,background:P.mint,color:"#062014",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(52,211,153,0.45)",zIndex:3,textTransform:"uppercase",display:"flex",alignItems:"center",gap:4}}>{"\u25B2 SCALE"}</div>}
                 </div>
                 <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
                   <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
@@ -842,6 +843,20 @@ export default function MediaOnGas(){
                 var top10=sorted.slice(0,10);
                 var rest=sorted.slice(10);
                 var totals=totalsForSec(arr);
+                // Flag up to 5 creatives to scale: meaningful volume, CPR at or below blended
+                (function(){
+                  var capCpr=totals.cpr>0?totals.cpr*1.05:Infinity;
+                  var minResults=sec.key==="landingpage"?20:3;
+                  var minSpend=100;
+                  var scalable=sorted.filter(function(a){
+                    if(a.results<minResults)return false;
+                    if(a.spend<minSpend)return false;
+                    var cpr=a.results>0?a.spend/a.results:Infinity;
+                    return cpr<=capCpr;
+                  }).slice(0,5);
+                  sorted.forEach(function(a){a._scale=false;});
+                  scalable.forEach(function(a){a._scale=true;});
+                })();
                 var bm=sec.bench;
                 var verdict="";
                 if(totals.cpr>0&&bm){
@@ -931,7 +946,174 @@ export default function MediaOnGas(){
                 var matched=Object.keys(byObj);
                 var unmatched=filteredAds.filter(function(a){return matched.indexOf(a.objective||"landingpage")<0;});
                 if(unmatched.length===0)return null;
-                return <div style={{padding:14,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:11}}>{unmatched.length+" ads not matched to a known objective category."}</div>;
+                return <div style={{padding:14,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:11,marginBottom:20}}>{unmatched.length+" ads not matched to a known objective category."}</div>;
+              })()}
+
+              {(function(){
+                // Executive Summary: platform winners, objective winners, scale recommendations
+                if(filteredAds.length===0)return null;
+
+                // Best performer per platform group (by results, tiebreak lowest CPR)
+                var byPlat={};
+                filteredAds.forEach(function(a){var pg=platformGroup(a.platform);if(!byPlat[pg])byPlat[pg]=[];byPlat[pg].push(a);});
+                var platWinners=Object.keys(byPlat).map(function(pg){
+                  var winner=byPlat[pg].slice().sort(function(a,b){
+                    if(b.results!==a.results)return b.results-a.results;
+                    var ac=a.results>0?a.spend/a.results:Infinity;
+                    var bc=b.results>0?b.spend/b.results:Infinity;
+                    if(ac!==bc)return ac-bc;
+                    return b.impressions-a.impressions;
+                  })[0];
+                  var pSpend=0,pImps=0,pClicks=0,pResults=0;
+                  byPlat[pg].forEach(function(a){pSpend+=a.spend;pImps+=a.impressions;pClicks+=a.clicks;pResults+=a.results;});
+                  return {pg:pg,winner:winner,count:byPlat[pg].length,spend:pSpend,imps:pImps,clicks:pClicks,results:pResults,ctr:pImps>0?(pClicks/pImps*100):0};
+                }).sort(function(a,b){return b.spend-a.spend;});
+
+                // Collect all scale-flagged ads across sections
+                var scaleAll=[];
+                filteredAds.forEach(function(a){if(a._scale)scaleAll.push(a);});
+                scaleAll.sort(function(a,b){
+                  var ac=a.results>0?a.spend/a.results:Infinity;
+                  var bc=b.results>0?b.spend/b.results:Infinity;
+                  if(ac!==bc)return ac-bc;
+                  return b.results-a.results;
+                });
+
+                // Objective winners (already computed in sections; re-derive for summary)
+                var objWinners=objSections.map(function(sec){
+                  var arr=byObj[sec.key]||[];
+                  if(arr.length===0)return null;
+                  var w=arr.slice().sort(function(a,b){
+                    if(b.results!==a.results)return b.results-a.results;
+                    var ac=a.results>0?a.spend/a.results:Infinity;
+                    var bc=b.results>0?b.spend/b.results:Infinity;
+                    return ac-bc;
+                  })[0];
+                  var t=totalsForSec(arr);
+                  return {sec:sec,winner:w,totals:t,count:arr.length};
+                }).filter(function(x){return x!==null;});
+
+                var miniCard=function(ad,accent,metricLabel,metricVal,costLabel2,costVal){
+                  var pc=platCol5[ad.platform]||P.ember;
+                  var ps=platShort2[ad.platform]||ad.platform;
+                  var fm2=fmtMeta(ad.format);
+                  return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
+                    <div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
+                      {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
+                      <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:"#fff",fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
+                      <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm}}>
+                        <span style={{color:pc,fontWeight:700}}>{ps}</span>
+                        <span style={{color:accent,fontWeight:800}}>{metricVal+" "+metricLabel}</span>
+                        {costVal&&<span style={{color:accent,fontWeight:800}}>{costVal+" "+costLabel2}</span>}
+                        <span style={{color:P.sub}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
+                      </div>
+                    </div>
+                  </div>;
+                };
+
+                return <div style={{marginTop:40,background:"linear-gradient(135deg,rgba(52,211,153,0.09),rgba(251,191,36,0.05),rgba(0,0,0,0.4))",borderRadius:20,padding:"30px 32px 32px",border:"1px solid "+P.mint+"35"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:6}}>
+                    {Ic.crown(P.mint,24)}
+                    <div>
+                      <div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>CREATIVE EXECUTIVE SUMMARY</div>
+                      <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>Winners by platform, objective breakdown, and creatives recommended to scale</div>
+                    </div>
+                  </div>
+
+                  {/* PLATFORM WINNERS */}
+                  <div style={{marginTop:26}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                      {Ic.chart(P.cyan,16)}
+                      <span style={{fontSize:12,fontWeight:900,color:P.cyan,fontFamily:ff,letterSpacing:1.5}}>BEST PERFORMER PER PLATFORM</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"30, transparent)"}}/>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:platWinners.length>=3?"repeat(2,1fr)":"1fr",gap:12}}>
+                      {platWinners.map(function(p){
+                        var pc=platCol5[p.pg]||P.ember;
+                        if(!p.winner)return null;
+                        var resT=p.winner.resultType;
+                        return <div key={p.pg} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+pc+"30"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                            <span style={{fontSize:12,fontWeight:900,color:pc,fontFamily:ff,letterSpacing:1}}>{p.pg.toUpperCase()}</span>
+                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{p.count+" ads \u00b7 "+fR(p.spend)+" \u00b7 "+p.ctr.toFixed(2)+"% CTR"}</span>
+                          </div>
+                          {miniCard(p.winner,pc,resultLabel(resT),p.winner.results>0?fmt(p.winner.results):"0",costPerLabel(resT),p.winner.results>0?fR(p.winner.spend/p.winner.results):null)}
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+
+                  {/* OBJECTIVE WINNERS */}
+                  <div style={{marginTop:28}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                      {Ic.target(P.orchid,16)}
+                      <span style={{fontSize:12,fontWeight:900,color:P.orchid,fontFamily:ff,letterSpacing:1.5}}>BEST PERFORMER PER OBJECTIVE</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.orchid+"30, transparent)"}}/>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:objWinners.length>=3?"repeat(2,1fr)":"1fr",gap:12}}>
+                      {objWinners.map(function(o){
+                        var resT=o.winner.resultType;
+                        return <div key={o.sec.key} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+o.sec.accent+"30"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                            <span style={{fontSize:12,fontWeight:900,color:o.sec.accent,fontFamily:ff,letterSpacing:1}}>{o.sec.label}</span>
+                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{o.count+" ads \u00b7 "+fR(o.totals.spend)+(o.totals.cpr>0?" \u00b7 "+fR(o.totals.cpr)+" "+o.sec.costLabel:"")}</span>
+                          </div>
+                          {miniCard(o.winner,o.sec.accent,resultLabel(resT),o.winner.results>0?fmt(o.winner.results):"0",costPerLabel(resT),o.winner.results>0?fR(o.winner.spend/o.winner.results):null)}
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+
+                  {/* SCALE RECOMMENDATIONS */}
+                  <div style={{marginTop:28}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                      {Ic.bolt(P.mint,16)}
+                      <span style={{fontSize:12,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>{"\u25B2 RECOMMENDED TO SCALE ("+scaleAll.length+")"}</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"30, transparent)"}}/>
+                      <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>volume + efficiency at or below blended cost</span>
+                    </div>
+                    {scaleAll.length===0?<div style={{padding:18,textAlign:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No creatives yet meet the scale threshold (min results + CPR at or below blended). Let more data accumulate or test new variants.</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+                      {scaleAll.slice(0,10).map(function(ad,ai){
+                        var sec=objSections.filter(function(s){return s.key===(ad.objective||"landingpage");})[0]||{accent:P.mint,label:""};
+                        var resT=ad.resultType;
+                        return <div key={ad.adId+"_scale_"+ai} style={{display:"flex",gap:12,background:"rgba(52,211,153,0.05)",borderRadius:10,padding:10,border:"1px solid "+P.mint+"40",alignItems:"center"}}>
+                          <div style={{width:24,textAlign:"center",fontSize:13,fontWeight:900,color:P.mint,fontFamily:fm}}>{"#"+(ai+1)}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            {miniCard(ad,sec.accent,resultLabel(resT),ad.results>0?fmt(ad.results):"0",costPerLabel(resT),ad.results>0?fR(ad.spend/ad.results):null)}
+                          </div>
+                        </div>;
+                      })}
+                    </div>}
+                  </div>
+
+                  {/* COMMENTARY */}
+                  <div style={{marginTop:28,padding:"18px 20px",background:"rgba(0,0,0,0.3)",borderRadius:12,border:"1px solid "+P.rule}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      {Ic.eye(P.ember,14)}
+                      <span style={{fontSize:11,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1.5}}>HEADLINE READ</span>
+                    </div>
+                    {(function(){
+                      var lines=[];
+                      var leadPlat=platWinners[0];
+                      if(leadPlat){
+                        lines.push(leadPlat.pg+" is the largest-spend platform at "+fR(leadPlat.spend)+" ("+fmt(leadPlat.imps)+" impressions, "+leadPlat.ctr.toFixed(2)+"% CTR). Top creative: \""+((leadPlat.winner&&leadPlat.winner.adName)||"Unnamed").substring(0,70)+"\".");
+                      }
+                      var topObj=objWinners.slice().sort(function(a,b){return b.totals.results-a.totals.results;})[0];
+                      if(topObj&&topObj.totals.results>0){
+                        lines.push(topObj.sec.label+" is delivering the most volume: "+fmt(topObj.totals.results)+" "+resultLabel(topObj.winner.resultType).toLowerCase()+" from "+fR(topObj.totals.spend)+" at a blended "+topObj.sec.costLabel+" of "+fR(topObj.totals.cpr)+".");
+                      }
+                      if(scaleAll.length>0){
+                        lines.push(scaleAll.length+" creatives qualify for scaling. Recommended action: lift budgets 15-25% on the ad sets feeding these, and pause the bottom quartile in each objective to reallocate.");
+                      }else{
+                        lines.push("No creatives currently clear the scale threshold. Let data accumulate on the current top-ranked ads and test fresh variants against the top performer in each objective.");
+                      }
+                      return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:6,display:"flex",gap:8}}><span style={{color:P.mint,fontWeight:900}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
+                    })()}
+                  </div>
+                </div>;
               })()}
             </div>;
           })()}
