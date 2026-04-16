@@ -1003,20 +1003,23 @@ export default function MediaOnGas(){
                   var pc=platCol5[ad.platform]||P.ember;
                   var ps=platShort2[ad.platform]||ad.platform;
                   var fm2=fmtMeta(ad.format);
+                  var href=ad.previewUrl||ad.thumbnail||"";
+                  var thumbBlock=<div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
+                    {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
+                    <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:"#fff",fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
+                  </div>;
                   return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
-                    <div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
-                      {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
-                      <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:"#fff",fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
-                    </div>
+                    {href?<a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",flexShrink:0}}>{thumbBlock}</a>:thumbBlock}
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
-                      <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm}}>
+                      <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
                         <span style={{color:pc,fontWeight:700}}>{ps}</span>
                         <span style={{color:accent,fontWeight:800}}>{metricVal+" "+metricLabel}</span>
                         {costVal&&<span style={{color:accent,fontWeight:800}}>{costVal+" "+costLabel2}</span>}
                         <span style={{color:P.sub}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
                     </div>
+                    {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,textDecoration:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap"}}>VIEW AD</a>:<span style={{flexShrink:0,color:P.dim,fontSize:8,fontFamily:fm,letterSpacing:1,padding:"5px 10px",border:"1px solid "+P.rule,borderRadius:5,whiteSpace:"nowrap"}}>NO LINK</span>}
                   </div>;
                 };
 
