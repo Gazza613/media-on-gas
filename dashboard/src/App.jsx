@@ -745,11 +745,11 @@ export default function MediaOnGas(){
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
                   {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
-                  {isTop&&<div style={{position:"absolute",top:10,left:10,background:P.mint,color:"#062014",padding:"5px 12px",borderRadius:6,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(0,0,0,0.5)",textTransform:"uppercase",zIndex:3}}>{"\u2605 Top Performer"}</div>}
-                  {!isTop&&<div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>}
+                  <div style={{position:"absolute",top:10,left:10,background:isTop?P.mint:"rgba(255,255,255,0.18)",color:isTop?"#062014":P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                   <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
                   <div style={{position:"absolute",bottom:10,left:10,background:fmtMeta(ad.format).color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.5)",zIndex:3}}>{fmtMeta(ad.format).label}</div>
-                  {ad._scale&&<div style={{position:"absolute",bottom:10,right:10,background:P.mint,color:"#062014",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(52,211,153,0.45)",zIndex:3,textTransform:"uppercase",display:"flex",alignItems:"center",gap:4}}>{"\u25B2 SCALE"}</div>}
+                  {ad._scale&&<div style={{position:"absolute",bottom:10,right:10,background:P.mint,color:"#062014",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(52,211,153,0.45)",zIndex:3,textTransform:"uppercase"}}>{"\u25B2 SCALE"}</div>}
+                  {ad._topPerformer&&<div style={{position:"absolute",bottom:10,right:10,background:P.warning,color:"#2a1605",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(251,191,36,0.4)",zIndex:3,textTransform:"uppercase"}}>{"\u2605 TOP PERFORMER"}</div>}
                 </div>
                 <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
                   <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
@@ -843,20 +843,8 @@ export default function MediaOnGas(){
                 var top10=sorted.slice(0,10);
                 var rest=sorted.slice(10);
                 var totals=totalsForSec(arr);
-                // Flag up to 5 creatives to scale: meaningful volume, CPR at or below blended
-                (function(){
-                  var capCpr=totals.cpr>0?totals.cpr*1.05:Infinity;
-                  var minResults=sec.key==="landingpage"?20:3;
-                  var minSpend=100;
-                  var scalable=sorted.filter(function(a){
-                    if(a.results<minResults)return false;
-                    if(a.spend<minSpend)return false;
-                    var cpr=a.results>0?a.spend/a.results:Infinity;
-                    return cpr<=capCpr;
-                  }).slice(0,5);
-                  sorted.forEach(function(a){a._scale=false;});
-                  scalable.forEach(function(a){a._scale=true;});
-                })();
+                // Rank-based tagging: top 5 = SCALE, next 5 = TOP PERFORMER
+                sorted.forEach(function(a,i){a._scale=i<5&&a.results>0;a._topPerformer=i>=5&&i<10&&a.results>0;});
                 var bm=sec.bench;
                 var verdict="";
                 if(totals.cpr>0&&bm){
@@ -969,28 +957,46 @@ export default function MediaOnGas(){
                   return {pg:pg,winner:winner,count:byPlat[pg].length,spend:pSpend,imps:pImps,clicks:pClicks,results:pResults,ctr:pImps>0?(pClicks/pImps*100):0};
                 }).sort(function(a,b){return b.spend-a.spend;});
 
-                // Collect all scale-flagged ads across sections
-                var scaleAll=[];
-                filteredAds.forEach(function(a){if(a._scale)scaleAll.push(a);});
-                scaleAll.sort(function(a,b){
-                  var ac=a.results>0?a.spend/a.results:Infinity;
-                  var bc=b.results>0?b.spend/b.results:Infinity;
-                  if(ac!==bc)return ac-bc;
-                  return b.results-a.results;
-                });
-
-                // Objective winners (already computed in sections; re-derive for summary)
-                var objWinners=objSections.map(function(sec){
+                // Objective breakdowns: top 10 sorted + analytical aggregates per objective
+                var objBreakdown=objSections.map(function(sec){
                   var arr=byObj[sec.key]||[];
                   if(arr.length===0)return null;
-                  var w=arr.slice().sort(function(a,b){
+                  var srt=arr.slice().sort(function(a,b){
                     if(b.results!==a.results)return b.results-a.results;
                     var ac=a.results>0?a.spend/a.results:Infinity;
                     var bc=b.results>0?b.spend/b.results:Infinity;
-                    return ac-bc;
-                  })[0];
+                    if(ac!==bc)return ac-bc;
+                    return b.impressions-a.impressions;
+                  });
                   var t=totalsForSec(arr);
-                  return {sec:sec,winner:w,totals:t,count:arr.length};
+                  var top5=srt.slice(0,5);
+                  var next5=srt.slice(5,10);
+                  var topSpend=0,topRes=0,tailSpend=0,tailRes=0;
+                  top5.forEach(function(a){topSpend+=a.spend;topRes+=a.results;});
+                  var tail=srt.slice(Math.max(Math.floor(srt.length*0.75),10));
+                  tail.forEach(function(a){tailSpend+=a.spend;tailRes+=a.results;});
+                  var topCpr=topRes>0?topSpend/topRes:0;
+                  var tailCpr=tailRes>0?tailSpend/tailRes:0;
+                  var efficiencyGap=(topCpr>0&&tailCpr>0)?(tailCpr/topCpr):0;
+                  // Format mix inside top 5
+                  var fmtMix={};
+                  top5.forEach(function(a){var fl=fmtMeta(a.format).label;fmtMix[fl]=(fmtMix[fl]||0)+1;});
+                  var fmtTop=Object.keys(fmtMix).sort(function(a,b){return fmtMix[b]-fmtMix[a];})[0];
+                  // Platform mix inside top 5
+                  var platMix={};
+                  top5.forEach(function(a){var pg=platformGroup(a.platform);platMix[pg]=(platMix[pg]||0)+1;});
+                  var platTop=Object.keys(platMix).sort(function(a,b){return platMix[b]-platMix[a];})[0];
+                  // Blended CTR for top 5 vs tail
+                  var topImps=0,topClicks=0;top5.forEach(function(a){topImps+=a.impressions;topClicks+=a.clicks;});
+                  var tailImps=0,tailClicks=0;tail.forEach(function(a){tailImps+=a.impressions;tailClicks+=a.clicks;});
+                  var topCtr=topImps>0?(topClicks/topImps*100):0;
+                  var tailCtr=tailImps>0?(tailClicks/tailImps*100):0;
+                  // Reallocation impact: if tail spend moved to top CPR, projected additional results
+                  var realloc=topCpr>0&&tailSpend>0?Math.round(tailSpend/topCpr)-tailRes:0;
+                  return {sec:sec,arr:arr,sorted:srt,top5:top5,next5:next5,totals:t,count:arr.length,
+                    topCpr:topCpr,tailCpr:tailCpr,efficiencyGap:efficiencyGap,
+                    fmtMix:fmtMix,fmtTop:fmtTop,platMix:platMix,platTop:platTop,
+                    topCtr:topCtr,tailCtr:tailCtr,tailSpend:tailSpend,tailCount:tail.length,realloc:realloc};
                 }).filter(function(x){return x!==null;});
 
                 var miniCard=function(ad,accent,metricLabel,metricVal,costLabel2,costVal){
@@ -1046,71 +1052,128 @@ export default function MediaOnGas(){
                     </div>
                   </div>
 
-                  {/* OBJECTIVE WINNERS */}
-                  <div style={{marginTop:28}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                      {Ic.target(P.orchid,16)}
-                      <span style={{fontSize:12,fontWeight:900,color:P.orchid,fontFamily:ff,letterSpacing:1.5}}>BEST PERFORMER PER OBJECTIVE</span>
-                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.orchid+"30, transparent)"}}/>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:objWinners.length>=3?"repeat(2,1fr)":"1fr",gap:12}}>
-                      {objWinners.map(function(o){
-                        var resT=o.winner.resultType;
-                        return <div key={o.sec.key} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+o.sec.accent+"30"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                            <span style={{fontSize:12,fontWeight:900,color:o.sec.accent,fontFamily:ff,letterSpacing:1}}>{o.sec.label}</span>
-                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{o.count+" ads \u00b7 "+fR(o.totals.spend)+(o.totals.cpr>0?" \u00b7 "+fR(o.totals.cpr)+" "+o.sec.costLabel:"")}</span>
-                          </div>
-                          {miniCard(o.winner,o.sec.accent,resultLabel(resT),o.winner.results>0?fmt(o.winner.results):"0",costPerLabel(resT),o.winner.results>0?fR(o.winner.spend/o.winner.results):null)}
-                        </div>;
-                      })}
-                    </div>
-                  </div>
+                  {/* PER OBJECTIVE TOP 10 + DEEP INSIGHTS */}
+                  {objBreakdown.map(function(o){
+                    var sec=o.sec;
+                    var resT=(o.sorted[0]&&o.sorted[0].resultType)||sec.metric;
+                    var ten=o.sorted.slice(0,10);
+                    return <div key={"obj_brk_"+sec.key} style={{marginTop:28,padding:20,background:"rgba(0,0,0,0.25)",borderRadius:14,border:"1px solid "+sec.accent+"30"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+                        {sec.icon}
+                        <span style={{fontSize:13,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{sec.label+" \u00b7 TOP 10"}</span>
+                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
+                        <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{o.count+" ads \u00b7 "+fR(o.totals.spend)+" \u00b7 "+(o.totals.cpr>0?fR(o.totals.cpr)+" "+sec.costLabel:"no results yet")}</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+                        {ten.map(function(ad,ai){
+                          var isScale=ai<5;
+                          var isTP=ai>=5;
+                          var bordCol=isScale?P.mint+"60":P.warning+"50";
+                          var bgCol=isScale?"rgba(52,211,153,0.05)":"rgba(251,191,36,0.04)";
+                          return <div key={ad.adId+"_obj_"+ai} style={{display:"flex",gap:12,background:bgCol,borderRadius:10,padding:10,border:"1px solid "+bordCol,alignItems:"center"}}>
+                            <div style={{width:28,textAlign:"center",fontSize:13,fontWeight:900,color:isScale?P.mint:P.warning,fontFamily:fm}}>{"#"+(ai+1)}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              {miniCard(ad,sec.accent,resultLabel(resT),ad.results>0?fmt(ad.results):"0",costPerLabel(resT),ad.results>0?fR(ad.spend/ad.results):null)}
+                            </div>
+                            <div style={{background:isScale?P.mint:P.warning,color:isScale?"#062014":"#2a1605",fontSize:9,fontWeight:900,padding:"4px 8px",borderRadius:4,fontFamily:fm,letterSpacing:1,whiteSpace:"nowrap"}}>{isScale?"\u25B2 SCALE":"\u2605 TOP PERFORMER"}</div>
+                          </div>;
+                        })}
+                      </div>
 
-                  {/* SCALE RECOMMENDATIONS */}
-                  <div style={{marginTop:28}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                      {Ic.bolt(P.mint,16)}
-                      <span style={{fontSize:12,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>{"\u25B2 RECOMMENDED TO SCALE ("+scaleAll.length+")"}</span>
-                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"30, transparent)"}}/>
-                      <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>volume + efficiency at or below blended cost</span>
-                    </div>
-                    {scaleAll.length===0?<div style={{padding:18,textAlign:"center",color:P.dim,fontSize:11,fontFamily:fm}}>No creatives yet meet the scale threshold (min results + CPR at or below blended). Let more data accumulate or test new variants.</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
-                      {scaleAll.slice(0,10).map(function(ad,ai){
-                        var sec=objSections.filter(function(s){return s.key===(ad.objective||"landingpage");})[0]||{accent:P.mint,label:""};
-                        var resT=ad.resultType;
-                        return <div key={ad.adId+"_scale_"+ai} style={{display:"flex",gap:12,background:"rgba(52,211,153,0.05)",borderRadius:10,padding:10,border:"1px solid "+P.mint+"40",alignItems:"center"}}>
-                          <div style={{width:24,textAlign:"center",fontSize:13,fontWeight:900,color:P.mint,fontFamily:fm}}>{"#"+(ai+1)}</div>
-                          <div style={{flex:1,minWidth:0}}>
-                            {miniCard(ad,sec.accent,resultLabel(resT),ad.results>0?fmt(ad.results):"0",costPerLabel(resT),ad.results>0?fR(ad.spend/ad.results):null)}
-                          </div>
-                        </div>;
-                      })}
-                    </div>}
-                  </div>
+                      {/* ANALYST READ — per objective */}
+                      <div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid "+sec.accent+"25"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          {Ic.eye(sec.accent,12)}
+                          <span style={{fontSize:10,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{"ANALYST READ \u00b7 "+sec.label}</span>
+                        </div>
+                        {(function(){
+                          var lines=[];
+                          var bm=sec.bench;
+                          // L1: concentration + volume
+                          if(o.totals.results>0){
+                            var top5Share=o.totals.results>0?Math.round((function(){var x=0;o.top5.forEach(function(a){x+=a.results;});return x/o.totals.results*100;})()):0;
+                            lines.push("The top 5 creatives account for "+top5Share+"% of "+sec.label.toLowerCase()+" delivery ("+fR(o.totals.spend)+" total spend, "+fmt(o.totals.results)+" "+resultLabel(resT).toLowerCase()+") — "+(top5Share>=70?"heavy concentration, a refresh pipeline is critical to avoid fatigue":top5Share>=40?"healthy concentration, continue iterating on winning angles":"dispersed performance, pick clearer winners before scaling"));
+                          }else{
+                            lines.push("No measurable "+sec.label.toLowerCase()+" yet across "+o.count+" ads on "+fR(o.totals.spend)+" spend. Verify conversion tracking, landing page load, and event mapping before scaling any budget.");
+                          }
+                          // L2: efficiency gap
+                          if(o.efficiencyGap>0&&o.tailCount>0){
+                            lines.push("Efficiency gap: top 5 at "+fR(o.topCpr)+" "+sec.costLabel+" vs bottom quartile at "+fR(o.tailCpr)+" — a "+o.efficiencyGap.toFixed(1)+"x spread. This is "+(o.efficiencyGap>=3?"a decisive signal — the long tail is materially dragging blended cost":o.efficiencyGap>=1.8?"a meaningful spread worth acting on":"a modest spread, marginal gains only from rebalancing")+".");
+                          }
+                          // L3: reallocation math
+                          if(o.realloc>0){
+                            lines.push("Reallocation impact: moving the "+fR(o.tailSpend)+" currently in the bottom quartile to the top 5 at their CPR would project ~"+fmt(o.realloc)+" additional "+resultLabel(resT).toLowerCase()+" at the same spend. Action: pause "+o.tailCount+" tail ads, lift top-5 ad-set budgets by 20%.");
+                          }
+                          // L4: benchmark read
+                          if(o.totals.cpr>0&&bm){
+                            var bVerd=o.totals.cpr<=bm.low?"well below the SA benchmark floor ("+fR(bm.low)+") — top-quartile efficiency":o.totals.cpr<=bm.mid?"inside the SA benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+") — performing to standard":o.totals.cpr<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+") — room to tighten":"above the SA benchmark ceiling ("+fR(bm.high)+") — red flag, revisit targeting and creative hooks";
+                            lines.push("Blended "+sec.costLabel+" at "+fR(o.totals.cpr)+" is "+bVerd+".");
+                          }
+                          // L5: format mix insight
+                          if(o.fmtTop&&o.fmtMix[o.fmtTop]>=3){
+                            lines.push("Format signal: "+o.fmtMix[o.fmtTop]+" of 5 scale-ranked creatives are "+o.fmtTop+". Double down on "+o.fmtTop.toLowerCase()+" production and starve weaker formats in this objective.");
+                          }
+                          // L6: platform signal
+                          if(o.platTop&&o.platMix[o.platTop]>=3){
+                            lines.push("Platform lean: "+o.platMix[o.platTop]+" of 5 top creatives sit on "+o.platTop+". If this differs from your planned spend split, adjust budget weighting to match where results are actually landing.");
+                          }
+                          // L7: CTR delta
+                          if(o.topCtr>0&&o.tailCtr>0){
+                            var ctrDelta=o.topCtr-o.tailCtr;
+                            if(Math.abs(ctrDelta)>=0.3){
+                              lines.push("Attention delta: top 5 CTR "+o.topCtr.toFixed(2)+"% vs tail "+o.tailCtr.toFixed(2)+"%"+(ctrDelta>0?". Top creatives are also earning disproportionate attention — the hook is doing work, not just the algorithm.":". Tail has stronger CTR but weaker conversion — the hook attracts but the offer/landing isn't converting. Audit funnel past the click."));
+                            }
+                          }
+                          return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:6,display:"flex",gap:8}}><span style={{color:sec.accent,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
+                        })()}
+                      </div>
+                    </div>;
+                  })}
 
-                  {/* COMMENTARY */}
-                  <div style={{marginTop:28,padding:"18px 20px",background:"rgba(0,0,0,0.3)",borderRadius:12,border:"1px solid "+P.rule}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                      {Ic.eye(P.ember,14)}
-                      <span style={{fontSize:11,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1.5}}>HEADLINE READ</span>
+                  {/* CROSS-OBJECTIVE STRATEGIC READ */}
+                  <div style={{marginTop:28,padding:"20px 22px",background:"linear-gradient(135deg,rgba(251,191,36,0.06),rgba(0,0,0,0.4))",borderRadius:12,border:"1px solid "+P.ember+"30"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                      {Ic.crown(P.ember,16)}
+                      <span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1.5}}>STRATEGIC READ \u00b7 CROSS-OBJECTIVE</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.ember+"30, transparent)"}}/>
                     </div>
                     {(function(){
                       var lines=[];
-                      var leadPlat=platWinners[0];
-                      if(leadPlat){
-                        lines.push(leadPlat.pg+" is the largest-spend platform at "+fR(leadPlat.spend)+" ("+fmt(leadPlat.imps)+" impressions, "+leadPlat.ctr.toFixed(2)+"% CTR). Top creative: \""+((leadPlat.winner&&leadPlat.winner.adName)||"Unnamed").substring(0,70)+"\".");
+                      // Spend efficiency ranked across objectives
+                      var objRanked=objBreakdown.slice().filter(function(o){return o.totals.cpr>0;}).sort(function(a,b){
+                        var aBm=a.sec.bench,bBm=b.sec.bench;
+                        var aR=aBm?a.totals.cpr/aBm.mid:1;
+                        var bR=bBm?b.totals.cpr/bBm.mid:1;
+                        return aR-bR;
+                      });
+                      if(objRanked.length>=2){
+                        var best=objRanked[0],worst=objRanked[objRanked.length-1];
+                        lines.push("Objective efficiency ranking (vs SA benchmark midpoint): "+objRanked.map(function(o){var bm=o.sec.bench;var r=bm?(o.totals.cpr/bm.mid):0;return o.sec.label+" "+(r>0?(r<1?"-":"+")+Math.round(Math.abs(1-r)*100)+"%":"n/a");}).join(" \u00b7 ")+". Strongest: "+best.sec.label+". Weakest: "+worst.sec.label+".");
                       }
-                      var topObj=objWinners.slice().sort(function(a,b){return b.totals.results-a.totals.results;})[0];
-                      if(topObj&&topObj.totals.results>0){
-                        lines.push(topObj.sec.label+" is delivering the most volume: "+fmt(topObj.totals.results)+" "+resultLabel(topObj.winner.resultType).toLowerCase()+" from "+fR(topObj.totals.spend)+" at a blended "+topObj.sec.costLabel+" of "+fR(topObj.totals.cpr)+".");
+                      // Platform-objective fit
+                      var fits=[];
+                      objBreakdown.forEach(function(o){if(o.platTop&&o.platMix[o.platTop]>=3)fits.push(o.sec.label+" leans "+o.platTop);});
+                      if(fits.length>0)lines.push("Platform-objective fit: "+fits.join(" \u00b7 ")+". Use this to anchor media planning — do not force spend into platforms that the data says under-deliver for a given objective.");
+                      // Total reallocation potential
+                      var totRealloc=0,totReallocSpend=0,totReallocCount=0;
+                      objBreakdown.forEach(function(o){if(o.realloc>0){totRealloc+=o.realloc;totReallocSpend+=o.tailSpend;totReallocCount+=o.tailCount;}});
+                      if(totRealloc>0){
+                        lines.push("Portfolio-wide reallocation: "+totReallocCount+" tail creatives consuming "+fR(totReallocSpend)+" could be pruned. Redeploying that spend to top-ranked ad sets projects ~"+fmt(totRealloc)+" additional incremental results at current efficiency — a compounding win without new budget.");
                       }
-                      if(scaleAll.length>0){
-                        lines.push(scaleAll.length+" creatives qualify for scaling. Recommended action: lift budgets 15-25% on the ad sets feeding these, and pause the bottom quartile in each objective to reallocate.");
-                      }else{
-                        lines.push("No creatives currently clear the scale threshold. Let data accumulate on the current top-ranked ads and test fresh variants against the top performer in each objective.");
+                      // Creative refresh mandate
+                      var refreshCount=0;
+                      objBreakdown.forEach(function(o){if(o.efficiencyGap>=2.5)refreshCount++;});
+                      if(refreshCount>0)lines.push(refreshCount+" of "+objBreakdown.length+" objectives show a 2.5x+ efficiency gap between head and tail. These categories need a creative refresh sprint: 3-5 new variants tested against the current top performer, biased to the winning format and platform in each.");
+                      // Attention commentary
+                      var allImps=0,allClicks=0;filteredAds.forEach(function(a){allImps+=a.impressions;allClicks+=a.clicks;});
+                      var portfolioCtr=allImps>0?(allClicks/allImps*100):0;
+                      if(portfolioCtr>0){
+                        lines.push("Portfolio blended CTR: "+portfolioCtr.toFixed(2)+"% on "+fmt(allImps)+" impressions"+(portfolioCtr>=1.2?". Above the 1.2% healthy threshold — the creative is earning attention. Protect this by retiring fatigued creatives before CTR slides.":portfolioCtr>=0.8?". In the acceptable 0.8-1.2% band but not exceptional. Prioritise creative testing over audience expansion.":". Below 0.8% — attention is the bottleneck. Audience or creative fit is off before any scaling decision."));
                       }
-                      return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:6,display:"flex",gap:8}}><span style={{color:P.mint,fontWeight:900}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
+                      // Headline action
+                      var scaleCount=0;objBreakdown.forEach(function(o){scaleCount+=o.top5.filter(function(a){return a.results>0;}).length;});
+                      if(scaleCount>0)lines.push("Next 14 days: scale the "+scaleCount+" green-tagged creatives by +20% budget, kill the bottom "+totReallocCount+" tail ads, brief "+(refreshCount*4)+" new variants across "+refreshCount+" objective(s) needing refresh. Re-measure on day 14 with a minimum of 3x current volume per winning ad before locking in any permanent reallocation.");
+                      return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.75}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:8,display:"flex",gap:8}}><span style={{color:P.ember,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
                     })()}
                   </div>
                 </div>;
