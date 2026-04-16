@@ -418,30 +418,43 @@ export default async function handler(req, res) {
       var ttAdsData = await ttAdsRes.json();
       var ttAdsByAdId = {};
       var videoIds = [];
+      var imageIds = [];
       if (ttAdsData.data && ttAdsData.data.list) {
         ttAdsData.data.list.forEach(function(ad) {
           ttAdsByAdId[ad.ad_id] = ad;
           if (ad.video_id && videoIds.indexOf(ad.video_id) < 0) videoIds.push(ad.video_id);
+          if (ad.image_ids && ad.image_ids.length > 0) {
+            ad.image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });
+          }
         });
       }
 
       // Batch fetch video info for thumbnails
       var videoInfoByVid = {};
-      var ttVideoDebug = { videoIdsCount: videoIds.length, batches: [], sampleVideo: null };
       for (var v = 0; v < videoIds.length; v += 60) {
         var vBatch = videoIds.slice(v, v + 60);
         var vidUrl = "https://business-api.tiktok.com/open_api/v1.3/file/video/ad/info/?advertiser_id=" + ttAdvId + "&video_ids=" + encodeURIComponent(JSON.stringify(vBatch));
         try {
           var vRes = await fetch(vidUrl, { headers: { "Access-Token": ttToken } });
           var vData = await vRes.json();
-          ttVideoDebug.batches.push({ status: vRes.status, code: vData.code, message: vData.message, listLen: vData.data && vData.data.list ? vData.data.list.length : 0 });
           if (vData.data && vData.data.list) {
-            vData.data.list.forEach(function(vi) {
-              videoInfoByVid[vi.video_id] = vi;
-              if (!ttVideoDebug.sampleVideo) ttVideoDebug.sampleVideo = vi;
-            });
+            vData.data.list.forEach(function(vi) { videoInfoByVid[vi.video_id] = vi; });
           }
-        } catch (vErr) { console.error("TT video info error", vErr); ttVideoDebug.batches.push({ error: String(vErr) }); }
+        } catch (vErr) { console.error("TT video info error", vErr); }
+      }
+
+      // Batch fetch image info for carousel / static image ads
+      var imageInfoByImgId = {};
+      for (var ii = 0; ii < imageIds.length; ii += 60) {
+        var iBatch = imageIds.slice(ii, ii + 60);
+        var imgUrl = "https://business-api.tiktok.com/open_api/v1.3/file/image/ad/info/?advertiser_id=" + ttAdvId + "&image_ids=" + encodeURIComponent(JSON.stringify(iBatch));
+        try {
+          var iRes = await fetch(imgUrl, { headers: { "Access-Token": ttToken } });
+          var iData = await iRes.json();
+          if (iData.data && iData.data.list) {
+            iData.data.list.forEach(function(img) { imageInfoByImgId[img.image_id] = img; });
+          }
+        } catch (iErr) { console.error("TT image info error", iErr); }
       }
 
       // Ad-level insights
@@ -456,6 +469,13 @@ export default async function handler(req, res) {
           var mt = ins.metrics;
           if (!(parseFloat(mt.impressions || 0) > 0 || parseFloat(mt.spend || 0) > 0)) return;
           var video = ad.video_id ? (videoInfoByVid[ad.video_id] || {}) : {};
+          var firstImgInfo = {};
+          if (!ad.video_id && ad.image_ids && ad.image_ids.length > 0) {
+            for (var xi = 0; xi < ad.image_ids.length; xi++) {
+              var ifo = imageInfoByImgId[ad.image_ids[xi]];
+              if (ifo && (ifo.image_url || ifo.url)) { firstImgInfo = ifo; break; }
+            }
+          }
           var follows = parseInt(mt.follows || 0);
           var likes = parseInt(mt.likes || 0);
           var ttSpend = parseFloat(mt.spend || 0);
@@ -476,7 +496,7 @@ export default async function handler(req, res) {
             adsetName: mt.adgroup_name,
             adId: ins.dimensions.ad_id,
             adName: mt.ad_name,
-            thumbnail: video.video_cover_url || video.poster_url || "",
+            thumbnail: video.video_cover_url || video.poster_url || firstImgInfo.image_url || firstImgInfo.url || "",
             previewUrl: video.preview_url || ("https://ads.tiktok.com/i18n/perf/creation?aadvid=" + ttAdvId),
             format: ad.video_id ? "MP4" : (ad.image_ids && ad.image_ids.length > 1 ? "CAROUSEL" : "STATIC"),
             spend: ttSpend,
