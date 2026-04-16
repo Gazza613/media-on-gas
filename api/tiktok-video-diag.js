@@ -17,8 +17,8 @@ export default async function handler(req, res) {
   var out = { advertiser_id: advId, steps: [] };
 
   try {
-    // Step 1: pull ads with the full fields we need, so we can see what carousel ads look like
-    var adFields = encodeURIComponent(JSON.stringify(["ad_id", "ad_name", "ad_format", "video_id", "image_ids", "carousel_image_ids"]));
+    // Step 1: pull ads with rich creative fields so we can see how carousels are structured
+    var adFields = encodeURIComponent(JSON.stringify(["ad_id", "ad_name", "ad_format", "creative_type", "image_mode", "video_id", "image_ids", "carousel_image_labels", "catalog_id", "tiktok_item_id", "dynamic_format", "is_aco"]));
     var adsUrl = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + advId + "&page_size=50&fields=" + adFields;
     var adsRes = await fetch(adsUrl, { headers: { "Access-Token": token } });
     var adsData = await adsRes.json();
@@ -27,24 +27,27 @@ export default async function handler(req, res) {
     var videoIds = [], imageIds = [];
     var adSamples = [];
     var carouselAds = [];
+    var nonVideoNoImages = [];
     if (adsData.data && adsData.data.list) {
       adsData.data.list.forEach(function(a) {
         if (a.video_id && videoIds.indexOf(a.video_id) < 0) videoIds.push(a.video_id);
         if (a.image_ids && a.image_ids.length > 0) {
           a.image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });
         }
-        if (a.carousel_image_ids && a.carousel_image_ids.length > 0) {
-          a.carousel_image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });
-        }
-        // Collect first 5 raw ad objects so we can eyeball field shape
-        if (adSamples.length < 5) adSamples.push(a);
-        // Collect ads that look like carousels (no video, multiple images)
-        if (!a.video_id && ((a.image_ids && a.image_ids.length > 1) || (a.carousel_image_ids && a.carousel_image_ids.length > 0))) {
+        // Collect first 8 raw ad objects so we can eyeball field shape
+        if (adSamples.length < 8) adSamples.push(a);
+        // Carousel candidates = multi-image, no single video
+        if (!a.video_id && a.image_ids && a.image_ids.length > 1) {
           if (carouselAds.length < 3) carouselAds.push(a);
+        }
+        // Ads with neither video nor images — maybe spark/catalog ads
+        if (!a.video_id && (!a.image_ids || a.image_ids.length === 0)) {
+          if (nonVideoNoImages.length < 3) nonVideoNoImages.push(a);
         }
       });
     }
-    out.counts = { video_ids: videoIds.length, image_ids: imageIds.length, carousel_candidates: carouselAds.length };
+    out.counts = { total_ads: (adsData.data && adsData.data.list) ? adsData.data.list.length : 0, video_ids: videoIds.length, image_ids: imageIds.length, carousel_candidates: carouselAds.length, non_video_no_images: nonVideoNoImages.length };
+    out.non_video_no_images_sample = nonVideoNoImages;
     out.sample_ads = adSamples;
     out.carousel_candidates = carouselAds;
 
