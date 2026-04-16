@@ -851,6 +851,9 @@ export default function MediaOnGas(){
                   else verdict="ABOVE BENCHMARK CEILING";
                 }
 
+                var secCpc=totals.clicks>0?totals.spend/totals.clicks:0;
+                var secCpm=totals.imps>0?(totals.spend/totals.imps*1000):0;
+                var secResType=arr[0]?arr[0].resultType:sec.metric;
                 return <div key={sec.key} style={{marginBottom:36,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22,flexWrap:"wrap",gap:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -860,12 +863,19 @@ export default function MediaOnGas(){
                         <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>{sec.desc}</div>
                       </div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
-                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>ADS</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{arr.length}</div></div>
-                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totals.spend)}</div></div>
-                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>{resultLabel(arr[0]?arr[0].resultType:sec.metric)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.results>0?fmt(totals.results):"-"}</div></div>
-                      <div style={{textAlign:"right"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>{costPerLabel(arr[0]?arr[0].resultType:sec.metric)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.cpr>0?fR(totals.cpr):"-"}</div></div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>ADS IN SECTION</div>
+                      <div style={{fontSize:22,fontWeight:900,color:sec.accent,fontFamily:fm}}>{arr.length}</div>
                     </div>
+                  </div>
+
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:22}}>
+                    <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totals.spend)}</div></Glass>
+                    <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>IMPRESSIONS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(totals.imps)}</div></Glass>
+                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{resultLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.results>0?fmt(totals.results):"-"}</div></Glass>
+                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{costPerLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.cpr>0?fR(totals.cpr):"-"}</div></Glass>
+                    <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>BLENDED CTR</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>{totals.ctr.toFixed(2)+"%"}</div></Glass>
+                    <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>CPC</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{secCpc>0?fR(secCpc):"-"}</div></Glass>
                   </div>
 
                   {top10.length>0&&<div style={{marginBottom:22}}>
