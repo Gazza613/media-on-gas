@@ -299,14 +299,32 @@ export default async function handler(req, res) {
           if (isLead) {
             leads = Math.max(leads, v);
           }
-          if (at === "app_install" || at === "app_custom_event.fb_mobile_activate_app" || at === "mobile_app_install" || at === "omni_app_install") {
-            installs += v;
-          }
-          if (at === "like" || at === "page_like" || at === "follow") {
+          // App install: catch FB + IG + omni variants
+          var isInstall = (at === "app_install" ||
+                           at === "mobile_app_install" ||
+                           at === "omni_app_install" ||
+                           at === "app_custom_event.fb_mobile_activate_app" ||
+                           at === "onsite_conversion.app_install" ||
+                           atLow.indexOf("app_install") >= 0 ||
+                           atLow.indexOf("mobile_app_install") >= 0);
+          if (isInstall) installs = Math.max(installs, v);
+          // FB page likes
+          if (at === "like" || at === "page_like") {
             pageLikes = Math.max(pageLikes, v);
           }
+          // Follows — FB page follows AND Instagram follows (distinct action types on Meta)
+          var isFollow = (at === "follow" ||
+                          at === "onsite_conversion.follow" ||
+                          at === "ig_follow" ||
+                          at === "onsite_conversion.ig_follow" ||
+                          at === "onsite_conversion.total_ig_follow" ||
+                          atLow.indexOf("ig_follow") >= 0 ||
+                          atLow.indexOf("instagram_follow") >= 0 ||
+                          (atLow.indexOf("follow") >= 0 && atLow.indexOf("post") < 0 && atLow.indexOf("video") < 0));
+          if (isFollow) follows = Math.max(follows, v);
           if (at === "page_engagement" || at === "onsite_conversion.post_save") {
-            follows += v;
+            // Generic engagement is not a follow — only carry as a soft fallback when nothing else fires
+            if (pageLikes === 0 && follows === 0) follows = Math.max(follows, v);
           }
         });
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
