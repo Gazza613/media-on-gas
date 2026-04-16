@@ -17,43 +17,65 @@ export default async function handler(req, res) {
   var out = { advertiser_id: advId, steps: [] };
 
   try {
-    // Step 1: pull a handful of ads to get real video_ids
-    var adFields = encodeURIComponent(JSON.stringify(["ad_id", "ad_name", "video_id"]));
-    var adsUrl = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + advId + "&page_size=10&fields=" + adFields;
+    // Step 1: pull ads with the full fields we need, so we can see what carousel ads look like
+    var adFields = encodeURIComponent(JSON.stringify(["ad_id", "ad_name", "ad_format", "video_id", "image_ids", "carousel_image_ids"]));
+    var adsUrl = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + advId + "&page_size=50&fields=" + adFields;
     var adsRes = await fetch(adsUrl, { headers: { "Access-Token": token } });
     var adsData = await adsRes.json();
     out.steps.push({ step: "ad/get", status: adsRes.status, code: adsData.code, message: adsData.message, list_len: (adsData.data && adsData.data.list) ? adsData.data.list.length : 0 });
 
-    var videoIds = [];
+    var videoIds = [], imageIds = [];
+    var adSamples = [];
+    var carouselAds = [];
     if (adsData.data && adsData.data.list) {
       adsData.data.list.forEach(function(a) {
         if (a.video_id && videoIds.indexOf(a.video_id) < 0) videoIds.push(a.video_id);
+        if (a.image_ids && a.image_ids.length > 0) {
+          a.image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });
+        }
+        if (a.carousel_image_ids && a.carousel_image_ids.length > 0) {
+          a.carousel_image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });
+        }
+        // Collect first 5 raw ad objects so we can eyeball field shape
+        if (adSamples.length < 5) adSamples.push(a);
+        // Collect ads that look like carousels (no video, multiple images)
+        if (!a.video_id && ((a.image_ids && a.image_ids.length > 1) || (a.carousel_image_ids && a.carousel_image_ids.length > 0))) {
+          if (carouselAds.length < 3) carouselAds.push(a);
+        }
       });
     }
-    out.video_ids_found = videoIds.length;
-    if (videoIds.length === 0) {
-      out.verdict = "NO_VIDEO_IDS — no ads with video_id returned, cannot probe video info";
-      res.status(200).json(out);
-      return;
+    out.counts = { video_ids: videoIds.length, image_ids: imageIds.length, carousel_candidates: carouselAds.length };
+    out.sample_ads = adSamples;
+    out.carousel_candidates = carouselAds;
+
+    // Step 2: probe /file/video/ad/info/
+    if (videoIds.length > 0) {
+      var vidSample = videoIds.slice(0, 3);
+      var vidUrl = "https://business-api.tiktok.com/open_api/v1.3/file/video/ad/info/?advertiser_id=" + advId + "&video_ids=" + encodeURIComponent(JSON.stringify(vidSample));
+      var vRes = await fetch(vidUrl, { headers: { "Access-Token": token } });
+      var vData = await vRes.json();
+      out.steps.push({ step: "file/video/ad/info", status: vRes.status, code: vData.code, message: vData.message, list_len: (vData.data && vData.data.list) ? vData.data.list.length : 0 });
+      out.video_info_sample = (vData.data && vData.data.list && vData.data.list[0]) ? vData.data.list[0] : vData;
     }
 
-    // Step 2: probe /file/video/ad/info/ with the video_ids we just collected
-    var sample = videoIds.slice(0, 5);
-    var vidUrl = "https://business-api.tiktok.com/open_api/v1.3/file/video/ad/info/?advertiser_id=" + advId + "&video_ids=" + encodeURIComponent(JSON.stringify(sample));
-    var vRes = await fetch(vidUrl, { headers: { "Access-Token": token } });
-    var vData = await vRes.json();
-    out.steps.push({ step: "file/video/ad/info", status: vRes.status, code: vData.code, message: vData.message, list_len: (vData.data && vData.data.list) ? vData.data.list.length : 0 });
-
-    out.sample_video_ids = sample;
-    out.sample_response = vData;
-    if (vData.data && vData.data.list && vData.data.list.length > 0) {
-      var first = vData.data.list[0];
-      out.verdict = "SCOPE_ACTIVE — video info returned. video_cover_url=" + (first.video_cover_url ? "present" : "missing") + ", poster_url=" + (first.poster_url ? "present" : "missing");
-    } else if (vData.code && vData.code !== 0) {
-      out.verdict = "SCOPE_BLOCKED — API returned code " + vData.code + ": " + (vData.message || "no message");
+    // Step 3: probe /file/image/ad/info/
+    if (imageIds.length > 0) {
+      var imgSample = imageIds.slice(0, 5);
+      var imgUrl = "https://business-api.tiktok.com/open_api/v1.3/file/image/ad/info/?advertiser_id=" + advId + "&image_ids=" + encodeURIComponent(JSON.stringify(imgSample));
+      var iRes = await fetch(imgUrl, { headers: { "Access-Token": token } });
+      var iData = await iRes.json();
+      out.steps.push({ step: "file/image/ad/info", status: iRes.status, code: iData.code, message: iData.message, list_len: (iData.data && iData.data.list) ? iData.data.list.length : 0 });
+      out.image_info_sample = (iData.data && iData.data.list && iData.data.list[0]) ? iData.data.list[0] : iData;
     } else {
-      out.verdict = "EMPTY_RESPONSE — call succeeded but no list returned";
+      out.image_probe = "SKIPPED — no image_ids found on any ad. TikTok may be returning carousels under a different field.";
     }
+
+    // Verdict
+    var imgStep = out.steps.filter(function(s){return s.step === "file/image/ad/info";})[0];
+    if (imageIds.length === 0) out.verdict = "NO_IMAGE_IDS_ON_ADS — /ad/get is not returning image_ids. Need to find the right field for TikTok carousels on this account.";
+    else if (imgStep && imgStep.code === 0 && imgStep.list_len > 0) out.verdict = "IMAGE_SCOPE_ACTIVE — image info returned successfully";
+    else if (imgStep && imgStep.code !== 0) out.verdict = "IMAGE_SCOPE_BLOCKED — code " + imgStep.code + ": " + imgStep.message;
+    else out.verdict = "INCONCLUSIVE — see raw steps + samples below";
 
     res.status(200).json(out);
   } catch (err) {
