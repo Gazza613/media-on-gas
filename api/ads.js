@@ -541,7 +541,7 @@ export default async function handler(req, res) {
       var gTokenData = await gTokenRes.json();
       googleDebug.tokenOk = !!gTokenData.access_token;
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.responsive_display_ad.marketing_images, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.video_responsive_ad.videos, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -592,6 +592,49 @@ export default async function handler(req, res) {
               try { googleDebug.assetError = (await aRes.text()).substring(0, 500); } catch(e) {}
             }
           } catch (aErr) { googleDebug.assetCatch = String(aErr); }
+
+          // Direct asset lookup: responsive_display_ad.marketing_images etc return asset resource
+          // references, not URLs. Collect them and resolve in one GAQL call.
+          var directAssetRefs = [];
+          (gData.results || []).forEach(function(r) {
+            var rda = r.adGroupAd.ad.responsiveDisplayAd || {};
+            var appAd = r.adGroupAd.ad.appAd || {};
+            var vra = r.adGroupAd.ad.videoResponsiveAd || {};
+            var collect = function(arr) { (arr || []).forEach(function(m) { if (m && m.asset && directAssetRefs.indexOf(m.asset) < 0) directAssetRefs.push(m.asset); }); };
+            collect(rda.marketingImages);
+            collect(rda.squareMarketingImages);
+            collect(rda.youtubeVideos);
+            collect(appAd.images);
+            collect(appAd.youtubeVideos);
+            collect(vra.videos);
+          });
+          var assetUrlByRef = {};
+          var assetYoutubeIdByRef = {};
+          if (directAssetRefs.length > 0) {
+            try {
+              var refList = directAssetRefs.map(function(rn) { return "'" + rn + "'"; }).join(",");
+              var directQ = "SELECT asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name IN (" + refList + ")";
+              var dRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+                method: "POST",
+                headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
+                body: JSON.stringify({ query: directQ })
+              });
+              if (dRes.status === 200) {
+                var dData = await dRes.json();
+                (dData.results || []).forEach(function(ar) {
+                  if (ar.asset && ar.asset.resourceName) {
+                    if (ar.asset.imageAsset && ar.asset.imageAsset.fullSize && ar.asset.imageAsset.fullSize.url) {
+                      assetUrlByRef[ar.asset.resourceName] = ar.asset.imageAsset.fullSize.url;
+                    }
+                    if (ar.asset.youtubeVideoAsset && ar.asset.youtubeVideoAsset.youtubeVideoId) {
+                      assetYoutubeIdByRef[ar.asset.resourceName] = ar.asset.youtubeVideoAsset.youtubeVideoId;
+                    }
+                  }
+                });
+              }
+            } catch (dErr) { console.error("Google direct asset lookup error", dErr); }
+          }
+
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
             var adAssets = adToAssets[r.adGroupAd.resourceName] || {};
@@ -604,6 +647,21 @@ export default async function handler(req, res) {
             var adType = (ad.type || "").toUpperCase();
             var format = "STATIC";
             var isVideo = adType === "VIDEO_AD" || adType === "VIDEO_RESPONSIVE_AD" || adType === "VIDEO_BUMPER_AD" || adType === "VIDEO_NON_SKIPPABLE_IN_STREAM_AD" || adType === "VIDEO_TRUEVIEW_IN_STREAM_AD" || adType === "IN_FEED_VIDEO_AD";
+            // Helper: resolve the first asset reference in a list to a URL or YouTube ID
+            var firstUrlFrom = function(arr) {
+              if (!arr) return "";
+              for (var i = 0; i < arr.length; i++) { var u = arr[i] && arr[i].asset ? assetUrlByRef[arr[i].asset] : ""; if (u) return u; }
+              return "";
+            };
+            var firstYoutubeFrom = function(arr) {
+              if (!arr) return "";
+              for (var i = 0; i < arr.length; i++) { var y = arr[i] && arr[i].asset ? assetYoutubeIdByRef[arr[i].asset] : ""; if (y) return y; }
+              return "";
+            };
+            var rdaObj = ad.responsiveDisplayAd || {};
+            var appAdObj = ad.appAd || {};
+            var vraObj = ad.videoResponsiveAd || {};
+
             if (isVideo && adAssets.youtubeId) {
               thumb = "https://img.youtube.com/vi/" + adAssets.youtubeId + "/hqdefault.jpg";
               preview = "https://www.youtube.com/watch?v=" + adAssets.youtubeId;
@@ -616,10 +674,36 @@ export default async function handler(req, res) {
               thumb = ad.imageAd.imageUrl || "";
               preview = ad.imageAd.imageUrl || "";
               format = (thumb.toLowerCase().indexOf(".gif") >= 0) ? "GIF" : "STATIC";
-            } else if (ad.responsiveDisplayAd && ad.responsiveDisplayAd.marketingImages && ad.responsiveDisplayAd.marketingImages.length > 0) {
-              thumb = ad.responsiveDisplayAd.marketingImages[0].url || "";
-              preview = thumb;
-              format = "RESPONSIVE";
+            } else if (rdaObj.marketingImages || rdaObj.squareMarketingImages || rdaObj.youtubeVideos) {
+              // Responsive Display: resolve marketing image refs to URLs via our direct lookup
+              var rdaYt = firstYoutubeFrom(rdaObj.youtubeVideos);
+              if (rdaYt) {
+                thumb = "https://img.youtube.com/vi/" + rdaYt + "/hqdefault.jpg";
+                preview = "https://www.youtube.com/watch?v=" + rdaYt;
+                format = "MP4";
+              } else {
+                thumb = firstUrlFrom(rdaObj.marketingImages) || firstUrlFrom(rdaObj.squareMarketingImages);
+                preview = thumb;
+                format = "RESPONSIVE";
+              }
+            } else if (appAdObj.images || appAdObj.youtubeVideos) {
+              var appYt = firstYoutubeFrom(appAdObj.youtubeVideos);
+              if (appYt) {
+                thumb = "https://img.youtube.com/vi/" + appYt + "/hqdefault.jpg";
+                preview = "https://www.youtube.com/watch?v=" + appYt;
+                format = "MP4";
+              } else {
+                thumb = firstUrlFrom(appAdObj.images);
+                preview = thumb;
+                format = "RESPONSIVE";
+              }
+            } else if (vraObj.videos) {
+              var vraYt = firstYoutubeFrom(vraObj.videos);
+              if (vraYt) {
+                thumb = "https://img.youtube.com/vi/" + vraYt + "/hqdefault.jpg";
+                preview = "https://www.youtube.com/watch?v=" + vraYt;
+                format = "MP4";
+              }
             } else if (isVideo) {
               format = "MP4";
             }
