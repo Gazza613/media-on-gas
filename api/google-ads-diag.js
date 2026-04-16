@@ -43,14 +43,13 @@ export default async function handler(req, res) {
       "Content-Type": "application/json"
     };
 
-    // Query 1: broad ad payload with every thumbnail-relevant field we can think of
+    // Query 1: ad payload with the known-valid thumbnail-relevant fields in v21
     var adQuery = [
       "SELECT",
       "  ad_group_ad.ad.id,",
       "  ad_group_ad.ad.name,",
       "  ad_group_ad.ad.type,",
       "  ad_group_ad.ad.final_urls,",
-      "  ad_group_ad.ad.display_url,",
       "  ad_group_ad.ad.image_ad.image_url,",
       "  ad_group_ad.ad.image_ad.pixel_width,",
       "  ad_group_ad.ad.image_ad.pixel_height,",
@@ -63,16 +62,7 @@ export default async function handler(req, res) {
       "  ad_group_ad.ad.responsive_display_ad.long_headline,",
       "  ad_group_ad.ad.app_ad.images,",
       "  ad_group_ad.ad.app_ad.youtube_videos,",
-      "  ad_group_ad.ad.app_engagement_ad.images,",
-      "  ad_group_ad.ad.app_engagement_ad.videos,",
       "  ad_group_ad.ad.video_responsive_ad.videos,",
-      "  ad_group_ad.ad.video_responsive_ad.companion_banners,",
-      "  ad_group_ad.ad.demand_gen_multi_asset_ad.marketing_images,",
-      "  ad_group_ad.ad.demand_gen_multi_asset_ad.square_marketing_images,",
-      "  ad_group_ad.ad.demand_gen_video_responsive_ad.videos,",
-      "  ad_group_ad.ad.demand_gen_video_responsive_ad.companion_banners,",
-      "  ad_group_ad.ad.demand_gen_carousel_ad.carousel_cards,",
-      "  ad_group_ad.ad.demand_gen_carousel_ad.logo_image,",
       "  campaign.name,",
       "  campaign.advertising_channel_type,",
       "  campaign.advertising_channel_sub_type,",
@@ -176,7 +166,6 @@ export default async function handler(req, res) {
       var rda = ad.responsiveDisplayAd || {};
       var appAd = ad.appAd || {};
       var vra = ad.videoResponsiveAd || {};
-      var dgMulti = ad.demandGenMultiAssetAd || {};
       return {
         ad_id: ad.id,
         type: ad.type,
@@ -187,8 +176,6 @@ export default async function handler(req, res) {
         rda_youtube: (rda.youtubeVideos || []).length,
         app_ad_images: (appAd.images || []).length,
         vra_videos: (vra.videos || []).length,
-        vra_companions: (vra.companionBanners || []).length,
-        dg_multi_imgs: (dgMulti.marketingImages || []).length,
         asset_images: assets.images.length,
         asset_youtube: assets.youtube.length,
         name: ad.name
