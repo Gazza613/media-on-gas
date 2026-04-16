@@ -302,7 +302,7 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
-          <SH icon={Ic.crown(P.ember,20)} title="Media Insights" sub={df+" to "+dt+" \u00b7 Performance Intelligence Brief"} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} title="Media Insights" sub={df+" to "+dt+" | Performance Intelligence Brief"} accent={P.ember}/>
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
@@ -529,7 +529,7 @@ export default function MediaOnGas(){
                         var pc7=platCol4[ta.platform]||P.ember;
                         return <div key={ti} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",marginBottom:8,background:"linear-gradient(135deg,"+P.mint+"08,transparent)",borderLeft:"3px solid "+P.mint,borderRadius:"0 12px 12px 0",border:"1px solid "+P.mint+"15",borderLeftWidth:3}}>
                           <span style={{background:pc7,color:"#fff",fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:8,flexShrink:0,letterSpacing:1}}>{platShort[ta.platform]||ta.platform}</span>
-                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ta.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmt(ta.imps)+" impressions \u00b7 "+ta.ctr.toFixed(2)+"% CTR"}</div></div>
+                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ta.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmt(ta.imps)+" impressions | "+ta.ctr.toFixed(2)+"% CTR"}</div></div>
                           <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm,lineHeight:1}}>{fmt(ta.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(ta.costPer)+"/ea"}</div></div>
                         </div>;})}
                     </div>}
@@ -539,7 +539,7 @@ export default function MediaOnGas(){
                         var pc8=platCol4[wa.platform]||P.ember;
                         return <div key={wi} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",marginBottom:8,background:"linear-gradient(135deg,"+P.rose+"08,transparent)",borderLeft:"3px solid "+P.rose,borderRadius:"0 12px 12px 0",border:"1px solid "+P.rose+"15",borderLeftWidth:3}}>
                           <span style={{background:pc8,color:"#fff",fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:8,flexShrink:0,letterSpacing:1}}>{platShort[wa.platform]||wa.platform}</span>
-                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{wa.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(wa.spend)+" spent \u00b7 "+wa.ctr.toFixed(2)+"% CTR"}</div></div>
+                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{wa.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(wa.spend)+" spent | "+wa.ctr.toFixed(2)+"% CTR"}</div></div>
                           <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,fontWeight:900,color:P.rose,fontFamily:fm,lineHeight:1}}>{wa.result===0?"No results":fmt(wa.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{wa.result===0?"zero conversions":fR(wa.costPer)+"/ea"}</div></div>
                         </div>;})}
                     </div>}
@@ -591,7 +591,7 @@ export default function MediaOnGas(){
                 var communityRead=grandT2===0?"No community data in the selected campaigns.":"Owned audience: "+fmt(grandT2)+" across "+communityData.length+" platforms. "+(fbT2>0?"Facebook "+fmt(fbT2)+(parseFloat(m.pageLikes||0)>0?" (+"+fmt(parseFloat(m.pageLikes||0))+")":"")+". ":"")+(igT2>0?"Instagram "+fmt(igT2)+(igGrowth>0?" (+"+fmt(igGrowth)+")":"")+". ":"")+(ttT2>0?"TikTok "+fmt(ttT2)+(ttE2>0?" (+"+fmt(ttE2)+(t.follows>0?" at "+fR(t.spend/t.follows)+" CPF":"")+")":"")+". ":"")+(earnedTotal>0?fmt(earnedTotal)+" new members this period, each reduces future paid reach cost and builds organic distribution. "+(earnedTotal>100?"Meaningful scale, maintain follower budget whilst CPF holds within benchmark.":"Early momentum."):"");
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
                 return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:2}}>{df+" to "+dt+" \u00b7 "+fR(computed.totalSpend)+" spend \u00b7 "+sortedPlats.length+" platforms"}</div></div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:2}}>{df+" to "+dt+" | "+fR(computed.totalSpend)+" spend | "+sortedPlats.length+" platforms"}</div></div></div>
                   {subSec(P.cyan,Ic.eye(P.cyan,16),"Awareness",awarenessRead)}
                   {subSec(P.mint,Ic.bolt(P.mint,16),"Engagement",engagementRead)}
                   {subSec(P.rose,Ic.target(P.rose,16),"Objectives",objectiveRead)}
@@ -626,7 +626,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {tab==="creative"&&(<div>
-          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" \u00b7 Ad-level performance grouped by campaign objective"} accent={P.blaze}/>
+          <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" | Ad-level performance grouped by campaign objective"} accent={P.blaze}/>
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(selCamps.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns on the left to view ad-level creative performance.</div>;
@@ -672,7 +672,7 @@ export default function MediaOnGas(){
 
             // Objective sections in fixed order
             var objSections=[
-              {key:"leads",label:"LEAD GEN",accent:P.rose,icon:Ic.target(P.rose,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
+              {key:"leads",label:"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.rose,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
               {key:"appinstall",label:"APP INSTALL",accent:P.fb,icon:Ic.bolt(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on store clicks delivered and cost per click"},
               {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.tt,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
               {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.cyan,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
@@ -1047,7 +1047,7 @@ export default function MediaOnGas(){
                         return <div key={p.pg} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+pc+"30"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                             <span style={{fontSize:12,fontWeight:900,color:pc,fontFamily:ff,letterSpacing:1}}>{p.pg.toUpperCase()}</span>
-                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{p.count+" ads \u00b7 "+fR(p.spend)+" \u00b7 "+p.ctr.toFixed(2)+"% CTR"}</span>
+                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{p.count+" ads | "+fR(p.spend)+" | "+p.ctr.toFixed(2)+"% CTR"}</span>
                           </div>
                           {miniCard(p.winner,pc,resultLabel(resT),p.winner.results>0?fmt(p.winner.results):"0",costPerLabel(resT),p.winner.results>0?fR(p.winner.spend/p.winner.results):null)}
                         </div>;
@@ -1063,9 +1063,9 @@ export default function MediaOnGas(){
                     return <div key={"obj_brk_"+sec.key} style={{marginTop:28,padding:20,background:"rgba(0,0,0,0.25)",borderRadius:14,border:"1px solid "+sec.accent+"30"}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
                         {sec.icon}
-                        <span style={{fontSize:13,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{sec.label+" \u00b7 TOP 10"}</span>
+                        <span style={{fontSize:13,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{sec.label+" | TOP 10"}</span>
                         <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
-                        <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{o.count+" ads \u00b7 "+fR(o.totals.spend)+" \u00b7 "+(o.totals.cpr>0?fR(o.totals.cpr)+" "+sec.costLabel:"no results yet")}</span>
+                        <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{o.count+" ads | "+fR(o.totals.spend)+" | "+(o.totals.cpr>0?fR(o.totals.cpr)+" "+sec.costLabel:"no results yet")}</span>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
                         {ten.map(function(ad,ai){
@@ -1087,7 +1087,7 @@ export default function MediaOnGas(){
                       <div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid "+sec.accent+"25"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                           {Ic.eye(sec.accent,12)}
-                          <span style={{fontSize:10,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{"ANALYST READ \u00b7 "+sec.label}</span>
+                          <span style={{fontSize:10,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{"ANALYST READ | "+sec.label}</span>
                         </div>
                         {(function(){
                           var lines=[];
@@ -1137,7 +1137,7 @@ export default function MediaOnGas(){
                   <div style={{marginTop:28,padding:"20px 22px",background:"linear-gradient(135deg,rgba(251,191,36,0.06),rgba(0,0,0,0.4))",borderRadius:12,border:"1px solid "+P.ember+"30"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
                       {Ic.crown(P.ember,16)}
-                      <span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1.5}}>STRATEGIC READ \u00b7 CROSS-OBJECTIVE</span>
+                      <span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1.5}}>STRATEGIC READ | CROSS-OBJECTIVE</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.ember+"30, transparent)"}}/>
                     </div>
                     {(function(){
@@ -1151,12 +1151,12 @@ export default function MediaOnGas(){
                       });
                       if(objRanked.length>=2){
                         var best=objRanked[0],worst=objRanked[objRanked.length-1];
-                        lines.push("Objective efficiency ranking (vs SA benchmark midpoint): "+objRanked.map(function(o){var bm=o.sec.bench;var r=bm?(o.totals.cpr/bm.mid):0;return o.sec.label+" "+(r>0?(r<1?"-":"+")+Math.round(Math.abs(1-r)*100)+"%":"n/a");}).join(" \u00b7 ")+". Strongest: "+best.sec.label+". Weakest: "+worst.sec.label+".");
+                        lines.push("Objective efficiency ranking (vs SA benchmark midpoint): "+objRanked.map(function(o){var bm=o.sec.bench;var r=bm?(o.totals.cpr/bm.mid):0;return o.sec.label+" "+(r>0?(r<1?"-":"+")+Math.round(Math.abs(1-r)*100)+"%":"n/a");}).join(" | ")+". Strongest: "+best.sec.label+". Weakest: "+worst.sec.label+".");
                       }
                       // Platform-objective fit
                       var fits=[];
                       objBreakdown.forEach(function(o){if(o.platTop&&o.platMix[o.platTop]>=3)fits.push(o.sec.label+" leans "+o.platTop);});
-                      if(fits.length>0)lines.push("Platform-objective fit: "+fits.join(" \u00b7 ")+". Use this to anchor media planning — do not force spend into platforms that the data says under-deliver for a given objective.");
+                      if(fits.length>0)lines.push("Platform-objective fit: "+fits.join(" | ")+". Use this to anchor media planning — do not force spend into platforms that the data says under-deliver for a given objective.");
                       // Total reallocation potential
                       var totRealloc=0,totReallocSpend=0,totReallocCount=0;
                       objBreakdown.forEach(function(o){if(o.realloc>0){totRealloc+=o.realloc;totReallocSpend+=o.tailSpend;totReallocCount+=o.tailCount;}});
@@ -1417,7 +1417,7 @@ export default function MediaOnGas(){
 
         
         {tab==="targeting"&&(<div>
-          <SH icon={Ic.radar(P.solar,20)} title="Targeting Performance" sub={df+" to "+dt+" \u00b7 Adset-Level Analysis by Objective"} accent={P.solar}/>
+          <SH icon={Ic.radar(P.solar,20)} title="Targeting Performance" sub={df+" to "+dt+" | Adset-Level Analysis by Objective"} accent={P.solar}/>
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selIds=selCamps.map(function(x){return x.rawCampaignId||x.campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"");});
@@ -1654,7 +1654,7 @@ export default function MediaOnGas(){
             </div>;
           })()}
         </div>)}        {tab==="community"&&(<div>
-          <SH icon={Ic.users(P.mint,20)} title="Community Growth" sub={df+" to "+dt+" \u00b7 Followers & Likes by Platform"} accent={P.mint}/>
+          <SH icon={Ic.users(P.mint,20)} title="Community Growth" sub={df+" to "+dt+" | Followers & Likes by Platform"} accent={P.mint}/>
           <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
             <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TOTAL COMMUNITY & PERIOD GROWTH</div></div>
             {(function(){
