@@ -1073,12 +1073,14 @@ export default function MediaOnGas(){
                           var isTP=ai>=5;
                           var bordCol=isScale?P.mint+"60":P.warning+"50";
                           var bgCol=isScale?"rgba(52,211,153,0.05)":"rgba(251,191,36,0.04)";
-                          return <div key={ad.adId+"_obj_"+ai} style={{display:"flex",gap:12,background:bgCol,borderRadius:10,padding:10,border:"1px solid "+bordCol,alignItems:"center"}}>
-                            <div style={{width:28,textAlign:"center",fontSize:13,fontWeight:900,color:isScale?P.mint:P.warning,fontFamily:fm}}>{"#"+(ai+1)}</div>
+                          return <div key={ad.adId+"_obj_"+ai} style={{display:"flex",gap:10,background:bgCol,borderRadius:10,padding:10,border:"1px solid "+bordCol,alignItems:"stretch",overflow:"hidden"}}>
+                            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,minWidth:52}}>
+                              <div style={{fontSize:14,fontWeight:900,color:isScale?P.mint:P.warning,fontFamily:fm,lineHeight:1}}>{"#"+(ai+1)}</div>
+                              <div style={{background:isScale?P.mint:P.warning,color:isScale?"#062014":"#2a1605",fontSize:8,fontWeight:900,padding:"3px 6px",borderRadius:4,fontFamily:fm,letterSpacing:0.8,whiteSpace:"nowrap",textAlign:"center"}}>{isScale?"\u25B2 SCALE":"\u2605 TOP"}</div>
+                            </div>
                             <div style={{flex:1,minWidth:0}}>
                               {miniCard(ad,sec.accent,resultLabel(resT),ad.results>0?fmt(ad.results):"0",costPerLabel(resT),ad.results>0?fR(ad.spend/ad.results):null)}
                             </div>
-                            <div style={{background:isScale?P.mint:P.warning,color:isScale?"#062014":"#2a1605",fontSize:9,fontWeight:900,padding:"4px 8px",borderRadius:4,fontFamily:fm,letterSpacing:1,whiteSpace:"nowrap"}}>{isScale?"\u25B2 SCALE":"\u2605 TOP PERFORMER"}</div>
                           </div>;
                         })}
                       </div>
