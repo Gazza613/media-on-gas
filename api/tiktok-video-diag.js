@@ -61,16 +61,21 @@ export default async function handler(req, res) {
       out.video_info_sample = (vData.data && vData.data.list && vData.data.list[0]) ? vData.data.list[0] : vData;
     }
 
-    // Step 3: probe /file/image/ad/info/
-    if (imageIds.length > 0) {
-      var imgSample = imageIds.slice(0, 5);
+    // Step 3: probe /file/image/ad/info/ with ONLY carousel/standalone image ids
+    // (video ads' image_ids point to video-cover assets that this endpoint blocks with 40001)
+    var carouselImgIds = [];
+    carouselAds.forEach(function(ad) {
+      if (ad.image_ids) ad.image_ids.forEach(function(iid) { if (carouselImgIds.indexOf(iid) < 0) carouselImgIds.push(iid); });
+    });
+    if (carouselImgIds.length > 0) {
+      var imgSample = carouselImgIds.slice(0, 5);
       var imgUrl = "https://business-api.tiktok.com/open_api/v1.3/file/image/ad/info/?advertiser_id=" + advId + "&image_ids=" + encodeURIComponent(JSON.stringify(imgSample));
       var iRes = await fetch(imgUrl, { headers: { "Access-Token": token } });
       var iData = await iRes.json();
-      out.steps.push({ step: "file/image/ad/info", status: iRes.status, code: iData.code, message: iData.message, list_len: (iData.data && iData.data.list) ? iData.data.list.length : 0 });
+      out.steps.push({ step: "file/image/ad/info (carousel only)", status: iRes.status, code: iData.code, message: iData.message, list_len: (iData.data && iData.data.list) ? iData.data.list.length : 0 });
       out.image_info_sample = (iData.data && iData.data.list && iData.data.list[0]) ? iData.data.list[0] : iData;
     } else {
-      out.image_probe = "SKIPPED — no image_ids found on any ad. TikTok may be returning carousels under a different field.";
+      out.image_probe = "SKIPPED — no carousel image_ids found (carousel ads have video_id set or no image_ids at all).";
     }
 
     // Verdict

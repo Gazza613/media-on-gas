@@ -423,7 +423,9 @@ export default async function handler(req, res) {
         ttAdsData.data.list.forEach(function(ad) {
           ttAdsByAdId[ad.ad_id] = ad;
           if (ad.video_id && videoIds.indexOf(ad.video_id) < 0) videoIds.push(ad.video_id);
-          if (ad.image_ids && ad.image_ids.length > 0) {
+          // Only collect image_ids from ads without a video_id — video ads' image_ids point to
+          // video cover assets that the image-info endpoint refuses (40001), which poisons the batch.
+          if (!ad.video_id && ad.image_ids && ad.image_ids.length > 0) {
             ad.image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });
           }
         });
