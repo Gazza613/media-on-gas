@@ -99,7 +99,7 @@ export default async function handler(req, res) {
     });
     Object.keys(typeSamples).forEach(function(k) { typeSamples[k].forEach(function(r) { out.ads_sample.push(r); }); });
 
-    // Query 2: full asset view payload
+    // Query 2: full asset view payload (drop media_bundle_asset.data — prohibited in SELECT)
     var assetQuery = [
       "SELECT",
       "  ad_group_ad_asset_view.ad_group_ad,",
@@ -110,10 +110,8 @@ export default async function handler(req, res) {
       "  asset.image_asset.full_size.url,",
       "  asset.image_asset.full_size.width_pixels,",
       "  asset.image_asset.full_size.height_pixels,",
-      "  asset.image_asset.file_size,",
       "  asset.youtube_video_asset.youtube_video_id,",
       "  asset.youtube_video_asset.youtube_video_title,",
-      "  asset.media_bundle_asset.data,",
       "  asset.text_asset.text",
       "FROM ad_group_ad_asset_view",
       "WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'"
@@ -156,6 +154,44 @@ export default async function handler(req, res) {
           out.ad_to_assets[adRes].other.push(at);
         }
       });
+    }
+
+    // Query 3: direct asset lookup by resource name for marketingImages references
+    var assetResourceNames = [];
+    (adData.results || []).forEach(function(r) {
+      var rda = r.adGroupAd.ad.responsiveDisplayAd || {};
+      (rda.marketingImages || []).forEach(function(m) { if (m.asset && assetResourceNames.indexOf(m.asset) < 0) assetResourceNames.push(m.asset); });
+      (rda.squareMarketingImages || []).forEach(function(m) { if (m.asset && assetResourceNames.indexOf(m.asset) < 0) assetResourceNames.push(m.asset); });
+      (rda.youtubeVideos || []).forEach(function(m) { if (m.asset && assetResourceNames.indexOf(m.asset) < 0) assetResourceNames.push(m.asset); });
+    });
+    out.asset_refs_from_ads = assetResourceNames.length;
+    if (assetResourceNames.length > 0) {
+      var assetIds = assetResourceNames.map(function(rn) { return "'" + rn + "'"; }).join(",");
+      var directAssetQuery = "SELECT asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name IN (" + assetIds + ")";
+      var dRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ query: directAssetQuery })
+      });
+      var dStatus = dRes.status;
+      var dText = await dRes.text();
+      out.steps.push({ step: "direct_asset_lookup", status: dStatus });
+      if (dStatus === 200) {
+        var dData = JSON.parse(dText);
+        out.direct_asset_count = (dData.results || []).length;
+        out.direct_asset_sample = (dData.results || []).slice(0, 5);
+        // Build name → url map
+        var urlByName = {};
+        (dData.results || []).forEach(function(ar) {
+          if (ar.asset && ar.asset.imageAsset && ar.asset.imageAsset.fullSize && ar.asset.imageAsset.fullSize.url) {
+            urlByName[ar.asset.resourceName] = ar.asset.imageAsset.fullSize.url;
+          }
+        });
+        out.direct_url_resolved_count = Object.keys(urlByName).length;
+        out.direct_first_url = Object.keys(urlByName).length > 0 ? urlByName[Object.keys(urlByName)[0]] : null;
+      } else {
+        out.direct_asset_error = dText.substring(0, 1500);
+      }
     }
 
     // Per-ad summary: can we resolve a thumbnail?
