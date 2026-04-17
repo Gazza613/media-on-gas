@@ -422,7 +422,7 @@ export default function MediaOnGas(){
                       </ResponsiveContainer>
                     </div>
                     <div style={{height:300}}>
-                      <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>IMPRESSIONS BY PLATFORM</div>
+                      <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>ADS SERVED BY PLATFORM</div>
                       <ResponsiveContainer width="100%" height="92%">
                         <BarChart data={impData} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="value" name="Impressions" radius={[6,6,0,0]}>{impData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="value" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
                       </ResponsiveContainer>
