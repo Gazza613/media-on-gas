@@ -595,6 +595,115 @@ export default function MediaOnGas(){
                 {(function(){var biggestPlat=communityData.slice().sort(function(a,b){return b.total-a.total;})[0];var fastestGrow=communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})[0];return standRow([biggestPlat?stand("BIGGEST PLATFORM",biggestPlat.name+", "+fmt(biggestPlat.total),biggestPlat.color):null,fastestGrow?stand("TOP GROWTH THIS PERIOD",fastestGrow.name+", +"+fmt(fastestGrow.earned),fastestGrow.color):null,earnedTotal>0?stand("COST PER MEMBER",fR(computed.totalSpend/earnedTotal),P.solar):null]);})()}
               </div>}
 
+              {/* ═══ TOP 5 ADS PER PLATFORM ═══ */}
+              {(function(){
+                if(!adsList||adsList.length===0)return null;
+                var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
+                if(selCamps.length===0)return null;
+                var selCampIds={};
+                selCamps.forEach(function(c){
+                  selCampIds[String(c.rawCampaignId||"")]=true;
+                  selCampIds[String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;
+                  selCampIds[String(c.campaignId||"")]=true;
+                });
+                var selCampNames={};
+                selCamps.forEach(function(c){if(c.campaignName)selCampNames[c.campaignName]=true;});
+                var filteredAds=adsList.filter(function(a){
+                  if(selCampIds[String(a.campaignId||"")])return true;
+                  if(selCampNames[a.campaignName])return true;
+                  return false;
+                });
+                if(filteredAds.length===0)return null;
+
+                var platformGroup=function(p){
+                  if(p==="Facebook")return"Facebook";
+                  if(p==="Instagram")return"Instagram";
+                  if(p==="TikTok")return"TikTok";
+                  if(p==="Google Display"||p==="YouTube"||p==="Google Search"||p==="Performance Max"||p==="Demand Gen")return"Google Display";
+                  return p;
+                };
+                var fmtMeta=function(f){
+                  var ff2=(f||"STATIC").toUpperCase();
+                  if(ff2==="MP4"||ff2==="VIDEO")return{label:"VIDEO",color:P.rose};
+                  if(ff2==="CAROUSEL")return{label:"CAROUSEL",color:P.orchid};
+                  if(ff2==="GIF")return{label:"GIF",color:P.warning};
+                  if(ff2==="RESPONSIVE")return{label:"RESPONSIVE",color:P.blaze};
+                  if(ff2==="TEXT")return{label:"TEXT",color:P.dim};
+                  return{label:"STATIC",color:P.cyan};
+                };
+                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
+                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
+
+                var platGroups=[
+                  {key:"Facebook",label:"FACEBOOK",accent:P.fb,short:"FB"},
+                  {key:"Instagram",label:"INSTAGRAM",accent:P.ig,short:"IG"},
+                  {key:"TikTok",label:"TIKTOK",accent:P.tt,short:"TT"},
+                  {key:"Google Display",label:"GOOGLE DISPLAY",accent:P.gd,short:"GD"}
+                ];
+
+                var sections=[];
+                platGroups.forEach(function(pg){
+                  var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
+                  if(platAds.length===0)return;
+                  var sorted=platAds.slice().sort(function(a,b){
+                    if(b.results!==a.results)return b.results-a.results;
+                    var ac=a.results>0?a.spend/a.results:Infinity;
+                    var bc=b.results>0?b.spend/b.results:Infinity;
+                    if(ac!==bc)return ac-bc;
+                    return b.impressions-a.impressions;
+                  });
+                  sections.push({pg:pg,ads:sorted.slice(0,5),total:platAds.length});
+                });
+                if(sections.length===0)return null;
+
+                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(P.mint,"TOP 5 ADS PER PLATFORM",Ic.crown(P.mint,18))}
+                  {sections.map(function(s){
+                    return <div key={s.pg.key} style={{marginBottom:24}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,paddingBottom:10,borderBottom:"1px solid "+s.pg.accent+"30"}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:s.pg.accent}}/>
+                        <span style={{fontSize:14,fontWeight:900,color:s.pg.accent,fontFamily:ff,letterSpacing:1.5}}>{s.pg.label}</span>
+                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.pg.accent+"30, transparent)"}}/>
+                        <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{s.total+" total ads"}</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
+                        {s.ads.map(function(ad,i){
+                          var fm2=fmtMeta(ad.format);
+                          return <div key={ad.adId+"_"+s.pg.key} style={{background:"rgba(0,0,0,0.35)",borderRadius:12,border:"1px solid "+s.pg.accent+"35",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+                            <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
+                              <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+s.pg.accent+"55,"+s.pg.accent+"15 55%,#0a0618 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:40,fontWeight:900,letterSpacing:4,color:s.pg.accent,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{s.pg.short}</div>
+                                <div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
+                                  <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
+                                  <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
+                                  {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
+                                </div>
+                              </div>
+                              {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
+                              <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+(i+1)}</div>
+                              <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:"#fff",padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
+                              {ad.results>0&&<div style={{position:"absolute",bottom:8,right:8,background:P.mint,color:"#062014",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(52,211,153,0.45)",zIndex:3}}>{"\u25B2 SCALE"}</div>}
+                            </div>
+                            <div style={{padding:"8px 10px",flex:1,display:"flex",flexDirection:"column"}}>
+                              <div style={{fontSize:10,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:6,lineHeight:1.3,minHeight:26,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
+                              <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,padding:"5px 7px",background:s.pg.accent+"10",border:"1px solid "+s.pg.accent+"30",borderRadius:6}}>
+                                <span style={{color:s.pg.accent,fontWeight:800}}>{(ad.results>0?fmt(ad.results):"0")+" "+resultLabelS(ad.resultType).split(" ")[0]}</span>
+                                <span style={{color:s.pg.accent,fontWeight:800}}>{ad.results>0?fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType):"-"}</span>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
+                                <span>{fR(ad.spend)}</span>
+                                <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
+                              </div>
+                              {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"6px 8px",background:s.pg.accent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"6px 8px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:5,color:P.dim,fontSize:8,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1}}>NO LINK</div>}
+                            </div>
+                          </div>;
+                        })}
+                      </div>
+                    </div>;
+                  })}
+                </div>;
+              })()}
+
               {/* ═══ 7. EXECUTIVE SUMMARY (consolidated at bottom) ═══ */}
               {(function(){
                 var bestCpcPlatLocal="";var bestCpcValLocal=Infinity;
