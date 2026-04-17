@@ -13,20 +13,41 @@ export default async function handler(req, res) {
   var accountId = req.query.account_id || "";
   var adIds = (req.query.ad_ids || "").split(",").filter(Boolean);
   if (!metaToken) { res.status(500).json({ error: "META_ACCESS_TOKEN not set" }); return; }
-  if (!accountId) { res.status(400).json({ error: "account_id query param required (e.g. act_542990539806888)" }); return; }
 
-  var out = { account_id: accountId, ads: [] };
+  var out = { ads: [], accounts_scanned: [] };
   try {
-    // If no ad_ids specified, pull recent ones
-    if (adIds.length === 0) {
-      var from = req.query.from || "2026-04-01";
-      var to = req.query.to || "2026-04-30";
-      var insUrl = "https://graph.facebook.com/v25.0/" + accountId + "/insights?fields=ad_id&time_range=" + encodeURIComponent(JSON.stringify({ since: from, until: to })) + "&level=ad&limit=20&access_token=" + metaToken;
-      var insRes = await fetch(insUrl);
-      var insData = await insRes.json();
-      adIds = (insData.data || []).map(function(d) { return d.ad_id; });
+    var from = req.query.from || "2026-03-01";
+    var to = req.query.to || "2026-04-30";
+
+    // If no ad_ids specified, sweep across every ad account the token has access to
+    var accountsToScan = [];
+    if (accountId) {
+      accountsToScan.push(accountId);
+    } else if (adIds.length === 0) {
+      var acctsUrl = "https://graph.facebook.com/v25.0/me/adaccounts?fields=id,name&limit=50&access_token=" + metaToken;
+      var acctsRes = await fetch(acctsUrl);
+      var acctsData = await acctsRes.json();
+      (acctsData.data || []).forEach(function(a) { accountsToScan.push(a.id); });
     }
-    if (adIds.length === 0) { out.error = "no ads"; res.status(200).json(out); return; }
+
+    if (adIds.length === 0) {
+      for (var ai = 0; ai < accountsToScan.length; ai++) {
+        var acct = accountsToScan[ai];
+        try {
+          var insUrl = "https://graph.facebook.com/v25.0/" + acct + "/insights?fields=ad_id,ad_name&time_range=" + encodeURIComponent(JSON.stringify({ since: from, until: to })) + "&level=ad&limit=10&access_token=" + metaToken;
+          var insRes = await fetch(insUrl);
+          var insData = await insRes.json();
+          var count = (insData.data || []).length;
+          out.accounts_scanned.push({ account_id: acct, ads_found: count, error: insData.error && insData.error.message });
+          (insData.data || []).forEach(function(d) {
+            if (adIds.length < 20 && adIds.indexOf(d.ad_id) < 0) adIds.push(d.ad_id);
+          });
+        } catch (e) {
+          out.accounts_scanned.push({ account_id: acct, error: String(e) });
+        }
+      }
+    }
+    if (adIds.length === 0) { out.error = "no ads across scanned accounts"; res.status(200).json(out); return; }
 
     var adFields = "id,name,creative{id,thumbnail_url,image_url,effective_object_story_id,object_type,video_id,instagram_permalink_url,image_hash,asset_feed_spec}";
     var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + adIds.join(",") + "&fields=" + encodeURIComponent(adFields) + "&access_token=" + metaToken;
