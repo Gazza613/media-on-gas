@@ -604,9 +604,20 @@ export default function MediaOnGas(){
 
               {/* ═══ TOP 5 ADS PER PLATFORM ═══ */}
               {(function(){
-                if(!adsList||adsList.length===0)return null;
                 var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
                 if(selCamps.length===0)return null;
+                // Ads endpoint is slower than campaigns (many Meta/TikTok/Google lookups). Render a
+                // placeholder while it loads so the section is visibly part of the page instead of
+                // appearing mid-scroll after the fetch resolves.
+                if(!adsList||adsList.length===0){
+                  return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                    {secHead(P.mint,"TOP 5 ADS PER PLATFORM",Ic.crown(P.mint,18))}
+                    <div style={{padding:"40px 20px",textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12,lineHeight:1.8}}>
+                      <div style={{fontSize:14,color:P.sub,marginBottom:6}}>Loading creative performance…</div>
+                      <div>Fetching ad-level thumbnails and metrics from Meta, TikTok and Google. This usually takes 5-15 seconds.</div>
+                    </div>
+                  </div>;
+                }
                 var selCampIds={};
                 selCamps.forEach(function(c){
                   selCampIds[String(c.rawCampaignId||"")]=true;
