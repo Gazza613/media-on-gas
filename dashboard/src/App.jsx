@@ -302,7 +302,7 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
-          <SH icon={Ic.crown(P.ember,20)} title="Media Insights" sub={df+" to "+dt+" | Performance Intelligence Brief"} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt+" | Performance Intelligence Brief"} accent={P.ember}/>
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
