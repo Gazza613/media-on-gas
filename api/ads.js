@@ -176,23 +176,24 @@ export default async function handler(req, res) {
         }
       });
       var videoThumbs = {};
-      for (var vb = 0; vb < videoIds.length; vb += 50) {
-        var vBatch = videoIds.slice(vb, vb + 50);
-        var vUrl = "https://graph.facebook.com/v25.0/?ids=" + vBatch.join(",") + "&fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken;
+      // Parallel per-video fetch. The old batch ?ids= approach poisoned the whole batch when
+      // any single video_id was unreachable (different page permissions, deleted, etc.).
+      var fetchOneVideoThumb = async function(vid) {
         try {
-          var vRes = await fetch(vUrl);
-          var vData = await vRes.json();
-          Object.keys(vData).forEach(function(vid) {
-            var v = vData[vid];
-            if (!v) return;
-            var best = "";
-            if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
-              var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
-              best = largest.uri || "";
-            }
-            videoThumbs[vid] = best || v.picture || "";
-          });
-        } catch (vbErr) { console.error("Meta video thumb error", account.name, vbErr); }
+          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
+          var v = await r.json();
+          if (!v || v.error) return;
+          var best = "";
+          if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
+            var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
+            best = largest.uri || "";
+          }
+          videoThumbs[vid] = best || v.picture || "";
+        } catch (_) { /* individual failure, leave entry empty */ }
+      };
+      // Chunk parallel calls to avoid too many concurrent sockets
+      for (var vb = 0; vb < videoIds.length; vb += 15) {
+        await Promise.all(videoIds.slice(vb, vb + 15).map(fetchOneVideoThumb));
       }
 
       // Resolve image_hash to full-resolution uploaded asset URL via /adimages
@@ -227,6 +228,18 @@ export default async function handler(req, res) {
             });
           }
         } catch (aiErr) { console.error("Meta adimages error", account.name, aiErr); }
+      }
+      // Fallback for any hash the batch didn't return (e.g. creative shared from another
+      // ad account). Probe individually so one bad hash doesn't poison the lot.
+      var unresolvedHashes = imageHashes.filter(function(h) { return !hashToUrl[h]; });
+      if (unresolvedHashes.length > 0) {
+        await Promise.all(unresolvedHashes.slice(0, 100).map(async function(h) {
+          try {
+            var r = await fetch("https://graph.facebook.com/v25.0/" + account.id + "/adimages?hashes=" + encodeURIComponent(JSON.stringify([h])) + "&fields=hash,url,permalink_url&access_token=" + metaToken);
+            var d = await r.json();
+            if (d.data && d.data[0]) hashToUrl[h] = d.data[0].url || d.data[0].permalink_url || "";
+          } catch (_) {}
+        }));
       }
 
       // Resolve effective_object_story_id to post.full_picture for higher-res post images
