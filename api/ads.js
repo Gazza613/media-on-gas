@@ -210,14 +210,16 @@ export default async function handler(req, res) {
       var storyToPic = {};
       for (var si = 0; si < storyIds.length; si += 50) {
         var sBatch = storyIds.slice(si, si + 50);
-        var spUrl = "https://graph.facebook.com/v25.0/?ids=" + sBatch.join(",") + "&fields=full_picture,picture&access_token=" + metaToken;
+        var spUrl = "https://graph.facebook.com/v25.0/?ids=" + sBatch.join(",") + "&fields=full_picture,picture,picture_attachment{image}&access_token=" + metaToken;
         try {
           var spRes = await fetch(spUrl);
           var spData = await spRes.json();
           Object.keys(spData).forEach(function(sid) {
             var s = spData[sid];
             if (!s) return;
-            storyToPic[sid] = s.full_picture || s.picture || "";
+            // picture_attachment.image.src is Meta's highest-resolution cached copy
+            var pa = s.picture_attachment && s.picture_attachment.image && s.picture_attachment.image.src;
+            storyToPic[sid] = pa || s.full_picture || s.picture || "";
           });
         } catch (spErr) { console.error("Meta post picture error", account.name, spErr); }
       }
@@ -252,18 +254,13 @@ export default async function handler(req, res) {
         } catch (spErr2) { /* silent fail, full_picture is the fallback */ }
       }
 
-      var upsizeFb = function(url) {
-        if (!url) return url;
-        if (url.indexOf("fbcdn.net") < 0 && url.indexOf("cdninstagram.com") < 0) return url;
-        // Replace small CDN size patterns in path (p64x64, s100x100, etc) with larger
-        url = url.replace(/\/p\d+x\d+\//g, "/p1080x1080/");
-        url = url.replace(/\/s\d+x\d+\//g, "/s1080x1080/");
-        if (url.indexOf("width=") < 0) {
-          var sep = url.indexOf("?") >= 0 ? "&" : "?";
-          url = url + sep + "width=1080";
-        }
-        return url;
-      };
+      // Meta FB/IG CDN URLs are signed via query params (oh=, oe=, _nc_sig=).
+      // Altering the /pNxN/ path segment invalidates the signature and the CDN
+      // falls back to serving a low-res placeholder. Leave the URL as Meta
+      // returned it — higher resolution comes from picking the right upstream
+      // field (full_picture, /adimages, attachments{media}) rather than URL
+      // rewriting.
+      var upsizeFb = function(url) { return url || ""; };
 
       insights.forEach(function(ins) {
         var cr = creativesByAdId[ins.ad_id] || {};
