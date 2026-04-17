@@ -541,7 +541,7 @@ export default async function handler(req, res) {
       var gTokenData = await gTokenRes.json();
       googleDebug.tokenOk = !!gTokenData.access_token;
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.video_responsive_ad.videos, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.responsive_display_ad.long_headline, ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.app_ad.headlines, ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines, campaign.id, campaign.name, campaign.advertising_channel_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -738,7 +738,23 @@ export default async function handler(req, res) {
               campaignName: r.campaign.name,
               adsetName: r.adGroup.name,
               adId: ad.id,
-              adName: ad.name || ("Ad " + ad.id),
+              adName: (function(){
+                if (ad.name) return ad.name;
+                var rda = ad.responsiveDisplayAd || {};
+                var rsa = ad.responsiveSearchAd || {};
+                var appAdN = ad.appAd || {};
+                var vraN = ad.videoResponsiveAd || {};
+                if (rda.longHeadline && rda.longHeadline.text) return rda.longHeadline.text;
+                if (rda.headlines && rda.headlines[0] && rda.headlines[0].text) return rda.headlines[0].text;
+                if (rsa.headlines && rsa.headlines[0] && rsa.headlines[0].text) return rsa.headlines[0].text;
+                if (appAdN.headlines && appAdN.headlines[0] && appAdN.headlines[0].text) return appAdN.headlines[0].text;
+                if (vraN.headlines && vraN.headlines[0] && vraN.headlines[0].text) return vraN.headlines[0].text;
+                if (ad.imageAd && ad.imageAd.name) return ad.imageAd.name;
+                // Last resort: use ad group name + ad type so it reads meaningfully instead of a bare ID
+                var typeLbl = (ad.type || "").replace(/_/g, " ").replace(/\bAD$/i, "").trim() || "Ad";
+                var grp = r.adGroup && r.adGroup.name ? r.adGroup.name + " | " : "";
+                return grp + typeLbl;
+              })(),
               thumbnail: thumb,
               previewUrl: preview,
               format: format,
