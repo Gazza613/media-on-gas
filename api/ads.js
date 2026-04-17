@@ -153,11 +153,27 @@ export default async function handler(req, res) {
         } catch (bErr) { console.error("Meta batch creative error", account.name, bErr); }
       }
 
+      // Track primary video_id per ad (falls back to first DCO variant if the creative is
+      // Dynamic/Advantage+ and doesn't have a top-level video_id).
+      var adPrimaryVideoId = {};
+      var adPrimaryImageHash = {};
       // Collect unique video IDs for high-res thumbnail fetch
       var videoIds = [];
       Object.keys(creativesByAdId).forEach(function(adId) {
-        var vid = creativesByAdId[adId].video_id;
-        if (vid && videoIds.indexOf(vid) < 0) videoIds.push(vid);
+        var cr = creativesByAdId[adId];
+        var vid = cr.video_id;
+        var afs = cr.asset_feed_spec || {};
+        if (!vid && afs.videos && afs.videos.length > 0) vid = afs.videos[0].video_id;
+        if (vid) {
+          adPrimaryVideoId[adId] = vid;
+          if (videoIds.indexOf(vid) < 0) videoIds.push(vid);
+        }
+        // Also any DCO video variant thumbnails (thumbnail_hash is an image hash)
+        if (afs.videos) {
+          afs.videos.forEach(function(v) {
+            if (v.video_id && videoIds.indexOf(v.video_id) < 0) videoIds.push(v.video_id);
+          });
+        }
       });
       var videoThumbs = {};
       for (var vb = 0; vb < videoIds.length; vb += 50) {
@@ -180,10 +196,22 @@ export default async function handler(req, res) {
       }
 
       // Resolve image_hash to full-resolution uploaded asset URL via /adimages
+      // Also collect hashes from asset_feed_spec (Dynamic / Advantage+ ads)
       var imageHashes = [];
       Object.keys(creativesByAdId).forEach(function(adId) {
-        var hash = creativesByAdId[adId].image_hash;
-        if (hash && imageHashes.indexOf(hash) < 0) imageHashes.push(hash);
+        var cr = creativesByAdId[adId];
+        var hash = cr.image_hash;
+        var afs = cr.asset_feed_spec || {};
+        if (!hash && afs.images && afs.images.length > 0) hash = afs.images[0].hash;
+        if (hash) {
+          adPrimaryImageHash[adId] = hash;
+          if (imageHashes.indexOf(hash) < 0) imageHashes.push(hash);
+        }
+        if (afs.images) {
+          afs.images.forEach(function(im) {
+            if (im.hash && imageHashes.indexOf(im.hash) < 0) imageHashes.push(im.hash);
+          });
+        }
       });
       var hashToUrl = {};
       for (var ih = 0; ih < imageHashes.length; ih += 50) {
@@ -266,8 +294,10 @@ export default async function handler(req, res) {
         var cr = creativesByAdId[ins.ad_id] || {};
         var pub = ins._pub;
         var platform = pub === "instagram" ? "Instagram" : "Facebook";
-        var vidThumb = cr.video_id ? videoThumbs[cr.video_id] : "";
-        var hashThumb = cr.image_hash ? hashToUrl[cr.image_hash] : "";
+        var primaryVid = adPrimaryVideoId[ins.ad_id];
+        var primaryHash = adPrimaryImageHash[ins.ad_id];
+        var vidThumb = primaryVid ? videoThumbs[primaryVid] : "";
+        var hashThumb = primaryHash ? hashToUrl[primaryHash] : "";
         var sid = cr.effective_object_story_id;
         var postHiThumb = sid ? storyToPicHi[sid] : "";
         var postThumb = sid ? storyToPic[sid] : "";
