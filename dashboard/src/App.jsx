@@ -533,12 +533,12 @@ export default function MediaOnGas(){
                   var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;
                   return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};
                 }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
-                if(topAd.length===0&&worstAd.length===0)return null;
-                var topChart=topAd.slice(0,5).map(function(a){return{name:a.name.length>25?a.name.substring(0,22)+"...":a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember};});
+                if(topAd.length===0)return null;
+                var topChart=topAd.slice(0,5).map(function(a){return{name:a.name.length>22?a.name.substring(0,20)+"...":a.name,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.solar,"TARGETING STANDOUTS",Ic.radar(P.solar,18))}
-                  <div style={{display:"grid",gridTemplateColumns:topAd.length>0&&worstAd.length>0?"1fr 1fr":"1fr",gap:20,marginBottom:20}}>
-                    {topAd.length>0&&<div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+                    <div>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.mint+"15",border:"1px solid "+P.mint+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.check(P.mint,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>TOP PERFORMERS</span></div>
                       {topAd.slice(0,4).map(function(ta,ti){
                         var pc7=platCol4[ta.platform]||P.ember;
@@ -547,17 +547,24 @@ export default function MediaOnGas(){
                           <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ta.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmt(ta.imps)+" impressions | "+ta.ctr.toFixed(2)+"% CTR"}</div></div>
                           <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm,lineHeight:1}}>{fmt(ta.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(ta.costPer)+"/ea"}</div></div>
                         </div>;})}
-                    </div>}
-                    {worstAd.length>0&&<div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.rose+"15",border:"1px solid "+P.rose+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.alert(P.rose,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.rose,fontFamily:ff,letterSpacing:1}}>REQUIRES ATTENTION</span></div>
-                      {worstAd.slice(0,4).map(function(wa,wi){
-                        var pc8=platCol4[wa.platform]||P.ember;
-                        return <div key={wi} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",marginBottom:8,background:"linear-gradient(135deg,"+P.rose+"08,transparent)",borderLeft:"3px solid "+P.rose,borderRadius:"0 12px 12px 0",border:"1px solid "+P.rose+"15",borderLeftWidth:3}}>
-                          <span style={{background:pc8,color:"#fff",fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:8,flexShrink:0,letterSpacing:1}}>{platShort[wa.platform]||wa.platform}</span>
-                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{wa.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(wa.spend)+" spent | "+wa.ctr.toFixed(2)+"% CTR"}</div></div>
-                          <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:14,fontWeight:900,color:P.rose,fontFamily:fm,lineHeight:1}}>{wa.result===0?"No results":fmt(wa.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{wa.result===0?"zero conversions":fR(wa.costPer)+"/ea"}</div></div>
-                        </div>;})}
-                    </div>}
+                    </div>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.solar+"15",border:"1px solid "+P.solar+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.chart(P.solar,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1}}>BEST AUDIENCES</span></div>
+                      {topChart.length>=2?<div style={{height:280}}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={topChart} layout="vertical" margin={{top:6,right:52,left:0,bottom:6}} barSize={26}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
+                            <XAxis type="number" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                            <YAxis type="category" dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} width={130}/>
+                            <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                            <Bar dataKey="results" name="Results" radius={[0,6,6,0]}>
+                              {topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}
+                              <LabelList dataKey="results" position="right" formatter={function(v){return fmt(v);}} style={lblStyle}/>
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>:<div style={{padding:18,textAlign:"center",color:P.dim,fontSize:11,fontFamily:fm,background:"rgba(0,0,0,0.2)",borderRadius:10}}>Need at least 2 top-performing audiences to render the chart. Let more data accumulate.</div>}
+                    </div>
                   </div>
                   {topChart.length>=2&&<div style={{height:320}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>TOP AD SET EFFICIENCY (RESULTS VS COST)</div>
@@ -565,7 +572,7 @@ export default function MediaOnGas(){
                       <ComposedChart data={topChart} barSize={36} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:9,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]}>{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="results" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}><LabelList dataKey="costPer" position="top" formatter={function(v){return"R"+v;}} style={lblStyleSm}/></Line></ComposedChart>
                     </ResponsiveContainer>
                   </div>}
-                  {(function(){var totalWaste=0;worstAd.forEach(function(w){totalWaste+=w.spend;});return standRow([topAd.length>0?stand("BEST AD SET",(topAd[0].name.length>30?topAd[0].name.substring(0,28)+"..":topAd[0].name)+", "+fR(topAd[0].costPer)+"/ea",platCol4[topAd[0].platform]||P.mint):null,stand("ACTIVE AD SETS",selAdsets2.length,P.cyan),worstAd.length>0?stand("FLAGGED WASTE",fR(totalWaste)+" across "+worstAd.length,P.rose):null]);})()}
+                  {standRow([topAd.length>0?stand("BEST AD SET",(topAd[0].name.length>30?topAd[0].name.substring(0,28)+"..":topAd[0].name)+", "+fR(topAd[0].costPer)+"/ea",platCol4[topAd[0].platform]||P.mint):null,stand("ACTIVE AD SETS",selAdsets2.length,P.cyan),topAd.length>1?stand("SECOND BEST",(topAd[1].name.length>30?topAd[1].name.substring(0,28)+"..":topAd[1].name)+", "+fR(topAd[1].costPer)+"/ea",platCol4[topAd[1].platform]||P.solar):null])}
                 </div>;
               })()}
 
