@@ -642,14 +642,25 @@ export default function MediaOnGas(){
                 ];
 
                 var sections=[];
+                var IMP_FLOOR=5000;
+                var tierOf=function(ad){
+                  if(ad.results>0)return 1;
+                  if(ad.impressions>=IMP_FLOOR)return 2;
+                  return 3;
+                };
                 platGroups.forEach(function(pg){
                   var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
                   if(platAds.length===0)return;
                   var sorted=platAds.slice().sort(function(a,b){
-                    if(b.results!==a.results)return b.results-a.results;
-                    var ac=a.results>0?a.spend/a.results:Infinity;
-                    var bc=b.results>0?b.spend/b.results:Infinity;
-                    if(ac!==bc)return ac-bc;
+                    var aT=tierOf(a),bT=tierOf(b);
+                    if(aT!==bT)return aT-bT;
+                    if(aT===1){
+                      if(b.results!==a.results)return b.results-a.results;
+                      var ac=a.spend/a.results;
+                      var bc=b.spend/b.results;
+                      if(ac!==bc)return ac-bc;
+                      return b.impressions-a.impressions;
+                    }
                     return b.impressions-a.impressions;
                   });
                   sections.push({pg:pg,ads:sorted.slice(0,5),total:platAds.length});
@@ -956,11 +967,19 @@ export default function MediaOnGas(){
               {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:objSections.map(function(sec){
                 var arr=byObj[sec.key]||[];
                 if(arr.length===0)return null;
-                // Sort: results DESC (KPI volume), then by cost-per-result ASC for ties (more efficient first)
+                // Tier-based sort: (1) ads with results rank by results DESC then CPR ASC,
+                // (2) ads with impressions >= 5k but no results yet rank by impressions DESC
+                // (algorithm is delivering, just hasn't scored), (3) low-delivery ads last.
+                // Low-impression ads are no longer penalised for having zero results.
+                var IMP_FLOOR=5000;
+                var tierOf=function(ad){if(ad.results>0)return 1;if(ad.impressions>=IMP_FLOOR)return 2;return 3;};
                 var sorted=arr.slice().sort(function(a,b){
+                  var aT=tierOf(a),bT=tierOf(b);
+                  if(aT!==bT)return aT-bT;
+                  if(aT!==1)return b.impressions-a.impressions;
                   if(b.results!==a.results)return b.results-a.results;
-                  var ac=a.results>0?a.spend/a.results:Infinity;
-                  var bc=b.results>0?b.spend/b.results:Infinity;
+                  var ac=a.spend/a.results;
+                  var bc=b.spend/b.results;
                   if(ac!==bc)return ac-bc;
                   return b.impressions-a.impressions;
                 });
