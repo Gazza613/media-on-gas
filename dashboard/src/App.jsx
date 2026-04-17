@@ -474,9 +474,18 @@ export default function MediaOnGas(){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CPC BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CPC & CLICKS BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={cpcData} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="cpc" name="CPC" radius={[6,6,0,0]}>{cpcData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="cpc" position="top" formatter={function(v){return"R"+v;}} style={lblStyle}/></Bar></BarChart>
+                      <ComposedChart data={cpcData.map(function(d){var pl=Object.keys(platBreak).filter(function(k){return(platShort[k]||k)===d.name;})[0];return{name:d.name,cpc:d.cpc,clicks:pl?platBreak[pl].clicks:0,color:d.color};})} barSize={38} margin={{top:24,right:16,left:0,bottom:0}}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
+                        <XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                        <YAxis yAxisId="left" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return"R"+v;}}/>
+                        <YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                        <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                        <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/>
+                        <Bar yAxisId="left" dataKey="cpc" name="CPC" radius={[6,6,0,0]}>{cpcData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="cpc" position="top" formatter={function(v){return"R"+v;}} style={lblStyle}/></Bar>
+                        <Line yAxisId="right" type="monotone" dataKey="clicks" name="Clicks" stroke={P.mint} strokeWidth={2.5} dot={{r:5,fill:P.mint,stroke:"#0a0618",strokeWidth:2}} activeDot={{r:7}}><LabelList dataKey="clicks" position="top" formatter={function(v){return fmt(v);}} style={Object.assign({},lblStyle,{fill:P.mint})}/></Line>
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
