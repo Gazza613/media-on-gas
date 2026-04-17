@@ -702,11 +702,11 @@ export default function MediaOnGas(){
                             <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                               <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+s.pg.accent+"55,"+s.pg.accent+"15 55%,#0a0618 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                                 <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:40,fontWeight:900,letterSpacing:4,color:s.pg.accent,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{s.pg.short}</div>
-                                <div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
+                                {!ad.thumbnail&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
                                   <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
                                   <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
                                   {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
-                                </div>
+                                </div>}
                               </div>
                               {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
                               {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
@@ -880,14 +880,17 @@ export default function MediaOnGas(){
               var pc=platCol5[ad.platform]||P.ember;
               var ps=platShort2[ad.platform]||ad.platform;
               var fm2=fmtMeta(ad.format);
+              // Only render the centred metric when there's no thumbnail — when there is one,
+              // the card-level gradient-backed overlay handles the callout and a second copy
+              // from here bubbles up to the same stacking layer and duplicates.
+              var showMetric=!ad.thumbnail;
               return <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+pc+"55,"+pc+"15 55%,#0a0618 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
                 <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:56,fontWeight:900,letterSpacing:4,color:pc,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{ps.toUpperCase()}</div>
-                <div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 14px"}}>
+                {showMetric&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 14px"}}>
                   <div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:2,marginBottom:4,fontWeight:800}}>{resultLabel(ad.resultType)}</div>
                   <div style={{fontSize:34,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"—"}</div>
                   {ad.results>0&&<div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:6,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)}</div>}
-                </div>
-                <div style={{position:"absolute",bottom:10,left:10,background:fm2.color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)"}}>{fm2.label}</div>
+                </div>}
               </div>;
             };
             var FilterBtn=function(active,label,onClick,color){
