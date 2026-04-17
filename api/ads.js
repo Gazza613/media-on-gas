@@ -294,15 +294,37 @@ export default async function handler(req, res) {
         var cr = creativesByAdId[ins.ad_id] || {};
         var pub = ins._pub;
         var platform = pub === "instagram" ? "Instagram" : "Facebook";
-        var primaryVid = adPrimaryVideoId[ins.ad_id];
-        var primaryHash = adPrimaryImageHash[ins.ad_id];
-        var vidThumb = primaryVid ? videoThumbs[primaryVid] : "";
-        var hashThumb = primaryHash ? hashToUrl[primaryHash] : "";
+        // Walk every variant (DCO ads often have multiple) until we find one that resolves.
+        // This covers cases where the first variant's hash isn't in this account's /adimages.
+        var afs = cr.asset_feed_spec || {};
+        var vidThumb = "";
+        var candidateVids = [];
+        if (cr.video_id) candidateVids.push(cr.video_id);
+        if (afs.videos) afs.videos.forEach(function(v) { if (v.video_id) candidateVids.push(v.video_id); });
+        for (var cvi = 0; cvi < candidateVids.length && !vidThumb; cvi++) {
+          vidThumb = videoThumbs[candidateVids[cvi]] || "";
+        }
+        var hashThumb = "";
+        var candidateHashes = [];
+        if (cr.image_hash) candidateHashes.push(cr.image_hash);
+        if (afs.images) afs.images.forEach(function(im) { if (im.hash) candidateHashes.push(im.hash); });
+        for (var chi = 0; chi < candidateHashes.length && !hashThumb; chi++) {
+          hashThumb = hashToUrl[candidateHashes[chi]] || "";
+        }
+        // Direct url fields on asset_feed_spec images (some DCO ads carry them instead of hashes)
+        var afsDirectUrl = "";
+        if (afs.images) {
+          for (var adi = 0; adi < afs.images.length && !afsDirectUrl; adi++) {
+            if (afs.images[adi].url) afsDirectUrl = afs.images[adi].url;
+          }
+        }
         var sid = cr.effective_object_story_id;
         var postHiThumb = sid ? storyToPicHi[sid] : "";
         var postThumb = sid ? storyToPic[sid] : "";
         // Priority: video thumbnail > /adimages permalink (full upload) > post attachments hi-res > post full_picture > image_url > thumbnail_url
-        var thumb = upsizeFb(vidThumb || hashThumb || postHiThumb || postThumb || cr.image_url || cr.thumbnail_url || "");
+        // Priority: video cover -> uploaded original -> direct asset_feed url -> post hi-res -> post pic -> image_url
+        // thumbnail_url is the absolute last resort because Meta bakes a 64x64 stp= modifier into it
+        var thumb = upsizeFb(vidThumb || hashThumb || afsDirectUrl || postHiThumb || postThumb || cr.image_url || cr.thumbnail_url || "");
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;
