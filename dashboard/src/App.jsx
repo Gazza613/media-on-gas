@@ -885,7 +885,7 @@ export default function MediaOnGas(){
                 parts.push("Overall, the campaign is performing strongly, efficient in delivery, meaningful in engagement, and generating measurable results across every active objective.");
                 var text=parts.join(" ");
                 return <div style={{marginTop:20,padding:"24px 28px",background:"linear-gradient(135deg,"+P.orchid+"10 0%,"+P.ember+"06 50%, transparent 100%)",border:"1px solid "+P.orchid+"25",borderLeft:"4px solid "+P.orchid,borderRadius:"0 16px 16px 0"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Combined Summary Insights</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>Plain-English recap for the full selected period</div></div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Combined Summary Insights</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>Recap for the full selected period</div></div></div>
                   <div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{text}</div>
                 </div>;
               })()}
