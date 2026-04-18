@@ -445,16 +445,15 @@ export default function MediaOnGas(){
                   <div style={{height:300}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>REACH & IMPRESSIONS BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <ComposedChart data={sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,reach:platBreak[pl].reach||0,imps:platBreak[pl].imps||0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.reach-a.reach;})} barSize={36} margin={{top:24,right:16,left:0,bottom:0}}>
+                      <BarChart data={sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,reach:platBreak[pl].reach||0,imps:platBreak[pl].imps||0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.imps-a.imps;})} barGap={4} barCategoryGap="20%" margin={{top:24,right:12,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
                         <XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/>
-                        <YAxis yAxisId="left" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
-                        <YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                        <YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
                         <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                         <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/>
-                        <Bar yAxisId="left" dataKey="reach" name="Reach" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.map(function(pl){return pl;}).sort(function(a,b){return (platBreak[b].reach||0)-(platBreak[a].reach||0);}).map(function(pl,i){return <Cell key={i} fill={platCol4[pl]||P.ember}/>;})}<LabelList dataKey="reach" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
-                        <Line yAxisId="right" type="monotone" dataKey="imps" name="Impressions" stroke={P.cyan} strokeWidth={2.5} dot={{r:5,fill:P.cyan,stroke:"#0a0618",strokeWidth:2}} activeDot={{r:7}}><LabelList dataKey="imps" position="top" formatter={function(v){return fmt(v);}} style={Object.assign({},lblStyle,{fill:P.cyan})}/></Line>
-                      </ComposedChart>
+                        <Bar dataKey="imps" name="Impressions" radius={[6,6,0,0]} fill={P.cyan}><LabelList dataKey="imps" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
+                        <Bar dataKey="reach" name="Reach" radius={[6,6,0,0]} fill={P.orchid}><LabelList dataKey="reach" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
