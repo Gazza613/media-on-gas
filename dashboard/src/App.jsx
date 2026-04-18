@@ -835,22 +835,32 @@ export default function MediaOnGas(){
                   var scored=fAds.filter(function(a){return a.impressions>=5000;}).slice().sort(function(a,b){if(b.ctr!==a.ctr)return b.ctr-a.ctr;return b.clicks-a.clicks;});
                   if(scored.length===0)return "Creative performance is still gathering meaningful impression volume across "+fAds.length+" ads. Insights will sharpen as data accumulates.";
                   var top3=scored.slice(0,3);
+                  var fmtOf=function(f){var u=(f||"").toUpperCase();return u==="MP4"||u==="VIDEO"?"video":u==="CAROUSEL"?"carousel":u==="GIF"?"animated":"static image";};
                   var lines=[];
-                  lines.push("From "+fAds.length+" active creatives, three ads are currently earning the most attention and are the clear stand-outs this period.");
-                  top3.forEach(function(ad,i){
-                    var rank=i===0?"The strongest":i===1?"Second":"Third";
-                    var ctrTag=ad.ctr>=2?"an exceptionally high":ad.ctr>=1.4?"a strong above-benchmark":"a healthy";
-                    var fmtWord=(ad.format||"").toUpperCase();
-                    var fmtPhrase=fmtWord==="MP4"||fmtWord==="VIDEO"?"video":fmtWord==="CAROUSEL"?"carousel":fmtWord==="GIF"?"animated":"static image";
-                    lines.push(rank+" performer is a "+fmtPhrase+" ad on "+ad.platform+" achieving "+ctrTag+" click-through rate of "+ad.ctr.toFixed(2)+"% on "+fmt(ad.impressions)+" impressions"+(ad.results>0?", delivering "+fmt(ad.results)+" results at "+fR(ad.spend/ad.results)+" each":"")+". This indicates the creative concept is resonating with the audience, the combination of "+fmtPhrase+" format, platform fit and messaging is drawing meaningful engagement.");
-                  });
-                  // Format + platform pattern insight
+                  // Opening: frames the portfolio, not a "only 3 work" read
+                  lines.push("Across "+fAds.length+" active creatives, a broader portfolio is working to deliver consistent volume and keep the audience engaged without fatigue. Within that mix, three standouts are delivering especially strong engagement this period and offer the clearest signals about what the audience responds to.");
+                  var a=top3[0],b=top3[1],c=top3[2];
+                  if(a){
+                    var aFmt=fmtOf(a.format);
+                    lines.push("Leading the pack is a "+aFmt+" on "+a.platform+" that captured a "+a.ctr.toFixed(2)+"% click-through rate from "+fmt(a.impressions)+" impressions"+(a.results>0?", converting that attention into "+fmt(a.results)+" results at just "+fR(a.spend/a.results)+" each":"")+". This ad sets the tone for what is currently resonating most with the audience.");
+                  }
+                  if(b){
+                    var bFmt=fmtOf(b.format);
+                    var same1=aFmt===bFmt?" same "+bFmt+" formula":"a "+bFmt;
+                    lines.push("Close behind, "+same1+" on "+b.platform+" reached "+b.ctr.toFixed(2)+"% click-through across "+fmt(b.impressions)+" impressions"+(b.results>0?" and drove "+fmt(b.results)+" results at "+fR(b.spend/b.results)+" each":"")+", reinforcing that the creative direction is finding its audience.");
+                  }
+                  if(c){
+                    var cFmt=fmtOf(c.format);
+                    lines.push("Rounding out the top three, a "+cFmt+" on "+c.platform+" sustained "+c.ctr.toFixed(2)+"% click-through over "+fmt(c.impressions)+" impressions"+(c.results>0?", adding "+fmt(c.results)+" results at "+fR(c.spend/c.results)+" each":"")+", a steady contributor that underlines the broader campaign is building momentum.");
+                  }
+                  // Pattern detection
                   var fmtCount={};var platCount={};
-                  top3.forEach(function(a){var f=(a.format||"STATIC").toUpperCase();var fp=f==="MP4"?"video":f==="CAROUSEL"?"carousel":f==="GIF"?"animated":"static";fmtCount[fp]=(fmtCount[fp]||0)+1;platCount[a.platform]=(platCount[a.platform]||0)+1;});
-                  var topFmt=Object.keys(fmtCount).sort(function(a,b){return fmtCount[b]-fmtCount[a];})[0];
-                  var topPl=Object.keys(platCount).sort(function(a,b){return platCount[b]-platCount[a];})[0];
-                  if(fmtCount[topFmt]>=2)lines.push("A pattern is emerging: "+topFmt+" creative is consistently pulling the strongest engagement, a useful signal for how the audience prefers to absorb the brand message.");
-                  else if(platCount[topPl]>=2)lines.push(topPl+" is emerging as the platform where creative resonates most strongly with the audience this period.");
+                  top3.forEach(function(ad){var fp=fmtOf(ad.format);fmtCount[fp]=(fmtCount[fp]||0)+1;platCount[ad.platform]=(platCount[ad.platform]||0)+1;});
+                  var topFmt=Object.keys(fmtCount).sort(function(x,y){return fmtCount[y]-fmtCount[x];})[0];
+                  var topPl=Object.keys(platCount).sort(function(x,y){return platCount[y]-platCount[x];})[0];
+                  if(fmtCount[topFmt]>=2)lines.push("A clear pattern is forming, "+topFmt+" creative is driving the deepest engagement across the top performers, pointing to how the audience prefers to absorb the brand message. The wider roster of creatives keeps the rotation fresh so the best-performing styles stay effective for longer.");
+                  else if(platCount[topPl]>=2)lines.push(topPl+" is emerging as the environment where creative is landing most strongly, while the spread across platforms continues to widen reach and keep the audience exposure balanced.");
+                  else lines.push("The top performers span multiple formats and platforms, which suggests the audience is responding to several creative angles at once, a healthy sign that the portfolio strategy is working.");
                   return lines.join(" ");
                 })();
 
