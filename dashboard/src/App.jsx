@@ -199,7 +199,7 @@ export default function MediaOnGas(){
   var matchPage=function(campaignName,pageName){
     return autoMatchPage(campaignName,pageName)>0;
   };
-  var ttBaselines={"momo":{followers:123995,asOf:"2026-03-31"}};
+  var ttBaselines={"momo":{followers:129400,asOf:"2026-04-18"}};
   var getTtTotal=function(campaignName,earnedFollows){
     var cn=(campaignName||"").toLowerCase();
     var cumFollows=ttCumFollows||0;
@@ -596,7 +596,7 @@ export default function MediaOnGas(){
                   <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL COMMUNITY</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></Glass>
                   <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>EARNED THIS PERIOD</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{earnedTotal>0?"+"+fmt(earnedTotal):"-"}</div></Glass>
                   <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>GROWTH RATE</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{grandT2>0&&earnedTotal>0?(earnedTotal/grandT2*100).toFixed(1)+"%":"-"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{earnedTotal>0?fR(computed.totalSpend/earnedTotal):"-"}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;return earnedTotal>0&&cs>0?fR(cs/earnedTotal):"-";})()}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginTop:4,fontStyle:"italic"}}>community spend only</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
@@ -612,7 +612,7 @@ export default function MediaOnGas(){
                     </ResponsiveContainer>
                   </div>
                 </div>
-                {(function(){var biggestPlat=communityData.slice().sort(function(a,b){return b.total-a.total;})[0];var fastestGrow=communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})[0];return standRow([biggestPlat?stand("LARGEST FOLLOWER COUNT PLATFORM",biggestPlat.name+", "+fmt(biggestPlat.total),biggestPlat.color):null,fastestGrow?stand("TOP GROWTH THIS PERIOD",fastestGrow.name+", +"+fmt(fastestGrow.earned),fastestGrow.color):null,earnedTotal>0?stand("COST PER MEMBER",fR(computed.totalSpend/earnedTotal),P.solar):null]);})()}
+                {(function(){var biggestPlat=communityData.slice().sort(function(a,b){return b.total-a.total;})[0];var fastestGrow=communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})[0];return standRow([biggestPlat?stand("LARGEST FOLLOWER COUNT PLATFORM",biggestPlat.name+", "+fmt(biggestPlat.total),biggestPlat.color):null,fastestGrow?stand("TOP GROWTH THIS PERIOD",fastestGrow.name+", +"+fmt(fastestGrow.earned),fastestGrow.color):null,(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;return earnedTotal>0&&cs>0?stand("COST PER MEMBER",fR(cs/earnedTotal)+" (community spend only)",P.solar):null;})()]);})()}
               </div>}
 
               {/* ═══ TOP 5 ADS PER PLATFORM ═══ */}
