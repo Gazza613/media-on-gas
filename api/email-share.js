@@ -165,15 +165,17 @@ function renderSummaryBlock(summary) {
     { label: "Cost per click", value: fmtR(g.cpc), sub: "blended across platforms", accent: "#FFAA00" }
   ];
 
-  // Render KPIs as two rows of three cells using a nested table (max compatibility)
+  // KPIs as two rows of three tiles. Fixed row height so labels + values + subtext align
+  // cleanly across tiles even when subtext wraps differently in different clients.
+  var KPI_TILE_HEIGHT = 118;
   var kpiRows = "";
   for (var i = 0; i < kpis.length; i += 3) {
     var group = kpis.slice(i, i + 3);
     kpiRows += '<tr>' + group.map(function(k) {
       return '<td valign="top" width="33.33%" style="padding:6px;">' +
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.04);border:1px solid rgba(168,85,247,0.18);border-radius:10px;">' +
-        '<tr><td style="padding:14px 14px 12px;">' +
-        '<div style="font-size:8px;color:' + k.accent + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;">' + k.label + '</div>' +
+        '<table role="presentation" width="100%" height="' + KPI_TILE_HEIGHT + '" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.04);border:1px solid rgba(168,85,247,0.18);border-radius:10px;height:' + KPI_TILE_HEIGHT + 'px;">' +
+        '<tr><td valign="top" style="padding:14px 14px 12px;">' +
+        '<div style="font-size:8px;color:' + k.accent + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;min-height:20px;">' + k.label + '</div>' +
         '<div style="font-size:22px;font-weight:900;color:#FFFBF8;margin-top:6px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + k.value + '</div>' +
         '<div style="font-size:9px;color:#8B7FA3;margin-top:6px;font-family:Helvetica,Arial,sans-serif;">' + k.sub + '</div>' +
         '</td></tr></table></td>';
@@ -196,24 +198,28 @@ function renderSummaryBlock(summary) {
       '</tr>';
   }).join("");
 
-  // Objective outcomes row (leads / follows / LP clicks / installs), only show those > 0
-  var outcomes = [];
+  // Always render all four outcome tiles. Balanced visual, positive framing across every campaign.
+  // 2x2 grid: Leads + Followers on top row, App Installs + Landing Page on bottom.
   var totalFollows = g.follows + g.pageLikes + g.likes;
-  if (g.leads > 0) outcomes.push({ label: "Leads generated", value: fmtNum(g.leads), cost: g.leads > 0 ? fmtR(g.spend / Math.max(1, g.leads)) + " per lead" : "", accent: "#F43F5E" });
-  if (totalFollows > 0) outcomes.push({ label: "New followers", value: fmtNum(totalFollows), cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "", accent: "#00F2EA" });
-  if (g.appInstalls > 0) outcomes.push({ label: "App installs", value: fmtNum(g.appInstalls), cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per install" : "", accent: "#4599FF" });
-  if (g.landingPageViews > 0 && outcomes.length < 3) outcomes.push({ label: "Landing page views", value: fmtNum(g.landingPageViews), cost: "", accent: "#22D3EE" });
-
+  var outcomes = [
+    { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "activation ready", accent: "#F43F5E" },
+    { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "building community", accent: "#00F2EA" },
+    { label: "App installs", value: g.appInstalls, cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per install" : "not this period", accent: "#4599FF" },
+    { label: "Landing page views", value: g.landingPageViews, cost: g.landingPageViews > 0 ? fmtR(g.spend / g.landingPageViews) + " per view" : "not tracked this period", accent: "#22D3EE" }
+  ];
+  var OUTCOME_TILE_HEIGHT = 110;
   var outcomeRows = "";
-  if (outcomes.length > 0) {
-    outcomeRows = '<tr>' + outcomes.map(function(o) {
-      var w = Math.floor(100 / outcomes.length);
-      return '<td valign="top" width="' + w + '%" style="padding:6px;">' +
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.04);border:1px solid ' + o.accent + '33;border-left:3px solid ' + o.accent + ';border-radius:10px;">' +
-        '<tr><td style="padding:14px 16px;">' +
-        '<div style="font-size:8px;color:' + o.accent + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;">' + o.label + '</div>' +
-        '<div style="font-size:22px;font-weight:900;color:#FFFBF8;margin-top:4px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + o.value + '</div>' +
-        (o.cost ? '<div style="font-size:10px;color:#8B7FA3;margin-top:5px;font-family:Helvetica,Arial,sans-serif;">' + o.cost + '</div>' : '') +
+  for (var oi = 0; oi < outcomes.length; oi += 2) {
+    var pair = outcomes.slice(oi, oi + 2);
+    outcomeRows += '<tr>' + pair.map(function(o) {
+      var valueDisplay = o.value > 0 ? fmtNum(o.value) : "\u2014";
+      var valueColor = o.value > 0 ? "#FFFBF8" : "rgba(255,251,248,0.4)";
+      return '<td valign="top" width="50%" style="padding:6px;">' +
+        '<table role="presentation" width="100%" height="' + OUTCOME_TILE_HEIGHT + '" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.04);border:1px solid ' + o.accent + '33;border-left:3px solid ' + o.accent + ';border-radius:10px;height:' + OUTCOME_TILE_HEIGHT + 'px;">' +
+        '<tr><td valign="top" style="padding:14px 16px;">' +
+        '<div style="font-size:8px;color:' + o.accent + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;min-height:20px;">' + o.label + '</div>' +
+        '<div style="font-size:22px;font-weight:900;color:' + valueColor + ';margin-top:4px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + valueDisplay + '</div>' +
+        '<div style="font-size:10px;color:#8B7FA3;margin-top:5px;font-family:Helvetica,Arial,sans-serif;">' + o.cost + '</div>' +
         '</td></tr></table></td>';
     }).join("") + '</tr>';
   }
@@ -225,12 +231,12 @@ function renderSummaryBlock(summary) {
         kpiRows +
       '</table>' +
     '</td></tr>' +
-    (outcomeRows ? '<tr><td style="padding:14px 40px 0;">' +
+    ('<tr><td style="padding:14px 40px 0;">' +
       '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:14px;font-family:Helvetica,Arial,sans-serif;">Objective Outcomes</div>' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-left:-6px;margin-right:-6px;">' +
         outcomeRows +
       '</table>' +
-    '</td></tr>' : '') +
+    '</td></tr>') +
     (summary.platforms.length > 1 ? '<tr><td style="padding:22px 40px 0;">' +
       '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:14px;font-family:Helvetica,Arial,sans-serif;">Platform Breakdown</div>' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(168,85,247,0.16);border-radius:12px;">' +
@@ -277,7 +283,7 @@ function renderCommentaryBlock(summary) {
   }).join("");
 
   return '<tr><td style="padding:28px 40px 0;">' +
-    '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:14px;font-family:Helvetica,Arial,sans-serif;">Executive Read</div>' +
+    '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:14px;font-family:Helvetica,Arial,sans-serif;">Media Analyst Insights</div>' +
     '<div style="background:rgba(249,98,3,0.04);border-left:3px solid #F96203;border-radius:0 12px 12px 0;padding:20px 22px;">' +
       paraHtml +
     '</div>' +
