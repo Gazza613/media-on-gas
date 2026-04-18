@@ -562,7 +562,7 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST COST PER 1000 ADS SERVED",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
-                <div style={{fontSize:10,color:"rgba(255,255,255,0.9)",fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,textAlign:"center",fontStyle:"italic",padding:"22px 8px 18px"}}>* Reach and frequency metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.9)",fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,textAlign:"center",fontStyle:"italic",padding:"14px 8px 2px"}}>* Reach and frequency metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
               </div>
 
               {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
@@ -792,6 +792,12 @@ export default function MediaOnGas(){
                   if(b.clicks!==a.clicks)return b.clicks-a.clicks;
                   return b.ctr-a.ctr;
                 };
+                // Landing Page ranks by pure click volume, the impression floor was sinking
+                // high-click ads that had fewer than 5k impressions.
+                var landingPageSort=function(a,b){
+                  if(b.clicks!==a.clicks)return b.clicks-a.clicks;
+                  return b.ctr-a.ctr;
+                };
 
                 var sections=[];
                 platGroups.forEach(function(pg){
@@ -799,12 +805,28 @@ export default function MediaOnGas(){
                   if(platAds.length===0)return;
                   var groups=[];
                   objGroups.forEach(function(og){
-                    var objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
+                    var objAds;
+                    if(og.key==="followers"){
+                      // Follows/page_likes fire from any ad, not just Page-Likes-objective campaigns.
+                      // Union in every ad that earned follows so the section reflects true follower contribution.
+                      objAds=platAds.filter(function(a){
+                        var raw=parseFloat(a.followsRaw||0);
+                        return (a.objective||"landingpage")==="followers"||raw>0;
+                      }).map(function(a){
+                        var raw=parseFloat(a.followsRaw||0);
+                        if((a.resultType||"")!=="follows"&&raw>0){
+                          return Object.assign({},a,{results:raw,resultType:"follows"});
+                        }
+                        return a;
+                      });
+                    } else {
+                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
+                    }
                     if(objAds.length===0)return;
-                    // Lead Gen + Followers are volume-of-result objectives (leads / follows),
-                    // so rank by results DESC then cost-per-result ASC.
-                    // App Install + Landing Page are engagement/click objectives, rank by clicks.
-                    var sorter=(og.key==="leads"||og.key==="followers")?leadSort:engagementSort;
+                    var sorter;
+                    if(og.key==="leads"||og.key==="followers")sorter=leadSort;
+                    else if(og.key==="landingpage")sorter=landingPageSort;
+                    else sorter=engagementSort;
                     var sorted=objAds.slice().sort(sorter).slice(0,5);
                     groups.push({og:og,ads:sorted,total:objAds.length});
                   });
@@ -1061,13 +1083,26 @@ export default function MediaOnGas(){
               {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.cyan,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
             ];
 
-            // Group ads by objective
+            // Group ads by objective. Followers gets a special union: any ad that earned
+            // follows (even if its primary objective was leads or landing page) counts toward
+            // the Followers bucket, so incidental follower contribution is visible.
             var byObj={};
             filteredAds.forEach(function(a){
               var o=a.objective||"landingpage";
               if(!byObj[o])byObj[o]=[];
               byObj[o].push(a);
             });
+            var followersAds=filteredAds.filter(function(a){
+              var raw=parseFloat(a.followsRaw||0);
+              return (a.objective||"landingpage")==="followers"||raw>0;
+            }).map(function(a){
+              var raw=parseFloat(a.followsRaw||0);
+              if((a.resultType||"")!=="follows"&&raw>0){
+                return Object.assign({},a,{results:raw,resultType:"follows"});
+              }
+              return a;
+            });
+            byObj["followers"]=followersAds;
 
             // Aggregate totals per objective
             var totalsForSec=function(arr){
@@ -1226,8 +1261,9 @@ export default function MediaOnGas(){
                 // Tier-based sort: (1) ads with results rank by results DESC then CPR ASC,
                 // (2) ads with impressions >= 5k but no results yet rank by impressions DESC
                 // (algorithm is delivering, just hasn't scored), (3) low-delivery ads last.
-                // Low-impression ads are no longer penalised for having zero results.
-                var IMP_FLOOR=5000;
+                // Landing Page skips the impression floor so the highest-click ad always wins,
+                // even if its impressions are under 5k.
+                var IMP_FLOOR=sec.key==="landingpage"?0:5000;
                 var tierOf=function(ad){if(ad.results>0)return 1;if(ad.impressions>=IMP_FLOOR)return 2;return 3;};
                 var sorted=arr.slice().sort(function(a,b){
                   var aT=tierOf(a),bT=tierOf(b);

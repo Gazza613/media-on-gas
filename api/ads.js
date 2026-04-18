@@ -569,6 +569,7 @@ export default async function handler(req, res) {
           objective: objective,
           results: resCount,
           resultType: resType,
+          followsRaw: pageLikes + follows,
           placements: ins.placements
         });
       });
@@ -691,6 +692,7 @@ export default async function handler(req, res) {
             objective: ttObjective,
             results: ttResCount,
             resultType: ttResType,
+            followsRaw: follows + likes,
             placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });
         });
@@ -948,6 +950,7 @@ export default async function handler(req, res) {
               objective: gObjective,
               results: gResCount,
               resultType: gResType,
+              followsRaw: 0,
               placements: (function(){ var p={}; p[gPlace]={spend:sp,impressions:imps,clicks:clk}; return p; })()
             });
           });
