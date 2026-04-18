@@ -147,6 +147,29 @@ export default async function handler(req, res) {
           cur.placements[place].clicks += clk;
         });
       }
+
+      // Second insights pull WITHOUT platform_position breakdown. Meta doesn't attribute
+      // lead/install conversion actions cleanly across position rows (they get duplicated
+      // or dropped), so the actionsAgg we built above from the position-broken query is
+      // unreliable for conversion counts. Rebuild actionsAgg from a publisher-only pull.
+      try {
+        var actUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+        var actRes = await fetch(actUrl);
+        var actData = await actRes.json();
+        if (actData.data) {
+          actData.data.forEach(function(row) {
+            var pub = row.publisher_platform || "facebook";
+            if (pub !== "facebook" && pub !== "instagram") return;
+            var key = row.ad_id + "_" + pub;
+            if (!insMap[key]) return;
+            insMap[key].actionsAgg = {};
+            (row.actions || []).forEach(function(a) {
+              insMap[key].actionsAgg[a.action_type] = parseInt(a.value || 0);
+            });
+          });
+        }
+      } catch (actErr) { console.error("Meta actions override fetch error", account.name, actErr); }
+
       var insights = Object.keys(insMap).map(function(k) { return insMap[k]; });
 
       // Unique ad IDs to fetch creative for
