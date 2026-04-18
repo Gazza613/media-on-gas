@@ -207,6 +207,28 @@ export default async function handler(req, res) {
       origin: origin
     });
 
+    // Plain-text alternative. SpamAssassin docks HTML-only mail (MIME_HTML_ONLY rule),
+    // and some corporate filters outright reject multipart/mixed bodies without a text part.
+    var clientName = clientSlug.split("-").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ");
+    var expiresDisplay = new Date(expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
+    var textLines = [];
+    textLines.push("Hi " + clientName + ",");
+    textLines.push("");
+    if (body.personalMessage) { textLines.push(String(body.personalMessage).trim()); textLines.push(""); }
+    textLines.push("Your live performance dashboard for " + from + " to " + to + " is ready.");
+    textLines.push("One click opens the full interactive view, no login required.");
+    textLines.push("");
+    textLines.push("View dashboard: " + shareUrl);
+    textLines.push("");
+    textLines.push("This link stays active until " + expiresDisplay + ".");
+    textLines.push("");
+    textLines.push("Kind regards,");
+    if (body.senderName) textLines.push(String(body.senderName).trim());
+    if (body.senderTitle) textLines.push(String(body.senderTitle).trim());
+    textLines.push("GAS Marketing Automation");
+    textLines.push("grow@gasmarketing.co.za");
+    var text = textLines.join("\n");
+
     var transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -220,6 +242,7 @@ export default async function handler(req, res) {
       cc: ccList.length ? ccList.join(", ") : undefined,
       bcc: bccList.length ? bccList.join(", ") : undefined,
       subject: "Your Performance Metrics That Matter Have Just Arrived From GAS Marketing Automation!",
+      text: text,
       html: html
     });
 
