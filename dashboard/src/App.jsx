@@ -750,11 +750,11 @@ export default function MediaOnGas(){
                         <span style={{color:objAccent,fontWeight:800}}>{(ad.results>0?fmt(ad.results):"0")+" "+resultLabelS(ad.resultType).split(" ")[0]}</span>
                         <span style={{color:objAccent,fontWeight:800}}>{ad.results>0?fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType):"-"}</span>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
-                        <div><div style={{color:P.dim,fontSize:7,letterSpacing:0.6}}>IMPRESSIONS</div><div style={{color:P.txt,fontWeight:700,fontSize:10}}>{fmt(ad.impressions)}</div></div>
-                        <div><div style={{color:P.dim,fontSize:7,letterSpacing:0.6}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:10}}>{ad.cpc>0?fR(ad.cpc):(ad.clicks>0?fR(ad.spend/ad.clicks):"-")}</div></div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,fontSize:8,fontFamily:fm,marginBottom:8}}>
+                        <div><div style={{color:"rgba(255,255,255,0.7)",fontSize:8,letterSpacing:0.8,fontWeight:700}}>IMPRESSIONS</div><div style={{color:"#fff",fontWeight:800,fontSize:11}}>{fmt(ad.impressions)}</div></div>
+                        <div><div style={{color:"rgba(255,255,255,0.7)",fontSize:8,letterSpacing:0.8,fontWeight:700}}>COST PER CLICK</div><div style={{color:"#fff",fontWeight:800,fontSize:11}}>{ad.cpc>0?fR(ad.cpc):(ad.clicks>0?fR(ad.spend/ad.clicks):"-")}</div></div>
                       </div>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,fontFamily:fm,marginBottom:8,color:"rgba(255,255,255,0.85)",fontWeight:600}}>
                         <span>{fR(ad.spend)}</span>
                         <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
