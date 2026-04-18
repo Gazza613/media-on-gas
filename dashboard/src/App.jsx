@@ -257,8 +257,11 @@ export default function MediaOnGas(){
   };
   var benchLabel=function(val,bm){if(!bm)return"";if(val<=bm.low)return"well below the SA benchmark ("+bm.label+")";if(val<=bm.mid)return"within the efficient range of the SA benchmark ("+bm.label+")";if(val<=bm.high)return"at the upper end of the SA benchmark ("+bm.label+")";return"above the SA benchmark range ("+bm.label+")";};
   var daysBetween=function(a,b){return Math.max(1,Math.round((new Date(b)-new Date(a))/86400000)+1);};
+  // "Today" in Africa/Johannesburg (UTC+2) rather than UTC. Prevents the pacing % from
+  // shifting by a day between 22:00-23:59 local time when UTC date rolls over first.
+  var todayLocal=function(){return new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Johannesburg"});};
   var totalDays=daysBetween(df,dt);
-  var elapsed=daysBetween(df,new Date().toISOString().split("T")[0]);
+  var elapsed=daysBetween(df,todayLocal());
   var pctElapsed=Math.min(100,(elapsed/totalDays*100));
   var pctSpent=computed.totalSpend>0&&computed.grand&&computed.grand.spend>0?100:0;
   var dailySpendRate=elapsed>0?computed.totalSpend/elapsed:0;
@@ -310,7 +313,7 @@ export default function MediaOnGas(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
             var totalDays2=Math.max(1,Math.round((new Date(dt)-new Date(df))/86400000)+1);
-            var todayStr=new Date().toISOString().split("T")[0];
+            var todayStr=todayLocal();
             var elapsedDays=Math.max(1,Math.round((new Date(todayStr>dt?dt:todayStr)-new Date(df))/86400000)+1);
             var dailySpend=computed.totalSpend>0?computed.totalSpend/elapsedDays:0;
             var projSpend=dailySpend*totalDays2;

@@ -19,6 +19,12 @@ var cacheSet = function(store, key, value) {
   store[key] = { value: value, ts: Date.now() };
 };
 
+// Whole-response cache for /api/ads keyed by from|to. 5-min TTL means a user hard-
+// refreshing or opening the dashboard in multiple tabs within that window gets an
+// instant return, skipping the whole 5-15s fan-out across Meta / TikTok / Google.
+var adsResponseCache = {};
+var ADS_RESPONSE_TTL_MS = 5 * 60 * 1000;
+
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
@@ -68,11 +74,22 @@ export default async function handler(req, res) {
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
+
+  // Whole-response cache check: if we've served this exact date range within the last
+  // 5 minutes on this warm instance, return immediately and skip every downstream fetch.
+  var cacheKey = from + "|" + to;
+  var cached = adsResponseCache[cacheKey];
+  if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
+    res.status(200).json(cached.data);
+    return;
+  }
+
   var allAds = [];
 
   /* ═══ META (Facebook + Instagram) ═══ */
-  for (var i = 0; i < metaAccounts.length; i++) {
-    var account = metaAccounts[i];
+  // Parallelise all 6 ad accounts at once instead of serial for-loop. Each account's work
+  // takes 2-3s on its own; serial was ~15-18s for Meta, parallel brings it down to ~3-4s.
+  await Promise.all(metaAccounts.map(async function(account) {
     try {
       // Fetch real campaign objectives for this account
       var campObjMap = {};
@@ -544,7 +561,7 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error("Meta ads error for", account.name, err);
     }
-  }
+  }));
 
   /* ═══ TIKTOK ═══ */
   try {
@@ -928,5 +945,7 @@ export default async function handler(req, res) {
     console.error("Google ads error", gErr);
   }
 
-  res.status(200).json({ ads: allAds, total: allAds.length });
+  var response = { ads: allAds, total: allAds.length };
+  adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
+  res.status(200).json(response);
 }
