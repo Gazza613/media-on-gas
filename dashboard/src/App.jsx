@@ -706,7 +706,7 @@ export default function MediaOnGas(){
                     var objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
                     if(objAds.length===0)return;
                     var sorter=og.key==="leads"?leadSort:engagementSort;
-                    var sorted=objAds.slice().sort(sorter).slice(0,3);
+                    var sorted=objAds.slice().sort(sorter).slice(0,5);
                     groups.push({og:og,ads:sorted,total:objAds.length});
                   });
                   if(groups.length===0)return;
@@ -767,7 +767,7 @@ export default function MediaOnGas(){
                             <span style={{fontSize:11,fontWeight:900,color:g.og.accent,fontFamily:fm,letterSpacing:2}}>{g.og.label}</span>
                             <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"\u2022 ranked "+g.og.criterion+" \u2022 "+g.total+" ad"+(g.total===1?"":"s")}</span>
                           </div>
-                          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
                             {g.ads.map(function(ad,i){return renderAdCard(ad,i+1,s.pg.accent,s.pg.short,g.og.accent);})}
                           </div>
                         </div>;
