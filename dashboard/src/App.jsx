@@ -342,7 +342,7 @@ export default function MediaOnGas(){
             var objCL4={"App Store Clicks":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
 
             var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
-            var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember,_currency:true};});
+            var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember,_currency:true};}).sort(function(a,b){return b.value-a.value;});
             var impData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,value:platBreak[pl].imps,color:platCol4[pl]||P.ember};});
             var cpcData=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,cpc:pb.clicks>0?parseFloat((pb.spend/pb.clicks).toFixed(2)):0,color:platCol4[pl]||P.ember,_currency:true};});
             var cpmData=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,cpm:pb.imps>0?parseFloat((pb.spend/pb.imps*1000).toFixed(2)):0,color:platCol4[pl]||P.ember,_currency:true};});
