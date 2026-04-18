@@ -311,7 +311,7 @@ export default async function handler(req, res) {
       // Meta FB/IG CDN URLs are signed via query params (oh=, oe=, _nc_sig=).
       // Altering the /pNxN/ path segment invalidates the signature and the CDN
       // falls back to serving a low-res placeholder. Leave the URL as Meta
-      // returned it — higher resolution comes from picking the right upstream
+      // returned it, higher resolution comes from picking the right upstream
       // field (full_picture, /adimages, attachments{media}) rather than URL
       // rewriting.
       var upsizeFb = function(url) { return url || ""; };
@@ -387,7 +387,7 @@ export default async function handler(req, res) {
           if (at === "like" || at === "page_like") {
             pageLikes = Math.max(pageLikes, v);
           }
-          // Follows — FB page follows AND Instagram follows (distinct action types on Meta)
+          // Follows, FB page follows AND Instagram follows (distinct action types on Meta)
           var isFollow = (at === "follow" ||
                           at === "onsite_conversion.follow" ||
                           at === "ig_follow" ||
@@ -398,7 +398,7 @@ export default async function handler(req, res) {
                           (atLow.indexOf("follow") >= 0 && atLow.indexOf("post") < 0 && atLow.indexOf("video") < 0));
           if (isFollow) follows = Math.max(follows, v);
           if (at === "page_engagement" || at === "onsite_conversion.post_save") {
-            // Generic engagement is not a follow — only carry as a soft fallback when nothing else fires
+            // Generic engagement is not a follow, only carry as a soft fallback when nothing else fires
             if (pageLikes === 0 && follows === 0) follows = Math.max(follows, v);
           }
         });
@@ -443,7 +443,7 @@ export default async function handler(req, res) {
             var postType = sid ? storyToType[sid] : "";
             if (postType) return postType;
             // Dynamic Creative / Flexible ads: asset_feed_spec holds *variants*. Having videos AND images
-            // means Meta picks per impression — treat as ambiguous (fall through to STATIC). Videos-only → MP4.
+            // means Meta picks per impression, treat as ambiguous (fall through to STATIC). Videos-only → MP4.
             var afs = cr.asset_feed_spec || {};
             var afsVideos = (afs.videos && afs.videos.length) || 0;
             var afsImages = (afs.images && afs.images.length) || 0;
@@ -498,7 +498,7 @@ export default async function handler(req, res) {
         ttAdsData.data.list.forEach(function(ad) {
           ttAdsByAdId[ad.ad_id] = ad;
           if (ad.video_id && videoIds.indexOf(ad.video_id) < 0) videoIds.push(ad.video_id);
-          // Only collect image_ids from ads without a video_id — video ads' image_ids point to
+          // Only collect image_ids from ads without a video_id, video ads' image_ids point to
           // video cover assets that the image-info endpoint refuses (40001), which poisons the batch.
           if (!ad.video_id && ad.image_ids && ad.image_ids.length > 0) {
             ad.image_ids.forEach(function(iid) { if (imageIds.indexOf(iid) < 0) imageIds.push(iid); });

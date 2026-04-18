@@ -151,7 +151,7 @@ function OverviewTab() {
             <span>{R(totalSpend)} of {R(budget)} ({pacing}%)</span>
           </div>
           <MiniBar pct={parseFloat(pacing)} />
-          <div style={{ marginTop: 6 }}><Flag type="good">ON PACE — spend trails time by 2.3pp</Flag></div>
+          <div style={{ marginTop: 6 }}><Flag type="good">ON PACE, spend trails time by 2.3pp</Flag></div>
         </div>
       </div>
 
@@ -243,9 +243,9 @@ function FacebookTab() {
       <Card style={{ borderLeft: `3px solid ${COLORS.mtn}`, background: COLORS.cardAlt }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: COLORS.mtn, fontFamily: mono, marginBottom: 6 }}>OPTIMISATION FLAGS</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.8 }}>
-          <div style={{ marginBottom: 6 }}><Flag type="good">GIF format best CPC</Flag> Scroll & Chill GIF at R0.67 — prioritise GIF creative refresh for April.</div>
-          <div style={{ marginBottom: 6 }}><Flag type="good">Cold Interest ≈ Lookalike</Flag> CPC gap is only R0.06 — both adsets viable, no reallocation needed.</div>
-          <div><Flag type="warn">Frequency 2.72x</Flag> Approaching 3x threshold on 24 days — monitor for fatigue in final week.</div>
+          <div style={{ marginBottom: 6 }}><Flag type="good">GIF format best CPC</Flag> Scroll & Chill GIF at R0.67, prioritise GIF creative refresh for April.</div>
+          <div style={{ marginBottom: 6 }}><Flag type="good">Cold Interest ≈ Lookalike</Flag> CPC gap is only R0.06, both adsets viable, no reallocation needed.</div>
+          <div><Flag type="warn">Frequency 2.72x</Flag> Approaching 3x threshold on 24 days, monitor for fatigue in final week.</div>
         </div>
       </Card>
     </div>
@@ -283,9 +283,9 @@ function InstagramTab() {
       <Card style={{ borderLeft: `3px solid ${COLORS.ig}`, background: COLORS.cardAlt }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: COLORS.ig, fontFamily: mono, marginBottom: 6 }}>OPTIMISATION FLAGS</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.8 }}>
-          <div style={{ marginBottom: 6 }}><Flag type="good">Best Meta CPM at R13.61</Flag> — 20% more efficient than Facebook for impressions.</div>
-          <div style={{ marginBottom: 6 }}><Flag type="good">Kabelo Rent to Own dominates</Flag> — 77% of all IG follows from one creative. Test new Kabelo variants.</div>
-          <div><Flag type="warn">Frequency 3.57x</Flag> — above 3x threshold. Creative refresh recommended for April.</div>
+          <div style={{ marginBottom: 6 }}><Flag type="good">Best Meta CPM at R13.61</Flag>, 20% more efficient than Facebook for impressions.</div>
+          <div style={{ marginBottom: 6 }}><Flag type="good">Kabelo Rent to Own dominates</Flag>, 77% of all IG follows from one creative. Test new Kabelo variants.</div>
+          <div><Flag type="warn">Frequency 3.57x</Flag>, above 3x threshold. Creative refresh recommended for April.</div>
         </div>
       </Card>
     </div>
@@ -325,9 +325,9 @@ function TikTokTab() {
       <Card style={{ borderLeft: `3px solid ${COLORS.tt}`, background: "#14172a" }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: COLORS.tt, fontFamily: mono, marginBottom: 6 }}>OPTIMISATION FLAGS</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.8 }}>
-          <div style={{ marginBottom: 6 }}><Flag type="good">92.5% view completion</Flag> — exceptional creative resonance. Content format is working.</div>
-          <div style={{ marginBottom: 6 }}><Flag type="good">Ayanda R1.28 CPF</Flag> — best community cost across all 3 platforms, 2.4x cheaper than next best Meta rate.</div>
-          <div><Flag type="good">R6.34 CPM</Flag> — 2.7x more impressions per rand vs Facebook. TikTok is the scale engine.</div>
+          <div style={{ marginBottom: 6 }}><Flag type="good">92.5% view completion</Flag>, exceptional creative resonance. Content format is working.</div>
+          <div style={{ marginBottom: 6 }}><Flag type="good">Ayanda R1.28 CPF</Flag>, best community cost across all 3 platforms, 2.4x cheaper than next best Meta rate.</div>
+          <div><Flag type="good">R6.34 CPM</Flag>, 2.7x more impressions per rand vs Facebook. TikTok is the scale engine.</div>
         </div>
       </Card>
     </div>
@@ -384,7 +384,7 @@ function WeeklyTab() {
       <Card style={{ borderLeft: `3px solid ${COLORS.mtn}`, background: COLORS.cardAlt }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: COLORS.mtn, fontFamily: mono, marginBottom: 6 }}>CAMPAIGN OUTLOOK</div>
         <div style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.8 }}>
-          Campaign structure is mature and well-optimised. Every metric is trending in the right direction — rising volume, falling costs. 7 days remain to close out March with R41,087 budget remaining. No immediate action required; maintain current structure and monitor frequency.
+          Campaign structure is mature and well-optimised. Every metric is trending in the right direction, rising volume, falling costs. 7 days remain to close out March with R41,087 budget remaining. No immediate action required; maintain current structure and monitor frequency.
         </div>
       </Card>
     </div>
@@ -416,34 +416,34 @@ function InsightCard({ status, title, platform, children, action }) {
 
 function AnalystTab() {
   const flags = [
-    { status: "good", title: "Meta CPC at Campaign-Best R1.28 in Week 4", platform: "META", action: "Maintain current structure — no changes needed for final week.",
+    { status: "good", title: "Meta CPC at Campaign-Best R1.28 in Week 4", platform: "META", action: "Maintain current structure, no changes needed for final week.",
       body: "Week 4 is delivering 2,751 results/day at R1.28 blended CPC, the lowest cost and highest daily volume of the entire 24-day period. Results have grown every single week from 2,153/day in W1 (+28%), while CPC improved 5%. This confirms a well-optimised, maturing campaign." },
     { status: "good", title: "GIF Format Outperforms All Meta App Install Creatives", platform: "FB", action: "Prioritise GIF creative format for April refresh. Brief new GIF variants on top offers.",
-      body: "Scroll & Chill Bundles GIF leads with 7,671 clicks at R0.67 CPC — the single best cost-per-click in the Meta account. Showmax & Mins GIF follows at R0.64 CPC with a 2.78% CTR (highest in account). GIF consistently delivers top CTR on App Install." },
+      body: "Scroll & Chill Bundles GIF leads with 7,671 clicks at R0.67 CPC, the single best cost-per-click in the Meta account. Showmax & Mins GIF follows at R0.64 CPC with a 2.78% CTR (highest in account). GIF consistently delivers top CTR on App Install." },
     { status: "good", title: "TikTok: 61.9% of All Impressions at R6.34 CPM", platform: "TT", action: "TikTok is the scale engine. Consider increasing TikTok allocation in April budget.",
       body: "7.59M impressions at 2.7x more volume per rand than Facebook. 92.5% video view completion rate confirms strong creative resonance. Combined with lowest CPF (R1.28 Ayanda), TikTok is both the reach and community growth leader." },
-    { status: "good", title: "Ayanda R59/R69 Deals — Best Community Creative All Platforms", platform: "TT", action: "Scale Ayanda creative with new offer variants. Test Ayanda on IG Reels.",
-      body: "3,249 TikTok follows at R1.28 CPF — 2.4x cheaper than the next best Meta community rate. This single creative is driving the most cost-efficient audience acquisition across all 3 platforms." },
+    { status: "good", title: "Ayanda R59/R69 Deals, Best Community Creative All Platforms", platform: "TT", action: "Scale Ayanda creative with new offer variants. Test Ayanda on IG Reels.",
+      body: "3,249 TikTok follows at R1.28 CPF, 2.4x cheaper than the next best Meta community rate. This single creative is driving the most cost-efficient audience acquisition across all 3 platforms." },
     { status: "good", title: "Kabelo Rent to Own Dominates Instagram Followers", platform: "IG", action: "Test new Kabelo variants to diversify IG follower sources before fatigue sets in.",
-      body: "4,449 follows at R1.30 CPF — accounts for 77% of all Instagram follows. Single creative concentration is an efficiency win now but a risk if fatigue hits." },
+      body: "4,449 follows at R1.30 CPF, accounts for 77% of all Instagram follows. Single creative concentration is an efficiency win now but a risk if fatigue hits." },
     { status: "good", title: "Instagram Delivers Best Meta CPM at R13.61", platform: "IG", action: "IG is 20% more efficient than FB for impressions. Ideal for awareness layering.",
-      body: "R13.61 CPM vs Facebook's R17.03 — a 20% efficiency advantage. Combined with strong community follow rates, Instagram is the most cost-efficient Meta impression channel." },
+      body: "R13.61 CPM vs Facebook's R17.03, a 20% efficiency advantage. Combined with strong community follow rates, Instagram is the most cost-efficient Meta impression channel." },
     { status: "good", title: "Three-Platform Community Grew to 19,214", platform: "ALL", action: "Community blended CPF at R2.60 is strong. Track retention and engagement post-campaign.",
       body: "TikTok: 7,558 follows (R1.94 CPF) · Facebook: 5,902 likes (R4.66 CPF) · Instagram: 5,754 followers (R1.36 CPF). Healthy distribution across platforms with TikTok leading volume and IG leading efficiency." },
-    { status: "warn", title: "Instagram Frequency at 3.57x — Above Threshold", platform: "IG", action: "Introduce fresh creative for IG in final week or rotate existing underperformers out.",
+    { status: "warn", title: "Instagram Frequency at 3.57x, Above Threshold", platform: "IG", action: "Introduce fresh creative for IG in final week or rotate existing underperformers out.",
       body: "3.57x average frequency on 24 days exceeds the 3x fatigue threshold. While CPF remains efficient, continued frequency growth without new creative risks rising costs and declining engagement." },
     { status: "warn", title: "Facebook Frequency Approaching 3x at 2.72x", platform: "FB", action: "Monitor daily. If frequency crosses 3x before month-end, pause lowest-performing adset.",
-      body: "Currently at 2.72x with 7 days remaining. At current trajectory, frequency will reach ~3.5x by month-end. Performance is still improving (W4 is best week), so no immediate action — but this is the metric most likely to cause a late-campaign slowdown." },
+      body: "Currently at 2.72x with 7 days remaining. At current trajectory, frequency will reach ~3.5x by month-end. Performance is still improving (W4 is best week), so no immediate action, but this is the metric most likely to cause a late-campaign slowdown." },
     { status: "warn", title: "Kabelo Concentration Risk on Instagram", platform: "IG", action: "Brief 2–3 new IG follower creatives for April to reduce single-creative dependency.",
       body: "77% of all IG follows come from one Kabelo creative. If this ad fatigues, the entire IG follower pipeline is at risk. Diversification is the priority for the next cycle." },
   ];
 
   const scoreData = [
-    { metric: "Budget Pacing", score: 95, status: "good", detail: "75.1% spend vs 77.4% time — slightly under-pacing (ideal)" },
+    { metric: "Budget Pacing", score: 95, status: "good", detail: "75.1% spend vs 77.4% time, slightly under-pacing (ideal)" },
     { metric: "CPC Trend", score: 92, status: "good", detail: "Improving every week, W4 at campaign-best R1.28" },
     { metric: "Creative Health", score: 85, status: "good", detail: "GIF format winning on FB, Ayanda winning on TT" },
     { metric: "Frequency Risk", score: 62, status: "warn", detail: "IG at 3.57x (above threshold), FB at 2.72x (approaching)" },
-    { metric: "Community Growth", score: 90, status: "good", detail: "19,214 total at R2.60 blended CPF — strong across all 3" },
+    { metric: "Community Growth", score: 90, status: "good", detail: "19,214 total at R2.60 blended CPF, strong across all 3" },
     { metric: "Platform Balance", score: 78, status: "good", detail: "TikTok dominates impressions (62%) but each platform has a role" },
   ];
 
@@ -503,10 +503,10 @@ function AnalystTab() {
       <Card style={{ background: "linear-gradient(135deg, #1a1a2e, #16213e)", border: `1px solid ${COLORS.mtn}40`, marginTop: 8 }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: COLORS.mtn, fontFamily: mono, letterSpacing: 2, marginBottom: 12 }}>APRIL PLANNING RECOMMENDATIONS</div>
         {[
-          { num: "01", text: "Increase GIF format allocation on Facebook App Install — proven lowest CPC at R0.67" },
+          { num: "01", text: "Increase GIF format allocation on Facebook App Install, proven lowest CPC at R0.67" },
           { num: "02", text: "Brief 2–3 new Instagram follower creatives to reduce Kabelo single-creative dependency" },
-          { num: "03", text: "Scale Ayanda R59/R69 on TikTok with new offer variants — R1.28 CPF is best in campaign" },
-          { num: "04", text: "Consider increasing TikTok budget share — delivers 2.7x more impressions per rand than FB" },
+          { num: "03", text: "Scale Ayanda R59/R69 on TikTok with new offer variants, R1.28 CPF is best in campaign" },
+          { num: "04", text: "Consider increasing TikTok budget share, delivers 2.7x more impressions per rand than FB" },
           { num: "05", text: "Monitor frequency caps: set alerts at 3.5x on FB and 4x on IG to trigger creative rotation" },
         ].map((r) => (
           <div key={r.num} style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>

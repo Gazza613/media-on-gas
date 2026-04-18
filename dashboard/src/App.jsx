@@ -799,7 +799,7 @@ export default function MediaOnGas(){
                     var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
                     var verdict=cp>0&&bm?(cp<=bm.low?"top-quartile efficiency":cp<=bm.mid?"a healthy, efficient cost in line with SA benchmarks":cp<=bm.high?"a steady cost within benchmark range":"a cost tracking just above benchmark midpoint"):"";
                     if(objName==="Leads"&&od.results>0){
-                      lines.push("Lead Generation produced "+fmt(od.results)+" qualified leads at "+fR(cp)+" per lead"+(verdict?" — "+verdict:"")+". Each lead represents a genuine prospect who chose to share their contact details, the highest-value first-party signal in the entire funnel.");
+                      lines.push("Lead Generation produced "+fmt(od.results)+" qualified leads at "+fR(cp)+" per lead"+(verdict?", "+verdict:"")+". Each lead represents a genuine prospect who chose to share their contact details, the highest-value first-party signal in the entire funnel.");
                     } else if(objName==="App Store Clicks"&&od.results>0){
                       lines.push("App Install campaigns drove "+fmt(od.results)+" clicks through to the app store at "+fR(cp)+" per click"+(verdict?", "+verdict:"")+", each representing a user moving from ad exposure to the final download step.");
                     } else if(objName==="Followers & Likes"&&od.results>0){
@@ -814,7 +814,7 @@ export default function MediaOnGas(){
                 })();
 
                 var creativeRead=(function(){
-                  if(!adsList||adsList.length===0)return "Ad-level creative data is still loading — creative insights will appear here once the ads endpoint returns.";
+                  if(!adsList||adsList.length===0)return "Ad-level creative data is still loading, creative insights will appear here once the ads endpoint returns.";
                   var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
                   var selIds={};selCamps.forEach(function(c){selIds[String(c.rawCampaignId||"")]=true;selIds[String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;selIds[String(c.campaignId||"")]=true;});
                   var selNames={};selCamps.forEach(function(c){if(c.campaignName)selNames[c.campaignName]=true;});
@@ -830,7 +830,7 @@ export default function MediaOnGas(){
                     var ctrTag=ad.ctr>=2?"an exceptionally high":ad.ctr>=1.4?"a strong above-benchmark":"a healthy";
                     var fmtWord=(ad.format||"").toUpperCase();
                     var fmtPhrase=fmtWord==="MP4"||fmtWord==="VIDEO"?"video":fmtWord==="CAROUSEL"?"carousel":fmtWord==="GIF"?"animated":"static image";
-                    lines.push(rank+" performer is a "+fmtPhrase+" ad on "+ad.platform+" achieving "+ctrTag+" click-through rate of "+ad.ctr.toFixed(2)+"% on "+fmt(ad.impressions)+" impressions"+(ad.results>0?", delivering "+fmt(ad.results)+" results at "+fR(ad.spend/ad.results)+" each":"")+". This indicates the creative concept is resonating with the audience — the combination of "+fmtPhrase+" format, platform fit and messaging is drawing meaningful engagement.");
+                    lines.push(rank+" performer is a "+fmtPhrase+" ad on "+ad.platform+" achieving "+ctrTag+" click-through rate of "+ad.ctr.toFixed(2)+"% on "+fmt(ad.impressions)+" impressions"+(ad.results>0?", delivering "+fmt(ad.results)+" results at "+fR(ad.spend/ad.results)+" each":"")+". This indicates the creative concept is resonating with the audience, the combination of "+fmtPhrase+" format, platform fit and messaging is drawing meaningful engagement.");
                   });
                   // Format + platform pattern insight
                   var fmtCount={};var platCount={};
@@ -848,7 +848,7 @@ export default function MediaOnGas(){
                   var parts=[selAdsets2.length+" active audiences are currently in-market across the selected campaigns."];
                   if(topAd2.length>0){
                     var best=topAd2[0];
-                    parts.push("The standout audience is \""+best.name+"\" on "+best.platform+", generating "+fmt(best.result)+" results at "+fR(best.costPer)+" each with a "+best.ctr.toFixed(2)+"% click-through rate — strong evidence that message, audience and platform are all aligned for this segment.");
+                    parts.push("The standout audience is \""+best.name+"\" on "+best.platform+", generating "+fmt(best.result)+" results at "+fR(best.costPer)+" each with a "+best.ctr.toFixed(2)+"% click-through rate, strong evidence that message, audience and platform are all aligned for this segment.");
                     if(topAd2.length>=3){
                       parts.push("The top "+Math.min(topAd2.length,5)+" audiences combined are driving the majority of efficient results, confirming a strong foundation of well-targeted segments that are actively responding to the creative.");
                     }
@@ -856,7 +856,7 @@ export default function MediaOnGas(){
                   return parts.join(" ");
                 })();
 
-                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns — connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(parseFloat(m.pageLikes||0)>0?" (with "+fmt(parseFloat(m.pageLikes||0))+" earned in this period)":"")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" new followers this period)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member is a permanent organic distribution channel — every future campaign, post or update reaches them for free, compounding the value of the brand's owned audience over time.":"");
+                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns, connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(parseFloat(m.pageLikes||0)>0?" (with "+fmt(parseFloat(m.pageLikes||0))+" earned in this period)":"")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" new followers this period)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member is a permanent organic distribution channel, every future campaign, post or update reaches them for free, compounding the value of the brand's owned audience over time.":"");
 
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
                 return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
@@ -876,13 +876,13 @@ export default function MediaOnGas(){
                 var cpmQ=computed.blendedCpm<=benchmarks.meta.cpm.low?"well below":computed.blendedCpm<=benchmarks.meta.cpm.mid?"within":computed.blendedCpm<=benchmarks.meta.cpm.high?"within the upper band of":"just above";
                 var ctrQ=blCtr>=2?"markedly above":blCtr>=1.4?"above":blCtr>=0.9?"within":"close to";
                 parts.push("Over the selected period, "+fR(computed.totalSpend)+" has been invested across "+sortedPlats.length+" platforms, delivering a consistent daily run rate of "+fR(dailySpend)+" and an expected total investment of "+fR(projSpend)+" by period end.");
-                parts.push("The campaigns reached an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people with "+fmt(computed.totalImps)+" impressions, keeping cost to reach 1,000 ads served at "+fR(computed.blendedCpm)+" — "+cpmQ+" the South African benchmark.");
+                parts.push("The campaigns reached an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people with "+fmt(computed.totalImps)+" impressions, keeping cost to reach 1,000 ads served at "+fR(computed.blendedCpm)+", "+cpmQ+" the South African benchmark.");
                 parts.push("Engagement is tracking "+ctrQ+" the SA benchmark on click-through rate ("+blCtr.toFixed(2)+"% vs 0.9 to 1.4%), with a blended cost per click of "+fR(blCpc)+" reflecting efficient value for every user action.");
                 var activeO=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
                 if(activeO.length>0){var topO=activeO.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var tot=0;activeO.forEach(function(k){tot+=objectives4[k].results;});parts.push("Objective delivery produced "+fmt(tot)+" measurable results across "+activeO.length+" objective area"+(activeO.length===1?"":"s")+", with "+topO+" leading on total volume this period.");}
                 if(bestCpmPlat&&worstCpmPlat&&bestCpmPlat!==worstCpmPlat)parts.push(bestCpmPlat+" is the most cost-efficient platform for reach across the media mix, while the broader platform split ensures the audience encounters the brand in multiple environments.");
-                if(grandT2>0)parts.push("The brand's owned community now stands at "+fmt(grandT2)+" members"+(earnedTotal>0?", having welcomed "+fmt(earnedTotal)+" new followers in this period — each one a permanent, cost-free distribution channel for every future campaign":"")+".");
-                parts.push("Overall, the campaign is performing strongly — efficient in delivery, meaningful in engagement, and generating measurable results across every active objective.");
+                if(grandT2>0)parts.push("The brand's owned community now stands at "+fmt(grandT2)+" members"+(earnedTotal>0?", having welcomed "+fmt(earnedTotal)+" new followers in this period, each one a permanent, cost-free distribution channel for every future campaign":"")+".");
+                parts.push("Overall, the campaign is performing strongly, efficient in delivery, meaningful in engagement, and generating measurable results across every active objective.");
                 var text=parts.join(" ");
                 return <div style={{marginTop:20,padding:"24px 28px",background:"linear-gradient(135deg,"+P.orchid+"10 0%,"+P.ember+"06 50%, transparent 100%)",border:"1px solid "+P.orchid+"25",borderLeft:"4px solid "+P.orchid,borderRadius:"0 16px 16px 0"}}>
                   <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Combined Summary Insights</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>Plain-English recap for the full selected period</div></div></div>
@@ -991,7 +991,7 @@ export default function MediaOnGas(){
               var pc=platCol5[ad.platform]||P.ember;
               var ps=platShort2[ad.platform]||ad.platform;
               var fm2=fmtMeta(ad.format);
-              // Only render the centred metric when there's no thumbnail — when there is one,
+              // Only render the centred metric when there's no thumbnail, when there is one,
               // the card-level gradient-backed overlay handles the callout and a second copy
               // from here bubbles up to the same stacking layer and duplicates.
               var showMetric=!ad.thumbnail;
@@ -999,7 +999,7 @@ export default function MediaOnGas(){
                 <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:56,fontWeight:900,letterSpacing:4,color:pc,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{ps.toUpperCase()}</div>
                 {showMetric&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 14px"}}>
                   <div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:2,marginBottom:4,fontWeight:800}}>{resultLabel(ad.resultType)}</div>
-                  <div style={{fontSize:34,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"—"}</div>
+                  <div style={{fontSize:34,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):","}</div>
                   {ad.results>0&&<div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:6,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)}</div>}
                 </div>}
               </div>;
@@ -1370,7 +1370,7 @@ export default function MediaOnGas(){
                         })}
                       </div>
 
-                      {/* ANALYST READ — per objective */}
+                      {/* ANALYST READ, per objective */}
                       <div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid "+sec.accent+"25"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                           {Ic.eye(sec.accent,12)}
@@ -1382,13 +1382,13 @@ export default function MediaOnGas(){
                           // L1: concentration + volume
                           if(o.totals.results>0){
                             var top5Share=o.totals.results>0?Math.round((function(){var x=0;o.top5.forEach(function(a){x+=a.results;});return x/o.totals.results*100;})()):0;
-                            lines.push("The top 5 creatives account for "+top5Share+"% of "+sec.label.toLowerCase()+" delivery ("+fR(o.totals.spend)+" total spend, "+fmt(o.totals.results)+" "+resultLabel(resT).toLowerCase()+") — "+(top5Share>=70?"heavy concentration, a refresh pipeline is critical to avoid fatigue":top5Share>=40?"healthy concentration, continue iterating on winning angles":"dispersed performance, pick clearer winners before scaling"));
+                            lines.push("The top 5 creatives account for "+top5Share+"% of "+sec.label.toLowerCase()+" delivery ("+fR(o.totals.spend)+" total spend, "+fmt(o.totals.results)+" "+resultLabel(resT).toLowerCase()+"), "+(top5Share>=70?"heavy concentration, a refresh pipeline is critical to avoid fatigue":top5Share>=40?"healthy concentration, continue iterating on winning angles":"dispersed performance, pick clearer winners before scaling"));
                           }else{
                             lines.push("No measurable "+sec.label.toLowerCase()+" yet across "+o.count+" ads on "+fR(o.totals.spend)+" spend. Verify conversion tracking, landing page load, and event mapping before scaling any budget.");
                           }
                           // L2: efficiency gap
                           if(o.efficiencyGap>0&&o.tailCount>0){
-                            lines.push("Efficiency gap: top 5 at "+fR(o.topCpr)+" "+sec.costLabel+" vs bottom quartile at "+fR(o.tailCpr)+" — a "+o.efficiencyGap.toFixed(1)+"x spread. This is "+(o.efficiencyGap>=3?"a decisive signal — the long tail is materially dragging blended cost":o.efficiencyGap>=1.8?"a meaningful spread worth acting on":"a modest spread, marginal gains only from rebalancing")+".");
+                            lines.push("Efficiency gap: top 5 at "+fR(o.topCpr)+" "+sec.costLabel+" vs bottom quartile at "+fR(o.tailCpr)+", a "+o.efficiencyGap.toFixed(1)+"x spread. This is "+(o.efficiencyGap>=3?"a decisive signal, the long tail is materially dragging blended cost":o.efficiencyGap>=1.8?"a meaningful spread worth acting on":"a modest spread, marginal gains only from rebalancing")+".");
                           }
                           // L3: reallocation math
                           if(o.realloc>0){
@@ -1396,7 +1396,7 @@ export default function MediaOnGas(){
                           }
                           // L4: benchmark read
                           if(o.totals.cpr>0&&bm){
-                            var bVerd=o.totals.cpr<=bm.low?"well below the SA benchmark floor ("+fR(bm.low)+") — top-quartile efficiency":o.totals.cpr<=bm.mid?"inside the SA benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+") — performing to standard":o.totals.cpr<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+") — room to tighten":"above the SA benchmark ceiling ("+fR(bm.high)+") — red flag, revisit targeting and creative hooks";
+                            var bVerd=o.totals.cpr<=bm.low?"well below the SA benchmark floor ("+fR(bm.low)+"), top-quartile efficiency":o.totals.cpr<=bm.mid?"inside the SA benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+"), performing to standard":o.totals.cpr<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+"), room to tighten":"above the SA benchmark ceiling ("+fR(bm.high)+"), red flag, revisit targeting and creative hooks";
                             lines.push("Blended "+sec.costLabel+" at "+fR(o.totals.cpr)+" is "+bVerd+".");
                           }
                           // L5: format mix insight
@@ -1411,7 +1411,7 @@ export default function MediaOnGas(){
                           if(o.topCtr>0&&o.tailCtr>0){
                             var ctrDelta=o.topCtr-o.tailCtr;
                             if(Math.abs(ctrDelta)>=0.3){
-                              lines.push("Attention delta: top 5 CTR "+o.topCtr.toFixed(2)+"% vs tail "+o.tailCtr.toFixed(2)+"%"+(ctrDelta>0?". Top creatives are also earning disproportionate attention — the hook is doing work, not just the algorithm.":". Tail has stronger CTR but weaker conversion — the hook attracts but the offer/landing isn't converting. Audit funnel past the click."));
+                              lines.push("Attention delta: top 5 CTR "+o.topCtr.toFixed(2)+"% vs tail "+o.tailCtr.toFixed(2)+"%"+(ctrDelta>0?". Top creatives are also earning disproportionate attention, the hook is doing work, not just the algorithm.":". Tail has stronger CTR but weaker conversion, the hook attracts but the offer/landing isn't converting. Audit funnel past the click."));
                             }
                           }
                           return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:6,display:"flex",gap:8}}><span style={{color:sec.accent,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
@@ -1443,12 +1443,12 @@ export default function MediaOnGas(){
                       // Platform-objective fit
                       var fits=[];
                       objBreakdown.forEach(function(o){if(o.platTop&&o.platMix[o.platTop]>=3)fits.push(o.sec.label+" leans "+o.platTop);});
-                      if(fits.length>0)lines.push("Platform-objective fit: "+fits.join(" | ")+". Use this to anchor media planning — do not force spend into platforms that the data says under-deliver for a given objective.");
+                      if(fits.length>0)lines.push("Platform-objective fit: "+fits.join(" | ")+". Use this to anchor media planning, do not force spend into platforms that the data says under-deliver for a given objective.");
                       // Total reallocation potential
                       var totRealloc=0,totReallocSpend=0,totReallocCount=0;
                       objBreakdown.forEach(function(o){if(o.realloc>0){totRealloc+=o.realloc;totReallocSpend+=o.tailSpend;totReallocCount+=o.tailCount;}});
                       if(totRealloc>0){
-                        lines.push("Portfolio-wide reallocation: "+totReallocCount+" tail creatives consuming "+fR(totReallocSpend)+" could be pruned. Redeploying that spend to top-ranked ad sets projects ~"+fmt(totRealloc)+" additional incremental results at current efficiency — a compounding win without new budget.");
+                        lines.push("Portfolio-wide reallocation: "+totReallocCount+" tail creatives consuming "+fR(totReallocSpend)+" could be pruned. Redeploying that spend to top-ranked ad sets projects ~"+fmt(totRealloc)+" additional incremental results at current efficiency, a compounding win without new budget.");
                       }
                       // Creative refresh mandate
                       var refreshCount=0;
@@ -1458,7 +1458,7 @@ export default function MediaOnGas(){
                       var allImps=0,allClicks=0;filteredAds.forEach(function(a){allImps+=a.impressions;allClicks+=a.clicks;});
                       var portfolioCtr=allImps>0?(allClicks/allImps*100):0;
                       if(portfolioCtr>0){
-                        lines.push("Portfolio blended CTR: "+portfolioCtr.toFixed(2)+"% on "+fmt(allImps)+" impressions"+(portfolioCtr>=1.2?". Above the 1.2% healthy threshold — the creative is earning attention. Protect this by retiring fatigued creatives before CTR slides.":portfolioCtr>=0.8?". In the acceptable 0.8-1.2% band but not exceptional. Prioritise creative testing over audience expansion.":". Below 0.8% — attention is the bottleneck. Audience or creative fit is off before any scaling decision."));
+                        lines.push("Portfolio blended CTR: "+portfolioCtr.toFixed(2)+"% on "+fmt(allImps)+" impressions"+(portfolioCtr>=1.2?". Above the 1.2% healthy threshold, the creative is earning attention. Protect this by retiring fatigued creatives before CTR slides.":portfolioCtr>=0.8?". In the acceptable 0.8-1.2% band but not exceptional. Prioritise creative testing over audience expansion.":". Below 0.8%, attention is the bottleneck. Audience or creative fit is off before any scaling decision."));
                       }
                       // Headline action
                       var scaleCount=0;objBreakdown.forEach(function(o){scaleCount+=o.top5.filter(function(a){return a.results>0;}).length;});
@@ -2047,7 +2047,7 @@ export default function MediaOnGas(){
         {tab==="optimise"&&!isClient&&(<div>
           <SH icon={Ic.flag(P.warning,20)} title="Optimisation, Flags & Recommendations" sub={flags.length+" flags · "+openFlags+" open · Auto-generated"} accent={P.warning}/>
 
-          {/* PERFORMANCE TRENDLINES — platform x objective matrix of sparklines */}
+          {/* PERFORMANCE TRENDLINES, platform x objective matrix of sparklines */}
           {(function(){
             var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"App Install",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"landingpage",label:"Landing Page",accent:P.cyan}];
             var platCols=[{key:"Facebook",label:"FB",accent:P.fb},{key:"Instagram",label:"IG",accent:P.ig},{key:"TikTok",label:"TT",accent:P.tt},{key:"Google",label:"Google",accent:P.gd}];

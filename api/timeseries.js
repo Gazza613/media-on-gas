@@ -2,7 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 
-// Same account list as /api/ads — keep in sync
+// Same account list as /api/ads, keep in sync
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
   var seriesMap = {};
   var debug = { meta: {}, tiktok: {}, google: {} };
 
-  /* META — weekly time_increment via insights per account */
+  /* META, weekly time_increment via insights per account */
   if (metaToken) {
     for (var i = 0; i < metaAccounts.length; i++) {
       var account = metaAccounts[i];
@@ -110,7 +110,7 @@ export default async function handler(req, res) {
     }
   }
 
-  /* TIKTOK — daily, aggregate server-side into weekly/monthly */
+  /* TIKTOK, daily, aggregate server-side into weekly/monthly */
   if (ttToken && ttAdvId) {
     try {
       // Campaign objective map
@@ -149,7 +149,7 @@ export default async function handler(req, res) {
     } catch (e) { debug.tiktok.error = String(e); }
   }
 
-  /* GOOGLE — daily, aggregate server-side */
+  /* GOOGLE, daily, aggregate server-side */
   try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
