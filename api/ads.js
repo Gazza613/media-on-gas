@@ -180,23 +180,16 @@ export default async function handler(req, res) {
       // any single video_id was unreachable (different page permissions, deleted, etc.).
       var fetchOneVideoThumb = async function(vid) {
         try {
-          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails.limit(50){uri,height,width,is_preferred}&access_token=" + metaToken);
+          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
           var v = await r.json();
           if (!v || v.error) return;
-          // Any frame from the thumbnails edge is treated as hi-confidence — Meta serves those
-          // at native resolution (540-1920px typically). The picture-field fallback is
-          // low-confidence because it has a forced stp= transform baked in.
-          var hiUrl = "";
+          var best = "";
           if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
-            var sorted = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); });
-            if (sorted[0]) hiUrl = sorted[0].uri || "";
+            var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
+            best = largest.uri || "";
           }
-          var loUrl = "";
-          if (v.picture) {
-            loUrl = v.picture.replace(/([?&])stp=[^&]*/g, "$1").replace(/\?&/, "?").replace(/[?&]$/, "");
-          }
-          videoThumbs[vid] = { hi: hiUrl, lo: loUrl };
-        } catch (_) { /* individual failure */ }
+          videoThumbs[vid] = best || v.picture || "";
+        } catch (_) { /* individual failure, leave entry empty */ }
       };
       // Chunk parallel calls to avoid too many concurrent sockets
       for (var vb = 0; vb < videoIds.length; vb += 15) {
@@ -317,18 +310,13 @@ export default async function handler(req, res) {
         // Walk every variant (DCO ads often have multiple) until we find one that resolves.
         // This covers cases where the first variant's hash isn't in this account's /adimages.
         var afs = cr.asset_feed_spec || {};
-        // Any URL from the thumbnails edge is hi-confidence; the stripped picture field is
-        // low-confidence and only used as a fallback ahead of cr.thumbnail_url.
-        var vidThumbHi = "";
-        var vidThumbLow = "";
+        // Walk every variant video id until one resolves, same as the proven-good version.
+        var vidThumb = "";
         var candidateVids = [];
         if (cr.video_id) candidateVids.push(cr.video_id);
         if (afs.videos) afs.videos.forEach(function(v) { if (v.video_id) candidateVids.push(v.video_id); });
-        for (var cvi = 0; cvi < candidateVids.length; cvi++) {
-          var vEntry = videoThumbs[candidateVids[cvi]];
-          if (!vEntry) continue;
-          if (!vidThumbHi && vEntry.hi) vidThumbHi = vEntry.hi;
-          if (!vidThumbLow && vEntry.lo) vidThumbLow = vEntry.lo;
+        for (var cvi = 0; cvi < candidateVids.length && !vidThumb; cvi++) {
+          vidThumb = videoThumbs[candidateVids[cvi]] || "";
         }
         var hashThumb = "";
         var candidateHashes = [];
@@ -350,10 +338,10 @@ export default async function handler(req, res) {
         // Priority: video thumbnail > /adimages permalink (full upload) > post attachments hi-res > post full_picture > image_url > thumbnail_url
         // Priority: video cover -> uploaded original -> direct asset_feed url -> post hi-res -> post pic -> image_url
         // thumbnail_url is the absolute last resort because Meta bakes a 64x64 stp= modifier into it
-        // Priority: confidently hi-res video cover, then uploaded-asset hashes and direct
-        // asset_feed urls, then post-level images, then image_url. Low-res video thumbs and
-        // the tiny cr.thumbnail_url are saved as absolute last resorts.
-        var thumb = upsizeFb(vidThumbHi || hashThumb || afsDirectUrl || postHiThumb || postThumb || cr.image_url || vidThumbLow || cr.thumbnail_url || "");
+        // Proven priority from commit a1a260b where thumbnails were confirmed sharp:
+        // video cover, uploaded-asset hash, direct asset_feed url, post hi-res,
+        // post full_picture, creative image_url, creative thumbnail_url as last resort.
+        var thumb = upsizeFb(vidThumb || hashThumb || afsDirectUrl || postHiThumb || postThumb || cr.image_url || cr.thumbnail_url || "");
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;
