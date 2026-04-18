@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { issueToken } from "./_jwt.js";
+import { logEmailSend } from "./_audit.js";
 
 // Admin-only endpoint. Issues a signed share token, fetches the campaign summary,
 // and emails a branded HTML report from grow@gasmarketing.co.za via Gmail SMTP.
@@ -578,6 +579,23 @@ export default async function handler(req, res) {
       text: text,
       html: html
     });
+
+    // Fire-and-forget audit write. Graceful no-op if Upstash env vars aren't set yet.
+    logEmailSend({
+      clientSlug: clientSlug,
+      clientName: clientSlug.split("-").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" "),
+      to: toList,
+      cc: ccList,
+      bcc: bccList,
+      fromDate: from,
+      toDate: to,
+      campaignCount: campaignIds.length + campaignNames.length,
+      senderName: body.senderName || "",
+      senderTitle: body.senderTitle || "",
+      summaryEmbedded: !!summary,
+      topAdsEmbedded: !!topAds,
+      messageId: info.messageId || ""
+    }).catch(function(err) { console.error("Audit log failed", err); });
 
     res.status(200).json({
       ok: true,

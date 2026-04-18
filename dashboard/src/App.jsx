@@ -207,6 +207,65 @@ function ShareModal(props){
     }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
   var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");};
+
+  // Audit trail state
+  var auditOpen=useState(false);
+  var auditEntries=useState([]);
+  var auditLoading=useState(false);
+  var auditEnabled=useState(true);
+  var auditQuery=useState("");
+  var loadAudit=function(){
+    auditLoading[1](true);
+    fetch(props.apiBase+"/api/audit-log?limit=500",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        auditLoading[1](false);
+        auditEntries[1](Array.isArray(d.entries)?d.entries:[]);
+        auditEnabled[1](d.enabled!==false);
+      })
+      .catch(function(){auditLoading[1](false);auditEnabled[1](true);auditEntries[1]([]);});
+  };
+  useEffect(function(){if(auditOpen[0]){loadAudit();}},[auditOpen[0],emailSent[0]]);
+  var filteredAudit=(function(){
+    var q=(auditQuery[0]||"").toLowerCase().trim();
+    if(!q)return auditEntries[0];
+    return auditEntries[0].filter(function(e){
+      if((e.clientSlug||"").toLowerCase().indexOf(q)>=0)return true;
+      if((e.clientName||"").toLowerCase().indexOf(q)>=0)return true;
+      if((e.senderName||"").toLowerCase().indexOf(q)>=0)return true;
+      var recips=[].concat(e.to||[]).concat(e.cc||[]).concat(e.bcc||[]).join(" ").toLowerCase();
+      if(recips.indexOf(q)>=0)return true;
+      return false;
+    });
+  })();
+  var exportCsv=function(){
+    var rows=[["Sent at (UTC)","Client slug","Client name","Sent by","Title","To","CC","BCC","Period from","Period to","Campaigns","Summary embedded","Top ads embedded"]];
+    filteredAudit.forEach(function(e){
+      rows.push([
+        e.sentAt||"",
+        e.clientSlug||"",
+        e.clientName||"",
+        e.senderName||"",
+        e.senderTitle||"",
+        (e.to||[]).join("; "),
+        (e.cc||[]).join("; "),
+        (e.bcc||[]).join("; "),
+        e.fromDate||"",
+        e.toDate||"",
+        e.campaignCount||0,
+        e.summaryEmbedded?"yes":"no",
+        e.topAdsEmbedded?"yes":"no"
+      ]);
+    });
+    var csv=rows.map(function(r){return r.map(function(c){var s=String(c||"");if(s.indexOf(",")>=0||s.indexOf('"')>=0||s.indexOf("\n")>=0){return '"'+s.replace(/"/g,'""')+'"';}return s;}).join(",");}).join("\n");
+    var blob=new Blob([csv],{type:"text/csv"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url;a.download="email-audit-"+(new Date()).toISOString().slice(0,10)+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  var fmtDate=function(iso){if(!iso)return"—";var d=new Date(iso);if(isNaN(d.getTime()))return iso;return d.toLocaleString("en-ZA",{year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit"});};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
     <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto"}}>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
@@ -293,6 +352,43 @@ function ShareModal(props){
 
         <button onClick={reset} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
       </div>}
+
+      {/* Audit trail, collapsible. Team visibility of recent email activity + KPI signal */}
+      <div style={{marginTop:22,borderTop:"1px solid "+P.rule,paddingTop:18}}>
+        <button onClick={function(){auditOpen[1](!auditOpen[0]);}} style={{width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span>{auditOpen[0]?"Hide":"View"} Send Log{auditEntries[0].length>0?" ("+auditEntries[0].length+")":""}</span>
+          <span style={{color:P.sub,fontSize:11}}>{auditOpen[0]?"\u25B2":"\u25BC"}</span>
+        </button>
+        {auditOpen[0]&&<div style={{marginTop:12}}>
+          {!auditEnabled[0]&&<div style={{background:P.warning+"10",border:"1px solid "+P.warning+"40",borderRadius:10,padding:"12px 14px",fontSize:11,color:P.warning,fontFamily:fm,lineHeight:1.6}}>
+            <div style={{fontWeight:800,marginBottom:4,letterSpacing:1.5,textTransform:"uppercase"}}>Audit storage not configured</div>
+            <div style={{color:P.txt}}>Install Upstash Redis on Vercel Storage, link it to this project, and redeploy. Env vars auto-populate. Free tier covers years of usage.</div>
+          </div>}
+          {auditEnabled[0]&&<div>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <input value={auditQuery[0]} onChange={function(e){auditQuery[1](e.target.value);}} placeholder="Search by client name, slug, sender, or recipient email" style={{flex:1,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+              <button onClick={loadAudit} disabled={auditLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:auditLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{auditLoading[0]?"…":"REFRESH"}</button>
+              <button onClick={exportCsv} disabled={filteredAudit.length===0} style={{background:filteredAudit.length===0?"transparent":gEmber,border:"1px solid "+(filteredAudit.length===0?P.rule:"transparent"),borderRadius:8,padding:"8px 14px",color:filteredAudit.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filteredAudit.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>
+            </div>
+            {auditLoading[0]&&<div style={{color:P.sub,fontSize:11,fontFamily:fm,padding:"16px 4px"}}>Loading send log...</div>}
+            {!auditLoading[0]&&filteredAudit.length===0&&<div style={{color:P.dim,fontSize:11,fontFamily:fm,padding:"18px 4px",textAlign:"center",fontStyle:"italic"}}>{auditEntries[0].length===0?"No emails sent yet. Send your first report to start the log.":"No matches for that search."}</div>}
+            {!auditLoading[0]&&filteredAudit.length>0&&<div style={{maxHeight:340,overflowY:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.25)"}}>
+              {filteredAudit.map(function(e,i){
+                var recipients=[].concat(e.to||[]);
+                return <div key={e.id||i} style={{padding:"10px 14px",borderBottom:i===filteredAudit.length-1?"none":"1px solid "+P.rule,fontSize:11,fontFamily:fm,lineHeight:1.5}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4,gap:8}}>
+                    <span style={{color:P.ember,fontWeight:800,letterSpacing:1,textTransform:"uppercase",fontSize:10}}>{e.clientName||e.clientSlug||"Unknown"}</span>
+                    <span style={{color:P.sub,fontSize:10}}>{fmtDate(e.sentAt)}</span>
+                  </div>
+                  <div style={{color:P.txt,marginBottom:2}}>{recipients.join(", ")||"—"}</div>
+                  {(e.cc&&e.cc.length>0)||(e.bcc&&e.bcc.length>0)?<div style={{color:P.dim,fontSize:10}}>{(e.cc&&e.cc.length>0?"cc: "+e.cc.join(", "):"")}{(e.cc&&e.cc.length>0)&&(e.bcc&&e.bcc.length>0)?"  ":""}{(e.bcc&&e.bcc.length>0?"bcc: "+e.bcc.join(", "):"")}</div>:null}
+                  <div style={{color:P.sub,fontSize:10,marginTop:3}}>Period: {e.fromDate||"—"} to {e.toDate||"—"} {e.senderName?"| Sent by "+e.senderName:""}{e.campaignCount?" | "+e.campaignCount+" campaign"+(e.campaignCount===1?"":"s"):""}</div>
+                </div>;
+              })}
+            </div>}
+          </div>}
+        </div>}
+      </div>
     </div>
   </div>);
 }
