@@ -2,6 +2,23 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 
+// Module-level caches that persist across warm Vercel invocations on the same instance.
+// Meta Graph API has aggressive app-level rate limits (#4) and video thumbnails + image
+// hashes rarely change, so cache them for 30 minutes and skip the network call on
+// subsequent /api/ads requests against the same video_id or hash.
+var videoThumbCache = {};
+var hashUrlCache = {};
+var CACHE_TTL_MS = 30 * 60 * 1000;
+var cacheGet = function(store, key) {
+  var hit = store[key];
+  if (!hit) return null;
+  if (Date.now() - hit.ts > CACHE_TTL_MS) { delete store[key]; return null; }
+  return hit.value;
+};
+var cacheSet = function(store, key, value) {
+  store[key] = { value: value, ts: Date.now() };
+};
+
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
@@ -176,6 +193,13 @@ export default async function handler(req, res) {
         }
       });
       var videoThumbs = {};
+      // Seed from module-level cache first: anything we've resolved recently skips the API call.
+      var videoIdsToFetch = [];
+      videoIds.forEach(function(vid) {
+        var cached = cacheGet(videoThumbCache, vid);
+        if (cached) videoThumbs[vid] = cached;
+        else videoIdsToFetch.push(vid);
+      });
       // Extract a thumbnail URL from a single video payload (shared between batch and fallback)
       var pickThumbFromVideo = function(v) {
         if (!v || v.error) return "";
@@ -193,23 +217,25 @@ export default async function handler(req, res) {
         try {
           var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
           var v = await r.json();
-          videoThumbs[vid] = pickThumbFromVideo(v);
+          var url = pickThumbFromVideo(v);
+          if (url) { videoThumbs[vid] = url; cacheSet(videoThumbCache, vid, url); }
         } catch (_) {}
       };
-      for (var vb = 0; vb < videoIds.length; vb += 50) {
-        var vBatch = videoIds.slice(vb, vb + 50);
+      for (var vb = 0; vb < videoIdsToFetch.length; vb += 50) {
+        var vBatch = videoIdsToFetch.slice(vb, vb + 50);
         try {
           var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + vBatch.join(",") + "&fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken;
           var bRes = await fetch(batchUrl);
           var bData = await bRes.json();
           if (bData && !bData.error) {
-            // Batch succeeded: populate every id we got back. Missing ids stay empty.
             vBatch.forEach(function(vid) {
               var v = bData[vid];
-              if (v) videoThumbs[vid] = pickThumbFromVideo(v);
+              if (v) {
+                var url = pickThumbFromVideo(v);
+                if (url) { videoThumbs[vid] = url; cacheSet(videoThumbCache, vid, url); }
+              }
             });
           } else {
-            // Batch itself errored (rate limit or bad id): individual fetches for this batch only
             for (var ib = 0; ib < vBatch.length; ib += 10) {
               await Promise.all(vBatch.slice(ib, ib + 10).map(fetchOneVideoThumb));
             }
@@ -240,8 +266,15 @@ export default async function handler(req, res) {
         }
       });
       var hashToUrl = {};
-      for (var ih = 0; ih < imageHashes.length; ih += 50) {
-        var hBatch = imageHashes.slice(ih, ih + 50);
+      // Seed from module-level cache first
+      var hashesToFetch = [];
+      imageHashes.forEach(function(h) {
+        var cached = cacheGet(hashUrlCache, account.id + ":" + h);
+        if (cached) hashToUrl[h] = cached;
+        else hashesToFetch.push(h);
+      });
+      for (var ih = 0; ih < hashesToFetch.length; ih += 50) {
+        var hBatch = hashesToFetch.slice(ih, ih + 50);
         var hashStr = encodeURIComponent(JSON.stringify(hBatch));
         var aiUrl = "https://graph.facebook.com/v25.0/" + account.id + "/adimages?hashes=" + hashStr + "&fields=hash,url,permalink_url,width,height&access_token=" + metaToken;
         try {
@@ -249,20 +282,22 @@ export default async function handler(req, res) {
           var aiData = await aiRes.json();
           if (aiData.data) {
             aiData.data.forEach(function(img) {
-              hashToUrl[img.hash] = img.url || img.permalink_url || "";
+              var url = img.url || img.permalink_url || "";
+              if (url) { hashToUrl[img.hash] = url; cacheSet(hashUrlCache, account.id + ":" + img.hash, url); }
             });
           }
         } catch (aiErr) { console.error("Meta adimages error", account.name, aiErr); }
       }
-      // Fallback for any hash the batch didn't return (e.g. creative shared from another
-      // ad account). Probe individually so one bad hash doesn't poison the lot.
-      var unresolvedHashes = imageHashes.filter(function(h) { return !hashToUrl[h]; });
+      var unresolvedHashes = hashesToFetch.filter(function(h) { return !hashToUrl[h]; });
       if (unresolvedHashes.length > 0) {
         await Promise.all(unresolvedHashes.slice(0, 100).map(async function(h) {
           try {
             var r = await fetch("https://graph.facebook.com/v25.0/" + account.id + "/adimages?hashes=" + encodeURIComponent(JSON.stringify([h])) + "&fields=hash,url,permalink_url&access_token=" + metaToken);
             var d = await r.json();
-            if (d.data && d.data[0]) hashToUrl[h] = d.data[0].url || d.data[0].permalink_url || "";
+            if (d.data && d.data[0]) {
+              var url = d.data[0].url || d.data[0].permalink_url || "";
+              if (url) { hashToUrl[h] = url; cacheSet(hashUrlCache, account.id + ":" + h, url); }
+            }
           } catch (_) {}
         }));
       }
