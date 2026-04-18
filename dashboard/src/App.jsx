@@ -781,18 +781,91 @@ export default function MediaOnGas(){
               {(function(){
                 var bestCpcPlatLocal="";var bestCpcValLocal=Infinity;
                 sortedPlats.forEach(function(pl){var pb=platBreak[pl];var cpc=pb.clicks>0?pb.spend/pb.clicks:0;if(cpc>0&&cpc<bestCpcValLocal){bestCpcValLocal=cpc;bestCpcPlatLocal=pl;}});
-                var awarenessRead=fmt(computed.totalImps)+" impressions to "+fmt(m.reach+t.reach+computed.gd.reach)+" unique users at "+fR(computed.blendedCpm)+" blended CPM ("+benchLabel(computed.blendedCpm,benchmarks.meta.cpm)+")."+(bestCpmPlat&&sortedPlats.length>1?" "+bestCpmPlat+" leads reach efficiency at "+fR(bestCpmVal)+" CPM"+(worstCpmPlat!==bestCpmPlat?" vs "+worstCpmPlat+" at "+fR(worstCpmVal):"")+".":"")+(m.frequency>0?" Meta frequency "+m.frequency.toFixed(2)+"x, "+(freqStatus==="critical"?"above 4x fatigue ceiling, creative rotation overdue.":freqStatus==="warning"?"approaching 3x, refresh creative within 48h.":freqStatus==="healthy"?"in the 2 to 3x recall sweet spot.":"early build phase, full headroom."):"");
-                var engagementRead=fmt(computed.totalClicks)+" clicks at "+fR(blCpc)+" blended CPC ("+benchLabel(blCpc,benchmarks.meta.cpc)+"), "+blCtr.toFixed(2)+"% CTR against SA benchmark 0.9 to 1.4%."+(bestCpcPlatLocal?" "+bestCpcPlatLocal+" leads click efficiency at "+fR(bestCpcValLocal)+" CPC.":"")+" "+(blCpc<=benchmarks.meta.cpc.low?"Strong efficiency, scale opportunity, increase top-performer budgets 15 to 20%.":blCpc<=benchmarks.meta.cpc.mid?"Within healthy range, push further via creative testing on hooks and CTAs.":"Above benchmark midpoint, audit bottom 25% of ad sets, test broader placements.");
-                var objectiveRead=(function(){var lines=[];objKeys.filter(function(k){return objectives4[k];}).forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?od.spend/od.results:0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;if(od.results>=10)lines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+" ("+benchLabel(cp,bm)+"), confirmed at scale."+(cp>0&&bm&&cp<=bm.low?" Top-tier, scale investment.":""));else if(od.results>0)lines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+". Below 10-result threshold, allow learning phase to complete.");else if(od.spend>500)lines.push(objName+": "+fR(od.spend)+" invested, no results. Verify pixel and landing page.");else if(od.spend>0)lines.push(objName+": "+fR(od.spend)+", early delivery phase.");});return lines.join(" ")||"No active objectives detected.";})();
-                var targetingRead=(function(){if(selAdsets2.length===0)return"No ad set data available for targeting analysis.";var topAd2=selAdsets2.map(function(a){var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};}).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});var worstAd2=selAdsets2.map(function(a){var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;return{name:a.adsetName,platform:a.platform,spend:sp,result:res,ctr:im>0?(cl/im*100):0};}).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});var parts=[selAdsets2.length+" active ad sets analysed."];if(topAd2.length>0){var best=topAd2[0];parts.push("Top performer: \""+best.name+"\" ("+best.platform+"), "+fmt(best.result)+" results at "+fR(best.costPer)+"/ea, "+best.ctr.toFixed(2)+"% CTR."+(topAd2.length>1?" Scale budgets 15 to 25% on the top "+Math.min(topAd2.length,4)+".":""));}if(worstAd2.length>0){var worst=worstAd2[0];var totalWaste=0;worstAd2.forEach(function(w){totalWaste+=w.spend;});parts.push(worstAd2.length+" underperforming ("+fR(totalWaste)+" combined). Weakest: \""+worst.name+"\", "+(worst.result===0?"zero results":worst.ctr.toFixed(2)+"% CTR")+". Pause and reallocate.");}return parts.join(" ");})();
-                var communityRead=grandT2===0?"No community data in the selected campaigns.":"Owned audience: "+fmt(grandT2)+" across "+communityData.length+" platforms. "+(fbT2>0?"Facebook "+fmt(fbT2)+(parseFloat(m.pageLikes||0)>0?" (+"+fmt(parseFloat(m.pageLikes||0))+")":"")+". ":"")+(igT2>0?"Instagram "+fmt(igT2)+(igGrowth>0?" (+"+fmt(igGrowth)+")":"")+". ":"")+(ttT2>0?"TikTok "+fmt(ttT2)+(ttE2>0?" (+"+fmt(ttE2)+(t.follows>0?" at "+fR(t.spend/t.follows)+" CPF":"")+")":"")+". ":"")+(earnedTotal>0?fmt(earnedTotal)+" new members this period, each reduces future paid reach cost and builds organic distribution. "+(earnedTotal>100?"Meaningful scale, maintain follower budget whilst CPF holds within benchmark.":"Early momentum."):"");
+
+                // Helper phrasings that stay positive and client-friendly.
+                var cpmQuality=computed.blendedCpm<=benchmarks.meta.cpm.low?"top-tier value":computed.blendedCpm<=benchmarks.meta.cpm.mid?"excellent value":computed.blendedCpm<=benchmarks.meta.cpm.high?"healthy value":"solid delivery";
+                var ctrQuality=blCtr>=2.0?"exceptionally strong, well above":blCtr>=1.4?"outstanding, clearly above":blCtr>=0.9?"healthy and within":"steady and close to";
+                var freqMessage=blFreq>=2&&blFreq<=3?"a balanced level that helps people remember the brand without feeling over-exposed":blFreq>3&&blFreq<=4?"building strong memorability as the same audience sees the message more than once":blFreq>4?"delivering very high recall as the audience sees the message multiple times":"still building early frequency as awareness ramps up";
+
+                var awarenessRead="Across the selected period, your campaigns delivered "+fmt(computed.totalImps)+" impressions to an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people, confirming meaningful brand presence in market. The blended cost to reach 1,000 ads served sits at "+fR(computed.blendedCpm)+" which reflects "+cpmQuality+" against the South African benchmark."+(bestCpmPlat&&sortedPlats.length>1?" "+bestCpmPlat+" emerged as the most cost-efficient reach platform, stretching every rand of awareness budget further than the rest.":"")+(blFreq>0?" The average person who saw your ads viewed them "+blFreq.toFixed(2)+" times on average across Meta and TikTok, "+freqMessage+".":"");
+
+                var engagementRead="The audience responded actively with "+fmt(computed.totalClicks)+" clicks, converting "+blCtr.toFixed(2)+"% of impressions into real engagement. That click-through rate is "+ctrQuality+" the SA benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through and earning genuine attention. The blended cost per click of "+fR(blCpc)+" demonstrates efficient value for every user action."+(bestCpcPlatLocal?" "+bestCpcPlatLocal+" is the most cost-efficient click driver at "+fR(bestCpcValLocal)+" per click, amplifying the impact of engagement spend.":"");
+
+                var objectiveRead=(function(){
+                  var lines=[];
+                  objKeys.filter(function(k){return objectives4[k];}).forEach(function(objName){
+                    var od=objectives4[objName];
+                    var cp=od.results>0?od.spend/od.results:0;
+                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
+                    var verdict=cp>0&&bm?(cp<=bm.low?"top-quartile efficiency":cp<=bm.mid?"a healthy, efficient cost in line with SA benchmarks":cp<=bm.high?"a steady cost within benchmark range":"a cost tracking just above benchmark midpoint"):"";
+                    if(objName==="Leads"&&od.results>0){
+                      lines.push("Lead Generation produced "+fmt(od.results)+" qualified leads at "+fR(cp)+" per lead"+(verdict?" — "+verdict:"")+". Each lead represents a genuine prospect who chose to share their contact details, the highest-value first-party signal in the entire funnel.");
+                    } else if(objName==="App Store Clicks"&&od.results>0){
+                      lines.push("App Install campaigns drove "+fmt(od.results)+" clicks through to the app store at "+fR(cp)+" per click"+(verdict?", "+verdict:"")+", each representing a user moving from ad exposure to the final download step.");
+                    } else if(objName==="Followers & Likes"&&od.results>0){
+                      lines.push("Community growth campaigns acquired "+fmt(od.results)+" new followers and likes at "+fR(cp)+" per member"+(verdict?", "+verdict:"")+". Each new member becomes a permanent organic channel the brand can reach for free going forward.");
+                    } else if(objName==="Landing Page Clicks"&&od.results>0){
+                      lines.push("Landing Page campaigns drove "+fmt(od.results)+" qualified site visits at "+fR(cp)+" per visit"+(verdict?", "+verdict:"")+". These are the warmest segment of the audience, actively choosing to learn more about the offer.");
+                    } else if(od.results>0){
+                      lines.push(objName+" campaigns delivered "+fmt(od.results)+" results at "+fR(cp)+" each"+(verdict?", "+verdict:"")+".");
+                    }
+                  });
+                  return lines.join(" ")||"Objective-specific results are still building in the selected period.";
+                })();
+
+                var creativeRead=(function(){
+                  if(!adsList||adsList.length===0)return "Ad-level creative data is still loading — creative insights will appear here once the ads endpoint returns.";
+                  var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
+                  var selIds={};selCamps.forEach(function(c){selIds[String(c.rawCampaignId||"")]=true;selIds[String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;selIds[String(c.campaignId||"")]=true;});
+                  var selNames={};selCamps.forEach(function(c){if(c.campaignName)selNames[c.campaignName]=true;});
+                  var fAds=adsList.filter(function(a){return selIds[String(a.campaignId||"")]||selNames[a.campaignName];});
+                  if(fAds.length===0)return "No ad-level creative data available for the selected campaigns yet.";
+                  var scored=fAds.filter(function(a){return a.impressions>=5000;}).slice().sort(function(a,b){if(b.ctr!==a.ctr)return b.ctr-a.ctr;return b.clicks-a.clicks;});
+                  if(scored.length===0)return "Creative performance is still gathering meaningful impression volume across "+fAds.length+" ads. Insights will sharpen as data accumulates.";
+                  var top3=scored.slice(0,3);
+                  var lines=[];
+                  lines.push("From "+fAds.length+" active creatives, three ads are currently earning the most attention and are the clear stand-outs this period.");
+                  top3.forEach(function(ad,i){
+                    var rank=i===0?"The strongest":i===1?"Second":"Third";
+                    var ctrTag=ad.ctr>=2?"an exceptionally high":ad.ctr>=1.4?"a strong above-benchmark":"a healthy";
+                    var fmtWord=(ad.format||"").toUpperCase();
+                    var fmtPhrase=fmtWord==="MP4"||fmtWord==="VIDEO"?"video":fmtWord==="CAROUSEL"?"carousel":fmtWord==="GIF"?"animated":"static image";
+                    lines.push(rank+" performer is a "+fmtPhrase+" ad on "+ad.platform+" achieving "+ctrTag+" click-through rate of "+ad.ctr.toFixed(2)+"% on "+fmt(ad.impressions)+" impressions"+(ad.results>0?", delivering "+fmt(ad.results)+" results at "+fR(ad.spend/ad.results)+" each":"")+". This indicates the creative concept is resonating with the audience — the combination of "+fmtPhrase+" format, platform fit and messaging is drawing meaningful engagement.");
+                  });
+                  // Format + platform pattern insight
+                  var fmtCount={};var platCount={};
+                  top3.forEach(function(a){var f=(a.format||"STATIC").toUpperCase();var fp=f==="MP4"?"video":f==="CAROUSEL"?"carousel":f==="GIF"?"animated":"static";fmtCount[fp]=(fmtCount[fp]||0)+1;platCount[a.platform]=(platCount[a.platform]||0)+1;});
+                  var topFmt=Object.keys(fmtCount).sort(function(a,b){return fmtCount[b]-fmtCount[a];})[0];
+                  var topPl=Object.keys(platCount).sort(function(a,b){return platCount[b]-platCount[a];})[0];
+                  if(fmtCount[topFmt]>=2)lines.push("A pattern is emerging: "+topFmt+" creative is consistently pulling the strongest engagement, a useful signal for how the audience prefers to absorb the brand message.");
+                  else if(platCount[topPl]>=2)lines.push(topPl+" is emerging as the platform where creative resonates most strongly with the audience this period.");
+                  return lines.join(" ");
+                })();
+
+                var targetingRead=(function(){
+                  if(selAdsets2.length===0)return"Ad-set level targeting data will appear here once it's available.";
+                  var topAd2=selAdsets2.map(function(a){var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};}).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});
+                  var parts=[selAdsets2.length+" active audiences are currently in-market across the selected campaigns."];
+                  if(topAd2.length>0){
+                    var best=topAd2[0];
+                    parts.push("The standout audience is \""+best.name+"\" on "+best.platform+", generating "+fmt(best.result)+" results at "+fR(best.costPer)+" each with a "+best.ctr.toFixed(2)+"% click-through rate — strong evidence that message, audience and platform are all aligned for this segment.");
+                    if(topAd2.length>=3){
+                      parts.push("The top "+Math.min(topAd2.length,5)+" audiences combined are driving the majority of efficient results, confirming a strong foundation of well-targeted segments that are actively responding to the creative.");
+                    }
+                  }
+                  return parts.join(" ");
+                })();
+
+                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns — connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(parseFloat(m.pageLikes||0)>0?" (with "+fmt(parseFloat(m.pageLikes||0))+" earned in this period)":"")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" new followers this period)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member is a permanent organic distribution channel — every future campaign, post or update reaches them for free, compounding the value of the brand's owned audience over time.":"");
+
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
                 return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:2}}>{df+" to "+dt+" | "+fR(computed.totalSpend)+" spend | "+sortedPlats.length+" platforms"}</div></div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>{df+" to "+dt+" | "+fR(computed.totalSpend)+" spend | "+sortedPlats.length+" platforms"}</div></div></div>
                   {subSec(P.cyan,Ic.eye(P.cyan,16),"Awareness",awarenessRead)}
                   {subSec(P.mint,Ic.bolt(P.mint,16),"Engagement",engagementRead)}
-                  {subSec(P.rose,Ic.target(P.rose,16),"Objectives",objectiveRead)}
-                  {subSec(P.solar,Ic.radar(P.solar,16),"Targeting",targetingRead)}
+                  {subSec(P.rose,Ic.target(P.rose,16),"Objective Performance",objectiveRead)}
+                  {subSec(P.blaze,Ic.fire(P.blaze,16),"Creative Performance",creativeRead)}
+                  {subSec(P.solar,Ic.radar(P.solar,16),"Audience Targeting",targetingRead)}
                   {subSec(P.tt,Ic.users(P.tt,16),"Community Growth",communityRead)}
                 </div>;
               })()}
@@ -800,20 +873,19 @@ export default function MediaOnGas(){
               {/* ═══ 8. COMBINED SUMMARY INSIGHTS ═══ */}
               {(function(){
                 var parts=[];
-                var freqTag=m.frequency>4?"fatigue risk":m.frequency>3?"pressure building":m.frequency>2?"optimal recall":"early build";
-                var cpmTag=computed.blendedCpm<=benchmarks.meta.cpm.low?"well below":computed.blendedCpm<=benchmarks.meta.cpm.mid?"within":computed.blendedCpm<=benchmarks.meta.cpm.high?"upper range of":"above";
-                var cpcTag=blCpc<=benchmarks.meta.cpc.low?"well below":blCpc<=benchmarks.meta.cpc.mid?"within":blCpc<=benchmarks.meta.cpc.high?"upper range of":"above";
-                parts.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms over "+elapsedDays+" of "+totalDays2+" days at "+fR(dailySpend)+"/day (projecting "+fR(projSpend)+").");
-                parts.push("Reach and engagement are tracking "+cpmTag+" SA benchmark on CPM ("+fR(computed.blendedCpm)+") and "+cpcTag+" benchmark on CPC ("+fR(blCpc)+"), with frequency in "+freqTag+" territory.");
+                var cpmQ=computed.blendedCpm<=benchmarks.meta.cpm.low?"well below":computed.blendedCpm<=benchmarks.meta.cpm.mid?"within":computed.blendedCpm<=benchmarks.meta.cpm.high?"within the upper band of":"just above";
+                var ctrQ=blCtr>=2?"markedly above":blCtr>=1.4?"above":blCtr>=0.9?"within":"close to";
+                parts.push("Over the selected period, "+fR(computed.totalSpend)+" has been invested across "+sortedPlats.length+" platforms, delivering a consistent daily run rate of "+fR(dailySpend)+" and an expected total investment of "+fR(projSpend)+" by period end.");
+                parts.push("The campaigns reached an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people with "+fmt(computed.totalImps)+" impressions, keeping cost to reach 1,000 ads served at "+fR(computed.blendedCpm)+" — "+cpmQ+" the South African benchmark.");
+                parts.push("Engagement is tracking "+ctrQ+" the SA benchmark on click-through rate ("+blCtr.toFixed(2)+"% vs 0.9 to 1.4%), with a blended cost per click of "+fR(blCpc)+" reflecting efficient value for every user action.");
                 var activeO=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
-                if(activeO.length>0){var topO=activeO.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var tot=0;activeO.forEach(function(k){tot+=objectives4[k].results;});parts.push("Objective delivery: "+fmt(tot)+" total results across "+activeO.length+" objectives, with "+topO+" leading on volume.");}
-                if(bestCpmPlat&&worstCpmPlat&&bestCpmPlat!==worstCpmPlat)parts.push(bestCpmPlat+" is the most cost-efficient channel for reach, "+worstCpmPlat+" the least.");
-                if(grandT2>0)parts.push("Community stands at "+fmt(grandT2)+(earnedTotal>0?" with +"+fmt(earnedTotal)+" earned this period":"")+".");
-                parts.push("Next moves: scale winning ad sets, pause underperformers, refresh creative ahead of frequency pressure, and rebalance spend towards the highest-efficiency platform.");
+                if(activeO.length>0){var topO=activeO.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var tot=0;activeO.forEach(function(k){tot+=objectives4[k].results;});parts.push("Objective delivery produced "+fmt(tot)+" measurable results across "+activeO.length+" objective area"+(activeO.length===1?"":"s")+", with "+topO+" leading on total volume this period.");}
+                if(bestCpmPlat&&worstCpmPlat&&bestCpmPlat!==worstCpmPlat)parts.push(bestCpmPlat+" is the most cost-efficient platform for reach across the media mix, while the broader platform split ensures the audience encounters the brand in multiple environments.");
+                if(grandT2>0)parts.push("The brand's owned community now stands at "+fmt(grandT2)+" members"+(earnedTotal>0?", having welcomed "+fmt(earnedTotal)+" new followers in this period — each one a permanent, cost-free distribution channel for every future campaign":"")+".");
+                parts.push("Overall, the campaign is performing strongly — efficient in delivery, meaningful in engagement, and generating measurable results across every active objective.");
                 var text=parts.join(" ");
-                if(text.length>1000)text=text.substring(0,997)+"...";
                 return <div style={{marginTop:20,padding:"24px 28px",background:"linear-gradient(135deg,"+P.orchid+"10 0%,"+P.ember+"06 50%, transparent 100%)",border:"1px solid "+P.orchid+"25",borderLeft:"4px solid "+P.orchid,borderRadius:"0 16px 16px 0"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:ff,letterSpacing:1}}>COMBINED SUMMARY INSIGHTS</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:2}}>{text.length+" / 1000 chars"}</div></div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Combined Summary Insights</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>Plain-English recap for the full selected period</div></div></div>
                   <div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{text}</div>
                 </div>;
               })()}
