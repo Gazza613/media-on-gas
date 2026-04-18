@@ -342,7 +342,7 @@ export default function MediaOnGas(){
             var platShort={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
             var objKeys=["App Store Clicks","Landing Page Clicks","Followers & Likes","Leads"];
             var objCol4={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
-            var objCL4={"App Store Clicks":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
+            var objCL4={"App Store Clicks":"COST PER CLICK","Landing Page Clicks":"COST PER CLICK","Leads":"COST PER LEAD","Followers & Likes":"COST PER FOLLOWER"};
 
             var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
             var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember,_currency:true};}).sort(function(a,b){return b.value-a.value;});
