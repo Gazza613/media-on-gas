@@ -183,20 +183,19 @@ export default async function handler(req, res) {
           var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails.limit(50){uri,height,width,is_preferred}&access_token=" + metaToken);
           var v = await r.json();
           if (!v || v.error) return;
-          var pickUrl = "";
-          var pickWidth = 0;
+          // Any frame from the thumbnails edge is treated as hi-confidence — Meta serves those
+          // at native resolution (540-1920px typically). The picture-field fallback is
+          // low-confidence because it has a forced stp= transform baked in.
+          var hiUrl = "";
           if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
             var sorted = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); });
-            if (sorted[0]) { pickUrl = sorted[0].uri || ""; pickWidth = sorted[0].width || 0; }
+            if (sorted[0]) hiUrl = sorted[0].uri || "";
           }
-          if (!pickUrl && v.picture) {
-            var stripped = v.picture.replace(/([?&])stp=[^&]*/g, "$1").replace(/\?&/, "?").replace(/[?&]$/, "");
-            pickUrl = stripped;
-            pickWidth = 0; // unknown size from picture field, mark as low-confidence
+          var loUrl = "";
+          if (v.picture) {
+            loUrl = v.picture.replace(/([?&])stp=[^&]*/g, "$1").replace(/\?&/, "?").replace(/[?&]$/, "");
           }
-          // Store both URL and width so the per-ad thumbnail picker can treat a low-res
-          // video thumb as a fallback rather than the winner.
-          videoThumbs[vid] = { url: pickUrl, width: pickWidth };
+          videoThumbs[vid] = { hi: hiUrl, lo: loUrl };
         } catch (_) { /* individual failure */ }
       };
       // Chunk parallel calls to avoid too many concurrent sockets
@@ -318,8 +317,8 @@ export default async function handler(req, res) {
         // Walk every variant (DCO ads often have multiple) until we find one that resolves.
         // This covers cases where the first variant's hash isn't in this account's /adimages.
         var afs = cr.asset_feed_spec || {};
-        // Separate confidently hi-res video thumbs (>=600px) from low-res fallbacks so
-        // that a 320px video frame doesn't win over a 1080px post attachment image.
+        // Any URL from the thumbnails edge is hi-confidence; the stripped picture field is
+        // low-confidence and only used as a fallback ahead of cr.thumbnail_url.
         var vidThumbHi = "";
         var vidThumbLow = "";
         var candidateVids = [];
@@ -327,9 +326,9 @@ export default async function handler(req, res) {
         if (afs.videos) afs.videos.forEach(function(v) { if (v.video_id) candidateVids.push(v.video_id); });
         for (var cvi = 0; cvi < candidateVids.length; cvi++) {
           var vEntry = videoThumbs[candidateVids[cvi]];
-          if (!vEntry || !vEntry.url) continue;
-          if (vEntry.width >= 600) { if (!vidThumbHi) vidThumbHi = vEntry.url; }
-          else { if (!vidThumbLow) vidThumbLow = vEntry.url; }
+          if (!vEntry) continue;
+          if (!vidThumbHi && vEntry.hi) vidThumbHi = vEntry.hi;
+          if (!vidThumbLow && vEntry.lo) vidThumbLow = vEntry.lo;
         }
         var hashThumb = "";
         var candidateHashes = [];
