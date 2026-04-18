@@ -176,24 +176,49 @@ export default async function handler(req, res) {
         }
       });
       var videoThumbs = {};
-      // Parallel per-video fetch. The old batch ?ids= approach poisoned the whole batch when
-      // any single video_id was unreachable (different page permissions, deleted, etc.).
+      // Extract a thumbnail URL from a single video payload (shared between batch and fallback)
+      var pickThumbFromVideo = function(v) {
+        if (!v || v.error) return "";
+        var best = "";
+        if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
+          var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
+          best = largest.uri || "";
+        }
+        return best || v.picture || "";
+      };
+      // Batch via ?ids= counts as 1 API call per batch, staying well under Meta's app rate limit.
+      // If the batch itself returns an error (e.g. one bad id poisons the response), fall back
+      // to individual fetches for just the ids in that batch.
       var fetchOneVideoThumb = async function(vid) {
         try {
           var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
           var v = await r.json();
-          if (!v || v.error) return;
-          var best = "";
-          if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
-            var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
-            best = largest.uri || "";
-          }
-          videoThumbs[vid] = best || v.picture || "";
-        } catch (_) { /* individual failure, leave entry empty */ }
+          videoThumbs[vid] = pickThumbFromVideo(v);
+        } catch (_) {}
       };
-      // Chunk parallel calls to avoid too many concurrent sockets
-      for (var vb = 0; vb < videoIds.length; vb += 15) {
-        await Promise.all(videoIds.slice(vb, vb + 15).map(fetchOneVideoThumb));
+      for (var vb = 0; vb < videoIds.length; vb += 50) {
+        var vBatch = videoIds.slice(vb, vb + 50);
+        try {
+          var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + vBatch.join(",") + "&fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken;
+          var bRes = await fetch(batchUrl);
+          var bData = await bRes.json();
+          if (bData && !bData.error) {
+            // Batch succeeded: populate every id we got back. Missing ids stay empty.
+            vBatch.forEach(function(vid) {
+              var v = bData[vid];
+              if (v) videoThumbs[vid] = pickThumbFromVideo(v);
+            });
+          } else {
+            // Batch itself errored (rate limit or bad id): individual fetches for this batch only
+            for (var ib = 0; ib < vBatch.length; ib += 10) {
+              await Promise.all(vBatch.slice(ib, ib + 10).map(fetchOneVideoThumb));
+            }
+          }
+        } catch (_) {
+          for (var ib2 = 0; ib2 < vBatch.length; ib2 += 10) {
+            await Promise.all(vBatch.slice(ib2, ib2 + 10).map(fetchOneVideoThumb));
+          }
+        }
       }
 
       // Resolve image_hash to full-resolution uploaded asset URL via /adimages
