@@ -473,7 +473,7 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST COST PER 1000 ADS SERVED",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
-                <div style={{fontSize:10,color:P.dim,fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,padding:"14px 8px 0",textAlign:"center",fontStyle:"italic"}}>* Reach and frequency metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.9)",fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,textAlign:"center",fontStyle:"italic",padding:"22px 8px 18px"}}>* Reach and frequency metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
               </div>
 
               {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
