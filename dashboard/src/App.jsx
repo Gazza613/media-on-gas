@@ -445,22 +445,19 @@ export default function MediaOnGas(){
                   <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER 1000 ADS SERVED</div><div style={{fontSize:24,fontWeight:900,color:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.high?P.solar:P.rose,fontFamily:fm}}>{fR(computed.blendedCpm)}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
-                  <div style={{height:300,display:"flex",flexDirection:"column"}}>
+                  <div style={{height:300}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>REACH & IMPRESSIONS BY PLATFORM</div>
-                    <div style={{flex:1,minHeight:0}}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,reach:platBreak[pl].reach||0,imps:platBreak[pl].imps||0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.imps-a.imps;})} barGap={4} barCategoryGap="20%" margin={{top:24,right:12,left:0,bottom:0}}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
-                          <XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/>
-                          <YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
-                          <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                          <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/>
-                          <Bar dataKey="imps" name="Impressions" radius={[6,6,0,0]} fill={P.cyan}><LabelList dataKey="imps" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
-                          <Bar dataKey="reach" name="Reach" radius={[6,6,0,0]} fill={P.orchid}><LabelList dataKey="reach" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:0.5,lineHeight:1.5,padding:"8px 4px 0",textAlign:"center",fontStyle:"italic"}}>* Reach metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
+                    <ResponsiveContainer width="100%" height="90%">
+                      <BarChart data={sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,reach:platBreak[pl].reach||0,imps:platBreak[pl].imps||0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.imps-a.imps;})} barGap={4} barCategoryGap="20%" margin={{top:24,right:12,left:0,bottom:0}}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
+                        <XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                        <YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                        <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                        <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/>
+                        <Bar dataKey="imps" name="Impressions" radius={[6,6,0,0]} fill={P.cyan}><LabelList dataKey="imps" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
+                        <Bar dataKey="reach" name="Reach" radius={[6,6,0,0]} fill={P.orchid}><LabelList dataKey="reach" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>FREQUENCY BY PLATFORM</div>
@@ -476,6 +473,7 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST CPM",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
+                <div style={{fontSize:10,color:P.dim,fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,padding:"14px 8px 0",textAlign:"center",fontStyle:"italic"}}>* Reach and frequency metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
               </div>
 
               {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
