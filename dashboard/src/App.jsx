@@ -251,7 +251,7 @@ export default function MediaOnGas(){
 
   var m=computed.meta,t=computed.tt;
   var benchmarks={
-    meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:15,mid:35,high:60,label:"R15-R60"}},
+    meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
     tiktok:{cpm:{low:4,mid:8,high:15,label:"R4-R15"},cpc:{low:0.01,mid:0.05,high:0.20,label:"R0.01-R0.20"},cpf:{low:1.0,mid:2.5,high:5.0,label:"R1-R5"}},
     google:{cpm:{low:8,mid:15,high:30,label:"R8-R30"},cpc:{low:1.0,mid:3.0,high:6.0,label:"R1-R6"}}
   };
