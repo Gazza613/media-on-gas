@@ -546,7 +546,7 @@ export default function MediaOnGas(){
                   return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};
                 }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
                 if(topAd.length===0)return null;
-                var topChart=topAd.slice(0,5).map(function(a,idx){var trunc=a.name.length>26?a.name.substring(0,24)+"…":a.name;return{name:"#"+(idx+1)+" "+trunc,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
+                var topChart=topAd.slice(0,4).map(function(a,idx){var trunc=a.name.length>26?a.name.substring(0,24)+"…":a.name;return{name:"#"+(idx+1)+" "+trunc,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
                 var AudienceTick=function(props){var payload=props.payload||{};var row=(topChart||[]).filter(function(d){return d.name===payload.value;})[0];var full=row?row.fullName:payload.value;var isX=props.axis==="x";return (<g transform={"translate("+props.x+","+props.y+")"}><title>{full}</title><text x={0} y={0} dy={isX?12:4} textAnchor={isX?"middle":"end"} fill="rgba(255,255,255,0.75)" fontSize={10} fontFamily={fm} fontWeight={600}>{payload.value}</text></g>);};
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.solar,"TARGETING STANDOUTS",Ic.radar(P.solar,18))}
