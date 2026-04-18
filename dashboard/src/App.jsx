@@ -546,7 +546,8 @@ export default function MediaOnGas(){
                   return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};
                 }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
                 if(topAd.length===0)return null;
-                var topChart=topAd.slice(0,5).map(function(a){return{name:a.name.length>22?a.name.substring(0,20)+"...":a.name,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
+                var topChart=topAd.slice(0,5).map(function(a){return{name:a.name.length>28?a.name.substring(0,26)+"…":a.name,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
+                var AudienceTick=function(props){var payload=props.payload||{};var row=(topChart||[]).filter(function(d){return d.name===payload.value;})[0];var full=row?row.fullName:payload.value;return (<g transform={"translate("+props.x+","+props.y+")"}><title>{full}</title><text x={0} y={0} dy={4} textAnchor="end" fill="rgba(255,255,255,0.75)" fontSize={10} fontFamily={fm} fontWeight={600}>{payload.value}</text></g>);};
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.solar,"TARGETING STANDOUTS",Ic.radar(P.solar,18))}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
@@ -566,8 +567,8 @@ export default function MediaOnGas(){
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={topChart} layout="vertical" margin={{top:6,right:52,left:0,bottom:6}} barSize={26}>
                             <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                            <XAxis type="number" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
-                            <YAxis type="category" dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} width={130}/>
+                            <XAxis type="number" tick={{fontSize:11,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                            <YAxis type="category" dataKey="name" tick={<AudienceTick/>} axisLine={false} tickLine={false} width={170}/>
                             <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                             <Bar dataKey="results" name="Results" radius={[0,6,6,0]}>
                               {topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}
