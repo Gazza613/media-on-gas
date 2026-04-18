@@ -704,8 +704,8 @@ export default function MediaOnGas(){
                 var objGroups=[
                   {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
                   {key:"appinstall",label:"APP INSTALL",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
-                  {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by clicks & CTR (min 5k impressions)"},
-                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks & CTR (min 5k impressions)"}
+                  {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page (min 5k impressions)"}
                 ];
 
                 var IMP_FLOOR=5000;
@@ -735,7 +735,10 @@ export default function MediaOnGas(){
                   objGroups.forEach(function(og){
                     var objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
                     if(objAds.length===0)return;
-                    var sorter=og.key==="leads"?leadSort:engagementSort;
+                    // Lead Gen + Followers are volume-of-result objectives (leads / follows),
+                    // so rank by results DESC then cost-per-result ASC.
+                    // App Install + Landing Page are engagement/click objectives, rank by clicks.
+                    var sorter=(og.key==="leads"||og.key==="followers")?leadSort:engagementSort;
                     var sorted=objAds.slice().sort(sorter).slice(0,5);
                     groups.push({og:og,ads:sorted,total:objAds.length});
                   });
