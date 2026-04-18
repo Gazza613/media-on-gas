@@ -58,13 +58,13 @@ function aggregate(arr) {
 async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, top ads skipped"); return null; }
     var internalHost = req.headers.host;
     var internalProto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
     if (!internalHost) return null;
     var url = internalProto + "://" + internalHost + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     var r = await fetch(url, { headers: { "x-api-key": apiKey } });
-    if (!r.ok) return null;
+    if (!r.ok) { console.warn("[email-share] /api/ads internal fetch failed", r.status); return null; }
     var d = await r.json();
     var all = d.ads || [];
     var idSet = {}; campaignIds.forEach(function(x) { idSet[String(x)] = true; });
@@ -108,13 +108,13 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
 async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, summary skipped"); return null; }
     var internalHost = req.headers.host;
     var internalProto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
     if (!internalHost) return null;
     var url = internalProto + "://" + internalHost + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     var r = await fetch(url, { headers: { "x-api-key": apiKey } });
-    if (!r.ok) return null;
+    if (!r.ok) { console.warn("[email-share] /api/campaigns internal fetch failed", r.status); return null; }
     var d = await r.json();
     var all = d.campaigns || [];
     var idSet = {}; campaignIds.forEach(function(x) { idSet[String(x)] = true; });
@@ -126,7 +126,7 @@ async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
       if (c.campaignName && nameSet[c.campaignName]) return true;
       return false;
     });
-    if (filtered.length === 0) return null;
+    if (filtered.length === 0) { console.warn("[email-share] Campaign allowlist matched zero of", all.length, "campaigns. Check campaignIds format."); return null; }
     var grand = aggregate(filtered);
     // Platform buckets
     var byPlat = {};
@@ -486,9 +486,12 @@ export default async function handler(req, res) {
     if (!raw) return [];
     return String(raw).split(/[,;]/).map(function(s) { return s.trim(); }).filter(function(s) { return emailRe.test(s); });
   };
-  var toList = parseList(body.to);
-  var ccList = parseList(body.cc);
-  var bccList = parseList(body.bcc);
+  // Email recipient fields use distinct names to avoid colliding with body.to (end date).
+  // Previously the frontend wrote the email address into body.to, which then got used as
+  // the "to date" in every downstream render. Renaming fixes it cleanly.
+  var toList = parseList(body.emailTo);
+  var ccList = parseList(body.emailCc);
+  var bccList = parseList(body.emailBcc);
 
   if (!clientSlug) { res.status(400).json({ error: "clientSlug required" }); return; }
   if (campaignIds.length === 0 && campaignNames.length === 0) {
@@ -597,6 +600,11 @@ export default async function handler(req, res) {
       messageId: info.messageId || ""
     }).catch(function(err) { console.error("Audit log failed", err); });
 
+    var diagnostic = "";
+    if (!process.env.DASHBOARD_API_KEY) diagnostic = "DASHBOARD_API_KEY env var is not set on Vercel, inline summary + ad previews are skipped.";
+    else if (!summary) diagnostic = "Internal /api/campaigns fetch returned no matching campaigns for the allowlist. Check Vercel logs.";
+    else if (!topAds) diagnostic = "Summary embedded but top ads fetch returned no matches.";
+
     res.status(200).json({
       ok: true,
       messageId: info.messageId,
@@ -605,7 +613,9 @@ export default async function handler(req, res) {
       sentTo: toList,
       cc: ccList,
       bcc: bccList,
-      summaryEmbedded: !!summary
+      summaryEmbedded: !!summary,
+      topAdsEmbedded: !!topAds,
+      diagnostic: diagnostic
     });
   } catch (err) {
     console.error("Email share error", err);

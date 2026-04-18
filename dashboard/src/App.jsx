@@ -127,6 +127,7 @@ function ShareModal(props){
   var emailBcc=useState("");
   var emailSent=useState(false);
   var emailSentTo=useState("");
+  var emailDiagnostic=useState("");
   var personalMsg=useState("");
   var senderName=useState("");
   var senderTitle=useState("");
@@ -190,9 +191,12 @@ function ShareModal(props){
     if(!emailRe.test((emailTo[0]||"").trim())){err[1]("Enter a valid recipient email");return;}
     err[1]("");busy[1](true);emailSent[1](false);
     var payload=buildCampaignPayload();
-    payload.to=emailTo[0].trim();
-    payload.cc=emailCc[0].trim();
-    payload.bcc=emailBcc[0].trim();
+    // Email recipients use distinct field names so they cannot collide with the
+    // date range "to" field, a previous bug substituted the email address into the
+    // body's "to date" rendering in the email.
+    payload.emailTo=emailTo[0].trim();
+    payload.emailCc=emailCc[0].trim();
+    payload.emailBcc=emailBcc[0].trim();
     fetch(props.apiBase+"/api/email-share",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
@@ -201,12 +205,12 @@ function ShareModal(props){
       busy[1](false);
       if(d.ok){
         shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt);
-        emailSent[1](true);emailSentTo[1]((d.sentTo||[]).join(", "));
+        emailSent[1](true);emailSentTo[1]((d.sentTo||[]).join(", "));emailDiagnostic[1](d.diagnostic||"");
       }
       else{err[1](d.error||"Could not send email");}
     }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
-  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");};
+  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");emailDiagnostic[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");};
 
   // Audit trail state
   var auditOpen=useState(false);
@@ -333,6 +337,7 @@ function ShareModal(props){
         {emailSent[0]&&<div style={{background:P.mint+"12",border:"1px solid "+P.mint+"40",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
           <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Email sent</div>
           <div style={{fontSize:12,color:P.txt,fontFamily:fm,lineHeight:1.5}}>Delivered to <span style={{color:P.mint,fontWeight:700}}>{emailSentTo[0]}</span></div>
+          {emailDiagnostic[0]&&<div style={{marginTop:8,fontSize:10,color:P.warning,fontFamily:fm,lineHeight:1.5,borderTop:"1px solid "+P.warning+"30",paddingTop:8}}>Note, {emailDiagnostic[0]}</div>}
         </div>}
         <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share URL</div>
         <div style={{display:"flex",gap:8,marginBottom:10}}>
