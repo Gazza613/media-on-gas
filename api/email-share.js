@@ -7,6 +7,15 @@ import { issueToken } from "./_jwt.js";
 // report link from grow@gasmarketing.co.za via Gmail SMTP (app password).
 // Env vars required: GMAIL_USER, GMAIL_APP_PASSWORD, DASHBOARD_JWT_SECRET.
 
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildEmailHtml(opts) {
   var clientName = opts.clientSlug
     .split("-")
@@ -15,6 +24,11 @@ function buildEmailHtml(opts) {
   var dateRange = opts.from + " to " + opts.to;
   var url = opts.shareUrl;
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
+  var origin = opts.origin || "https://media-on-gas.vercel.app";
+  var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
+  var senderName = escapeHtml(opts.senderName || "");
+  var senderTitle = escapeHtml(opts.senderTitle || "");
   // World-class in this context: dark brand-aligned, single hero CTA, crisp spacing, no noise.
   // Inline styles only since email clients strip <style>.
   return `<!DOCTYPE html>
@@ -49,10 +63,11 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:16px 40px 8px;">
         <div style="font-size:15px;color:#FFFBF8;line-height:1.7;font-weight:400;">
-          Your live performance dashboard is ready.
+          Hi ${clientName},
         </div>
-        <div style="font-size:14px;color:rgba(255,251,248,0.78);line-height:1.7;margin-top:12px;">
-          One click opens a full, interactive view of your media performance for the period above. Every metric is pulled live from the ad platforms, no exports, no stale numbers, always current.
+        ${personal ? `<div style="font-size:14px;color:#FFFBF8;line-height:1.75;margin-top:14px;padding:16px 20px;background:rgba(249,98,3,0.06);border-left:3px solid #F96203;border-radius:0 10px 10px 0;">${personal}</div>` : ""}
+        <div style="font-size:14px;color:rgba(255,251,248,0.78);line-height:1.7;margin-top:14px;">
+          Your live performance dashboard for <strong style="color:#F96203;">${dateRange}</strong> is ready. One click opens a full, interactive view of your media performance. Every metric is pulled live from the ad platforms, no exports, no stale numbers, always current.
         </div>
       </td></tr>
 
@@ -90,11 +105,30 @@ function buildEmailHtml(opts) {
         <div style="height:1px;background:rgba(168,85,247,0.16);"></div>
       </td></tr>
 
-      <tr><td style="padding:16px 40px 32px;text-align:center;">
-        <div style="font-size:11px;color:#8B7FA3;letter-spacing:1px;line-height:1.7;font-weight:500;">
-          Delivered by <strong style="color:#F96203;">GAS Marketing Automation</strong><br>
-          <a href="mailto:grow@gasmarketing.co.za" style="color:#8B7FA3;text-decoration:none;">grow@gasmarketing.co.za</a>
-        </div>
+      ${(senderName || senderTitle) ? `
+      <tr><td style="padding:18px 40px 4px;">
+        <div style="font-size:13px;color:#FFFBF8;font-weight:600;">Kind regards,</div>
+        ${senderName ? `<div style="font-size:14px;color:#FFFBF8;font-weight:700;margin-top:6px;">${senderName}</div>` : ""}
+        ${senderTitle ? `<div style="font-size:12px;color:#8B7FA3;margin-top:2px;">${senderTitle}</div>` : ""}
+      </td></tr>` : ""}
+
+      <tr><td style="padding:20px 40px 32px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+          <tr>
+            <td valign="middle" style="width:56px;padding-right:14px;">
+              <img src="${logoUrl}" alt="GAS Marketing" width="48" height="48" style="width:48px;height:48px;border-radius:50%;display:block;border:0;"/>
+            </td>
+            <td valign="middle">
+              <div style="font-size:12px;color:#FFFBF8;font-weight:800;letter-spacing:3px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
+              </div>
+              <div style="font-size:10px;color:#8B7FA3;letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;">Performance Metrics That Matter</div>
+              <div style="font-size:11px;color:#8B7FA3;margin-top:6px;">
+                <a href="mailto:grow@gasmarketing.co.za" style="color:#8B7FA3;text-decoration:none;">grow@gasmarketing.co.za</a>
+              </div>
+            </td>
+          </tr>
+        </table>
       </td></tr>
 
     </table>
@@ -166,7 +200,11 @@ export default async function handler(req, res) {
       from: from,
       to: to,
       shareUrl: shareUrl,
-      expiresAt: expiresAt
+      expiresAt: expiresAt,
+      personalMessage: body.personalMessage || "",
+      senderName: body.senderName || "",
+      senderTitle: body.senderTitle || "",
+      origin: origin
     });
 
     var transporter = nodemailer.createTransport({

@@ -121,12 +121,40 @@ function ShareModal(props){
   var busy=useState(false);
   var err=useState("");
   var copied=useState(false);
+  var draftCopied=useState(false);
   var emailTo=useState("");
   var emailCc=useState("");
   var emailBcc=useState("");
   var emailSent=useState(false);
   var emailSentTo=useState("");
+  var personalMsg=useState("");
+  var senderName=useState("");
+  var senderTitle=useState("");
   var copy=function(){if(!shareUrl[0])return;navigator.clipboard.writeText(shareUrl[0]);copied[1](true);setTimeout(function(){copied[1](false);},2000);};
+  var copyDraft=function(){
+    var text=buildPlainDraft();
+    navigator.clipboard.writeText(text);
+    draftCopied[1](true);setTimeout(function(){draftCopied[1](false);},2000);
+  };
+  var buildPlainDraft=function(){
+    var who=slug[0]?slug[0].split("-").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" "):"";
+    var lines=[];
+    lines.push("Hi "+(who||"there")+",");
+    lines.push("");
+    if(personalMsg[0].trim()){lines.push(personalMsg[0].trim());lines.push("");}
+    lines.push("Your live performance dashboard is ready for "+props.dateFrom+" to "+props.dateTo+". One click and you are in, no login required.");
+    lines.push("");
+    lines.push("View dashboard: "+shareUrl[0]);
+    lines.push("");
+    lines.push("This link stays active until "+(expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):"the expiry date")+".");
+    lines.push("");
+    lines.push("Kind regards,");
+    if(senderName[0].trim())lines.push(senderName[0].trim());
+    if(senderTitle[0].trim())lines.push(senderTitle[0].trim());
+    lines.push("GAS Marketing Automation");
+    lines.push("grow@gasmarketing.co.za");
+    return lines.join("\n");
+  };
   var buildCampaignPayload=function(){
     var selectedCampaigns=(props.campaigns||[]).filter(function(c){return props.selected.indexOf(c.campaignId)>=0;});
     var campaignIds=[];var campaignNames=[];
@@ -136,7 +164,7 @@ function ShareModal(props){
       if(c.campaignId)campaignIds.push(String(c.campaignId));
       if(c.campaignName)campaignNames.push(c.campaignName);
     });
-    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0]};
+    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim()};
   };
   var validateBasics=function(){
     if(!slug[0].trim()){err[1]("Enter a client slug (e.g. mtn-momo)");return false;}
@@ -178,7 +206,7 @@ function ShareModal(props){
       else{err[1](d.error||"Could not send email");}
     }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
-  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");};
+  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
     <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto"}}>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
@@ -197,6 +225,23 @@ function ShareModal(props){
       </div>
 
       <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:16}}>Campaigns in this share: <span style={{color:P.ember,fontWeight:700}}>{(props.selected||[]).length}</span> selected, <span style={{color:P.ember,fontWeight:700}}>{props.dateFrom}</span> to <span style={{color:P.ember,fontWeight:700}}>{props.dateTo}</span></div>
+
+      {/* Personal message, used in both sent emails and the copyable draft for link-only */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Personal message (optional)</div>
+        <textarea value={personalMsg[0]} onChange={function(e){personalMsg[1](e.target.value);}} placeholder="Add a short note for the client. E.g. 'Really strong month, scroll to Engagement Highlights for the click-through rate spike on the new Reels ad.'" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,outline:"none",resize:"vertical",minHeight:70,lineHeight:1.5}}/>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Your name</div>
+          <input value={senderName[0]} onChange={function(e){senderName[1](e.target.value);}} placeholder="e.g. Gary Shepherd" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Title (optional)</div>
+          <input value={senderTitle[0]} onChange={function(e){senderTitle[1](e.target.value);}} placeholder="e.g. Performance Lead" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+        </div>
+      </div>
 
       {/* Email delivery */}
       <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
@@ -236,6 +281,16 @@ function ShareModal(props){
           <button onClick={copy} style={{background:copied[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{copied[0]?"COPIED":"COPY"}</button>
         </div>
         <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):","} | Client: <span style={{color:P.ember,fontWeight:700}}>{slug[0]}</span></div>
+
+        {!emailSent[0]&&<div style={{marginTop:16,background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Ready-to-send email draft</div>
+            <button onClick={copyDraft} style={{background:draftCopied[0]?P.mint:"transparent",border:"1px solid "+(draftCopied[0]?P.mint:P.rule),borderRadius:8,padding:"6px 14px",color:draftCopied[0]?"#fff":P.txt,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>{draftCopied[0]?"COPIED":"COPY DRAFT"}</button>
+          </div>
+          <div style={{fontSize:9,color:P.dim,fontFamily:fm,marginBottom:10,lineHeight:1.5}}>Paste into Gmail compose. Link, sign-off and signature are pre-filled. You can add the GAS logo at the bottom of your Gmail signature (Gmail Settings, Signature, paste logo) so it attaches automatically to every send.</div>
+          <div style={{background:"rgba(0,0,0,0.45)",border:"1px solid "+P.rule,borderRadius:8,padding:"12px 14px",fontSize:11,fontFamily:fm,color:P.txt,lineHeight:1.7,whiteSpace:"pre-wrap",maxHeight:200,overflowY:"auto"}}>{buildPlainDraft()}</div>
+        </div>}
+
         <button onClick={reset} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
       </div>}
     </div>
