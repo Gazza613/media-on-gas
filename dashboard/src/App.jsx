@@ -121,11 +121,13 @@ function ShareModal(props){
   var busy=useState(false);
   var err=useState("");
   var copied=useState(false);
+  var emailTo=useState("");
+  var emailCc=useState("");
+  var emailBcc=useState("");
+  var emailSent=useState(false);
+  var emailSentTo=useState("");
   var copy=function(){if(!shareUrl[0])return;navigator.clipboard.writeText(shareUrl[0]);copied[1](true);setTimeout(function(){copied[1](false);},2000);};
-  var generate=function(){
-    if(!slug[0].trim()){err[1]("Enter a client slug (e.g. mtn-momo)");return;}
-    if(!props.selected||props.selected.length===0){err[1]("Select at least one campaign on the left before sharing");return;}
-    err[1]("");busy[1](true);
+  var buildCampaignPayload=function(){
     var selectedCampaigns=(props.campaigns||[]).filter(function(c){return props.selected.indexOf(c.campaignId)>=0;});
     var campaignIds=[];var campaignNames=[];
     selectedCampaigns.forEach(function(c){
@@ -134,41 +136,107 @@ function ShareModal(props){
       if(c.campaignId)campaignIds.push(String(c.campaignId));
       if(c.campaignName)campaignNames.push(c.campaignName);
     });
+    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0]};
+  };
+  var validateBasics=function(){
+    if(!slug[0].trim()){err[1]("Enter a client slug (e.g. mtn-momo)");return false;}
+    if(!props.selected||props.selected.length===0){err[1]("Select at least one campaign on the left before sharing");return false;}
+    return true;
+  };
+  var generate=function(){
+    if(!validateBasics())return;
+    err[1]("");busy[1](true);emailSent[1](false);
     fetch(props.apiBase+"/api/issue-token",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
-      body:JSON.stringify({clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0]})
+      body:JSON.stringify(buildCampaignPayload())
     }).then(function(r){return r.json();}).then(function(d){
       busy[1](false);
       if(d.shareUrl){shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt);}
       else{err[1](d.error||"Could not generate link");}
-    }).catch(function(e){busy[1](false);err[1]("Connection error");});
+    }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)"}} onClick={props.onClose}>
-    <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:520,maxWidth:"90vw"}}>
+  var sendEmail=function(){
+    if(!validateBasics())return;
+    var emailRe=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailRe.test((emailTo[0]||"").trim())){err[1]("Enter a valid recipient email");return;}
+    err[1]("");busy[1](true);emailSent[1](false);
+    var payload=buildCampaignPayload();
+    payload.to=emailTo[0].trim();
+    payload.cc=emailCc[0].trim();
+    payload.bcc=emailBcc[0].trim();
+    fetch(props.apiBase+"/api/email-share",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
+      body:JSON.stringify(payload)
+    }).then(function(r){return r.json();}).then(function(d){
+      busy[1](false);
+      if(d.ok){
+        shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt);
+        emailSent[1](true);emailSentTo[1]((d.sentTo||[]).join(", "));
+      }
+      else{err[1](d.error||"Could not send email");}
+    }).catch(function(){busy[1](false);err[1]("Connection error");});
+  };
+  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");};
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto"}}>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
-      <div style={{fontSize:12,color:P.sub,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only view, locked to the campaigns you currently have selected, only campaigns on the allowlist are visible. No admin tabs.</div>
+      <div style={{fontSize:12,color:P.sub,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
+
       <div style={{marginBottom:14}}>
         <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug</div>
         <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="e.g. mtn-momo" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1}}/>
       </div>
+
       <div style={{marginBottom:18}}>
         <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Expires in</div>
         <div style={{display:"flex",gap:8}}>
           {[30,60,90,180].map(function(d){return <button key={d} onClick={function(){expiry[1](d);}} style={{flex:1,background:expiry[0]===d?P.ember+"25":"transparent",border:"1px solid "+(expiry[0]===d?P.ember+"70":P.rule),borderRadius:8,padding:"8px 10px",color:expiry[0]===d?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{d+" days"}</button>;})}
         </div>
       </div>
-      <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:14}}>Campaigns in this share: <span style={{color:P.ember,fontWeight:700}}>{(props.selected||[]).length}</span> selected, <span style={{color:P.ember,fontWeight:700}}>{props.dateFrom}</span> to <span style={{color:P.ember,fontWeight:700}}>{props.dateTo}</span></div>
+
+      <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:16}}>Campaigns in this share: <span style={{color:P.ember,fontWeight:700}}>{(props.selected||[]).length}</span> selected, <span style={{color:P.ember,fontWeight:700}}>{props.dateFrom}</span> to <span style={{color:P.ember,fontWeight:700}}>{props.dateTo}</span></div>
+
+      {/* Email delivery */}
+      <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Email delivery (optional)</div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>To</div>
+          <input value={emailTo[0]} onChange={function(e){emailTo[1](e.target.value);err[1]("");}} placeholder="client@company.co.za" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Cc</div>
+            <input value={emailCc[0]} onChange={function(e){emailCc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          </div>
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Bcc</div>
+            <input value={emailBcc[0]} onChange={function(e){emailBcc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          </div>
+        </div>
+        <div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:8,lineHeight:1.5}}>Sends from grow@gasmarketing.co.za with a branded HTML report and a live dashboard link.</div>
+      </div>
+
       {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12}}>{err[0]}</div>}
-      {!shareUrl[0]&&<button onClick={generate} disabled={busy[0]} style={{width:"100%",background:busy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:2}}>{busy[0]?"GENERATING...":"GENERATE SHARE LINK"}</button>}
-      {shareUrl[0]&&<div>
+
+      {!shareUrl[0]&&<div style={{display:"flex",gap:10}}>
+        <button onClick={generate} disabled={busy[0]} style={{flex:1,background:busy[0]?"#555":"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>{busy[0]?"WORKING...":"LINK ONLY"}</button>
+        <button onClick={sendEmail} disabled={busy[0]} style={{flex:2,background:busy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:2}}>{busy[0]?"SENDING...":"SEND EMAIL + LINK"}</button>
+      </div>}
+
+      {shareUrl[0]&&<div style={{marginTop:4}}>
+        {emailSent[0]&&<div style={{background:P.mint+"12",border:"1px solid "+P.mint+"40",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Email sent</div>
+          <div style={{fontSize:12,color:P.txt,fontFamily:fm,lineHeight:1.5}}>Delivered to <span style={{color:P.mint,fontWeight:700}}>{emailSentTo[0]}</span></div>
+        </div>}
         <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share URL</div>
         <div style={{display:"flex",gap:8,marginBottom:10}}>
           <input readOnly value={shareUrl[0]} onClick={function(e){e.target.select();}} style={{flex:1,background:P.glass,border:"1px solid "+P.mint+"40",borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:11,fontFamily:fm,outline:"none"}}/>
           <button onClick={copy} style={{background:copied[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{copied[0]?"COPIED":"COPY"}</button>
         </div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):"—"} | Client: <span style={{color:P.ember,fontWeight:700}}>{slug[0]}</span></div>
-        <button onClick={function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");}} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):","} | Client: <span style={{color:P.ember,fontWeight:700}}>{slug[0]}</span></div>
+        <button onClick={reset} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
       </div>}
     </div>
   </div>);
@@ -357,7 +425,15 @@ export default function MediaOnGas(){
   var resolve=function(id){setFlags(function(p){return p.map(function(f){return f.id===id?Object.assign({},f,{status:"resolved"}):f;});});};
   var openFlags=flags.filter(function(f){return f.status==="open";}).length;
 
-  var tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)}];if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
+  var tabs;
+  if(isClient){
+    // Clients only ever see Summary. Force the active tab to summary so a stale
+    // tab state from admin mode cannot leak through.
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)}];
+  } else {
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
+  }
+  useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
 
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
   if(!session&&!viewToken)return(<LoginScreen onLogin={handleLogin}/>);
@@ -377,7 +453,7 @@ export default function MediaOnGas(){
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
-            <button onClick={handleLogout} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.dim,fontSize:10,fontWeight:600,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>LOGOUT</button>
+            {!isClient&&<button onClick={handleLogout} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.dim,fontSize:10,fontWeight:600,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>LOGOUT</button>}
           </div>
         </div>
       </div>
@@ -387,7 +463,7 @@ export default function MediaOnGas(){
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
-      {showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
+      {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
         {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:14,color:P.sub,fontFamily:fm}}>Your metrics that matter are loading,settle in…</div></div>):(<>
