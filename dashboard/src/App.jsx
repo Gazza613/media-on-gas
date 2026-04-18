@@ -29,20 +29,40 @@ function LoginScreen(props){
       else{setLoginErr("Invalid password");}
     }).catch(function(){setBusy(false);setLoginErr("Connection error");});
   };
-  return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)",fontFamily:ff}}>
-    <div style={{position:"fixed",inset:0,pointerEvents:"none"}}><div style={{position:"absolute",inset:0,opacity:0.015,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
-    <div style={{width:"100%",maxWidth:380,padding:32,position:"relative",zIndex:1}}>
+  return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse at 50% 20%,#1a0b2e 0%,#0d0618 45%,#06020e 100%)",fontFamily:ff,position:"relative",overflow:"hidden"}}>
+    <style>{"@keyframes gasFloat{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(0,-12px,0) scale(1.02)}}@keyframes gasDrift{0%{transform:translate3d(0,0,0)}100%{transform:translate3d(-120px,40px,0)}}@keyframes gasPulse{0%,100%{opacity:0.35;transform:scale(1)}50%{opacity:0.6;transform:scale(1.08)}}@keyframes gasOrbit{0%{transform:rotate(0deg) translateX(200px) rotate(0deg)}100%{transform:rotate(360deg) translateX(200px) rotate(-360deg)}}@keyframes gasShimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes gasEnter{0%{opacity:0;transform:translate3d(0,20px,0)}100%{opacity:1;transform:translate3d(0,0,0)}}@keyframes gasBorderGlow{0%,100%{box-shadow:0 0 0 1px rgba(249,98,3,0.1),0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(249,98,3,0.08)}50%{box-shadow:0 0 0 1px rgba(249,98,3,0.25),0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(249,98,3,0.2)}}@keyframes gasLogoGlow{0%,100%{box-shadow:0 0 30px rgba(249,98,3,0.3),0 0 60px rgba(249,98,3,0.15)}50%{box-shadow:0 0 45px rgba(249,98,3,0.5),0 0 90px rgba(249,98,3,0.25),0 0 120px rgba(168,85,247,0.15)}}@keyframes gasScan{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}"}</style>
+
+    {/* Ambient flare 1: ember top-left */}
+    <div style={{position:"absolute",top:"-10%",left:"-10%",width:"60vw",height:"60vw",background:"radial-gradient(circle,rgba(249,98,3,0.18) 0%,transparent 55%)",filter:"blur(40px)",animation:"gasFloat 9s ease-in-out infinite",pointerEvents:"none"}}/>
+    {/* Ambient flare 2: orchid bottom-right */}
+    <div style={{position:"absolute",bottom:"-15%",right:"-10%",width:"50vw",height:"50vw",background:"radial-gradient(circle,rgba(168,85,247,0.15) 0%,transparent 55%)",filter:"blur(40px)",animation:"gasFloat 11s ease-in-out infinite 2s",pointerEvents:"none"}}/>
+    {/* Ambient flare 3: cyan mid */}
+    <div style={{position:"absolute",top:"40%",left:"55%",width:"30vw",height:"30vw",background:"radial-gradient(circle,rgba(34,211,238,0.08) 0%,transparent 60%)",filter:"blur(60px)",animation:"gasPulse 7s ease-in-out infinite 1s",pointerEvents:"none"}}/>
+
+    {/* Grid overlay with slow drift */}
+    <div style={{position:"absolute",inset:"-5%",opacity:0.04,backgroundImage:"linear-gradient("+P.ember+" 1px,transparent 1px),linear-gradient(90deg,"+P.ember+" 1px,transparent 1px)",backgroundSize:"56px 56px",animation:"gasDrift 40s linear infinite",pointerEvents:"none"}}/>
+
+    {/* Noise + scanline for CRT feel */}
+    <div style={{position:"absolute",inset:0,opacity:0.015,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px",pointerEvents:"none"}}/>
+    <div style={{position:"absolute",left:0,right:0,height:"100vh",background:"linear-gradient(180deg,transparent 0%,rgba(249,98,3,0.04) 50%,transparent 100%)",animation:"gasScan 8s linear infinite",pointerEvents:"none",mixBlendMode:"screen"}}/>
+
+    <div style={{width:"100%",maxWidth:380,padding:32,position:"relative",zIndex:2,animation:"gasEnter 0.8s cubic-bezier(0.2,0.8,0.2,1) both"}}>
       <div style={{textAlign:"center",marginBottom:40}}>
-        <div style={{width:72,height:72,borderRadius:"50%",overflow:"hidden",margin:"0 auto 20px",boxShadow:"0 0 40px rgba(249,98,3,0.3)"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
-        <div style={{fontSize:20,fontWeight:900,letterSpacing:6,fontFamily:fm,lineHeight:1,marginBottom:8}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div>
-        <div style={{fontSize:10,color:P.sub,letterSpacing:3,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Performance Metrics That Matter</div>
+        <div style={{width:80,height:80,borderRadius:"50%",overflow:"hidden",margin:"0 auto 22px",animation:"gasLogoGlow 4s ease-in-out infinite",position:"relative"}}>
+          <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+          {/* shimmer ring */}
+          <div style={{position:"absolute",inset:-2,borderRadius:"50%",background:"conic-gradient(from 0deg,transparent 0deg,rgba(249,98,3,0.35) 60deg,transparent 120deg,transparent 360deg)",animation:"gasOrbit 6s linear infinite",opacity:0.6,pointerEvents:"none"}}/>
+        </div>
+        <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{backgroundImage:"linear-gradient(90deg,#F96203,#FF3D00,#A855F7,#F96203)",backgroundSize:"300% 100%",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",animation:"gasShimmer 6s linear infinite"}}>GAS</span></div>
+        <div style={{fontSize:10,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Performance Metrics That Matter</div>
       </div>
-      <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(20px)"}}>
+      <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",animation:"gasBorderGlow 5s ease-in-out infinite"}}>
         <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:16,textAlign:"center"}}>Dashboard Access</div>
-        <input type="password" placeholder="Enter password" value={pw} onChange={function(e){setPw(e.target.value);setLoginErr("");}} onKeyDown={function(e){if(e.key==="Enter")handleLogin();}} autoFocus style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2}}/>
-        {loginErr&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center"}}>{loginErr}</div>}
-        <button onClick={handleLogin} disabled={busy} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2,opacity:busy?0.7:1}}>{busy?"AUTHENTICATING...":"ENTER"}</button>
+        <input type="password" placeholder="Enter password" value={pw} onChange={function(e){setPw(e.target.value);setLoginErr("");}} onKeyDown={function(e){if(e.key==="Enter")handleLogin();}} autoFocus onFocus={function(e){e.target.style.borderColor="rgba(249,98,3,0.5)";e.target.style.boxShadow="0 0 0 3px rgba(249,98,3,0.1)";}} onBlur={function(e){e.target.style.borderColor=P.rule;e.target.style.boxShadow="none";}} style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2,transition:"border-color 0.25s, box-shadow 0.25s"}}/>
+        {loginErr&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center",animation:"gasEnter 0.3s ease both"}}>{loginErr}</div>}
+        <button onClick={handleLogin} disabled={busy} onMouseEnter={function(e){if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(249,98,3,0.35)";}}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 4px 14px rgba(249,98,3,0.2)";}} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2,opacity:busy?0.7:1,transition:"transform 0.18s, box-shadow 0.25s",boxShadow:"0 4px 14px rgba(249,98,3,0.2)",position:"relative",overflow:"hidden"}}>{busy?"AUTHENTICATING...":"ENTER"}</button>
       </div>
+      <div style={{textAlign:"center",marginTop:24,fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>Secure access, end-to-end</div>
     </div>
   </div>);
 }
