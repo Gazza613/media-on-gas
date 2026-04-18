@@ -145,6 +145,8 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
   var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
+  var ts1=useState(null),timeseries=ts1[0],setTimeseries=ts1[1];
+  var ts2=useState("week"),tsGran=ts2[0],setTsGran=ts2[1];
   var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
   var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
   var cf3=useState("all"),crFiltObj=cf3[0],setCrFiltObj=cf3[1];
@@ -220,8 +222,9 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});};
+  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
   useEffect(function(){if(session){fetchData();}},[df,dt,session]);
+  useEffect(function(){if(!session)return;fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.series){setTimeseries(d);}}).catch(function(){});},[df,dt,session,tsGran]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
@@ -298,7 +301,7 @@ export default function MediaOnGas(){
       {showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
-        {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:14,color:P.sub,fontFamily:fm}}>Pulling live data from Meta and TikTok…</div></div>):(<>
+        {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:14,color:P.sub,fontFamily:fm}}>Your metrics that matter are loading. Settle in.</div></div>):(<>
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
@@ -1943,6 +1946,81 @@ export default function MediaOnGas(){
 
         {tab==="optimise"&&!isClient&&(<div>
           <SH icon={Ic.flag(P.warning,20)} title="Optimisation, Flags & Recommendations" sub={flags.length+" flags · "+openFlags+" open · Auto-generated"} accent={P.warning}/>
+
+          {/* PERFORMANCE TRENDLINES — platform x objective matrix of sparklines */}
+          {(function(){
+            var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"App Install",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"landingpage",label:"Landing Page",accent:P.cyan}];
+            var platCols=[{key:"Facebook",label:"FB",accent:P.fb},{key:"Instagram",label:"IG",accent:P.ig},{key:"TikTok",label:"TT",accent:P.tt},{key:"Google",label:"Google",accent:P.gd}];
+            var hasData=timeseries&&timeseries.series&&timeseries.series.length>0;
+            var buckets=(timeseries&&timeseries.buckets)||[];
+            var findSeries=function(pl,ob){if(!hasData)return null;for(var i=0;i<timeseries.series.length;i++){var s=timeseries.series[i];if(s.platform===pl&&s.objective===ob)return s;}return null;};
+            var wow=function(points){if(!points||points.length<2)return null;var last=points[points.length-1],prev=points[points.length-2];if(prev.results<=0&&last.results<=0)return null;if(prev.results===0)return {delta:100,direction:"up",label:"new"};var d=((last.results-prev.results)/prev.results)*100;return{delta:Math.abs(d),direction:d>=0?"up":"down",label:(d>=0?"+":"-")+Math.abs(d).toFixed(0)+"%"};};
+            var sparkPath=function(points,h,w){if(!points||points.length===0)return"";var vals=points.map(function(p){return p.results;});var max=Math.max.apply(null,vals.concat([1]));var min=Math.min.apply(null,vals);var range=max-min||1;return points.map(function(p,i){var x=(i/(Math.max(points.length-1,1)))*w;var y=h-((p.results-min)/range)*h;return(i===0?"M":"L")+x.toFixed(1)+","+y.toFixed(1);}).join(" ");};
+            var sparkArea=function(points,h,w){if(!points||points.length===0)return"";var path=sparkPath(points,h,w);if(!path)return"";return path+" L"+w+","+h+" L0,"+h+" Z";};
+
+            return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 14px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  {Ic.chart(P.cyan,18)}
+                  <span style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>Performance Trendlines</span>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  {["week","month"].map(function(g){return <button key={g} onClick={function(){setTsGran(g);}} style={{background:tsGran===g?P.cyan+"25":"transparent",border:"1px solid "+(tsGran===g?P.cyan+"60":P.rule),borderRadius:6,padding:"5px 12px",color:tsGran===g?P.cyan:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{g==="week"?"Weekly":"Monthly"}</button>;})}
+                </div>
+              </div>
+              {!hasData?<div style={{padding:"40px 20px",textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12,lineHeight:1.8}}><div style={{fontSize:14,color:P.sub,marginBottom:6}}>Loading trendlines…</div><div>Fetching {tsGran==="week"?"weekly":"monthly"} performance from Meta, TikTok and Google.</div></div>:<div>
+                <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{tsGran==="week"?"Weekly":"Monthly"} results by platform x objective | {buckets.length} {tsGran==="week"?"weeks":"months"} in view</div>
+                <div style={{display:"grid",gridTemplateColumns:"140px repeat(4,1fr)",gap:8,marginBottom:6}}>
+                  <div/>
+                  {platCols.map(function(p){return <div key={p.key} style={{textAlign:"center",fontSize:11,fontWeight:900,color:p.accent,fontFamily:fm,letterSpacing:1.5,padding:"8px 4px",borderBottom:"1px solid "+p.accent+"35"}}>{p.label}</div>;})}
+                </div>
+                {objRows.map(function(o){
+                  return <div key={o.key} style={{display:"grid",gridTemplateColumns:"140px repeat(4,1fr)",gap:8,marginBottom:8,alignItems:"stretch"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 8px",background:o.accent+"10",border:"1px solid "+o.accent+"30",borderRadius:8}}>
+                      <div style={{width:6,height:28,borderRadius:3,background:o.accent}}/>
+                      <span style={{fontSize:11,fontWeight:900,color:o.accent,fontFamily:fm,letterSpacing:1}}>{o.label.toUpperCase()}</span>
+                    </div>
+                    {platCols.map(function(p){
+                      var s=findSeries(p.key,o.key);
+                      var pts=s&&s.points||[];
+                      var totalResults=pts.reduce(function(a,x){return a+(x.results||0);},0);
+                      var totalSpend=pts.reduce(function(a,x){return a+(x.spend||0);},0);
+                      var delta=wow(pts);
+                      var hasActivity=totalResults>0||totalSpend>0;
+                      return <div key={p.key} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 10px 6px",display:"flex",flexDirection:"column",minHeight:92}}>
+                        {hasActivity?<div>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                            <div><div style={{fontSize:15,fontWeight:900,color:o.accent,fontFamily:fm,lineHeight:1}}>{fmt(totalResults)}</div><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:2}}>{fR(totalSpend)}</div></div>
+                            {delta&&<div style={{fontSize:9,fontWeight:900,color:delta.direction==="up"?P.mint:P.rose,fontFamily:fm,background:(delta.direction==="up"?P.mint:P.rose)+"18",padding:"2px 6px",borderRadius:4,letterSpacing:0.5}}>{delta.label}</div>}
+                          </div>
+                          <svg width="100%" height="36" viewBox={"0 0 100 36"} preserveAspectRatio="none" style={{display:"block"}}>
+                            <path d={sparkArea(pts,36,100)} fill={p.accent+"25"}/>
+                            <path d={sparkPath(pts,36,100)} stroke={p.accent} strokeWidth="1.6" fill="none" strokeLinejoin="round" strokeLinecap="round"/>
+                          </svg>
+                        </div>:<div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,color:P.dim,fontSize:9,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>No activity</div>}
+                      </div>;
+                    })}
+                  </div>;
+                })}
+                <div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.25)",borderRadius:10,border:"1px solid "+P.rule}}>
+                  {(function(){
+                    var lines=[];
+                    // Top momentum mover (largest positive WoW on meaningful volume)
+                    var rankings=[];
+                    objRows.forEach(function(o){platCols.forEach(function(p){var s=findSeries(p.key,o.key);if(!s)return;var pts=s.points;var totalRes=pts.reduce(function(a,x){return a+x.results;},0);if(totalRes<5)return;var d=wow(pts);if(!d)return;rankings.push({plat:p.label,obj:o.label,delta:d,totalRes:totalRes});});});
+                    rankings.sort(function(a,b){return (b.delta.direction==="up"?b.delta.delta:-b.delta.delta)-(a.delta.direction==="up"?a.delta.delta:-a.delta.delta);});
+                    var topUp=rankings.filter(function(r){return r.delta.direction==="up";})[0];
+                    var topDown=rankings.slice().reverse().filter(function(r){return r.delta.direction==="down";})[0];
+                    if(topUp)lines.push("Momentum leader: "+topUp.obj+" on "+topUp.plat+" is "+topUp.delta.label+" "+(tsGran==="week"?"WoW":"MoM")+" ("+fmt(topUp.totalRes)+" results to date). Scaling candidate.");
+                    if(topDown)lines.push("Attention point: "+topDown.obj+" on "+topDown.plat+" is "+topDown.delta.label+" "+(tsGran==="week"?"WoW":"MoM")+". Check frequency, creative fatigue or audience saturation.");
+                    if(lines.length===0)lines.push("Not enough "+(tsGran==="week"?"weekly":"monthly")+" history yet to spot momentum patterns. Re-check after another "+(tsGran==="week"?"week":"month")+" of delivery.");
+                    return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:5,display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
+                  })()}
+                </div>
+              </div>}
+            </div>;
+          })()}
+
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
             {[{l:"CRITICAL",c:P.critical},{l:"WARNING",c:P.warning},{l:"INFO",c:P.info},{l:"POSITIVE",c:P.positive}].map(function(x){return<Glass key={x.l} accent={x.c} st={{padding:"18px 16px",textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:x.c,letterSpacing:2,fontFamily:fm,marginBottom:6}}>{x.l}</div><div style={{fontSize:28,fontWeight:900,color:x.c,fontFamily:fm}}>{flags.filter(function(f){return f.severity===x.l.toLowerCase();}).length}</div></Glass>;})}
           </div>
