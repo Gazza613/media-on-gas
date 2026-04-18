@@ -494,6 +494,78 @@ export default function MediaOnGas(){
   if(!session&&!viewToken)return(<LoginScreen onLogin={handleLogin}/>);
 
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
+    <style>{`
+      /* Mobile responsive: attribute selectors match inline React styles so no component refactor needed */
+      @media (max-width: 820px) {
+        /* Collapse wide grids */
+        div[style*="grid-template-columns: repeat(6"],
+        div[style*="grid-template-columns:repeat(6"],
+        div[style*="grid-template-columns: repeat(5"],
+        div[style*="grid-template-columns:repeat(5"] {
+          grid-template-columns: 1fr 1fr !important;
+          gap: 10px !important;
+        }
+        div[style*="grid-template-columns: repeat(4"],
+        div[style*="grid-template-columns:repeat(4"] {
+          grid-template-columns: 1fr 1fr !important;
+          gap: 10px !important;
+        }
+        div[style*="grid-template-columns: repeat(3"],
+        div[style*="grid-template-columns:repeat(3"] {
+          grid-template-columns: 1fr !important;
+          gap: 10px !important;
+        }
+        div[style*="grid-template-columns: 1fr 1fr"] {
+          grid-template-columns: 1fr !important;
+        }
+        div[style*="grid-template-columns: 340px 1fr"] {
+          grid-template-columns: 1fr !important;
+        }
+        /* Wide sections shrink padding */
+        div[style*="padding:\\"6px 28px 28px\\""],
+        div[style*='padding:"6px 28px 28px"'] {
+          padding: 6px 14px 18px !important;
+        }
+        /* Header wraps controls; tabs scroll horizontally */
+        header > div:last-child > div {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          flex-wrap: nowrap !important;
+        }
+        header > div:last-child > div button {
+          flex-shrink: 0 !important;
+          padding: 8px 14px !important;
+          font-size: 12px !important;
+        }
+        /* Large numeric values shrink */
+        div[style*="font-size:28px"],
+        div[style*="font-size: 28px"] { font-size: 22px !important; }
+        div[style*="font-size:30px"],
+        div[style*="font-size: 30px"] { font-size: 24px !important; }
+        div[style*="font-size:34px"],
+        div[style*="font-size: 34px"] { font-size: 26px !important; }
+        /* Main outer padding tightens */
+        div[style*="padding:\\"20px 28px 80px\\""],
+        div[style*='padding:"20px 28px 80px"'] {
+          padding: 14px 12px 60px !important;
+        }
+        /* Wide tables scroll instead of overflowing */
+        table { max-width: 100%; }
+      }
+      @media (max-width: 480px) {
+        /* Super-compact phone layout, all cards full width */
+        div[style*="grid-template-columns: repeat(4"],
+        div[style*="grid-template-columns:repeat(4"],
+        div[style*="grid-template-columns: repeat(5"],
+        div[style*="grid-template-columns:repeat(5"],
+        div[style*="grid-template-columns: repeat(6"],
+        div[style*="grid-template-columns:repeat(6"] {
+          grid-template-columns: 1fr !important;
+        }
+        /* Date picker stacks inline */
+        header input[type="date"] { width: 100px !important; font-size: 11px !important; }
+      }
+    `}</style>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
 
     <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(6,2,14,0.92)",backdropFilter:"blur(24px)",borderBottom:"1px solid "+P.rule}}>

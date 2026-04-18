@@ -53,6 +53,55 @@ function aggregate(arr) {
   return s;
 }
 
+// Pull live top creative ads for the allowed campaigns. Top 3 per platform by spend.
+async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return null;
+    var internalHost = req.headers.host;
+    var internalProto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+    if (!internalHost) return null;
+    var url = internalProto + "://" + internalHost + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+    var r = await fetch(url, { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return null;
+    var d = await r.json();
+    var all = d.ads || [];
+    var idSet = {}; campaignIds.forEach(function(x) { idSet[String(x)] = true; });
+    var nameSet = {}; campaignNames.forEach(function(x) { nameSet[x] = true; });
+    var filtered = all.filter(function(a) {
+      var cid = String(a.campaignId || "");
+      if (idSet[cid]) return true;
+      if (a.campaignName && nameSet[a.campaignName]) return true;
+      return false;
+    });
+    if (filtered.length === 0) return null;
+    // Group by platform, pick top 3 by results then spend
+    var byPlat = {};
+    filtered.forEach(function(a) {
+      var p = a.platform || "Other";
+      if (!byPlat[p]) byPlat[p] = [];
+      byPlat[p].push(a);
+    });
+    var platforms = Object.keys(byPlat).map(function(p) {
+      var arr = byPlat[p].slice().sort(function(a, b) {
+        var ar = parseFloat(a.results || 0);
+        var br = parseFloat(b.results || 0);
+        if (br !== ar) return br - ar;
+        return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
+      }).slice(0, 3);
+      return { platform: p, ads: arr };
+    }).sort(function(a, b) {
+      var aSpend = a.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
+      var bSpend = b.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
+      return bSpend - aSpend;
+    }).slice(0, 3); // cap at 3 platforms to keep email scannable
+    return platforms;
+  } catch (err) {
+    console.error("Email top ads fetch error", err);
+    return null;
+  }
+}
+
 // Pull live campaign data using the internal /api/campaigns endpoint. Returns null on
 // any failure so the email still sends with its usual CTA block.
 async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
@@ -189,6 +238,105 @@ function renderSummaryBlock(summary) {
     '</td></tr>' : '');
 }
 
+// Generate 2-3 paragraphs of plain-English commentary from aggregate metrics.
+function renderCommentaryBlock(summary) {
+  if (!summary) return "";
+  var g = summary.grand;
+  var paras = [];
+
+  // Awareness paragraph
+  var cpmQuality = g.cpm > 0 && g.cpm <= 12 ? "exceptional value" : g.cpm <= 18 ? "excellent value" : g.cpm <= 25 ? "healthy value" : "solid reach delivery";
+  var awarenessText = "Your campaigns delivered <strong>" + fmtNum(g.impressions) + "</strong> ads served to <strong>" + fmtNum(g.reach) + "</strong> unique people";
+  if (g.frequency > 0) awarenessText += ", with each person seeing the message an average of <strong>" + g.frequency.toFixed(2) + " times</strong>";
+  awarenessText += ". At " + fmtR(g.cpm) + " per 1,000 ads served, this reflects " + cpmQuality + " against the paid social benchmark";
+  if (summary.platforms.length > 1) {
+    var bestCpm = summary.platforms.slice().filter(function(p) { return p.impressions > 0; }).sort(function(a, b) { return (a.spend / a.impressions) - (b.spend / b.impressions); })[0];
+    if (bestCpm) awarenessText += ", with <strong>" + escapeHtml(bestCpm.platform) + "</strong> emerging as the most cost-efficient reach channel";
+  }
+  awarenessText += ".";
+  paras.push(awarenessText);
+
+  // Engagement paragraph
+  var ctrQuality = g.ctr >= 2.0 ? "exceptionally strong, well above" : g.ctr >= 1.4 ? "outstanding, clearly above" : g.ctr >= 0.9 ? "healthy and within" : "steady and close to";
+  var engagementText = "The audience responded actively with <strong>" + fmtNum(g.clicks) + "</strong> clicks, converting " + fmtPct(g.ctr) + " of ads served into genuine engagement. That click-through rate is " + ctrQuality + " the SA benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through. A blended cost per click of <strong>" + fmtR(g.cpc) + "</strong> demonstrates efficient value for every user action.";
+  paras.push(engagementText);
+
+  // Outcomes paragraph (only if results exist)
+  var totalFollows = g.follows + g.pageLikes + g.likes;
+  var outcomeParts = [];
+  if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.spend / g.leads) + " per lead");
+  if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.spend / totalFollows) + " per follower");
+  if (g.appInstalls > 0) outcomeParts.push("<strong>" + fmtNum(g.appInstalls) + " app installs</strong> at " + fmtR(g.spend / g.appInstalls) + " per install");
+  if (outcomeParts.length > 0) {
+    paras.push("Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action.");
+  }
+
+  var paraHtml = paras.map(function(p) {
+    return '<p style="margin:0 0 14px;font-size:14px;color:#FFFBF8;line-height:1.8;font-family:Helvetica,Arial,sans-serif;">' + p + '</p>';
+  }).join("");
+
+  return '<tr><td style="padding:28px 40px 0;">' +
+    '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:14px;font-family:Helvetica,Arial,sans-serif;">Executive Read</div>' +
+    '<div style="background:rgba(249,98,3,0.04);border-left:3px solid #F96203;border-radius:0 12px 12px 0;padding:20px 22px;">' +
+      paraHtml +
+    '</div>' +
+  '</td></tr>';
+}
+
+// Render top creative ads per platform with thumbnails + key metrics.
+function renderTopAdsBlock(topAds) {
+  if (!topAds || topAds.length === 0) return "";
+  var platColors = { "Facebook": "#4599FF", "Instagram": "#E1306C", "TikTok": "#00F2EA", "Google Display": "#34A853", "YouTube": "#FF0000", "Google Search": "#FFAA00", "Performance Max": "#7C3AED", "Demand Gen": "#D946EF" };
+  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "Installs" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "Clicks" : rt === "lp_clicks" ? "Clicks" : rt === "clicks" ? "Clicks" : "Results"; };
+  var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "installs" ? "per install" : rt === "follows" ? "per follower" : "per click"; };
+
+  var platformBlocks = topAds.map(function(pl) {
+    var accent = platColors[pl.platform] || "#F96203";
+    var adsHtml = pl.ads.map(function(ad) {
+      var results = parseFloat(ad.results || 0);
+      var spend = parseFloat(ad.spend || 0);
+      var clicks = parseFloat(ad.clicks || 0);
+      var impressions = parseFloat(ad.impressions || 0);
+      var ctr = parseFloat(ad.ctr || 0);
+      var adName = (ad.adName || "Unnamed ad").length > 44 ? (ad.adName || "").substring(0, 42) + "," : (ad.adName || "Unnamed ad");
+      var hasThumb = ad.thumbnail && String(ad.thumbnail).indexOf("http") === 0;
+      var thumbCell = hasThumb ?
+        '<img src="' + escapeHtml(ad.thumbnail) + '" alt="" width="120" height="120" style="width:120px;height:120px;object-fit:cover;border-radius:10px;display:block;border:0;background:#1a0f2a;"/>' :
+        '<div style="width:120px;height:120px;border-radius:10px;background:linear-gradient(135deg,' + accent + '55,' + accent + '15 55%,#0a0618 100%);display:table-cell;vertical-align:middle;text-align:center;color:#fff;font-size:11px;font-weight:800;letter-spacing:1px;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml(pl.platform) + '</div>';
+      var metricBlock = results > 0 ?
+        '<div style="font-size:18px;font-weight:900;color:#FFFBF8;font-family:Helvetica,Arial,sans-serif;line-height:1;margin-bottom:4px;">' + fmtNum(results) + ' <span style="font-size:10px;color:' + accent + ';font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + resultLabel(ad.resultType) + '</span></div>' +
+        '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend / results) + ' ' + costPerLabel(ad.resultType) + '</div>' :
+        '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">Still collecting results</div>';
+      return '<tr><td style="padding:10px 0;border-bottom:1px solid rgba(168,85,247,0.08);">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+        '<tr>' +
+        '<td valign="top" style="width:130px;padding-right:14px;">' + thumbCell + '</td>' +
+        '<td valign="top">' +
+          '<div style="font-size:13px;color:#FFFBF8;font-weight:700;margin-bottom:6px;line-height:1.4;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml(adName) + '</div>' +
+          metricBlock +
+          '<div style="font-size:11px;color:#8B7FA3;margin-top:8px;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend) + ' spent, ' + fmtNum(impressions) + ' ads served, ' + fmtPct(ctr) + ' CTR</div>' +
+        '</td>' +
+        '</tr></table>' +
+      '</td></tr>';
+    }).join("");
+
+    return '<tr><td style="padding:18px 40px 0;">' +
+      '<div style="display:block;margin-bottom:10px;">' +
+        '<span style="display:inline-block;width:8px;height:8px;background:' + accent + ';border-radius:50%;vertical-align:middle;margin-right:8px;"></span>' +
+        '<span style="font-size:11px;color:' + accent + ';letter-spacing:3px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;vertical-align:middle;">' + escapeHtml(pl.platform) + ' Top Performers</span>' +
+      '</div>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(168,85,247,0.14);border-radius:12px;padding:0 18px;">' +
+        adsHtml +
+      '</table>' +
+    '</td></tr>';
+  }).join("");
+
+  return '<tr><td style="padding:32px 40px 0;">' +
+    '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:6px;font-family:Helvetica,Arial,sans-serif;">Creative Highlights</div>' +
+    '<div style="font-size:12px;color:#8B7FA3;margin-bottom:12px;font-family:Helvetica,Arial,sans-serif;">Top performing ads per platform this period</div>' +
+  '</td></tr>' + platformBlocks;
+}
+
 function buildEmailHtml(opts) {
   var clientName = opts.clientSlug
     .split("-")
@@ -203,6 +351,8 @@ function buildEmailHtml(opts) {
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
   var summaryBlock = renderSummaryBlock(opts.summary);
+  var commentaryBlock = renderCommentaryBlock(opts.summary);
+  var topAdsBlock = renderTopAdsBlock(opts.topAds);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -245,6 +395,8 @@ function buildEmailHtml(opts) {
       </td></tr>
 
       ${summaryBlock}
+      ${commentaryBlock}
+      ${topAdsBlock}
 
       <tr><td style="padding:34px 40px 8px;" align="center">
         <div style="font-size:11px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:14px;">Want the full interactive view?</div>
@@ -356,8 +508,14 @@ export default async function handler(req, res) {
     var shareUrl = origin + "/view/?token=" + encodeURIComponent(token);
     var expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch live summary data to embed. If it fails, email still sends with CTA only.
-    var summary = await fetchCampaignSummary(req, from, to, campaignIds, campaignNames);
+    // Fetch summary + top ads in parallel so the email isn't sequential slow.
+    // If either fails the email still sends, just with fewer inline sections.
+    var results = await Promise.all([
+      fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
+      fetchTopAds(req, from, to, campaignIds, campaignNames)
+    ]);
+    var summary = results[0];
+    var topAds = results[1];
 
     var html = buildEmailHtml({
       clientSlug: clientSlug,
@@ -369,7 +527,8 @@ export default async function handler(req, res) {
       senderName: body.senderName || "",
       senderTitle: body.senderTitle || "",
       origin: origin,
-      summary: summary
+      summary: summary,
+      topAds: topAds
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
