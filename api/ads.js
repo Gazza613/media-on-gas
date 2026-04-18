@@ -180,15 +180,28 @@ export default async function handler(req, res) {
       // any single video_id was unreachable (different page permissions, deleted, etc.).
       var fetchOneVideoThumb = async function(vid) {
         try {
-          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
+          // thumbnails.limit(50) forces Meta to return every available resolution instead of
+          // its default set (sometimes only low-res frames for long or still-processing videos).
+          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails.limit(50){uri,height,width,is_preferred}&access_token=" + metaToken);
           var v = await r.json();
           if (!v || v.error) return;
           var best = "";
           if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
-            var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
-            best = largest.uri || "";
+            // Prefer the widest frame that isn't a tiny placeholder. Fall back to the preferred
+            // flag if no width info is present.
+            var sorted = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); });
+            var pick = sorted[0];
+            for (var ti = 0; ti < sorted.length; ti++) { if ((sorted[ti].width || 0) >= 720) { pick = sorted[ti]; break; } }
+            best = (pick && pick.uri) || "";
           }
-          videoThumbs[vid] = best || v.picture || "";
+          // Last resort: v.picture. Strip any baked-in stp= size modifier query so the CDN serves
+          // the largest version it can instead of the forced 160x160 preview.
+          if (!best && v.picture) {
+            var pic = v.picture;
+            var stripped = pic.replace(/([?&])stp=[^&]*/g, "$1").replace(/\?&/, "?").replace(/[?&]$/, "");
+            best = stripped;
+          }
+          videoThumbs[vid] = best || "";
         } catch (_) { /* individual failure, leave entry empty */ }
       };
       // Chunk parallel calls to avoid too many concurrent sockets
