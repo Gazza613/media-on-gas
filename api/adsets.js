@@ -220,5 +220,16 @@ export default async function handler(req, res) {
     }
   } catch (err) { console.error("Google Ads adsets error", err); }
 
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role === "client") {
+    var ids = principal.allowedCampaignIds || [];
+    var names = principal.allowedCampaignNames || [];
+    allAdsets = allAdsets.filter(function(a) {
+      var cid = String(a.campaignId || "");
+      if (ids.indexOf(cid) >= 0) return true;
+      if (names.indexOf(a.campaignName || "") >= 0) return true;
+      return false;
+    });
+  }
   res.json({ adsets: allAdsets, total: allAdsets.length });
 }

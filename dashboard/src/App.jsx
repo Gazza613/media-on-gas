@@ -113,7 +113,66 @@ function CampaignSelector(props){
   </div>);
 }
 
-function ShareModal(props){var shareUrl=window.location.origin+'/view/?from='+props.dateFrom+'&to='+props.dateTo+'&campaigns='+props.selected.join(',');var cs=useState(false);var copy=function(){navigator.clipboard.writeText(shareUrl);cs[1](true);setTimeout(function(){cs[1](false);},2000);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={props.onClose}><div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:480,maxWidth:"90vw"}}><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6}}>Share with Client</div><div style={{fontSize:12,color:P.sub,marginBottom:16}}>Client gets read-only access with date toggles. No campaign selector, no optimisation tab.</div><div style={{display:"flex",gap:8}}><input readOnly value={shareUrl} style={{flex:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/><button onClick={copy} style={{background:cs[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,cursor:"pointer"}}>{cs[0]?"Copied!":"Copy"}</button></div></div></div>);}
+function ShareModal(props){
+  var slug=useState("");
+  var expiry=useState(30);
+  var shareUrl=useState("");
+  var expiresAt=useState("");
+  var busy=useState(false);
+  var err=useState("");
+  var copied=useState(false);
+  var copy=function(){if(!shareUrl[0])return;navigator.clipboard.writeText(shareUrl[0]);copied[1](true);setTimeout(function(){copied[1](false);},2000);};
+  var generate=function(){
+    if(!slug[0].trim()){err[1]("Enter a client slug (e.g. mtn-momo)");return;}
+    if(!props.selected||props.selected.length===0){err[1]("Select at least one campaign on the left before sharing");return;}
+    err[1]("");busy[1](true);
+    var selectedCampaigns=(props.campaigns||[]).filter(function(c){return props.selected.indexOf(c.campaignId)>=0;});
+    var campaignIds=[];var campaignNames=[];
+    selectedCampaigns.forEach(function(c){
+      if(c.rawCampaignId)campaignIds.push(String(c.rawCampaignId));
+      if(c.campaignId)campaignIds.push(String(c.campaignId).replace(/_facebook$/,"").replace(/_instagram$/,""));
+      if(c.campaignId)campaignIds.push(String(c.campaignId));
+      if(c.campaignName)campaignNames.push(c.campaignName);
+    });
+    fetch(props.apiBase+"/api/issue-token",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
+      body:JSON.stringify({clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0]})
+    }).then(function(r){return r.json();}).then(function(d){
+      busy[1](false);
+      if(d.shareUrl){shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt);}
+      else{err[1](d.error||"Could not generate link");}
+    }).catch(function(e){busy[1](false);err[1]("Connection error");});
+  };
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)"}} onClick={props.onClose}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:520,maxWidth:"90vw"}}>
+      <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
+      <div style={{fontSize:12,color:P.sub,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only view, locked to the campaigns you currently have selected, only campaigns on the allowlist are visible. No admin tabs.</div>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug</div>
+        <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="e.g. mtn-momo" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1}}/>
+      </div>
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Expires in</div>
+        <div style={{display:"flex",gap:8}}>
+          {[30,60,90,180].map(function(d){return <button key={d} onClick={function(){expiry[1](d);}} style={{flex:1,background:expiry[0]===d?P.ember+"25":"transparent",border:"1px solid "+(expiry[0]===d?P.ember+"70":P.rule),borderRadius:8,padding:"8px 10px",color:expiry[0]===d?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{d+" days"}</button>;})}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:14}}>Campaigns in this share: <span style={{color:P.ember,fontWeight:700}}>{(props.selected||[]).length}</span> selected, <span style={{color:P.ember,fontWeight:700}}>{props.dateFrom}</span> to <span style={{color:P.ember,fontWeight:700}}>{props.dateTo}</span></div>
+      {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12}}>{err[0]}</div>}
+      {!shareUrl[0]&&<button onClick={generate} disabled={busy[0]} style={{width:"100%",background:busy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:2}}>{busy[0]?"GENERATING...":"GENERATE SHARE LINK"}</button>}
+      {shareUrl[0]&&<div>
+        <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share URL</div>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <input readOnly value={shareUrl[0]} onClick={function(e){e.target.select();}} style={{flex:1,background:P.glass,border:"1px solid "+P.mint+"40",borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:11,fontFamily:fm,outline:"none"}}/>
+          <button onClick={copy} style={{background:copied[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{copied[0]?"COPIED":"COPY"}</button>
+        </div>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):"—"} | Client: <span style={{color:P.ember,fontWeight:700}}>{slug[0]}</span></div>
+        <button onClick={function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");}} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
+      </div>}
+    </div>
+  </div>);
+}
 
 function genFlags(m,t,camps){
   var fl=[],id=1;
@@ -171,8 +230,26 @@ export default function MediaOnGas(){
   var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
   var cf3=useState("all"),crFiltObj=cf3[0],setCrFiltObj=cf3[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
+  var vt=useState(""),viewToken=vt[0],setViewToken=vt[1];
 
   useEffect(function(){
+    var params=new URLSearchParams(window.location.search);
+    var token=params.get("token");
+    var camps=params.get("campaigns");
+    if(camps){
+      var ids=camps.split(",").map(function(id){return id.trim();}).filter(function(id){return id;});
+      setUrlSelected(ids);
+    }
+    var from=params.get("from");
+    if(from)setDf(from);
+    var to=params.get("to");
+    if(to)setDt(to);
+    if(token){
+      setViewToken(token);
+      setAuthRole("client");
+      setAuthChecking(false);
+      return;
+    }
     var saved=sessionStorage.getItem("gas_session");
     if(!saved){setAuthChecking(false);return;}
     fetch(API+"/api/auth",{headers:{"x-session-token":saved}})
@@ -181,23 +258,12 @@ export default function MediaOnGas(){
     .catch(function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setAuthChecking(false);});
   },[]);
 
-  useEffect(function(){
-    var params=new URLSearchParams(window.location.search);
-    var camps=params.get('campaigns');
-    if(camps){
-      var ids=camps.split(',').map(function(id){return id.trim();}).filter(function(id){return id;});
-      setUrlSelected(ids);
-    }
-    var from=params.get('from');
-    if(from)setDf(from);
-    var to=params.get('to');
-    if(to)setDt(to);
-  },[]);
-
   var handleLogin=function(token,role){setSession(token);setAuthRole(role||"admin");};
   var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setSession(null);setAuthRole(null);};
 
-  var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client";
+  var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client"||!!viewToken;
+  var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-api-key":API_KEY,"x-session-token":session||""};};
+  var isAuthed=function(){return !!session||!!viewToken;};
 
   var pageOverrides=[
     {campaign:"willowbrook",page:"flower foundation"},
@@ -242,9 +308,9 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
-  useEffect(function(){if(session){fetchData();}},[df,dt,session]);
-  useEffect(function(){if(!session)return;fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:{"x-api-key":API_KEY,"x-session-token":session||""}}).then(function(r){return r.json();}).then(function(d){if(d.series){setTimeseries(d);}}).catch(function(){});},[df,dt,session,tsGran]);
+  var fetchData=function(){setLoading(true);var h=authHeaders();fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
+  useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
+  useEffect(function(){if(!isAuthed())return;fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:authHeaders()}).then(function(r){return r.json();}).then(function(d){if(d.series){setTimeseries(d);}}).catch(function(){});},[df,dt,session,viewToken,tsGran]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
@@ -294,7 +360,7 @@ export default function MediaOnGas(){
   var tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)}];if(!isClient)tabs.push({id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)});
 
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
-  if(!session)return(<LoginScreen onLogin={handleLogin}/>);
+  if(!session&&!viewToken)return(<LoginScreen onLogin={handleLogin}/>);
 
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
@@ -318,7 +384,7 @@ export default function MediaOnGas(){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1}}>{tabs.map(function(tb){return<button key={tb.id} onClick={function(){setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:tab===tb.id?P.ember+"10":"transparent",border:"none",borderBottom:tab===tb.id?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:"pointer",color:tab===tb.id?P.ember:P.sub,fontSize:13,fontWeight:tab===tb.id?800:500,fontFamily:ff,letterSpacing:0.3}}>{tb.icon}<span>{tb.label}</span></button>;})}</div></div>
     </header>
 
-    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} dateFrom={df} dateTo={dt}/>}
+    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
       {showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}

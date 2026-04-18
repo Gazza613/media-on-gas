@@ -1,6 +1,11 @@
 {
   "buildCommand": "",
   "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/view", "destination": "/index.html" },
+    { "source": "/view/", "destination": "/index.html" },
+    { "source": "/view/:path*", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

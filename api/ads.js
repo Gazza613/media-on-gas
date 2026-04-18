@@ -80,7 +80,21 @@ export default async function handler(req, res) {
   var cacheKey = from + "|" + to;
   var cached = adsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
-    res.status(200).json(cached.data);
+    // Apply client-token filtering on cache hits so scoped tokens never see wider data
+    var pCached = req.authPrincipal || { role: "admin" };
+    if (pCached.role === "client") {
+      var cIds = pCached.allowedCampaignIds || [];
+      var cNames = pCached.allowedCampaignNames || [];
+      var cFiltered = (cached.data.ads || []).filter(function(a) {
+        var cid = String(a.campaignId || "");
+        if (cIds.indexOf(cid) >= 0) return true;
+        if (cNames.indexOf(a.campaignName || "") >= 0) return true;
+        return false;
+      });
+      res.status(200).json({ ads: cFiltered, total: cFiltered.length });
+    } else {
+      res.status(200).json(cached.data);
+    }
     return;
   }
 
@@ -946,6 +960,22 @@ export default async function handler(req, res) {
   }
 
   var response = { ads: allAds, total: allAds.length };
+  // Cache the unfiltered (admin) response keyed by date range. Client-scoped filtering
+  // happens after the cache read on every request so tokens cannot see wider data.
   adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role === "client") {
+    var ids = principal.allowedCampaignIds || [];
+    var names = principal.allowedCampaignNames || [];
+    var filtered = allAds.filter(function(a) {
+      var cid = String(a.campaignId || "");
+      if (ids.indexOf(cid) >= 0) return true;
+      if (ids.some(function(allowed) { return cid && String(allowed) === cid; })) return true;
+      if (names.indexOf(a.campaignName || "") >= 0) return true;
+      return false;
+    });
+    res.status(200).json({ ads: filtered, total: filtered.length });
+    return;
+  }
   res.status(200).json(response);
 }

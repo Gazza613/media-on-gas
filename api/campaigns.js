@@ -278,5 +278,19 @@ export default async function handler(req, res) {
   } catch (pgErr) { console.error("Pages error", pgErr); }
 
 
+  // Client-scoped filtering: if request came from a client share token, restrict output
+  // to the campaigns on that token's allowlist. Admin requests are not filtered.
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role === "client") {
+    var ids = principal.allowedCampaignIds || [];
+    var names = principal.allowedCampaignNames || [];
+    allCampaigns = allCampaigns.filter(function(c) {
+      var raw = String(c.rawCampaignId || "");
+      var cid = String(c.campaignId || "");
+      if (ids.indexOf(raw) >= 0 || ids.indexOf(cid) >= 0) return true;
+      if (names.indexOf(c.campaignName || "") >= 0) return true;
+      return false;
+    });
+  }
   res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData });
 }

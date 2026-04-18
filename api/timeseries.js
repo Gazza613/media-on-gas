@@ -59,6 +59,19 @@ export default async function handler(req, res) {
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID || "7446793748044202000";
 
+  var principal = req.authPrincipal || { role: "admin" };
+  var allowedIds = {};
+  var allowedNames = {};
+  var isClientScoped = principal.role === "client";
+  (principal.allowedCampaignIds || []).forEach(function(id) { allowedIds[String(id)] = true; });
+  (principal.allowedCampaignNames || []).forEach(function(n) { allowedNames[String(n)] = true; });
+  var campaignAllowed = function(id, name) {
+    if (!isClientScoped) return true;
+    if (id && allowedIds[String(id)]) return true;
+    if (name && allowedNames[String(name)]) return true;
+    return false;
+  };
+
   var seriesMap = {};
   var debug = { meta: {}, tiktok: {}, google: {} };
 
@@ -102,6 +115,7 @@ export default async function handler(req, res) {
               });
             }
             if (objective === "landingpage" || (results === 0 && objective === "appinstall")) results = clk;
+            if (!campaignAllowed(row.campaign_id, row.campaign_name)) return;
             addTo(seriesMap, platform, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
           });
         }
@@ -142,6 +156,7 @@ export default async function handler(req, res) {
           var clk = parseInt(m.clicks || 0);
           var follows = parseInt(m.follows || 0) + parseInt(m.likes || 0);
           var results = objective === "followers" ? follows : clk;
+          if (!campaignAllowed(d.campaign_id, m.campaign_name)) return;
           addTo(seriesMap, "TikTok", objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
         });
       }
@@ -183,6 +198,7 @@ export default async function handler(req, res) {
             var clk = parseInt(r.metrics.clicks || 0);
             var conv = Math.round(parseFloat(r.metrics.conversions || 0));
             var results = conv > 0 ? conv : clk;
+            if (!campaignAllowed(r.campaign && r.campaign.id, r.campaign && r.campaign.name)) return;
             addTo(seriesMap, bucketPlat, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
           });
           debug.google.rows = (gData.results || []).length;
