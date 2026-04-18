@@ -305,7 +305,7 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
-          <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt+" | Performance Intelligence Brief"} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
@@ -340,7 +340,7 @@ export default function MediaOnGas(){
             var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
             var platCol4={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
             var platShort={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
-            var objKeys=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
+            var objKeys=["App Store Clicks","Landing Page Clicks","Followers & Likes","Leads"];
             var objCol4={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
             var objCL4={"App Store Clicks":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
 
@@ -472,7 +472,7 @@ export default function MediaOnGas(){
                     </ResponsiveContainer>
                   </div>
                 </div>
-                {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST CPM",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
+                {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST COST PER 1000 ADS SERVED",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
                 <div style={{fontSize:10,color:P.dim,fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,padding:"14px 8px 0",textAlign:"center",fontStyle:"italic"}}>* Reach and frequency metrics reflect Meta + TikTok only. Google Ads does not expose unique-user reach in standard reporting.</div>
               </div>
 
@@ -486,7 +486,7 @@ export default function MediaOnGas(){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CPC & CLICKS BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER CLICK & CLICKS BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
                       <ComposedChart data={cpcData.map(function(d){var pl=Object.keys(platBreak).filter(function(k){return(platShort[k]||k)===d.name;})[0];return{name:d.name,cpc:d.cpc,clicks:pl?platBreak[pl].clicks:0,color:d.color};}).sort(function(a,b){return b.cpc-a.cpc;})} barSize={38} margin={{top:24,right:16,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
@@ -501,13 +501,13 @@ export default function MediaOnGas(){
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CTR BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CLICK THROUGH RATE BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
-                {(function(){var bestCpcP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].clicks)-(platBreak[b].spend/platBreak[b].clicks);})[0];var bestCtrP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[b].clicks/platBreak[b].imps)-(platBreak[a].clicks/platBreak[a].imps);})[0];var mostClicksP=sortedPlats.slice().sort(function(a,b){return platBreak[b].clicks-platBreak[a].clicks;})[0];return standRow([bestCpcP?stand("BEST CPC",bestCpcP+", "+fR(platBreak[bestCpcP].spend/platBreak[bestCpcP].clicks),platCol4[bestCpcP]||P.mint):null,bestCtrP?stand("HIGHEST CTR",bestCtrP+", "+(platBreak[bestCtrP].clicks/platBreak[bestCtrP].imps*100).toFixed(2)+"%",platCol4[bestCtrP]||P.solar):null,mostClicksP?stand("MOST CLICKS",mostClicksP+", "+fmt(platBreak[mostClicksP].clicks),platCol4[mostClicksP]||P.cyan):null]);})()}
+                {(function(){var bestCpcP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].clicks)-(platBreak[b].spend/platBreak[b].clicks);})[0];var bestCtrP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[b].clicks/platBreak[b].imps)-(platBreak[a].clicks/platBreak[a].imps);})[0];var mostClicksP=sortedPlats.slice().sort(function(a,b){return platBreak[b].clicks-platBreak[a].clicks;})[0];return standRow([bestCpcP?stand("BEST COST PER CLICK",bestCpcP+", "+fR(platBreak[bestCpcP].spend/platBreak[bestCpcP].clicks),platCol4[bestCpcP]||P.mint):null,bestCtrP?stand("HIGHEST CLICK THROUGH RATE %",bestCtrP+", "+(platBreak[bestCtrP].clicks/platBreak[bestCtrP].imps*100).toFixed(2)+"%",platCol4[bestCtrP]||P.solar):null,mostClicksP?stand("MOST CLICKS",mostClicksP+", "+fmt(platBreak[mostClicksP].clicks),platCol4[mostClicksP]||P.cyan):null]);})()}
               </div>
 
               {/* ═══ 5. OBJECTIVE HIGHLIGHTS ═══ */}
@@ -530,7 +530,7 @@ export default function MediaOnGas(){
                     </div>;})}
                 </div>
                 {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></div>;})()}
-                {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;active.forEach(function(k){totalResults+=objectives4[k].results;});return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,stand("TOTAL RESULTS",fmt(totalResults),P.ember)]);})()}
+                {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;active.forEach(function(k){totalResults+=objectives4[k].results;});return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);})()}
               </div>}
 
               {/* ═══ 6. TARGETING STANDOUTS ═══ */}
@@ -546,7 +546,7 @@ export default function MediaOnGas(){
                   return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};
                 }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
                 if(topAd.length===0)return null;
-                var topChart=topAd.slice(0,5).map(function(a){return{name:a.name.length>28?a.name.substring(0,26)+"…":a.name,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
+                var topChart=topAd.slice(0,5).map(function(a,idx){var trunc=a.name.length>26?a.name.substring(0,24)+"…":a.name;return{name:"#"+(idx+1)+" "+trunc,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
                 var AudienceTick=function(props){var payload=props.payload||{};var row=(topChart||[]).filter(function(d){return d.name===payload.value;})[0];var full=row?row.fullName:payload.value;var isX=props.axis==="x";return (<g transform={"translate("+props.x+","+props.y+")"}><title>{full}</title><text x={0} y={0} dy={isX?12:4} textAnchor={isX?"middle":"end"} fill="rgba(255,255,255,0.75)" fontSize={10} fontFamily={fm} fontWeight={600}>{payload.value}</text></g>);};
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.solar,"TARGETING STANDOUTS",Ic.radar(P.solar,18))}
@@ -567,7 +567,7 @@ export default function MediaOnGas(){
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={topChart} layout="vertical" margin={{top:6,right:52,left:0,bottom:6}} barSize={26}>
                             <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                            <XAxis type="number" tick={{fontSize:11,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                            <XAxis type="number" tick={{fontSize:11,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
                             <YAxis type="category" dataKey="name" tick={<AudienceTick/>} axisLine={false} tickLine={false} width={170}/>
                             <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                             <Bar dataKey="results" name="Results" radius={[0,6,6,0]}>
@@ -582,10 +582,17 @@ export default function MediaOnGas(){
                   {topChart.length>=2&&<div style={{height:320}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>TOP AD SET EFFICIENCY (RESULTS VS COST)</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <ComposedChart data={topChart} barSize={36} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={<AudienceTick axis="x"/>} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="results" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}><LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyleSm}/></Line></ComposedChart>
+                      <ComposedChart data={topChart} barSize={36} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={<AudienceTick axis="x"/>} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="results" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}><LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyleSm}/></Line></ComposedChart>
                     </ResponsiveContainer>
                   </div>}
-                  {standRow([topAd.length>0?stand("BEST AD SET",(topAd[0].name.length>30?topAd[0].name.substring(0,28)+"..":topAd[0].name)+", "+fR(topAd[0].costPer)+"/ea",platCol4[topAd[0].platform]||P.mint,topAd[0].name+" | "+fR(topAd[0].costPer)+" per result"):null,stand("ACTIVE AD SETS",selAdsets2.length,P.cyan),topAd.length>1?stand("SECOND BEST",(topAd[1].name.length>30?topAd[1].name.substring(0,28)+"..":topAd[1].name)+", "+fR(topAd[1].costPer)+"/ea",platCol4[topAd[1].platform]||P.solar,topAd[1].name+" | "+fR(topAd[1].costPer)+" per result"):null])}
+                  {(function(){
+                    var wrapStand=function(label,name,suffix,color){return <div title={name||""} style={{flex:1,minWidth:160,background:"rgba(0,0,0,0.25)",border:"1px solid "+color+"30",borderLeft:"3px solid "+color,borderRadius:"0 10px 10px 0",padding:"12px 14px"}}><div style={{fontSize:9,fontWeight:800,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>{label}</div><div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:fm,lineHeight:1.45,whiteSpace:"normal",wordBreak:"break-word"}}>{name}</div>{suffix&&<div style={{fontSize:11,fontWeight:700,color:color,fontFamily:fm,marginTop:4}}>{suffix}</div>}</div>;};
+                    return <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:16}}>
+                      {topAd.length>0?wrapStand("BEST AD SET",topAd[0].name,fR(topAd[0].costPer)+" / result",platCol4[topAd[0].platform]||P.mint):null}
+                      <div style={{flex:1,minWidth:160,background:"rgba(0,0,0,0.25)",border:"1px solid "+P.cyan+"30",borderLeft:"3px solid "+P.cyan,borderRadius:"0 10px 10px 0",padding:"12px 14px"}}><div style={{fontSize:9,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>ACTIVE AD SETS</div><div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:fm}}>{selAdsets2.length}</div></div>
+                      {topAd.length>1?wrapStand("SECOND BEST",topAd[1].name,fR(topAd[1].costPer)+" / result",platCol4[topAd[1].platform]||P.solar):null}
+                    </div>;
+                  })()}
                 </div>;
               })()}
 
@@ -602,13 +609,13 @@ export default function MediaOnGas(){
                   <div style={{height:300}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COMMUNITY BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={communityData.slice().sort(function(a,b){return b.total-a.total;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="total" name="Total Followers" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{communityData.slice().sort(function(a,b){return b.total-a.total;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="total" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={communityData.slice().sort(function(a,b){return b.total-a.total;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="total" name="Total Followers" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{communityData.slice().sort(function(a,b){return b.total-a.total;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="total" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>EARNED THIS PERIOD</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.75)",fontFamily:fm,fontWeight:600}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="earned" name="Earned Followers" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="earned" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="earned" name="Earned Followers" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="earned" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -673,15 +680,15 @@ export default function MediaOnGas(){
                 ];
                 var objGroups=[
                   {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
-                  {key:"appinstall",label:"APP INSTALL",accent:P.fb,criterion:"by CTR & clicks (min 5k impressions)"},
-                  {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by CTR & clicks (min 5k impressions)"},
-                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by CTR & clicks (min 5k impressions)"}
+                  {key:"appinstall",label:"APP INSTALL",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
+                  {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by clicks & CTR (min 5k impressions)"},
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks & CTR (min 5k impressions)"}
                 ];
 
                 var IMP_FLOOR=5000;
                 // Ranking that differs by objective:
                 //   Lead Gen  -> leads DESC, CPL ASC, impressions DESC
-                //   Others    -> CTR DESC, clicks DESC (must clear IMP_FLOOR), low-imp sinks last
+                //   Others    -> clicks DESC, CTR DESC (must clear IMP_FLOOR), low-imp sinks last
                 var leadSort=function(a,b){
                   if(b.results!==a.results)return b.results-a.results;
                   var ac=a.results>0?a.spend/a.results:Infinity;
@@ -693,8 +700,8 @@ export default function MediaOnGas(){
                   var aQual=a.impressions>=IMP_FLOOR?0:1;
                   var bQual=b.impressions>=IMP_FLOOR?0:1;
                   if(aQual!==bQual)return aQual-bQual;
-                  if(b.ctr!==a.ctr)return b.ctr-a.ctr;
-                  return b.clicks-a.clicks;
+                  if(b.clicks!==a.clicks)return b.clicks-a.clicks;
+                  return b.ctr-a.ctr;
                 };
 
                 var sections=[];
@@ -734,13 +741,18 @@ export default function MediaOnGas(){
                       </div>}
                       <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                       <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:"#fff",padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
-                      {ad.results>0&&<div style={{position:"absolute",bottom:8,right:8,background:P.mint,color:"#062014",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(52,211,153,0.45)",zIndex:3}}>{"\u25B2 SCALE"}</div>}
+                      {rank<=3&&ad.results>0&&<div style={{position:"absolute",bottom:8,right:8,background:P.mint,color:"#062014",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(52,211,153,0.45)",zIndex:3}}>{"\u25B2 SCALE"}</div>}
+                      {rank>=4&&rank<=5&&ad.results>=0&&<div style={{position:"absolute",bottom:8,right:8,background:P.warning,color:"#2a1605",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(251,191,36,0.4)",zIndex:3}}>{"\u2605 TOP"}</div>}
                     </div>
                     <div style={{padding:"8px 10px",flex:1,display:"flex",flexDirection:"column"}}>
                       <div style={{fontSize:10,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:6,lineHeight:1.3,minHeight:26,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,padding:"5px 7px",background:objAccent+"10",border:"1px solid "+objAccent+"30",borderRadius:6}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:6,padding:"5px 7px",background:objAccent+"10",border:"1px solid "+objAccent+"30",borderRadius:6}}>
                         <span style={{color:objAccent,fontWeight:800}}>{(ad.results>0?fmt(ad.results):"0")+" "+resultLabelS(ad.resultType).split(" ")[0]}</span>
                         <span style={{color:objAccent,fontWeight:800}}>{ad.results>0?fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType):"-"}</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
+                        <div><div style={{color:P.dim,fontSize:7,letterSpacing:0.6}}>IMPRESSIONS</div><div style={{color:P.txt,fontWeight:700,fontSize:10}}>{fmt(ad.impressions)}</div></div>
+                        <div><div style={{color:P.dim,fontSize:7,letterSpacing:0.6}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:10}}>{ad.cpc>0?fR(ad.cpc):(ad.clicks>0?fR(ad.spend/ad.clicks):"-")}</div></div>
                       </div>
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
                         <span>{fR(ad.spend)}</span>
@@ -1564,7 +1576,7 @@ export default function MediaOnGas(){
               var objOrder={"App Store Clicks":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
               
 
-              var objectives=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
+              var objectives=["App Store Clicks","Landing Page Clicks","Followers & Likes","Leads"];
               var platList=["Facebook","Instagram","TikTok","Google Display","YouTube"];
               var groups={};objectives.forEach(function(o){
                 var matched=rows.filter(function(r){return r.objective===o;});
@@ -1741,7 +1753,7 @@ export default function MediaOnGas(){
             var platList3=["Facebook","Instagram","TikTok","Google Display"];
             var platCol3={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd};
             var platBdg3={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD"};
-            var objList3=["App Store Clicks","Landing Page Clicks","Leads","Followers & Likes"];
+            var objList3=["App Store Clicks","Landing Page Clicks","Followers & Likes","Leads"];
             var objCol3={"App Store Clicks":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
             var objRL3={"App Store Clicks":"App Clicks","Landing Page Clicks":"LP Clicks","Leads":"Leads","Followers & Likes":"Follows/Likes"};
             var objCL3={"App Store Clicks":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
