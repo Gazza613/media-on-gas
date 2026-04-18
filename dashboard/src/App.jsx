@@ -624,7 +624,7 @@ export default function MediaOnGas(){
                 // appearing mid-scroll after the fetch resolves.
                 if(!adsList||adsList.length===0){
                   return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                    {secHead(P.mint,"TOP 5 ADS PER PLATFORM",Ic.crown(P.mint,18))}
+                    {secHead(P.mint,"TOP ADS PER PLATFORM (BY OBJECTIVE)",Ic.crown(P.mint,18))}
                     <div style={{padding:"40px 20px",textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12,lineHeight:1.8}}>
                       <div style={{fontSize:14,color:P.sub,marginBottom:6}}>Loading creative performance…</div>
                       <div>Fetching ad-level thumbnails and metrics from Meta, TikTok and Google. This usually takes 5-15 seconds.</div>
@@ -671,81 +671,107 @@ export default function MediaOnGas(){
                   {key:"TikTok",label:"TIKTOK",accent:P.tt,short:"TT"},
                   {key:"Google Display",label:"GOOGLE DISPLAY",accent:P.gd,short:"GD"}
                 ];
+                var objGroups=[
+                  {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
+                  {key:"appinstall",label:"APP INSTALL",accent:P.fb,criterion:"by CTR & clicks (min 5k impressions)"},
+                  {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by CTR & clicks (min 5k impressions)"},
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by CTR & clicks (min 5k impressions)"}
+                ];
+
+                var IMP_FLOOR=5000;
+                // Ranking that differs by objective:
+                //   Lead Gen  -> leads DESC, CPL ASC, impressions DESC
+                //   Others    -> CTR DESC, clicks DESC (must clear IMP_FLOOR), low-imp sinks last
+                var leadSort=function(a,b){
+                  if(b.results!==a.results)return b.results-a.results;
+                  var ac=a.results>0?a.spend/a.results:Infinity;
+                  var bc=b.results>0?b.spend/b.results:Infinity;
+                  if(ac!==bc)return ac-bc;
+                  return b.impressions-a.impressions;
+                };
+                var engagementSort=function(a,b){
+                  var aQual=a.impressions>=IMP_FLOOR?0:1;
+                  var bQual=b.impressions>=IMP_FLOOR?0:1;
+                  if(aQual!==bQual)return aQual-bQual;
+                  if(b.ctr!==a.ctr)return b.ctr-a.ctr;
+                  return b.clicks-a.clicks;
+                };
 
                 var sections=[];
-                var IMP_FLOOR=5000;
-                var tierOf=function(ad){
-                  if(ad.results>0)return 1;
-                  if(ad.impressions>=IMP_FLOOR)return 2;
-                  return 3;
-                };
                 platGroups.forEach(function(pg){
                   var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
                   if(platAds.length===0)return;
-                  var sorted=platAds.slice().sort(function(a,b){
-                    var aT=tierOf(a),bT=tierOf(b);
-                    if(aT!==bT)return aT-bT;
-                    if(aT===1){
-                      if(b.results!==a.results)return b.results-a.results;
-                      var ac=a.spend/a.results;
-                      var bc=b.spend/b.results;
-                      if(ac!==bc)return ac-bc;
-                      return b.impressions-a.impressions;
-                    }
-                    return b.impressions-a.impressions;
+                  var groups=[];
+                  objGroups.forEach(function(og){
+                    var objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
+                    if(objAds.length===0)return;
+                    var sorter=og.key==="leads"?leadSort:engagementSort;
+                    var sorted=objAds.slice().sort(sorter).slice(0,3);
+                    groups.push({og:og,ads:sorted,total:objAds.length});
                   });
-                  sections.push({pg:pg,ads:sorted.slice(0,5),total:platAds.length});
+                  if(groups.length===0)return;
+                  sections.push({pg:pg,groups:groups,total:platAds.length});
                 });
                 if(sections.length===0)return null;
 
+                var renderAdCard=function(ad,rank,pgAccent,pgShort,objAccent){
+                  var fm2=fmtMeta(ad.format);
+                  return <div key={ad.adId+"_"+pgShort+"_"+rank} style={{background:"rgba(0,0,0,0.35)",borderRadius:12,border:"1px solid "+objAccent+"35",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+                    <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
+                      <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+pgAccent+"55,"+pgAccent+"15 55%,#0a0618 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:40,fontWeight:900,letterSpacing:4,color:pgAccent,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{pgShort}</div>
+                        {!ad.thumbnail&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
+                          <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
+                          <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
+                          {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
+                        </div>}
+                      </div>
+                      {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
+                      {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
+                        <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabelS(ad.resultType)}</div>
+                        <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
+                        <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>
+                      </div>}
+                      <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
+                      <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:"#fff",padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
+                      {ad.results>0&&<div style={{position:"absolute",bottom:8,right:8,background:P.mint,color:"#062014",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(52,211,153,0.45)",zIndex:3}}>{"\u25B2 SCALE"}</div>}
+                    </div>
+                    <div style={{padding:"8px 10px",flex:1,display:"flex",flexDirection:"column"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:6,lineHeight:1.3,minHeight:26,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,padding:"5px 7px",background:objAccent+"10",border:"1px solid "+objAccent+"30",borderRadius:6}}>
+                        <span style={{color:objAccent,fontWeight:800}}>{(ad.results>0?fmt(ad.results):"0")+" "+resultLabelS(ad.resultType).split(" ")[0]}</span>
+                        <span style={{color:objAccent,fontWeight:800}}>{ad.results>0?fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType):"-"}</span>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
+                        <span>{fR(ad.spend)}</span>
+                        <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
+                      </div>
+                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"6px 8px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:5,color:P.dim,fontSize:8,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1}}>NO LINK</div>}
+                    </div>
+                  </div>;
+                };
+
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                  {secHead(P.mint,"TOP 5 ADS PER PLATFORM",Ic.crown(P.mint,18))}
+                  {secHead(P.mint,"TOP ADS PER PLATFORM (BY OBJECTIVE)",Ic.crown(P.mint,18))}
                   {sections.map(function(s){
-                    return <div key={s.pg.key} style={{marginBottom:24}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,paddingBottom:10,borderBottom:"1px solid "+s.pg.accent+"30"}}>
-                        <div style={{width:8,height:8,borderRadius:"50%",background:s.pg.accent}}/>
-                        <span style={{fontSize:14,fontWeight:900,color:s.pg.accent,fontFamily:ff,letterSpacing:1.5}}>{s.pg.label}</span>
-                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.pg.accent+"30, transparent)"}}/>
-                        <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{s.total+" total ads"}</span>
+                    return <div key={s.pg.key} style={{marginBottom:28}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,paddingBottom:10,borderBottom:"2px solid "+s.pg.accent+"50"}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:s.pg.accent,boxShadow:"0 0 10px "+s.pg.accent}}/>
+                        <span style={{fontSize:16,fontWeight:900,color:s.pg.accent,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",lineHeight:1}}>{s.pg.label}</span>
+                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.pg.accent+"40, transparent)"}}/>
+                        <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{s.total+" total ads \u00b7 "+s.groups.length+" objectives"}</span>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
-                        {s.ads.map(function(ad,i){
-                          var fm2=fmtMeta(ad.format);
-                          return <div key={ad.adId+"_"+s.pg.key} style={{background:"rgba(0,0,0,0.35)",borderRadius:12,border:"1px solid "+s.pg.accent+"35",overflow:"hidden",display:"flex",flexDirection:"column"}}>
-                            <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
-                              <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+s.pg.accent+"55,"+s.pg.accent+"15 55%,#0a0618 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                                <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:40,fontWeight:900,letterSpacing:4,color:s.pg.accent,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{s.pg.short}</div>
-                                {!ad.thumbnail&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
-                                  <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
-                                  <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
-                                  {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
-                                </div>}
-                              </div>
-                              {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
-                              {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
-                                <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabelS(ad.resultType)}</div>
-                                <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
-                                <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>
-                              </div>}
-                              <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+(i+1)}</div>
-                              <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:"#fff",padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
-                              {ad.results>0&&<div style={{position:"absolute",bottom:8,right:8,background:P.mint,color:"#062014",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(52,211,153,0.45)",zIndex:3}}>{"\u25B2 SCALE"}</div>}
-                            </div>
-                            <div style={{padding:"8px 10px",flex:1,display:"flex",flexDirection:"column"}}>
-                              <div style={{fontSize:10,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:6,lineHeight:1.3,minHeight:26,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
-                              <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,padding:"5px 7px",background:s.pg.accent+"10",border:"1px solid "+s.pg.accent+"30",borderRadius:6}}>
-                                <span style={{color:s.pg.accent,fontWeight:800}}>{(ad.results>0?fmt(ad.results):"0")+" "+resultLabelS(ad.resultType).split(" ")[0]}</span>
-                                <span style={{color:s.pg.accent,fontWeight:800}}>{ad.results>0?fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType):"-"}</span>
-                              </div>
-                              <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,color:P.sub}}>
-                                <span>{fR(ad.spend)}</span>
-                                <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
-                              </div>
-                              {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"6px 8px",background:s.pg.accent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"6px 8px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:5,color:P.dim,fontSize:8,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1}}>NO LINK</div>}
-                            </div>
-                          </div>;
-                        })}
-                      </div>
+                      {s.groups.map(function(g){
+                        return <div key={s.pg.key+"_"+g.og.key} style={{marginBottom:18,paddingLeft:12,borderLeft:"3px solid "+g.og.accent+"55"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                            <span style={{fontSize:11,fontWeight:900,color:g.og.accent,fontFamily:fm,letterSpacing:2}}>{g.og.label}</span>
+                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"\u2022 ranked "+g.og.criterion+" \u2022 "+g.total+" ad"+(g.total===1?"":"s")}</span>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                            {g.ads.map(function(ad,i){return renderAdCard(ad,i+1,s.pg.accent,s.pg.short,g.og.accent);})}
+                          </div>
+                        </div>;
+                      })}
                     </div>;
                   })}
                 </div>;
