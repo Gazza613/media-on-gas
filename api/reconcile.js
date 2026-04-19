@@ -227,7 +227,11 @@ function buildReconciliation(sourceRows, dashRows) {
       dashAgg.spend += r.spend;
       dashAgg.impressions += r.impressions;
       dashAgg.clicks += r.clicks;
-      dashAgg.reach = Math.max(dashAgg.reach, r.reach); // reach is unique, not additive
+      // Dashboard apportions campaign-level reach across FB / IG rows by impression
+      // share, so summing them returns the authoritative campaign-level reach.
+      // Previously we did Math.max because publisher-level reaches were independent
+      // unique counts. Apportionment makes them additive.
+      dashAgg.reach += r.reach;
       dashAgg.leads += r.leads;
       dashAgg.followersCombined += r.followersCombined;
       dashAgg.appInstalls += r.appInstalls;

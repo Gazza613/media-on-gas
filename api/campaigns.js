@@ -314,13 +314,17 @@ export default async function handler(req, res) {
                 ctr: gImps > 0 ? ((gClicks / gImps) * 100).toFixed(2) : "0",
                 clicks: gClicks.toString(),
                 conversions: gConv.toFixed(0),
-                leads: "0",
+                // Google Ads reports conversions at the campaign level; for PaidSearch
+                // and Display lead-gen campaigns this IS the leads count. Reconcile
+                // and ads.js treat it identically, so campaigns.js must map it here
+                // or the dashboard shows 0 leads while source-of-truth shows the real count.
+                leads: gConv > 0 ? Math.round(gConv).toString() : "0",
                 appInstalls: "0",
                 landingPageViews: "0",
                 pageLikes: "0",
                 follows: "0",
                 likes: "0",
-                costPerLead: "0",
+                costPerLead: gConv > 0 ? (gSpend / gConv).toFixed(2) : "0",
                 costPerInstall: "0",
                 actions: [],
                 startDate: "", endDate: "", status: gc.status === "ENABLED" ? "active" : "paused"
