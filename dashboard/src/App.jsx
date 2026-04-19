@@ -1578,6 +1578,15 @@ export default function MediaOnGas(){
                         }
                         return a;
                       });
+                    } else if(og.key==="landingpage"){
+                      // LP objective ranks and displays by CLICKS. Some platforms (Google) return
+                      // conversions alongside clicks, and the backend stores results = conversions
+                      // when available. Under LP we override so both the sort and the on-card
+                      // metric use the raw clicks, keeping rank visually consistent.
+                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
+                        var clicks=parseFloat(a.clicks||0);
+                        return Object.assign({},a,{results:clicks,resultType:"lp_clicks"});
+                      });
                     } else {
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
                     }
