@@ -246,26 +246,41 @@ export default async function handler(req, res) {
       // per-ad without any breakdown gives us the authoritative per-ad count.
       var adTrueTotals = {};
       try {
-        var trueUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,actions&time_range=" + timeRange + "&level=ad&limit=500&access_token=" + metaToken;
+        // Fetch campaign_id too so we can check objective before folding the
+        // ambiguous "like" action into page_likes (see note below).
+        var trueUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,actions&time_range=" + timeRange + "&level=ad&limit=500&access_token=" + metaToken;
         var trueRes = await fetch(trueUrl);
         var trueData = await trueRes.json();
         if (trueData.data) {
           trueData.data.forEach(function(row) {
-            var totals = { like: 0, page_like: 0, follow: 0, ig_follow: 0, lead: 0, app_install: 0 };
+            var totals = { reactionLikes: 0, page_like: 0, follow: 0, lead: 0, app_install: 0 };
             (row.actions || []).forEach(function(a) {
               var at = a.action_type;
               var v = parseInt(a.value || 0);
-              if (at === "like" || at === "page_like") totals.page_like = Math.max(totals.page_like, v);
+              // "page_like" is the unambiguous page-like signal. "like" at ad
+              // level is POST REACTIONS (hearts, likes on the post itself), NOT
+              // page follows, a high-engagement post can rack up thousands of
+              // reactions that have no relationship to community growth. Keep
+              // them separate and only fold reactions into page_likes when we
+              // KNOW the campaign is Page Likes objective (where Meta returns
+              // page likes under the legacy "like" key).
+              if (at === "page_like") totals.page_like = Math.max(totals.page_like, v);
+              if (at === "like") totals.reactionLikes = Math.max(totals.reactionLikes, v);
               if (at === "follow" || at === "ig_follow" || at === "onsite_conversion.follow" || at === "onsite_conversion.ig_follow") totals.follow = Math.max(totals.follow, v);
               if (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at === "onsite_conversion.lead_grouped") totals.lead = Math.max(totals.lead, v);
               if (at === "app_install" || at === "mobile_app_install" || at === "omni_app_install") totals.app_install = Math.max(totals.app_install, v);
             });
+            // Only fold reactions for strict PAGE_LIKES objective (FB-only on
+            // Meta, which means it's safe to treat "like" as page likes even
+            // without per-placement detail in this no-breakdown pass).
+            var isPageLikesObj = String(campObjMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+            var pageLikeFinal = isPageLikesObj ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
             adTrueTotals[row.ad_id] = {
-              pageLikes: totals.page_like,
+              pageLikes: pageLikeFinal,
               follows: totals.follow,
               leads: totals.lead,
               appInstalls: totals.app_install,
-              followersCombined: totals.page_like + totals.follow
+              followersCombined: pageLikeFinal + totals.follow
             };
           });
         }
@@ -536,7 +551,14 @@ export default async function handler(req, res) {
         } else if (cr.effective_object_story_id) {
           preview = "https://www.facebook.com/" + cr.effective_object_story_id;
         }
-        var leads = 0, installs = 0, pageLikes = 0, follows = 0;
+        // Compute objective FIRST so we can decide how to treat the ambiguous
+        // "like" action (post reactions vs. page likes, see below).
+        var rawMetaObj = campObjMap[ins.campaign_id] || "";
+        var apiObj = mapMetaObjective(rawMetaObj);
+        var objective = apiObj || detectObjective(ins.campaign_name);
+        var isFbPlacement = pub === "facebook" || pub === "audience_network" || pub === "messenger" || pub === "oculus";
+
+        var leads = 0, installs = 0, pageLikes = 0, reactionLikes = 0, follows = 0;
         Object.keys(ins.actionsAgg || {}).forEach(function(at) {
           var v = ins.actionsAgg[at];
           var atLow = at.toLowerCase();
@@ -562,10 +584,14 @@ export default async function handler(req, res) {
                            atLow.indexOf("app_install") >= 0 ||
                            atLow.indexOf("mobile_app_install") >= 0);
           if (isInstall) installs = Math.max(installs, v);
-          // FB page likes
-          if (at === "like" || at === "page_like") {
-            pageLikes = Math.max(pageLikes, v);
-          }
+          // "page_like" is the unambiguous page-follow signal. "like" at ad
+          // level is POST REACTIONS (hearts on the post itself), not follows,
+          // a high-engagement post can show thousands of reactions that have
+          // no relationship to community growth. Track separately and only
+          // fold reactions into page_likes when the campaign is Page Likes
+          // objective (where Meta returns page likes under legacy "like").
+          if (at === "page_like") pageLikes = Math.max(pageLikes, v);
+          if (at === "like") reactionLikes = Math.max(reactionLikes, v);
           // Follows, FB page follows AND Instagram follows (distinct action types on Meta)
           var isFollow = (at === "follow" ||
                           at === "onsite_conversion.follow" ||
@@ -581,12 +607,15 @@ export default async function handler(req, res) {
             if (pageLikes === 0 && follows === 0) follows = Math.max(follows, v);
           }
         });
+        // Fold "like" into page likes ONLY for the strict PAGE_LIKES Meta
+        // objective on FB placements. On IG placements or on broader
+        // engagement-family objectives (POST_ENGAGEMENT etc.), "like" is post
+        // reactions, counting those would wildly overstate follower growth.
+        var isPageLikesObj = rawMetaObj.toUpperCase() === "PAGE_LIKES";
+        if (isPageLikesObj && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
-        // Use actual API objective if available, fall back to name detection
-        var apiObj = mapMetaObjective(campObjMap[ins.campaign_id]);
-        var objective = apiObj || detectObjective(ins.campaign_name);
         var resCount, resType;
         // For Lead Gen: ALWAYS show leads count (even 0). Never fall back to clicks.
         if (objective === "leads") { resCount = leads; resType = "leads"; }

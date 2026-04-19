@@ -10,6 +10,7 @@ var metaAccounts = [
   { name: "GAS Agency", id: "act_542990539806888" }
 ];
 
+
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
@@ -32,13 +33,13 @@ export default async function handler(req, res) {
     var campaignInfo = {};
 
     try {
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,effective_status,created_time,start_time,stop_time&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,objective,effective_status,created_time,start_time,stop_time&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
       var listRes = await fetch(listUrl);
       var listData = await listRes.json();
       if (listData.data) {
         for (var k = 0; k < listData.data.length; k++) {
           var camp = listData.data[k];
-          campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, created: new Date(camp.created_time), startTime: camp.start_time || null, stopTime: camp.stop_time || null };
+          campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, objective: camp.objective || "", created: new Date(camp.created_time), startTime: camp.start_time || null, stopTime: camp.stop_time || null };
         }
       }
     } catch (err) { console.error("Meta campaign list error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "campaign-list", message: String(err && err.message || err) }); }
@@ -101,7 +102,13 @@ export default async function handler(req, res) {
           var uniqueId = c.campaign_id + "_" + platName.toLowerCase();
           seenIds[c.campaign_id] = true;
 
-          var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, pageFollows = 0;
+          // Raw Meta objective string so we can gate on the strict PAGE_LIKES
+          // value rather than our broader "followers" family.
+          var rawMetaObj = String((campaignInfo[c.campaign_id] || {}).objective || "").toUpperCase();
+          var isPageLikesObj = rawMetaObj === "PAGE_LIKES";
+          var isFbPlacement = platName === "Facebook";
+
+          var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0;
           if (c.actions) {
             for (var a = 0; a < c.actions.length; a++) {
               var act = c.actions[a];
@@ -114,10 +121,20 @@ export default async function handler(req, res) {
               if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
                 landingPageViews = Math.max(landingPageViews, parseInt(act.value));
               }
-              if (act.action_type === "like") pageLikes = Math.max(pageLikes, parseInt(act.value));
+              // "page_like" is the unambiguous page-like action. "like" is
+              // POST REACTIONS (hearts/likes on the post itself) for all
+              // non-follower campaigns, counting those as page likes would
+              // wildly inflate follower counts on engagement-heavy creative.
+              if (act.action_type === "page_like") pageLikes = Math.max(pageLikes, parseInt(act.value));
+              if (act.action_type === "like") reactionLikes = Math.max(reactionLikes, parseInt(act.value));
               if (act.action_type === "page_engagement") pageFollows = Math.max(pageFollows, parseInt(act.value));
             }
           }
+          // Fold reactions into page likes only for the strict PAGE_LIKES
+          // objective on FB placements. PAGE_LIKES is an FB-only objective so
+          // this guarantees "like" really does mean page likes here, not IG
+          // post hearts on a broader engagement campaign.
+          if (isPageLikesObj && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
 
           if (!rowMap[uniqueId]) {
             rowMap[uniqueId] = {
