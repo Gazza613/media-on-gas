@@ -201,7 +201,43 @@ export default async function handler(req, res) {
         }
       } catch (actErr) { console.error("Meta actions override fetch error", account.name, actErr); }
 
-      var insights = Object.keys(insMap).map(function(k) { return insMap[k]; });
+      // Third pass: no-breakdown per-ad action totals. Page likes and follows in
+      // particular don't sum back to the campaign aggregate even under a single
+      // publisher_platform breakdown (Meta attributes at the campaign level for
+      // Page Like campaigns in a way that's lost in ad+placement rows). Fetching
+      // per-ad without any breakdown gives us the authoritative per-ad count.
+      var adTrueTotals = {};
+      try {
+        var trueUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,actions&time_range=" + timeRange + "&level=ad&limit=500&access_token=" + metaToken;
+        var trueRes = await fetch(trueUrl);
+        var trueData = await trueRes.json();
+        if (trueData.data) {
+          trueData.data.forEach(function(row) {
+            var totals = { like: 0, page_like: 0, follow: 0, ig_follow: 0, lead: 0, app_install: 0 };
+            (row.actions || []).forEach(function(a) {
+              var at = a.action_type;
+              var v = parseInt(a.value || 0);
+              if (at === "like" || at === "page_like") totals.page_like = Math.max(totals.page_like, v);
+              if (at === "follow" || at === "ig_follow" || at === "onsite_conversion.follow" || at === "onsite_conversion.ig_follow") totals.follow = Math.max(totals.follow, v);
+              if (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at === "onsite_conversion.lead_grouped") totals.lead = Math.max(totals.lead, v);
+              if (at === "app_install" || at === "mobile_app_install" || at === "omni_app_install") totals.app_install = Math.max(totals.app_install, v);
+            });
+            adTrueTotals[row.ad_id] = {
+              pageLikes: totals.page_like,
+              follows: totals.follow,
+              leads: totals.lead,
+              appInstalls: totals.app_install,
+              followersCombined: totals.page_like + totals.follow
+            };
+          });
+        }
+      } catch (trueErr) { console.error("Meta no-breakdown totals fetch error", account.name, trueErr); }
+
+      var insights = Object.keys(insMap).map(function(k) {
+        var row = insMap[k];
+        row.trueTotals = adTrueTotals[row.ad_id] || null;
+        return row;
+      });
 
       // Unique ad IDs to fetch creative for
       var uniqAdIds = [];
@@ -570,6 +606,11 @@ export default async function handler(req, res) {
           results: resCount,
           resultType: resType,
           followsRaw: pageLikes + follows,
+          // True per-ad total from the no-breakdown insights pass. Survives Meta's
+          // placement-split attribution drops, use this for follower rollups.
+          followsTrue: (ins.trueTotals && ins.trueTotals.followersCombined) || 0,
+          leadsTrue: (ins.trueTotals && ins.trueTotals.leads) || 0,
+          appInstallsTrue: (ins.trueTotals && ins.trueTotals.appInstalls) || 0,
           placements: ins.placements
         });
       });

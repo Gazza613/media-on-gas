@@ -1602,7 +1602,23 @@ export default function MediaOnGas(){
                     if(platAds.length===0)return;
                     var objAds;
                     if(og.key==="followers"){
-                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")==="followers";});
+                      // Meta's per-ad page_like count drops under publisher_platform breakdown,
+                      // so we use followsTrue from the server no-breakdown pass. Dedup by adId
+                      // (FB + IG rows of the same ad carry the same true total), keep
+                      // highest-impression row.
+                      var follAds=platAds.filter(function(a){return (a.objective||"landingpage")==="followers";});
+                      var dedup={};
+                      follAds.forEach(function(a){
+                        var k=a.adId||a.adName;
+                        if(!k)return;
+                        if(!dedup[k]||parseFloat(a.impressions||0)>parseFloat(dedup[k].impressions||0))dedup[k]=a;
+                      });
+                      objAds=Object.keys(dedup).map(function(k){
+                        var a=dedup[k];
+                        var ft=parseFloat(a.followsTrue||0);
+                        if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
+                        return a;
+                      });
                     } else if(og.key==="landingpage"){
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
                         var clicks=parseFloat(a.clicks||0);
@@ -1884,6 +1900,23 @@ export default function MediaOnGas(){
               if(!byObj[o])byObj[o]=[];
               byObj[o].push(a);
             });
+            // Followers bucket: dedupe by adId and swap in the no-breakdown per-ad
+            // page_like total from the server, so the creative summary matches the
+            // campaign aggregate rather than showing Meta's placement-split undercount.
+            if (byObj.followers && byObj.followers.length > 0) {
+              var fdedup={};
+              byObj.followers.forEach(function(a){
+                var k=a.adId||a.adName;
+                if(!k)return;
+                if(!fdedup[k]||parseFloat(a.impressions||0)>parseFloat(fdedup[k].impressions||0))fdedup[k]=a;
+              });
+              byObj.followers=Object.keys(fdedup).map(function(k){
+                var a=fdedup[k];
+                var ft=parseFloat(a.followsTrue||0);
+                if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
+                return a;
+              });
+            }
 
             // Aggregate totals per objective
             var totalsForSec=function(arr){
