@@ -1,6 +1,12 @@
 {
   "buildCommand": "",
   "outputDirectory": ".",
+  "crons": [
+    {
+      "path": "/api/reconcile?alert=1",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/view", "destination": "/index.html" },
     { "source": "/view/", "destination": "/index.html" },

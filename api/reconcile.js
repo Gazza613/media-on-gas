@@ -272,15 +272,30 @@ async function sendAlertEmail(flagged, from, to) {
 }
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 6, maxPerHour: 50 })) return;
-  if (!checkAuth(req, res)) return;
-  if (!req.authPrincipal || req.authPrincipal.role !== "admin") {
-    res.status(403).json({ error: "Admin-only" });
-    return;
+  // Cron-triggered calls from Vercel arrive with an Authorization: Bearer <CRON_SECRET>
+  // header that only Vercel's infrastructure knows. Short-circuit auth for that case
+  // so the scheduled reconciliation can run without a human session. We still refuse
+  // anything else on this short-circuit path.
+  var cronSecret = process.env.CRON_SECRET || "";
+  var authHeader = req.headers.authorization || req.headers.Authorization || "";
+  var isCron = cronSecret && authHeader === "Bearer " + cronSecret;
+
+  if (isCron) {
+    req.authPrincipal = { role: "admin" };
+  } else {
+    if (!rateLimit(req, res, { maxPerMin: 6, maxPerHour: 50 })) return;
+    if (!checkAuth(req, res)) return;
+    if (!req.authPrincipal || req.authPrincipal.role !== "admin") {
+      res.status(403).json({ error: "Admin-only" });
+      return;
+    }
   }
 
-  var from = req.query.from || "2026-04-01";
-  var to = req.query.to || "2026-04-30";
+  // Cron default: last 30 days. Manual calls can override with ?from=&to=.
+  var defaultTo = new Date().toISOString().slice(0, 10);
+  var defaultFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  var from = req.query.from || (isCron ? defaultFrom : "2026-04-01");
+  var to = req.query.to || (isCron ? defaultTo : "2026-04-30");
   var wantAlert = req.query.alert === "1" || req.query.alert === "true";
 
   var metaToken = process.env.META_ACCESS_TOKEN;
