@@ -117,7 +117,11 @@ export default async function handler(req, res) {
       } catch (cErr) { console.error("Meta campaign objective fetch error", account.name, cErr); }
 
       var timeRange = JSON.stringify({ since: from, until: to });
-      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform,platform_position&limit=500&access_token=" + metaToken;
+      // Single publisher_platform breakdown only. The earlier `platform_position`
+      // breakdown caused Meta to drop most ad rows entirely for Page Like and
+      // similar campaigns (a 45-ad campaign would return just 1 row). We split
+      // FB vs IG via publisher_platform but take no further breakdowns.
+      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
       var insRes = await fetch(insUrl);
       var insData = await insRes.json();
       // Aggregate placement-level rows back to one record per ad+publisher
