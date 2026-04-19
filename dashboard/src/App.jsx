@@ -943,6 +943,21 @@ export default function MediaOnGas(){
   var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-api-key":API_KEY,"x-session-token":session||""};};
   var isAuthed=function(){return !!session||!!viewToken;};
 
+  // Idle logout: 15 minutes of no activity ends an admin session.
+  // Client share-link views are excluded, the token there is the auth and
+  // expires on its own schedule, idle-logging them out would be hostile.
+  useEffect(function(){
+    if(!session||isClient)return;
+    var IDLE_MS=15*60*1000;
+    var timer=null;
+    var doLogout=function(){handleLogout();};
+    var resetIdle=function(){if(timer)clearTimeout(timer);timer=setTimeout(doLogout,IDLE_MS);};
+    var events=["mousemove","mousedown","keydown","scroll","touchstart","wheel"];
+    events.forEach(function(e){window.addEventListener(e,resetIdle,{passive:true});});
+    resetIdle();
+    return function(){if(timer)clearTimeout(timer);events.forEach(function(e){window.removeEventListener(e,resetIdle);});};
+  },[session,isClient]);
+
   var pageOverrides=[
     {campaign:"willowbrook",page:"flower foundation"},
     {campaign:"flower",page:"flower foundation"}
