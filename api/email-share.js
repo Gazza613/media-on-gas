@@ -32,53 +32,47 @@ function fmtPct(n) {
   return n.toFixed(2) + "%";
 }
 
-// Canonical objective for a row. /api/campaigns now sets c.objective for
-// every row (Meta, TikTok, Google), fall back to name detection for older
-// cached responses or any row that slipped through.
+// Objective classifier that MIRRORS the dashboard's Summary tile logic
+// (App.jsx around line 1387-1392). The dashboard classifies objectives by
+// campaign name only, not Meta's API objective field, and the email MUST
+// produce the same numbers the client sees on the dashboard. Keep this
+// rule set in lockstep with the dashboard.
 function campObjective(c) {
-  if (c.objective) return c.objective;
   var n = (c.campaignName || "").toLowerCase();
-  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
-  return "landingpage";
+  return "traffic"; // dashboard's default bucket, not surfaced as an outcome tile
 }
 
 // Aggregate a flat array of campaigns into one summed object + derived metrics.
-// Outcome counts are scoped by the campaign's canonical objective so a Lead
-// Gen tile never picks up stray leads attributed to an engagement campaign,
-// and a Follower tile never picks up post reactions on a Lead Gen campaign.
+// Outcome counts are scoped by the campaign's objective (name-based, matching
+// the dashboard) AND use the same formulas the dashboard uses on its
+// Summary KPI tiles:
+//   Leads                 = sum(camp.leads) on leads-name campaigns
+//   Followers & Likes     = sum(camp.pageLikes + camp.follows) on follower-name campaigns
+//   Clicks to App Store   = sum(camp.clicks) on appinstall-name campaigns
+//   Clicks to Landing Page= sum(camp.clicks) on traffic/homeloan-name campaigns
 function aggregate(arr) {
-  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, appStoreClicks: 0, landingPageClicks: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
+  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appStoreClicks: 0, landingPageClicks: 0, follows: 0, pageLikes: 0, landingPageViews: 0 };
   arr.forEach(function(c) {
     s.impressions += parseFloat(c.impressions || 0);
     s.reach += parseFloat(c.reach || 0);
     s.spend += parseFloat(c.spend || 0);
     s.clicks += parseFloat(c.clicks || 0);
     var obj = campObjective(c);
-    // Leads: count leads action only on lead-gen-objective campaigns. A brand
-    // awareness or engagement campaign can have a few leads attributed by
-    // Meta, which would wrongly inflate the Leads KPI when the client has
-    // not selected the actual Lead Gen campaign.
     if (obj === "leads") s.leads += parseFloat(c.leads || 0);
-    // App install outcomes: SDK-tracked installs AND clicks on app-store
-    // objective campaigns (Meta rarely wires the SDK for click-to-store ads).
-    if (obj === "appinstall") {
-      s.appInstalls += parseFloat(c.appInstalls || 0);
-      s.appStoreClicks += parseFloat(c.clicks || 0);
-    }
-    // Landing page clicks: only on traffic / LP-objective campaigns.
+    if (obj === "appinstall") s.appStoreClicks += parseFloat(c.clicks || 0);
     if (obj === "landingpage") {
       s.landingPageClicks += parseFloat(c.clicks || 0);
       s.landingPageViews += parseFloat(c.landingPageViews || 0);
     }
-    // Follower outcomes: follow actions, page likes, and TikTok video likes
-    // only count on follower-objective campaigns.
     if (obj === "followers") {
-      s.follows += parseFloat(c.follows || 0);
+      // Dashboard uses pageLikes + follows. TikTok video likes (camp.likes)
+      // are engagement, not followers, and are intentionally excluded.
       s.pageLikes += parseFloat(c.pageLikes || 0);
-      s.likes += parseFloat(c.likes || 0);
+      s.follows += parseFloat(c.follows || 0);
     }
   });
   s.cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : 0;
@@ -233,12 +227,10 @@ function renderSummaryBlock(summary) {
   // Only render tiles for objectives that have actual results. Keeps the email
   // honest for campaign shapes that focus on a single objective, a leads-only
   // campaign no longer shows empty followers/installs/LP tiles.
-  var totalFollows = g.follows + g.pageLikes + g.likes;
-  // App-install and landing-page outcomes use CLICKS on objective-matched
-  // campaigns (not action counts) because Meta rarely tracks actual installs
-  // or landing_page_view in SA for these campaign types. Mirrors the
-  // dashboard's Summary KPI tile logic exactly.
-  var appStoreValue = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
+  // All four outcome formulas mirror the dashboard's Summary objective
+  // tiles exactly (see App.jsx `objectives4` around line 1387-1396).
+  var totalFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
+  var appStoreValue = parseFloat(g.appStoreClicks || 0);
   var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var allOutcomes = [
     { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "", accent: "#F43F5E" },
@@ -321,8 +313,8 @@ function renderCommentaryBlock(summary) {
   // Outcomes paragraph (only if results exist). Must mirror the tile logic
   // exactly, fallback to clicks on objective-matched campaigns when action
   // counts are missing so commentary and KPI tiles never disagree.
-  var totalFollows = g.follows + g.pageLikes + g.likes;
-  var appStoreValue = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
+  var totalFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
+  var appStoreValue = parseFloat(g.appStoreClicks || 0);
   var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var outcomeParts = [];
   if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.spend / g.leads) + " per lead");
@@ -628,8 +620,8 @@ export default async function handler(req, res) {
       textLines.push("Clicks: " + fmtNum(g.clicks));
       textLines.push("Click-through rate: " + fmtPct(g.ctr));
       textLines.push("Cost per click: " + fmtR(g.cpc));
-      var txtFollows = (parseFloat(g.follows || 0) + parseFloat(g.pageLikes || 0) + parseFloat(g.likes || 0));
-      var txtAppStore = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
+      var txtFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
+      var txtAppStore = parseFloat(g.appStoreClicks || 0);
       var txtLp = parseFloat(g.landingPageClicks || 0);
       if (g.leads > 0) textLines.push("Leads: " + fmtNum(g.leads) + " at " + fmtR(g.spend / g.leads) + " per lead");
       if (txtFollows > 0) textLines.push("New followers: " + fmtNum(txtFollows) + " at " + fmtR(g.spend / txtFollows) + " per follower");
