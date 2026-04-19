@@ -224,10 +224,21 @@ function ShareModal(props){
       .then(function(r){return r.json();})
       .then(function(d){
         auditLoading[1](false);
-        auditEntries[1](Array.isArray(d.entries)?d.entries:[]);
+        var entries=Array.isArray(d.entries)?d.entries:[];
+        // Defensive client-side sort newest-first in case the server ever returns out of order.
+        entries.sort(function(a,b){var aT=a&&a.sentAt?Date.parse(a.sentAt):0;var bT=b&&b.sentAt?Date.parse(b.sentAt):0;return bT-aT;});
+        auditEntries[1](entries);
         auditEnabled[1](d.enabled!==false);
       })
       .catch(function(){auditLoading[1](false);auditEnabled[1](true);auditEntries[1]([]);});
+  };
+  var deleteAuditEntry=function(id){
+    if(!id)return;
+    if(!window.confirm("Delete this log entry? This cannot be undone."))return;
+    fetch(props.apiBase+"/api/audit-log?id="+encodeURIComponent(id),{method:"DELETE",headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.ok){auditEntries[1](auditEntries[0].filter(function(e){return e.id!==id;}));}})
+      .catch(function(){});
   };
   useEffect(function(){if(auditOpen[0]){loadAudit();}},[auditOpen[0],emailSent[0]]);
   var filteredAudit=(function(){
@@ -377,19 +388,37 @@ function ShareModal(props){
             </div>
             {auditLoading[0]&&<div style={{color:P.sub,fontSize:11,fontFamily:fm,padding:"16px 4px"}}>Loading send log...</div>}
             {!auditLoading[0]&&filteredAudit.length===0&&<div style={{color:P.dim,fontSize:11,fontFamily:fm,padding:"18px 4px",textAlign:"center",fontStyle:"italic"}}>{auditEntries[0].length===0?"No emails sent yet. Send your first report to start the log.":"No matches for that search."}</div>}
-            {!auditLoading[0]&&filteredAudit.length>0&&<div style={{maxHeight:340,overflowY:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.25)"}}>
-              {filteredAudit.map(function(e,i){
-                var recipients=[].concat(e.to||[]);
-                return <div key={e.id||i} style={{padding:"10px 14px",borderBottom:i===filteredAudit.length-1?"none":"1px solid "+P.rule,fontSize:11,fontFamily:fm,lineHeight:1.5}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4,gap:8}}>
-                    <span style={{color:P.ember,fontWeight:800,letterSpacing:1,textTransform:"uppercase",fontSize:10}}>{e.clientName||e.clientSlug||"Unknown"}</span>
-                    <span style={{color:P.sub,fontSize:10}}>{fmtDate(e.sentAt)}</span>
-                  </div>
-                  <div style={{color:P.txt,marginBottom:2}}>{recipients.join(", ")||"—"}</div>
-                  {(e.cc&&e.cc.length>0)||(e.bcc&&e.bcc.length>0)?<div style={{color:P.dim,fontSize:10}}>{(e.cc&&e.cc.length>0?"cc: "+e.cc.join(", "):"")}{(e.cc&&e.cc.length>0)&&(e.bcc&&e.bcc.length>0)?"  ":""}{(e.bcc&&e.bcc.length>0?"bcc: "+e.bcc.join(", "):"")}</div>:null}
-                  <div style={{color:P.sub,fontSize:10,marginTop:3}}>Period: {e.fromDate||"—"} to {e.toDate||"—"} {e.senderName?"| Sent by "+e.senderName:""}{e.campaignCount?" | "+e.campaignCount+" campaign"+(e.campaignCount===1?"":"s"):""}</div>
-                </div>;
-              })}
+            {!auditLoading[0]&&filteredAudit.length>0&&<div style={{maxHeight:420,overflowY:"auto",overflowX:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.25)"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:700}}>
+                <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
+                  <tr>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Sent</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Client</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Sender</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>To</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Period</th>
+                    <th style={{padding:"9px 10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,width:40}}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAudit.map(function(e,i){
+                    var recipients=[].concat(e.to||[]).join(", ")||"—";
+                    var periodTxt=(e.fromDate||"—")+" to "+(e.toDate||"—");
+                    var clientTxt=e.clientName||(e.clientSlug?e.clientSlug.split("-").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" "):"Unknown");
+                    var extras=[];
+                    if(e.cc&&e.cc.length>0)extras.push("cc: "+e.cc.join(", "));
+                    if(e.bcc&&e.bcc.length>0)extras.push("bcc: "+e.bcc.join(", "));
+                    return <tr key={e.id||i} style={{borderBottom:"1px solid "+P.rule+"50"}}>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{fmtDate(e.sentAt)}</td>
+                      <td style={{padding:"10px",color:P.ember,fontWeight:700,verticalAlign:"top"}}>{clientTxt}</td>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{e.senderName||"—"}{e.senderTitle?<div style={{color:P.dim,fontSize:9,marginTop:2}}>{e.senderTitle}</div>:null}</td>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",wordBreak:"break-all"}}>{recipients}{extras.length>0?<div style={{color:P.dim,fontSize:9,marginTop:3}}>{extras.join("  |  ")}</div>:null}</td>
+                      <td style={{padding:"10px",color:P.sub,verticalAlign:"top",whiteSpace:"nowrap"}}>{periodTxt}{e.campaignCount?<div style={{color:P.dim,fontSize:9,marginTop:2}}>{e.campaignCount+" campaign"+(e.campaignCount===1?"":"s")}</div>:null}</td>
+                      <td style={{padding:"10px",textAlign:"right",verticalAlign:"top"}}><button onClick={function(){deleteAuditEntry(e.id);}} title="Delete this entry" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.dim,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}} onMouseEnter={function(ev){ev.currentTarget.style.borderColor=P.critical;ev.currentTarget.style.color=P.critical;}} onMouseLeave={function(ev){ev.currentTarget.style.borderColor=P.rule;ev.currentTarget.style.color=P.dim;}}>{"\u00D7"}</button></td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
             </div>}
           </div>}
         </div>}

@@ -63,3 +63,21 @@ export async function readEmailLog(limit) {
   });
   return out;
 }
+
+// Delete a single entry by id. Fetches the full list, filters out the match,
+// then replaces the list contents. Safe for <=1000 entries, small and fast enough
+// that atomic semantics aren't needed here.
+export async function deleteEmailLogEntry(id) {
+  if (!getCreds()) return { ok: false, reason: "not-configured" };
+  if (!id) return { ok: false, reason: "no-id" };
+  var entries = await readEmailLog(MAX_ENTRIES);
+  var filtered = entries.filter(function(e) { return e && e.id !== id; });
+  if (filtered.length === entries.length) return { ok: false, reason: "not-found" };
+  await redisCmd(["DEL", LOG_KEY]);
+  if (filtered.length > 0) {
+    var args = ["RPUSH", LOG_KEY];
+    filtered.forEach(function(e) { args.push(JSON.stringify(e)); });
+    await redisCmd(args);
+  }
+  return { ok: true, removed: entries.length - filtered.length };
+}
