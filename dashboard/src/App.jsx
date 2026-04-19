@@ -427,6 +427,125 @@ function ShareModal(props){
   </div>);
 }
 
+// Floating chat panel. Renders a brand-styled slide-in panel with a
+// conversation against /api/chat. Auth follows the existing pattern: client
+// share tokens send Bearer header, admins use x-api-key + x-session-token.
+function ChatPanel(props){
+  var internalOpen=useState(false);
+  // Controlled mode if parent supplies open + setOpen, otherwise self-manage.
+  var isOpen=typeof props.open==="boolean"?props.open:internalOpen[0];
+  var setIsOpen=props.setOpen||internalOpen[1];
+  var messages=useState([]);
+  var input=useState("");
+  var busy=useState(false);
+  var err=useState("");
+  var scrollRef=useState(null);
+  var autoHeightRef=useState(null);
+
+  var close=function(){setIsOpen(false);err[1]("");};
+  var openPanel=function(){setIsOpen(true);setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},80);};
+
+  var authHeaders=function(){
+    if(props.viewToken)return{"Content-Type":"application/json","Authorization":"Bearer "+props.viewToken};
+    return{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""};
+  };
+  var send=function(){
+    var msg=(input[0]||"").trim();
+    if(!msg||busy[0])return;
+    err[1]("");
+    var next=messages[0].concat([{role:"user",content:msg}]);
+    messages[1](next);
+    input[1]("");
+    busy[1](true);
+    setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
+    fetch(props.apiBase+"/api/chat",{
+      method:"POST",
+      headers:authHeaders(),
+      body:JSON.stringify({
+        message:msg,
+        history:next.slice(0,-1),
+        from:props.dateFrom,
+        to:props.dateTo
+      })
+    }).then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d};});})
+      .then(function(res){
+        busy[1](false);
+        if(!res.ok){err[1](res.data.error||"Chat error");return;}
+        messages[1](next.concat([{role:"assistant",content:res.data.message||""}]));
+        setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
+      })
+      .catch(function(){busy[1](false);err[1]("Connection error");});
+  };
+  var handleKey=function(e){
+    if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}
+  };
+  var autoSize=function(e){
+    input[1](e.target.value);
+    e.target.style.height="auto";
+    e.target.style.height=Math.min(120,e.target.scrollHeight)+"px";
+  };
+
+  var suggestions=[
+    "How are we doing overall this period?",
+    "Which platform is giving us the best value?",
+    "What is our best performing ad and why?",
+    "Where should we shift budget next?"
+  ];
+
+  return (<><button onClick={openPanel} title="Chat to your GAS Media Expert" style={{position:"fixed",right:22,bottom:22,zIndex:900,width:64,height:64,borderRadius:"50%",border:"none",background:gEmber,color:"#fff",cursor:"pointer",boxShadow:"0 10px 30px rgba(255,61,0,0.45), 0 0 0 1px rgba(255,255,255,0.08) inset",display:"flex",alignItems:"center",justifyContent:"center",animation:"pulse-glow 3s ease-in-out infinite"}}>
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6a3 3 0 013-3h10a3 3 0 013 3v8a3 3 0 01-3 3H9l-4 4v-4H7a3 3 0 01-3-3V6z" stroke="#fff" strokeWidth="1.8" fill="rgba(255,255,255,0.15)"/><circle cx="9" cy="10" r="1" fill="#fff"/><circle cx="12" cy="10" r="1" fill="#fff"/><circle cx="15" cy="10" r="1" fill="#fff"/></svg>
+  </button>
+  {isOpen&&<div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
+    <div onClick={close} style={{position:"absolute",inset:0,background:"rgba(6,2,14,0.55)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",pointerEvents:"auto"}}/>
+    <div onClick={function(e){e.stopPropagation();}} style={{position:"relative",width:440,maxWidth:"96vw",height:"100vh",background:"linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%)",borderLeft:"1px solid "+P.rule,boxShadow:"-24px 0 60px rgba(0,0,0,0.5)",display:"flex",flexDirection:"column",pointerEvents:"auto",animation:"gasEnter 0.35s cubic-bezier(0.2,0.8,0.2,1) both"}}>
+      <style>{"@keyframes gasEnter{0%{transform:translateX(40px);opacity:0}100%{transform:translateX(0);opacity:1}}"}</style>
+      <div style={{padding:"18px 20px 14px",borderBottom:"1px solid "+P.rule,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#FF3D00,#FF6B00)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 4px 16px rgba(255,61,0,0.35)"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#fff" strokeWidth="1.5" fill="rgba(255,255,255,0.2)" strokeLinejoin="round"/></svg>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>GAS Media Expert</div>
+          <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:2,letterSpacing:1}}>Live, scoped to your campaigns for {props.dateFrom} to {props.dateTo}</div>
+        </div>
+        <button onClick={close} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,width:32,height:32,color:P.sub,cursor:"pointer",fontSize:18,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
+      </div>
+
+      <div ref={function(el){scrollRef[1](el);}} style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
+        {messages[0].length===0&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px"}}>
+            <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.7}}>Hi, I am your GAS Media Expert. Ask me anything about this report and I will ground every answer in your live campaign data.</div>
+          </div>
+          <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginTop:4}}>Try asking</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {suggestions.map(function(s,i){return <button key={i} onClick={function(){input[1](s);setTimeout(send,10);}} style={{textAlign:"left",background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,cursor:"pointer",lineHeight:1.4,transition:"all 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.background="rgba(255,255,255,0.03)";}}>{s}</button>;})}
+          </div>
+        </div>}
+        {messages[0].map(function(m,i){
+          var isUser=m.role==="user";
+          return <div key={i} style={{display:"flex",justifyContent:isUser?"flex-end":"flex-start"}}>
+            <div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content}</div>
+          </div>;
+        })}
+        {busy[0]&&<div style={{display:"flex",justifyContent:"flex-start"}}>
+          <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div>
+        </div>}
+        {err[0]&&<div style={{background:P.critical+"12",border:"1px solid "+P.critical+"40",borderRadius:10,padding:"10px 14px",fontSize:11,color:P.critical,fontFamily:fm,lineHeight:1.5}}>{err[0]}</div>}
+      </div>
+
+      <div style={{padding:"14px 16px 18px",borderTop:"1px solid "+P.rule,background:"rgba(0,0,0,0.35)"}}>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+          <textarea ref={function(el){autoHeightRef[1](el);}} value={input[0]} onChange={autoSize} onKeyDown={handleKey} placeholder="Ask about your campaigns..." rows={1} style={{flex:1,resize:"none",background:P.glass,border:"1px solid "+P.rule,borderRadius:12,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,outline:"none",lineHeight:1.5,maxHeight:120,overflowY:"auto"}}/>
+          <button onClick={send} disabled={busy[0]||!(input[0]||"").trim()} style={{background:busy[0]||!(input[0]||"").trim()?P.rule:gEmber,border:"none",borderRadius:12,width:46,height:46,color:"#fff",cursor:busy[0]||!(input[0]||"").trim()?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:busy[0]||!(input[0]||"").trim()?"none":"0 4px 14px rgba(255,61,0,0.35)"}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="rgba(255,255,255,0.18)"/></svg>
+          </button>
+        </div>
+        <div style={{marginTop:8,fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:1,textAlign:"center"}}>AI-generated insights grounded in your live data. Verify key decisions with your team.</div>
+      </div>
+    </div>
+  </div>}
+  </>);
+}
+
 function genFlags(m,t,camps){
   var fl=[],id=1;
   var metaImpShare=m.impressions>0&&t.impressions>0?(m.impressions/(m.impressions+t.impressions)*100):0;
@@ -473,6 +592,7 @@ export default function MediaOnGas(){
   var ls=useState(true),loading=ls[0],setLoading=ls[1];
   var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
+  var scs=useState(false),showChat=scs[0],setShowChat=scs[1];
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
@@ -718,6 +838,7 @@ export default function MediaOnGas(){
     </header>
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
+    <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat}/>
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
@@ -1953,6 +2074,19 @@ export default function MediaOnGas(){
               })()}
             </div>;
           })()}
+
+          {/* Inline chat CTA, sits at the end of the Summary so clients always see it */}
+          <div style={{marginTop:36,background:"linear-gradient(135deg,rgba(249,98,3,0.12),rgba(168,85,247,0.08) 60%,rgba(6,2,14,0.4))",border:"1px solid "+P.ember+"30",borderLeft:"4px solid "+P.ember,borderRadius:16,padding:"28px 32px",display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
+            <div style={{width:64,height:64,borderRadius:16,background:"linear-gradient(135deg,#FF3D00,#FF6B00)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 8px 24px rgba(255,61,0,0.35)"}}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#fff" strokeWidth="1.5" fill="rgba(255,255,255,0.2)" strokeLinejoin="round"/></svg>
+            </div>
+            <div style={{flex:1,minWidth:240}}>
+              <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:800,marginBottom:6}}>Your Data, On Demand</div>
+              <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",lineHeight:1.15,marginBottom:6}}>Chat To Your GAS Media Expert Now</div>
+              <div style={{fontSize:12,color:P.sub,fontFamily:ff,lineHeight:1.6,maxWidth:560}}>Ask questions about this report, get expert answers grounded in your live campaign numbers. Which platform is performing, where to scale, why a metric moved, all scoped to this period only.</div>
+            </div>
+            <button onClick={function(){setShowChat(true);}} style={{background:gEmber,border:"none",borderRadius:12,padding:"14px 28px",color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2.5,textTransform:"uppercase",boxShadow:"0 6px 20px rgba(255,61,0,0.35)",flexShrink:0}}>Start Chat</button>
+          </div>
         </div>)}
         {tab==="overview"&&(<div>
 
