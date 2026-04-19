@@ -161,8 +161,15 @@ export default async function handler(req, res) {
       };
       if (insData.data) {
         insData.data.forEach(function(ins) {
-          var pub = ins.publisher_platform || "facebook";
-          if (pub !== "facebook" && pub !== "instagram") return;
+          // Map publisher platform to the display platform family.
+          // audience_network + messenger + oculus => Facebook. threads => Instagram.
+          // Matches Meta Ads Manager's default "Facebook" view and stops those
+          // placements from being silently dropped from totals.
+          var rawPub = (ins.publisher_platform || "facebook").toLowerCase();
+          var pub;
+          if (rawPub === "instagram" || rawPub === "threads") pub = "instagram";
+          else if (rawPub === "facebook" || rawPub === "audience_network" || rawPub === "messenger" || rawPub === "oculus") pub = "facebook";
+          else return; // genuinely unknown
           var spend = parseFloat(ins.spend || 0);
           var imps = parseInt(ins.impressions || 0);
           if (!(imps > 0 || spend > 0)) return;
@@ -210,15 +217,24 @@ export default async function handler(req, res) {
         var actRes = await fetch(actUrl);
         var actData = await actRes.json();
         if (actData.data) {
+          // Aggregate by (ad_id, FB/IG family) across all publisher rows so AN +
+          // Messenger action counts roll into Facebook not get dropped.
+          var familyAgg = {};
           actData.data.forEach(function(row) {
-            var pub = row.publisher_platform || "facebook";
-            if (pub !== "facebook" && pub !== "instagram") return;
+            var rawPub = (row.publisher_platform || "facebook").toLowerCase();
+            var pub;
+            if (rawPub === "instagram" || rawPub === "threads") pub = "instagram";
+            else if (rawPub === "facebook" || rawPub === "audience_network" || rawPub === "messenger" || rawPub === "oculus") pub = "facebook";
+            else return;
             var key = row.ad_id + "_" + pub;
-            if (!insMap[key]) return;
-            insMap[key].actionsAgg = {};
+            if (!familyAgg[key]) familyAgg[key] = {};
             (row.actions || []).forEach(function(a) {
-              insMap[key].actionsAgg[a.action_type] = parseInt(a.value || 0);
+              familyAgg[key][a.action_type] = (familyAgg[key][a.action_type] || 0) + parseInt(a.value || 0);
             });
+          });
+          Object.keys(familyAgg).forEach(function(key) {
+            if (!insMap[key]) return;
+            insMap[key].actionsAgg = familyAgg[key];
           });
         }
       } catch (actErr) { console.error("Meta actions override fetch error", account.name, actErr); }

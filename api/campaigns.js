@@ -57,82 +57,152 @@ export default async function handler(req, res) {
         if (pageData.data) allMetaRows = allMetaRows.concat(pageData.data);
         nextUrl = pageData.paging && pageData.paging.next ? pageData.paging.next : null;
       }
-      var data = { data: allMetaRows };
-      if (data.data) {
-        for (var j = 0; j < data.data.length; j++) {
-          var c = data.data[j];
-          if (parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0) {
-            var pub = c.publisher_platform || "facebook"; if (pub !== "facebook" && pub !== "instagram") continue;
-            var platName = "Facebook";
-            if (pub === "instagram") platName = "Instagram";
-            else if (pub === "audience_network") platName = "Audience Network";
-            else if (pub === "messenger") platName = "Messenger";
-            var uniqueId = c.campaign_id + "_" + pub;
-            seenIds[c.campaign_id] = true;
 
-            var leads = 0;
-            var appInstalls = 0;
-            var landingPageViews = 0;
-            var pageLikes = 0;
-            var pageFollows = 0;
-            if (c.actions) {
-              for (var a = 0; a < c.actions.length; a++) {
-                var act = c.actions[a];
-                if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") {
-                  leads = Math.max(leads, parseInt(act.value));
-                }
-                // Meta reports overlapping action types (app_install, mobile_app_install,
-                // omni_app_install, app_custom_event.fb_mobile_activate_app). Using += over-counts.
-                // Math.max is the consistent pattern used for leads, landing_page_view, etc.
-                if (act.action_type === "app_custom_event.fb_mobile_activate_app" ||
-                    act.action_type === "app_install" ||
-                    act.action_type === "mobile_app_install" ||
-                    act.action_type === "omni_app_install") {
-                  appInstalls = Math.max(appInstalls, parseInt(act.value));
-                }
-                if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
-                  landingPageViews = Math.max(landingPageViews, parseInt(act.value));
-                }
-                if (act.action_type === "like") {
-                  pageLikes = parseInt(act.value);
-                }
-                if (act.action_type === "page_engagement") {
-                  pageFollows = parseInt(act.value);
-                }
+      // Authoritative campaign-level reach (no breakdowns). Meta dedupes reach across
+      // placements at the campaign level; summing or maxing the publisher rows isn't
+      // the same number as what Ads Manager reports in its default "campaign reach"
+      // view. We fetch it once here and apportion it to the merged FB / IG rows below
+      // so the dashboard total matches the source of truth.
+      var reachMap = {};
+      try {
+        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        var rAll = [];
+        var rNext = reachUrl;
+        var rGuard = 0;
+        while (rNext && rGuard < 10) {
+          rGuard++;
+          var rRes = await fetch(rNext);
+          if (!rRes.ok) break;
+          var rJson = await rRes.json();
+          if (rJson.data) rAll = rAll.concat(rJson.data);
+          rNext = rJson.paging && rJson.paging.next ? rJson.paging.next : null;
+        }
+        rAll.forEach(function(row) { reachMap[String(row.campaign_id)] = parseInt(row.reach || 0); });
+      } catch (_) { /* non-fatal */ }
+
+      // Merge publisher rows into one row per (campaign_id, platform family).
+      // audience_network + messenger + oculus collapse into Facebook. threads into
+      // Instagram. This matches Meta Ads Manager's default "Facebook" view (which is
+      // inclusive of AN + Messenger) and stops those placements from being silently dropped.
+      var mapPubToPlat = function(pub) {
+        var p = (pub || "facebook").toLowerCase();
+        if (p === "instagram" || p === "threads") return "Instagram";
+        if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
+        return null;
+      };
+      var rowMap = {};
+
+      if (allMetaRows.length > 0) {
+        for (var j = 0; j < allMetaRows.length; j++) {
+          var c = allMetaRows[j];
+          if (!(parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0)) continue;
+          var platName = mapPubToPlat(c.publisher_platform || "facebook");
+          if (!platName) continue;
+          var uniqueId = c.campaign_id + "_" + platName.toLowerCase();
+          seenIds[c.campaign_id] = true;
+
+          var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, pageFollows = 0;
+          if (c.actions) {
+            for (var a = 0; a < c.actions.length; a++) {
+              var act = c.actions[a];
+              if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") {
+                leads = Math.max(leads, parseInt(act.value));
               }
+              if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") {
+                appInstalls = Math.max(appInstalls, parseInt(act.value));
+              }
+              if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
+                landingPageViews = Math.max(landingPageViews, parseInt(act.value));
+              }
+              if (act.action_type === "like") pageLikes = Math.max(pageLikes, parseInt(act.value));
+              if (act.action_type === "page_engagement") pageFollows = Math.max(pageFollows, parseInt(act.value));
             }
+          }
 
-            allCampaigns.push({
+          if (!rowMap[uniqueId]) {
+            rowMap[uniqueId] = {
               platform: platName,
-              metaPlatform: pub,
+              metaPlatform: platName.toLowerCase(),
               accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""),
               accountId: account.id,
               campaignId: uniqueId,
               rawCampaignId: c.campaign_id,
               campaignName: c.campaign_name,
-              impressions: c.impressions,
-              reach: c.reach,
-              frequency: c.frequency,
-              spend: c.spend,
-              cpm: c.cpm,
-              cpc: c.cpc,
-              ctr: c.ctr,
-              clicks: c.clicks,
-              leads: leads.toString(),
-              appInstalls: appInstalls.toString(),
-              landingPageViews: landingPageViews.toString(),
-              pageLikes: pageLikes.toString(),
-              pageFollows: pageFollows.toString(),
-              costPerLead: leads > 0 ? (parseFloat(c.spend) / leads).toFixed(2) : "0",
-              costPerInstall: appInstalls > 0 ? (parseFloat(c.spend) / appInstalls).toFixed(2) : "0",
-              actions: c.actions || [],
-              startDate: campaignInfo[c.campaign_id] && campaignInfo[c.campaign_id].startTime ? campaignInfo[c.campaign_id].startTime.substring(0,10) : "",
-              endDate: campaignInfo[c.campaign_id] && campaignInfo[c.campaign_id].stopTime ? campaignInfo[c.campaign_id].stopTime.substring(0,10) : "",
-              status: campaignInfo[c.campaign_id] ? campaignInfo[c.campaign_id].status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active"
-            });
+              _sumImpressions: 0, _sumSpend: 0, _sumClicks: 0, _sumReachPublisher: 0,
+              leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, pageFollows: 0,
+              actions: []
+            };
           }
+          var row = rowMap[uniqueId];
+          row._sumImpressions += parseFloat(c.impressions || 0);
+          row._sumSpend += parseFloat(c.spend || 0);
+          row._sumClicks += parseFloat(c.clicks || 0);
+          row._sumReachPublisher += parseFloat(c.reach || 0);
+          row.leads = Math.max(row.leads, leads);
+          row.appInstalls = Math.max(row.appInstalls, appInstalls);
+          row.landingPageViews = Math.max(row.landingPageViews, landingPageViews);
+          row.pageLikes = Math.max(row.pageLikes, pageLikes);
+          row.pageFollows = Math.max(row.pageFollows, pageFollows);
+          if (c.actions) row.actions = row.actions.concat(c.actions);
         }
       }
+
+      // Apportion authoritative campaign reach across merged FB / IG rows by
+      // impression share so the dashboard total matches the authoritative number.
+      // Fallback to the summed publisher reach when authoritative isn't available.
+      var campTotalImps = {};
+      Object.keys(rowMap).forEach(function(k) {
+        var r = rowMap[k];
+        campTotalImps[r.rawCampaignId] = (campTotalImps[r.rawCampaignId] || 0) + r._sumImpressions;
+      });
+
+      Object.keys(rowMap).forEach(function(k) {
+        var r = rowMap[k];
+        var authReach = reachMap[String(r.rawCampaignId)];
+        var totalImps = campTotalImps[r.rawCampaignId] || 0;
+        var reachForRow;
+        if (authReach && totalImps > 0) {
+          reachForRow = Math.round(authReach * (r._sumImpressions / totalImps));
+        } else {
+          reachForRow = r._sumReachPublisher;
+        }
+        var impsStr = r._sumImpressions.toString();
+        var spendStr = r._sumSpend.toFixed(2);
+        var clicksStr = r._sumClicks.toString();
+        var reachStr = reachForRow.toString();
+        var cpm = r._sumImpressions > 0 ? ((r._sumSpend / r._sumImpressions) * 1000).toFixed(2) : "0";
+        var cpc = r._sumClicks > 0 ? (r._sumSpend / r._sumClicks).toFixed(2) : "0";
+        var ctr = r._sumImpressions > 0 ? ((r._sumClicks / r._sumImpressions) * 100).toFixed(2) : "0";
+        var freq = reachForRow > 0 ? (r._sumImpressions / reachForRow).toFixed(2) : "0";
+        allCampaigns.push({
+          platform: r.platform,
+          metaPlatform: r.metaPlatform,
+          accountName: r.accountName,
+          accountId: r.accountId,
+          campaignId: r.campaignId,
+          rawCampaignId: r.rawCampaignId,
+          campaignName: r.campaignName,
+          impressions: impsStr,
+          reach: reachStr,
+          frequency: freq,
+          spend: spendStr,
+          cpm: cpm,
+          cpc: cpc,
+          ctr: ctr,
+          clicks: clicksStr,
+          leads: r.leads.toString(),
+          appInstalls: r.appInstalls.toString(),
+          landingPageViews: r.landingPageViews.toString(),
+          pageLikes: r.pageLikes.toString(),
+          pageFollows: r.pageFollows.toString(),
+          costPerLead: r.leads > 0 ? (r._sumSpend / r.leads).toFixed(2) : "0",
+          costPerInstall: r.appInstalls > 0 ? (r._sumSpend / r.appInstalls).toFixed(2) : "0",
+          actions: r.actions || [],
+          startDate: campaignInfo[r.rawCampaignId] && campaignInfo[r.rawCampaignId].startTime ? campaignInfo[r.rawCampaignId].startTime.substring(0,10) : "",
+          endDate: campaignInfo[r.rawCampaignId] && campaignInfo[r.rawCampaignId].stopTime ? campaignInfo[r.rawCampaignId].stopTime.substring(0,10) : "",
+          status: campaignInfo[r.rawCampaignId] ? campaignInfo[r.rawCampaignId].status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active"
+        });
+      });
     } catch (err) { console.error("Meta insights error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "insights", message: String(err && err.message || err) }); }
 
     Object.keys(campaignInfo).forEach(function(cid) {
