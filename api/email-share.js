@@ -517,12 +517,20 @@ export default async function handler(req, res) {
   var ccList = parseList(body.emailCc);
   var bccList = parseList(body.emailBcc);
 
+  // Preview mode: build the HTML and return it without sending. Used by the
+  // Share modal's preview pane so account managers can review the final email
+  // before committing the send.
+  var previewMode = body.preview === true;
+
   if (!clientSlug) { res.status(400).json({ error: "clientSlug required" }); return; }
   if (campaignIds.length === 0 && campaignNames.length === 0) {
     res.status(400).json({ error: "Select at least one campaign" }); return;
   }
   if (!from || !to) { res.status(400).json({ error: "from and to dates required" }); return; }
-  if (toList.length === 0) { res.status(400).json({ error: "At least one valid recipient email required" }); return; }
+  // Only require a recipient email for actual sends, preview doesn't need it
+  if (!previewMode && toList.length === 0) {
+    res.status(400).json({ error: "At least one valid recipient email required" }); return;
+  }
 
   try {
     var token = issueToken({
@@ -591,6 +599,22 @@ export default async function handler(req, res) {
     textLines.push("GAS Marketing Automation");
     textLines.push("grow@gasmarketing.co.za");
     var text = textLines.join("\n");
+
+    // Preview short-circuit: return the rendered HTML + plain text so the
+    // Share modal can show it for account-manager review. No send, no audit.
+    if (previewMode) {
+      res.status(200).json({
+        ok: true,
+        preview: true,
+        html: html,
+        text: text,
+        shareUrl: shareUrl,
+        expiresAt: expiresAt,
+        summaryEmbedded: !!summary,
+        topAdsEmbedded: !!topAds
+      });
+      return;
+    }
 
     var transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",

@@ -128,6 +128,8 @@ function ShareModal(props){
   var emailSent=useState(false);
   var emailSentTo=useState("");
   var emailDiagnostic=useState("");
+  var previewHtml=useState("");
+  var previewLoading=useState(false);
   var personalMsg=useState("");
   var senderName=useState("");
   var senderTitle=useState("");
@@ -187,18 +189,35 @@ function ShareModal(props){
       else{err[1](d.error||"Could not generate link");}
     }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
-  var sendEmail=function(){
+  // Preview flow: fetch the rendered email HTML, show it in an iframe pane
+  // so the account manager reviews before committing the send.
+  var requestPreview=function(){
     if(!validateBasics())return;
     var emailRe=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if(!emailRe.test((emailTo[0]||"").trim())){err[1]("Enter a valid recipient email");return;}
-    err[1]("");busy[1](true);emailSent[1](false);
+    if(!emailRe.test((emailTo[0]||"").trim())){err[1]("Enter a valid recipient email to preview and send");return;}
+    err[1]("");previewLoading[1](true);previewHtml[1]("");
     var payload=buildCampaignPayload();
-    // Email recipients use distinct field names so they cannot collide with the
-    // date range "to" field, a previous bug substituted the email address into the
-    // body's "to date" rendering in the email.
     payload.emailTo=emailTo[0].trim();
     payload.emailCc=emailCc[0].trim();
     payload.emailBcc=emailBcc[0].trim();
+    payload.preview=true;
+    fetch(props.apiBase+"/api/email-share",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
+      body:JSON.stringify(payload)
+    }).then(function(r){return r.json();}).then(function(d){
+      previewLoading[1](false);
+      if(d.ok&&d.html){previewHtml[1](d.html);}
+      else{err[1](d.error||"Could not build preview");}
+    }).catch(function(){previewLoading[1](false);err[1]("Connection error");});
+  };
+  var confirmSend=function(){
+    err[1]("");busy[1](true);emailSent[1](false);
+    var payload=buildCampaignPayload();
+    payload.emailTo=emailTo[0].trim();
+    payload.emailCc=emailCc[0].trim();
+    payload.emailBcc=emailBcc[0].trim();
+    // preview omitted -> real send
     fetch(props.apiBase+"/api/email-share",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
@@ -206,13 +225,15 @@ function ShareModal(props){
     }).then(function(r){return r.json();}).then(function(d){
       busy[1](false);
       if(d.ok){
+        previewHtml[1]("");
         shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt);
         emailSent[1](true);emailSentTo[1]((d.sentTo||[]).join(", "));emailDiagnostic[1](d.diagnostic||"");
       }
       else{err[1](d.error||"Could not send email");}
     }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
-  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");emailDiagnostic[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");recipientName[1]("");};
+  var cancelPreview=function(){previewHtml[1]("");err[1]("");};
+  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");emailDiagnostic[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");recipientName[1]("");previewHtml[1]("");};
 
   // Audit trail state
   var auditOpen=useState(false);
@@ -283,7 +304,30 @@ function ShareModal(props){
     URL.revokeObjectURL(url);
   };
   var fmtDate=function(iso){if(!iso)return"—";var d=new Date(iso);if(isNaN(d.getTime()))return iso;return d.toLocaleString("en-ZA",{year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit"});};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
+  return(<>
+  {/* Preview overlay (on top of the share modal) */}
+  {previewHtml[0]&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:1100,padding:"24px 16px",backdropFilter:"blur(8px)"}} onClick={function(e){if(e.target===e.currentTarget)cancelPreview();}}>
+    <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"18px 22px",maxWidth:780,width:"100%",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 48px)",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
+        <div>
+          <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:4}}>Email Preview</div>
+          <div style={{fontSize:12,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Review this before confirming. To: <span style={{color:P.txt,fontWeight:700}}>{emailTo[0]}</span>{emailCc[0]?<span> | cc: <span style={{color:P.txt}}>{emailCc[0]}</span></span>:null}{emailBcc[0]?<span> | bcc: <span style={{color:P.txt}}>{emailBcc[0]}</span></span>:null}</div>
+        </div>
+        <button onClick={cancelPreview} title="Close preview" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      <div style={{flex:1,background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid "+P.rule,minHeight:400}}>
+        <iframe title="Email preview" srcDoc={previewHtml[0]} style={{width:"100%",height:"100%",minHeight:"60vh",border:"none",display:"block",background:"#06020e"}}/>
+      </div>
+      {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginTop:10}}>{err[0]}</div>}
+      <div style={{display:"flex",gap:10,marginTop:14}}>
+        <button onClick={cancelPreview} disabled={busy[0]} style={{flex:1,background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>Go Back and Edit</button>
+        <button onClick={confirmSend} disabled={busy[0]} style={{flex:2,background:busy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:2}}>{busy[0]?"SENDING...":"CONFIRM AND SEND"}</button>
+      </div>
+    </div>
+  </div>}
+  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
     <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto"}}>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
       <div style={{fontSize:12,color:P.sub,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
@@ -348,8 +392,8 @@ function ShareModal(props){
       {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12}}>{err[0]}</div>}
 
       {!shareUrl[0]&&<div style={{display:"flex",gap:10}}>
-        <button onClick={generate} disabled={busy[0]} style={{flex:1,background:busy[0]?"#555":"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>{busy[0]?"WORKING...":"LINK ONLY"}</button>
-        <button onClick={sendEmail} disabled={busy[0]} style={{flex:2,background:busy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:2}}>{busy[0]?"SENDING...":"SEND EMAIL + LINK"}</button>
+        <button onClick={generate} disabled={busy[0]||previewLoading[0]} style={{flex:1,background:busy[0]?"#555":"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>{busy[0]?"WORKING...":"LINK ONLY"}</button>
+        <button onClick={requestPreview} disabled={busy[0]||previewLoading[0]} style={{flex:2,background:(busy[0]||previewLoading[0])?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:(busy[0]||previewLoading[0])?"wait":"pointer",letterSpacing:2}}>{previewLoading[0]?"BUILDING PREVIEW...":busy[0]?"SENDING...":"PREVIEW + SEND"}</button>
       </div>}
 
       {shareUrl[0]&&<div style={{marginTop:4}}>
@@ -430,6 +474,113 @@ function ShareModal(props){
             </div>}
           </div>}
         </div>}
+      </div>
+    </div>
+  </div>
+  </>);
+}
+
+// Admin-only full-inventory audit of every campaign and its detected objective.
+// Critical for agency KPI reporting, lets managers spot-check classification accuracy.
+function CampaignAuditModal(props){
+  var rows=useState([]);
+  var loading=useState(false);
+  var err=useState("");
+  var query=useState("");
+  var platFilter=useState("all");
+  var objFilter=useState("all");
+
+  var load=function(){
+    loading[1](true);err[1]("");
+    fetch(props.apiBase+"/api/objective-audit",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){loading[1](false);if(Array.isArray(d.campaigns)){rows[1](d.campaigns);}else{err[1](d.error||"Could not load audit");}})
+      .catch(function(){loading[1](false);err[1]("Connection error");});
+  };
+  useEffect(function(){if(props.open)load();},[props.open]);
+
+  var data=rows[0]||[];
+  var q=(query[0]||"").toLowerCase().trim();
+  var filtered=data.filter(function(c){
+    if(platFilter[0]!=="all"&&c.platform!==platFilter[0])return false;
+    if(objFilter[0]!=="all"&&c.detectedObjective!==objFilter[0])return false;
+    if(q){
+      var hay=(c.campaignName+" "+c.accountName+" "+c.apiObjective+" "+c.detectedObjective).toLowerCase();
+      if(hay.indexOf(q)<0)return false;
+    }
+    return true;
+  });
+  var platforms={};data.forEach(function(c){platforms[c.platform]=true;});
+  var objectives={};data.forEach(function(c){objectives[c.detectedObjective]=true;});
+  var objCol={"Lead Generation":P.rose,"Click to App Install":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan};
+
+  var exportCsv=function(){
+    var header=["Platform","Account","Campaign Name","Detected Objective","Classification Source","API Objective","Status","Campaign ID"];
+    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.classificationSource,c.apiObjective,c.status,c.campaignId];}));
+    var csv=all.map(function(r){return r.map(function(cell){var s=String(cell||"");if(s.indexOf(",")>=0||s.indexOf('"')>=0||s.indexOf("\n")>=0){return '"'+s.replace(/"/g,'""')+'"';}return s;}).join(",");}).join("\n");
+    var blob=new Blob([csv],{type:"text/csv"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;a.download="campaign-objective-audit-"+(new Date()).toISOString().slice(0,10)+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
+  if(!props.open)return null;
+  return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(8px)",padding:"24px 16px"}} onClick={function(e){if(e.target===e.currentTarget)props.onClose();}}>
+    <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 26px",width:1100,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Campaign Objective Audit</div>
+          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>{loading[0]?"Loading campaigns from all platforms...":data.length+" campaigns across "+Object.keys(platforms).length+" platforms. Filter or search to verify objective accuracy. Export for review with the team."}</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>
+          <button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>
+          <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+        <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+        <select value={platFilter[0]} onChange={function(e){platFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
+          <option value="all">All platforms</option>
+          {Object.keys(platforms).sort().map(function(p){return <option key={p} value={p}>{p}</option>;})}
+        </select>
+        <select value={objFilter[0]} onChange={function(e){objFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
+          <option value="all">All objectives</option>
+          {Object.keys(objectives).sort().map(function(o){return <option key={o} value={o}>{o}</option>;})}
+        </select>
+      </div>
+      {err[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{err[0]}</div>}
+      <div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
+          <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
+            <tr>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Platform</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Account</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Campaign</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Detected Objective</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Why</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>API Objective</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(function(c,i){
+              var oc=objCol[c.detectedObjective]||P.sub;
+              return <tr key={c.campaignId+"_"+i} style={{borderBottom:"1px solid "+P.rule+"50"}}>
+                <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.platform}</td>
+                <td style={{padding:"10px",color:P.sub,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.accountName}</td>
+                <td style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:320}}>{c.campaignName}</td>
+                <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}><span style={{background:oc+"18",border:"1px solid "+oc+"50",color:oc,padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{c.detectedObjective}</span></td>
+                <td style={{padding:"10px",color:P.sub,verticalAlign:"top",fontSize:10,lineHeight:1.5}}>{c.classificationSource}</td>
+                <td style={{padding:"10px",color:P.dim,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.apiObjective||"—"}</td>
+                <td style={{padding:"10px",color:P.dim,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.status||"—"}</td>
+              </tr>;
+            })}
+            {filtered.length===0&&!loading[0]&&<tr><td colSpan={7} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the current filter.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>);
@@ -744,6 +895,7 @@ export default function MediaOnGas(){
   var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
   var scs=useState(false),showChat=scs[0],setShowChat=scs[1];
+  var sa=useState(false),showAudit=sa[0],setShowAudit=sa[1];
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
@@ -980,6 +1132,7 @@ export default function MediaOnGas(){
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.sub,14)} {selected.length} Campaigns</button>}
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
+            {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Campaign Objective Audit" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.solar,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,14)} Audit</button>}
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
             {!isClient&&<button onClick={handleLogout} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.dim,fontSize:10,fontWeight:600,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>LOGOUT</button>}
           </div>
@@ -989,6 +1142,7 @@ export default function MediaOnGas(){
     </header>
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
+    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session}/>
     <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
