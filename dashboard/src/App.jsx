@@ -1584,18 +1584,10 @@ export default function MediaOnGas(){
                   objGroups.forEach(function(og){
                     var objAds;
                     if(og.key==="followers"){
-                      // Follows/page_likes fire from any ad, not just Page-Likes-objective campaigns.
-                      // Union in every ad that earned follows so the section reflects true follower contribution.
-                      objAds=platAds.filter(function(a){
-                        var raw=parseFloat(a.followsRaw||0);
-                        return (a.objective||"landingpage")==="followers"||raw>0;
-                      }).map(function(a){
-                        var raw=parseFloat(a.followsRaw||0);
-                        if((a.resultType||"")!=="follows"&&raw>0){
-                          return Object.assign({},a,{results:raw,resultType:"follows"});
-                        }
-                        return a;
-                      });
+                      // Strict match: only ads whose campaign objective is Followers / Page Likes /
+                      // Engagement. App Install and other campaigns often pick up a handful of
+                      // incidental likes which previously made them appear here, confusingly.
+                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")==="followers";});
                     } else if(og.key==="landingpage"){
                       // LP objective ranks and displays by CLICKS. Some platforms (Google) return
                       // conversions alongside clicks, and the backend stores results = conversions
@@ -1871,24 +1863,16 @@ export default function MediaOnGas(){
 
             // Group ads by objective. Followers gets a special union: any ad that earned
             // follows (even if its primary objective was leads or landing page) counts toward
-            // the Followers bucket, so incidental follower contribution is visible.
+            // Strict objective grouping. Earlier we unioned in any ad with incidental
+            // follows, which pulled App Install / Lead Gen ads into the Followers bucket.
+            // Reverted so the Followers section only shows ads whose campaign objective
+            // is Followers / Page Likes / Engagement.
             var byObj={};
             filteredAds.forEach(function(a){
               var o=a.objective||"landingpage";
               if(!byObj[o])byObj[o]=[];
               byObj[o].push(a);
             });
-            var followersAds=filteredAds.filter(function(a){
-              var raw=parseFloat(a.followsRaw||0);
-              return (a.objective||"landingpage")==="followers"||raw>0;
-            }).map(function(a){
-              var raw=parseFloat(a.followsRaw||0);
-              if((a.resultType||"")!=="follows"&&raw>0){
-                return Object.assign({},a,{results:raw,resultType:"follows"});
-              }
-              return a;
-            });
-            byObj["followers"]=followersAds;
 
             // Aggregate totals per objective
             var totalsForSec=function(arr){
