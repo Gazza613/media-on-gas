@@ -483,12 +483,23 @@ function ShareModal(props){
 // Admin-only full-inventory audit of every campaign and its detected objective.
 // Critical for agency KPI reporting, lets managers spot-check classification accuracy.
 function CampaignAuditModal(props){
+  var view=useState("audit"); // "audit" | "reconcile"
   var rows=useState([]);
   var loading=useState(false);
   var err=useState("");
   var query=useState("");
   var platFilter=useState("all");
   var objFilter=useState("all");
+
+  // Reconciliation state
+  var recRows=useState([]);
+  var recSummary=useState(null);
+  var recLoading=useState(false);
+  var recErr=useState("");
+  var recSending=useState(false);
+  var recSent=useState("");
+  var recQuery=useState("");
+  var recStatusFilter=useState("all");
 
   var load=function(){
     loading[1](true);err[1]("");
@@ -497,7 +508,24 @@ function CampaignAuditModal(props){
       .then(function(d){loading[1](false);if(Array.isArray(d.campaigns)){rows[1](d.campaigns);}else{err[1](d.error||"Could not load audit");}})
       .catch(function(){loading[1](false);err[1]("Connection error");});
   };
-  useEffect(function(){if(props.open)load();},[props.open]);
+  var loadReconcile=function(sendAlert){
+    recErr[1]("");
+    if(sendAlert)recSending[1](true); else recLoading[1](true);
+    var qs="?from="+encodeURIComponent(props.dateFrom||"")+"&to="+encodeURIComponent(props.dateTo||"")+(sendAlert?"&alert=1":"");
+    fetch(props.apiBase+"/api/reconcile"+qs,{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        recLoading[1](false);recSending[1](false);
+        if(Array.isArray(d.rows)){
+          recRows[1](d.rows);recSummary[1](d.summary||null);
+          if(sendAlert&&d.alert&&d.alert.ok)recSent[1]("Alert emailed to gary@gasmarketing.co.za");
+          else if(sendAlert&&d.alert&&!d.alert.ok)recSent[1]("Alert skipped: "+(d.alert.reason||"unknown"));
+        } else { recErr[1](d.error||"Could not load reconciliation"); }
+      })
+      .catch(function(){recLoading[1](false);recSending[1](false);recErr[1]("Connection error");});
+  };
+  useEffect(function(){if(props.open&&view[0]==="audit")load();},[props.open,view[0]]);
+  useEffect(function(){if(props.open&&view[0]==="reconcile"&&recRows[0].length===0)loadReconcile(false);},[props.open,view[0]]);
 
   var data=rows[0]||[];
   var q=(query[0]||"").toLowerCase().trim();
@@ -527,20 +555,24 @@ function CampaignAuditModal(props){
   if(!props.open)return null;
   return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(8px)",padding:"24px 16px"}} onClick={function(e){if(e.target===e.currentTarget)props.onClose();}}>
     <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 26px",width:1100,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
-        <div>
-          <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Campaign Objective Audit</div>
-          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>{loading[0]?"Loading campaigns from all platforms...":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,background:"rgba(0,0,0,0.35)",border:"1px solid "+P.rule,borderRadius:12,padding:4}}>
+          <button onClick={function(){view[1]("audit");}} style={{background:view[0]==="audit"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="audit"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="audit"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Objective Audit</button>
+          <button onClick={function(){view[1]("reconcile");}} style={{background:view[0]==="reconcile"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="reconcile"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="reconcile"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>Data Reconciliation{recSummary[0]&&recSummary[0].red>0?<span style={{background:P.critical,color:"#fff",fontSize:9,padding:"1px 6px",borderRadius:4}}>{recSummary[0].red}</span>:null}</button>
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>
-          <button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>
+          {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
+          {view[0]==="audit"&&<button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>}
+          {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(false);}} disabled={recLoading[0]||recSending[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recLoading[0]?"RUNNING...":"RE-RUN"}</button>}
+          {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(true);}} disabled={recLoading[0]||recSending[0]} title="Run check + email Gary if any deltas found" style={{background:recSending[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recSending[0]?"SENDING...":"CHECK + ALERT"}</button>}
           <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           </button>
         </div>
       </div>
-      <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+      {view[0]==="audit"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Loading campaigns from all platforms...":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
+      {view[0]==="reconcile"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Ground truth from Meta / TikTok / Google APIs compared to what the dashboard computes for <strong style={{color:P.ember}}>{props.dateFrom}</strong> to <strong style={{color:P.ember}}>{props.dateTo}</strong>. Green = delta less than 1%, yellow = 1 to 5%, red = more than 5%.{recSent[0]?<span style={{color:P.mint,marginLeft:10}}>{recSent[0]}</span>:null}</div>}
+      {view[0]==="audit"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         <select value={platFilter[0]} onChange={function(e){platFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
           <option value="all">All platforms</option>
@@ -550,9 +582,25 @@ function CampaignAuditModal(props){
           <option value="all">All objectives</option>
           {Object.keys(objectives).sort().map(function(o){return <option key={o} value={o}>{o}</option>;})}
         </select>
-      </div>
-      {err[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{err[0]}</div>}
-      <div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
+      </div>}
+      {view[0]==="reconcile"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <input value={recQuery[0]} onChange={function(e){recQuery[1](e.target.value);}} placeholder="Search campaign..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+        <select value={recStatusFilter[0]} onChange={function(e){recStatusFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
+          <option value="all">All statuses</option>
+          <option value="red">Red only</option>
+          <option value="yellow">Yellow + Red</option>
+          <option value="green">Green only</option>
+        </select>
+        {recSummary[0]&&<div style={{display:"flex",gap:8,fontSize:10,fontFamily:fm,letterSpacing:1,fontWeight:800}}>
+          <span style={{color:P.mint}}>{recSummary[0].green} GREEN</span>
+          <span style={{color:P.warning}}>{recSummary[0].yellow} YELLOW</span>
+          <span style={{color:P.critical}}>{recSummary[0].red} RED</span>
+        </div>}
+      </div>}
+      {view[0]==="audit"&&err[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{err[0]}</div>}
+      {view[0]==="reconcile"&&recErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{recErr[0]}</div>}
+      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>Fetching ground truth from each platform, this takes 10 to 20 seconds...</div>}
+      {view[0]==="audit"&&<div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
           <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
             <tr>
@@ -583,7 +631,52 @@ function CampaignAuditModal(props){
             {filtered.length===0&&!loading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the current filter.</td></tr>}
           </tbody>
         </table>
-      </div>
+      </div>}
+      {view[0]==="reconcile"&&recRows[0].length>0&&(function(){
+        var rq=(recQuery[0]||"").toLowerCase().trim();
+        var filteredRec=recRows[0].filter(function(r){
+          if(recStatusFilter[0]==="red"&&r.overallStatus!=="red")return false;
+          if(recStatusFilter[0]==="yellow"&&r.overallStatus==="green")return false;
+          if(recStatusFilter[0]==="green"&&r.overallStatus!=="green")return false;
+          if(rq){var hay=(r.campaignName+" "+r.platform+" "+r.accountName).toLowerCase();if(hay.indexOf(rq)<0)return false;}
+          return true;
+        });
+        var statusBg={green:P.mint,yellow:P.warning,red:P.critical};
+        var fmtNum=function(n){var v=parseFloat(n||0);if(v>=1e6)return(v/1e6).toFixed(2)+"M";if(v>=1e3)return(v/1e3).toFixed(1)+"K";return Math.round(v).toLocaleString();};
+        var fmtVal=function(name,n){if(name==="spend")return "R"+(parseFloat(n||0)).toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});return fmtNum(n);};
+        return <div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:1000}}>
+            <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
+              <tr>
+                <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Platform</th>
+                <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Campaign</th>
+                <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Metric</th>
+                <th style={{padding:"10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Source of Truth</th>
+                <th style={{padding:"10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Dashboard</th>
+                <th style={{padding:"10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Delta %</th>
+                <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRec.map(function(r,i){
+                return r.metrics.map(function(m,mi){
+                  var c=statusBg[m.status];
+                  return <tr key={r.campaignId+"_"+m.name+"_"+i+"_"+mi} style={{borderBottom:mi===r.metrics.length-1?"2px solid "+P.rule:"1px solid "+P.rule+"30"}}>
+                    {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap",borderRight:"1px solid "+P.rule+"40"}}>{r.platform}</td>:null}
+                    {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:280,borderRight:"1px solid "+P.rule+"40"}}>{r.campaignName}<div style={{color:P.dim,fontSize:9,marginTop:3,fontFamily:fm}}>{r.accountName}</div></td>:null}
+                    <td style={{padding:"6px 10px",color:P.sub,verticalAlign:"middle",textTransform:"uppercase",letterSpacing:1,fontSize:10,fontWeight:700}}>{m.name}</td>
+                    <td align="right" style={{padding:"6px 10px",color:P.txt,verticalAlign:"middle",fontFamily:fm}}>{fmtVal(m.name,m.source)}</td>
+                    <td align="right" style={{padding:"6px 10px",color:P.txt,verticalAlign:"middle",fontFamily:fm}}>{fmtVal(m.name,m.dashboard)}</td>
+                    <td align="right" style={{padding:"6px 10px",color:c,fontWeight:800,verticalAlign:"middle",fontFamily:fm}}>{m.deltaPct.toFixed(2)+"%"}</td>
+                    <td style={{padding:"6px 10px",verticalAlign:"middle"}}><span style={{background:c+"20",border:"1px solid "+c+"60",color:c,padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{m.status}</span></td>
+                  </tr>;
+                });
+              })}
+              {filteredRec.length===0&&!recLoading[0]&&<tr><td colSpan={7} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the filter.</td></tr>}
+            </tbody>
+          </table>
+        </div>;
+      })()}
     </div>
   </div>);
 }
@@ -1176,7 +1269,7 @@ export default function MediaOnGas(){
     </header>
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
-    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session}/>
+    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt}/>
     <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
