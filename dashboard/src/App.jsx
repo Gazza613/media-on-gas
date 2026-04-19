@@ -487,12 +487,13 @@ function ChatPanel(props){
       var accumulated="";
       var finish=function(){
         busy[1](false);
-        // Strip the streaming flag so rerenders don't keep the cursor look.
+        // Strip the streaming flag so rerenders don't keep the cursor look,
+        // preserve attachments so ad thumbnails stay visible after completion.
         messages[1](function(prev){
           var copy=prev.slice();
           if(copy.length>0){
             var last=copy[copy.length-1];
-            if(last.role==="assistant")copy[copy.length-1]={role:"assistant",content:last.content||accumulated};
+            if(last.role==="assistant")copy[copy.length-1]=Object.assign({},last,{content:last.content||accumulated,streaming:false});
           }
           return copy;
         });
