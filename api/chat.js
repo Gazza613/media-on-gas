@@ -3,6 +3,25 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { buildChatContext } from "./_chatContext.js";
 
+// In-memory context cache. The data block is deterministic for
+// (principal + date range) over short windows, so caching it for 60s lets
+// follow-up messages in a conversation skip the /api/campaigns + /api/ads
+// fetch entirely. Warm instances only; cold starts still pay once.
+var contextCache = {};
+var CONTEXT_TTL_MS = 60 * 1000;
+function contextKey(principal, from, to) {
+  if (!principal || principal.role === "admin") return "admin|" + from + "|" + to;
+  return (principal.clientSlug || "client") + "|" + (principal.allowedCampaignIds || []).join(",") + "|" + from + "|" + to;
+}
+function getCachedContext(key) {
+  var entry = contextCache[key];
+  if (entry && Date.now() - entry.ts < CONTEXT_TTL_MS) return entry.value;
+  return null;
+}
+function setCachedContext(key, value) {
+  contextCache[key] = { value: value, ts: Date.now() };
+}
+
 // Client-scoped analyst chat. Uses the same token-based auth as the rest of the
 // dashboard, so the bot can only ever reason over the campaigns the caller is
 // allowed to see.
@@ -79,19 +98,23 @@ export default async function handler(req, res) {
   if (!from || !to) { res.status(400).json({ error: "Date range required" }); return; }
   if (message.length > 2000) { res.status(400).json({ error: "Message too long (max 2000 chars)" }); return; }
 
-  // Build the data context scoped to this caller.
+  // Build (or reuse) the data context scoped to this caller.
   var principal = req.authPrincipal || { role: "admin" };
-  var dataBlock;
-  try {
-    dataBlock = await buildChatContext(req, from, to, principal);
-  } catch (err) {
-    console.error("chat context build failed", err);
-    res.status(500).json({ error: "Could not load campaign data for this chat" });
-    return;
-  }
+  var cacheKey = contextKey(principal, from, to);
+  var dataBlock = getCachedContext(cacheKey);
   if (!dataBlock) {
-    res.status(500).json({ error: "No campaigns found for this date range. Ask the team to check the share token." });
-    return;
+    try {
+      dataBlock = await buildChatContext(req, from, to, principal);
+    } catch (err) {
+      console.error("chat context build failed", err);
+      res.status(500).json({ error: "Could not load campaign data for this chat" });
+      return;
+    }
+    if (!dataBlock) {
+      res.status(500).json({ error: "No campaigns found for this date range. Ask the team to check the share token." });
+      return;
+    }
+    setCachedContext(cacheKey, dataBlock);
   }
 
   // Build messages. Keep history clean: only role + content text. Drop any
@@ -115,9 +138,22 @@ export default async function handler(req, res) {
     { type: "text", text: dataBlock, cache_control: { type: "ephemeral" } }
   ];
 
+  // Stream the response back over SSE. The user sees the first token in
+  // ~1 second instead of waiting for the whole completion, which is the
+  // single biggest UX lever for a chat UI.
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders && res.flushHeaders();
+
+  var writeEvent = function(obj) {
+    try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (_) {}
+  };
+
   try {
     var anthropic = new Anthropic({ apiKey: apiKey });
-    var response = await anthropic.messages.create({
+    var stream = anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: MAX_OUTPUT_TOKENS,
       thinking: { type: "adaptive" },
@@ -125,21 +161,20 @@ export default async function handler(req, res) {
       messages: messages
     });
 
-    var text = "";
-    (response.content || []).forEach(function(block) {
-      if (block.type === "text") text += block.text;
-    });
-
-    res.status(200).json({
-      message: text,
-      usage: response.usage || null,
-      stopReason: response.stop_reason || null
-    });
+    for await (var event of stream) {
+      if (event.type === "content_block_delta" && event.delta && event.delta.type === "text_delta" && event.delta.text) {
+        writeEvent({ type: "delta", text: event.delta.text });
+      }
+    }
+    var finalMsg = await stream.finalMessage();
+    writeEvent({ type: "done", usage: finalMsg.usage || null, stopReason: finalMsg.stop_reason || null });
+    res.end();
   } catch (err) {
-    console.error("chat call failed", err);
-    var msg = err && err.message ? String(err.message) : "Chat failed";
-    if (err instanceof Anthropic.RateLimitError) { res.status(429).json({ error: "AI is rate-limited, try in a moment" }); return; }
-    if (err instanceof Anthropic.AuthenticationError) { res.status(500).json({ error: "Chat auth error on server" }); return; }
-    res.status(500).json({ error: msg });
+    console.error("chat stream failed", err);
+    var errMsg = err && err.message ? String(err.message) : "Chat failed";
+    if (err instanceof Anthropic.RateLimitError) errMsg = "AI is rate-limited, try in a moment";
+    else if (err instanceof Anthropic.AuthenticationError) errMsg = "Chat auth error on server";
+    writeEvent({ type: "error", error: errMsg });
+    res.end();
   }
 }

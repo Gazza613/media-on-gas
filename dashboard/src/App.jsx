@@ -454,10 +454,13 @@ function ChatPanel(props){
     if(!msg||busy[0])return;
     err[1]("");
     var next=messages[0].concat([{role:"user",content:msg}]);
-    messages[1](next);
+    // Seed the assistant placeholder immediately so streamed text appends in place.
+    var withPlaceholder=next.concat([{role:"assistant",content:"",streaming:true}]);
+    messages[1](withPlaceholder);
     input[1]("");
     busy[1](true);
     setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
+
     fetch(props.apiBase+"/api/chat",{
       method:"POST",
       headers:authHeaders(),
@@ -467,14 +470,65 @@ function ChatPanel(props){
         from:props.dateFrom,
         to:props.dateTo
       })
-    }).then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d};});})
-      .then(function(res){
+    }).then(function(r){
+      if(!r.ok||!r.body){
+        return r.json().then(function(d){throw new Error(d.error||"Chat error");});
+      }
+      var reader=r.body.getReader();
+      var decoder=new TextDecoder();
+      var buffer="";
+      var accumulated="";
+      var finish=function(){
         busy[1](false);
-        if(!res.ok){err[1](res.data.error||"Chat error");return;}
-        messages[1](next.concat([{role:"assistant",content:res.data.message||""}]));
-        setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
-      })
-      .catch(function(){busy[1](false);err[1]("Connection error");});
+        // Strip the streaming flag so rerenders don't keep the cursor look.
+        messages[1](function(prev){
+          var copy=prev.slice();
+          if(copy.length>0){
+            var last=copy[copy.length-1];
+            if(last.role==="assistant")copy[copy.length-1]={role:"assistant",content:last.content||accumulated};
+          }
+          return copy;
+        });
+      };
+      var pump=function(){
+        return reader.read().then(function(res){
+          if(res.done){finish();return;}
+          buffer+=decoder.decode(res.value,{stream:true});
+          var lines=buffer.split("\n");
+          buffer=lines.pop();
+          lines.forEach(function(line){
+            if(!line.startsWith("data: "))return;
+            var payload=line.slice(6);
+            if(!payload)return;
+            try{
+              var evt=JSON.parse(payload);
+              if(evt.type==="delta"&&evt.text){
+                accumulated+=evt.text;
+                messages[1](function(prev){
+                  var copy=prev.slice();
+                  if(copy.length>0){
+                    var last=copy[copy.length-1];
+                    if(last.role==="assistant")copy[copy.length-1]={role:"assistant",content:accumulated,streaming:true};
+                  }
+                  return copy;
+                });
+                var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;
+              }else if(evt.type==="error"){
+                err[1](evt.error||"Chat error");
+                // Remove the empty placeholder on error
+                messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
+              }
+            }catch(_){/* skip malformed */}
+          });
+          return pump();
+        });
+      };
+      return pump();
+    }).catch(function(e){
+      busy[1](false);
+      err[1]((e&&e.message)||"Connection error");
+      messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
+    });
   };
   var handleKey=function(e){
     if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}
@@ -522,11 +576,13 @@ function ChatPanel(props){
         </div>}
         {messages[0].map(function(m,i){
           var isUser=m.role==="user";
+          // Skip empty assistant placeholders (they exist only during streaming before first token lands)
+          if(!isUser&&!m.content)return null;
           return <div key={i} style={{display:"flex",justifyContent:isUser?"flex-end":"flex-start"}}>
-            <div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content}</div>
+            <div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>
           </div>;
         })}
-        {busy[0]&&<div style={{display:"flex",justifyContent:"flex-start"}}>
+        {busy[0]&&(messages[0].length===0||!messages[0][messages[0].length-1].content)&&<div style={{display:"flex",justifyContent:"flex-start"}}>
           <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div>
         </div>}
         {err[0]&&<div style={{background:P.critical+"12",border:"1px solid "+P.critical+"40",borderRadius:10,padding:"10px 14px",fontSize:11,color:P.critical,fontFamily:fm,lineHeight:1.5}}>{err[0]}</div>}
