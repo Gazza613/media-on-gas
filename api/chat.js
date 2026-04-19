@@ -38,7 +38,7 @@ function setCachedContext(key, value) {
 // - Rate limit 30/hr per IP (baseline) so a spam-chatter cannot blow cost.
 
 var MAX_HISTORY_MESSAGES = 12;
-var MAX_OUTPUT_TOKENS = 1024;
+var MAX_OUTPUT_TOKENS = 1600;
 
 var ANALYST_PERSONA = [
   "You are the GAS Media Expert, a top-1% South African paid-media data analyst embedded inside a live campaign reporting dashboard.",
@@ -48,16 +48,24 @@ var ANALYST_PERSONA = [
   "- Speak like a senior strategist briefing a smart client, not a junior pulling a report.",
   "- Anchor claims in exact figures from the data, and always compare them to the South African benchmark ranges you were given.",
   "- When the number is great, say so plainly. When it's behind benchmark, say so plainly with the honest reason.",
-  "- Prefer short, direct paragraphs. 2 to 4 sentences. Skip preamble. No bullet-lists unless the user explicitly asks for one.",
   "- Write in Southern African business English, use R for rand, never use em dashes, use commas instead.",
   "",
+  "LENGTH RULES, strict:",
+  "- Default answer length: 2 to 4 sentences. Keep it tight.",
+  "- If the question genuinely needs more detail (a comparative breakdown, a recommendation with reasoning, a multi-part question), go up to 6 sentences total, never more.",
+  "- No bullet lists unless the user explicitly asks for a list.",
+  "- Do NOT echo the question. Do NOT open with pleasantries like 'Great question' or 'Let me analyse this'. Get straight to the answer.",
+  "- Do NOT re-state the data setup (dates, platform count, etc.) unless directly asked.",
+  "",
   "Your job:",
-  "- Help the client understand their campaign performance and make smart decisions.",
+  "- Help the client understand their campaign performance and make smart decisions, scoped to the data provided.",
   "- Explain what a number means, why it's at that level, and what it implies.",
   "- When asked 'how are we doing', benchmark against the SA ranges in the data block and give a clear verdict.",
   "- When asked 'why', reason from the data to the most likely cause, but stay within what the data actually supports.",
   "- When asked 'what should we do', give one clear recommendation grounded in the numbers, then briefly note the tradeoff.",
-  ""
+  "",
+  "OFF-TOPIC HANDLING:",
+  "If the user asks about anything NOT related to their paid media performance in this dashboard, for example general knowledge, weather, sport, coding, news, politics, personal advice, health, legal, finance, other brands, their own business outside of paid media, or anything Claude-related, respond with exactly this pattern (adapted to context): \"That sits outside my role. I am the GAS Media Expert for your campaign performance in this report. Ask me anything about your ads, spend, reach, leads, or platform mix and I will help.\" Do not entertain the off-topic request even partially."
 ].join("\n");
 
 var ANTI_HALLUCINATION_RULES = [
@@ -101,21 +109,31 @@ export default async function handler(req, res) {
   // Build (or reuse) the data context scoped to this caller.
   var principal = req.authPrincipal || { role: "admin" };
   var cacheKey = contextKey(principal, from, to);
-  var dataBlock = getCachedContext(cacheKey);
-  if (!dataBlock) {
+  var ctx = getCachedContext(cacheKey);
+  if (!ctx) {
     try {
-      dataBlock = await buildChatContext(req, from, to, principal);
+      ctx = await buildChatContext(req, from, to, principal);
     } catch (err) {
       console.error("chat context build failed", err);
       res.status(500).json({ error: "Could not load campaign data for this chat" });
       return;
     }
-    if (!dataBlock) {
+    if (!ctx || !ctx.text) {
       res.status(500).json({ error: "No campaigns found for this date range. Ask the team to check the share token." });
       return;
     }
-    setCachedContext(cacheKey, dataBlock);
+    setCachedContext(cacheKey, ctx);
   }
+  var dataBlock = ctx.text;
+  var topAdCards = ctx.topAds || [];
+
+  // Detect intent for "top performing ad" questions so we can attach a
+  // visual ad card to the response. Keyword-based for reliability, matches
+  // common phrasings and avoids false positives on generic campaign questions.
+  var msgLow = message.toLowerCase();
+  var wantsTopAds = /(best|top|highest|leading|winning|strongest)[^.]{0,40}(ad|ads|creative|creatives|post|posts|performer|performers)/.test(msgLow) ||
+                    /(ad|creative|performer)[^.]{0,30}(best|top|highest|winning)/.test(msgLow) ||
+                    /which.*(ad|creative).*(best|top|winning|performing)/.test(msgLow);
 
   // Build messages. Keep history clean: only role + content text. Drop any
   // malformed entries instead of letting them 400 the API call.
@@ -150,6 +168,11 @@ export default async function handler(req, res) {
   var writeEvent = function(obj) {
     try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (_) {}
   };
+
+  // Emit ad cards first so the UI can render them above the streaming text.
+  if (wantsTopAds && topAdCards.length > 0) {
+    writeEvent({ type: "attachments", ads: topAdCards });
+  }
 
   try {
     var anthropic = new Anthropic({ apiKey: apiKey });

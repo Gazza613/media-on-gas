@@ -508,15 +508,23 @@ function ChatPanel(props){
                   var copy=prev.slice();
                   if(copy.length>0){
                     var last=copy[copy.length-1];
-                    if(last.role==="assistant")copy[copy.length-1]={role:"assistant",content:accumulated,streaming:true};
+                    if(last.role==="assistant")copy[copy.length-1]=Object.assign({},last,{content:accumulated,streaming:true});
                   }
                   return copy;
                 });
                 var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;
+              }else if(evt.type==="attachments"&&Array.isArray(evt.ads)){
+                messages[1](function(prev){
+                  var copy=prev.slice();
+                  if(copy.length>0){
+                    var last=copy[copy.length-1];
+                    if(last.role==="assistant")copy[copy.length-1]=Object.assign({},last,{attachments:evt.ads});
+                  }
+                  return copy;
+                });
               }else if(evt.type==="error"){
                 err[1](evt.error||"Chat error");
-                // Remove the empty placeholder on error
-                messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
+                messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content&&!copy[copy.length-1].attachments)copy.pop();return copy;});
               }
             }catch(_){/* skip malformed */}
           });
@@ -576,15 +584,41 @@ function ChatPanel(props){
         </div>}
         {messages[0].map(function(m,i){
           var isUser=m.role==="user";
-          // Skip empty assistant placeholders (they exist only during streaming before first token lands)
-          if(!isUser&&!m.content)return null;
-          return <div key={i} style={{display:"flex",justifyContent:isUser?"flex-end":"flex-start"}}>
-            <div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>
+          // Skip fully-empty assistant placeholders (pre-first-token). Keep placeholders that have attachments already.
+          if(!isUser&&!m.content&&!(m.attachments&&m.attachments.length>0))return null;
+          var platColors={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
+          var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":rt==="store_clicks"?"CLICKS":rt==="lp_clicks"?"CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
+          var costPerLabel=function(rt){return rt==="leads"?"per lead":rt==="installs"?"per install":rt==="follows"?"per follower":"per click";};
+          return <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isUser?"flex-end":"flex-start",gap:8}}>
+            {!isUser&&m.attachments&&m.attachments.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:"92%",width:"100%"}}>
+              {m.attachments.map(function(ad,ai){
+                var accent=platColors[ad.platform]||P.ember;
+                return <a key={ai} href={ad.previewUrl||ad.thumbnail||"#"} target="_blank" rel="noopener noreferrer" style={{display:"flex",gap:10,background:"rgba(0,0,0,0.35)",border:"1px solid "+accent+"35",borderLeft:"3px solid "+accent,borderRadius:12,padding:10,textDecoration:"none",color:"inherit"}}>
+                  <div style={{width:74,height:74,borderRadius:8,flexShrink:0,overflow:"hidden",background:"linear-gradient(135deg,"+accent+"55,"+accent+"10 55%,#0a0618)",position:"relative"}}>
+                    {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:800,letterSpacing:1}}>{ad.platform}</div>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                      <span style={{background:accent,color:"#fff",fontSize:8,fontWeight:800,padding:"2px 7px",borderRadius:4,letterSpacing:1}}>{(ad.platform||"").toUpperCase()}</span>
+                      {ad.format&&<span style={{background:"rgba(255,255,255,0.08)",color:P.txt,fontSize:8,fontWeight:700,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>{ad.format}</span>}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,lineHeight:1.3,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ad.adName}</div>
+                    {ad.results>0?<div style={{fontSize:11,color:accent,fontWeight:800,fontFamily:fm}}>{fmt(ad.results)+" "+resultLabel(ad.resultType)+" | "+fR(ad.costPerResult)+" "+costPerLabel(ad.resultType)}</div>:<div style={{fontSize:10,color:P.sub,fontFamily:fm}}>{fR(ad.spend)+" spend | "+ad.ctr.toFixed(2)+"% CTR"}</div>}
+                  </div>
+                </a>;
+              })}
+            </div>}
+            {(isUser||m.content)&&<div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>}
           </div>;
         })}
-        {busy[0]&&(messages[0].length===0||!messages[0][messages[0].length-1].content)&&<div style={{display:"flex",justifyContent:"flex-start"}}>
-          <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div>
-        </div>}
+        {(function(){
+          if(!busy[0])return null;
+          if(messages[0].length===0)return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div></div>;
+          var last=messages[0][messages[0].length-1];
+          // Hide once any content or attachments have arrived for the current turn
+          if(last.content||(last.attachments&&last.attachments.length>0))return null;
+          return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div></div>;
+        })()}
         {err[0]&&<div style={{background:P.critical+"12",border:"1px solid "+P.critical+"40",borderRadius:10,padding:"10px 14px",fontSize:11,color:P.critical,fontFamily:fm,lineHeight:1.5}}>{err[0]}</div>}
       </div>
 

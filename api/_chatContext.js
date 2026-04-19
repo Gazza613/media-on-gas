@@ -49,8 +49,10 @@ async function internalFetch(req, path) {
   return r.json();
 }
 
-// Pulls campaigns + top ads, filters to the principal's allowlist, and renders
-// a single authoritative data block the analyst must base answers on.
+// Pulls campaigns + top ads, filters to the principal's allowlist, and returns
+// { text, topAds } where text is the authoritative data block for the AI, and
+// topAds is a structured list we can render as thumbnail cards in the UI when
+// the user asks about best-performing creative.
 export async function buildChatContext(req, from, to, principal) {
   var campData = await internalFetch(req, "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to));
   if (!campData || !Array.isArray(campData.campaigns)) return null;
@@ -191,5 +193,26 @@ export async function buildChatContext(req, from, to, principal) {
   lines.push("- CPC: R1 to R6");
   lines.push("Google Ads does NOT expose reach, so frequency and unique-reach questions apply only to Meta and TikTok.");
 
-  return lines.join("\n");
+  // Shape top ads into a compact structure suitable for UI thumbnail cards.
+  var topAdCards = topAds.slice(0, 3).map(function(a) {
+    var results = parseFloat(a.results || 0);
+    var spend = parseFloat(a.spend || 0);
+    return {
+      adName: a.adName || "Unnamed ad",
+      platform: a.platform || "",
+      format: a.format || "STATIC",
+      thumbnail: a.thumbnail || "",
+      previewUrl: a.previewUrl || "",
+      campaignName: a.campaignName || "",
+      spend: spend,
+      impressions: parseFloat(a.impressions || 0),
+      clicks: parseFloat(a.clicks || 0),
+      ctr: parseFloat(a.ctr || 0),
+      results: results,
+      resultType: a.resultType || "results",
+      costPerResult: results > 0 ? spend / results : 0
+    };
+  });
+
+  return { text: lines.join("\n"), topAds: topAdCards };
 }
