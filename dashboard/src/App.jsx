@@ -456,8 +456,8 @@ function ChatPanel(props){
     if(props.viewToken)return{"Content-Type":"application/json","Authorization":"Bearer "+props.viewToken};
     return{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""};
   };
-  var send=function(){
-    var msg=(input[0]||"").trim();
+  var performSend=function(msgText){
+    var msg=(msgText||"").trim();
     if(!msg||busy[0])return;
     err[1]("");
     var next=messages[0].concat([{role:"user",content:msg}]);
@@ -468,6 +468,19 @@ function ChatPanel(props){
     busy[1](true);
     setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
 
+    // Build the selected-campaign allowlist from the admin's current selection
+    // so the bot only sees campaigns currently on-screen. Client tokens already
+    // enforce this server-side via the token's allowlist, this adds the same
+    // guarantee for admin sessions so cross-client data never leaks.
+    var selectedCampaigns=(props.campaigns||[]).filter(function(c){return (props.selected||[]).indexOf(c.campaignId)>=0;});
+    var selectedIds=[];var selectedNames=[];
+    selectedCampaigns.forEach(function(c){
+      if(c.rawCampaignId)selectedIds.push(String(c.rawCampaignId));
+      if(c.campaignId)selectedIds.push(String(c.campaignId).replace(/_facebook$/,"").replace(/_instagram$/,""));
+      if(c.campaignId)selectedIds.push(String(c.campaignId));
+      if(c.campaignName)selectedNames.push(c.campaignName);
+    });
+
     fetch(props.apiBase+"/api/chat",{
       method:"POST",
       headers:authHeaders(),
@@ -475,7 +488,9 @@ function ChatPanel(props){
         message:msg,
         history:next.slice(0,-1),
         from:props.dateFrom,
-        to:props.dateTo
+        to:props.dateTo,
+        selectedCampaignIds:selectedIds,
+        selectedCampaignNames:selectedNames
       })
     }).then(function(r){
       if(!r.ok||!r.body){
@@ -546,6 +561,8 @@ function ChatPanel(props){
       messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
     });
   };
+  // Wrapper that uses current input value. Button + Enter both call this.
+  var send=function(){performSend(input[0]);input[1]("");};
   var handleKey=function(e){
     if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}
   };
@@ -558,7 +575,7 @@ function ChatPanel(props){
   var suggestions=[
     "How are we doing overall this period?",
     "Which platform is giving us the best value?",
-    "What is our best performing ad and why?",
+    "Which are our best performing ads and why?",
     "Where should we shift budget next?"
   ];
 
@@ -615,7 +632,7 @@ function ChatPanel(props){
           </div>
           <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginTop:4}}>Try asking</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {suggestions.map(function(s,i){return <button key={i} onClick={function(){input[1](s);setTimeout(send,10);}} style={{textAlign:"left",background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,cursor:"pointer",lineHeight:1.4,transition:"all 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.background="rgba(255,255,255,0.03)";}}>{s}</button>;})}
+            {suggestions.map(function(s,i){return <button key={i} onClick={function(){performSend(s);}} style={{textAlign:"left",background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,cursor:"pointer",lineHeight:1.4,transition:"all 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.background="rgba(255,255,255,0.03)";}}>{s}</button>;})}
           </div>
         </div>}
         {messages[0].map(function(m,i){
@@ -964,7 +981,7 @@ export default function MediaOnGas(){
     </header>
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
-    <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat}/>
+    <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}

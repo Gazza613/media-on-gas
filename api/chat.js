@@ -106,8 +106,27 @@ export default async function handler(req, res) {
   if (!from || !to) { res.status(400).json({ error: "Date range required" }); return; }
   if (message.length > 2000) { res.status(400).json({ error: "Message too long (max 2000 chars)" }); return; }
 
-  // Build (or reuse) the data context scoped to this caller.
+  // Scope the data. Client tokens carry their own allowlist; admin requests
+  // honor the dashboard's current selection so the bot never answers about
+  // campaigns that are not on-screen. Without this guard, admin chat
+  // would return results across every client in the system.
   var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role === "admin") {
+    var selIds = Array.isArray(body.selectedCampaignIds) ? body.selectedCampaignIds.map(String) : [];
+    var selNames = Array.isArray(body.selectedCampaignNames) ? body.selectedCampaignNames.map(String) : [];
+    if (selIds.length === 0 && selNames.length === 0) {
+      res.status(400).json({ error: "Select at least one campaign on the dashboard before asking. The bot only answers about selected campaigns." });
+      return;
+    }
+    // Downgrade admin to a client-like principal for context filtering so the
+    // same allowlist code path runs. Purely local to this request.
+    principal = {
+      role: "client",
+      clientSlug: "admin-scoped",
+      allowedCampaignIds: selIds,
+      allowedCampaignNames: selNames
+    };
+  }
   var cacheKey = contextKey(principal, from, to);
   var ctx = getCachedContext(cacheKey);
   if (!ctx) {
