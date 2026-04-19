@@ -215,7 +215,7 @@ function ShareModal(props){
     draftCopied[1](true);setTimeout(function(){draftCopied[1](false);},2000);
   };
   var buildPlainDraft=function(){
-    var slugWho=slug[0]?slug[0].split("-").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" "):"";
+    var slugWho=slug[0]?slug[0].split("-").map(function(w){return w.toUpperCase();}).join(" "):"";
     var who=(recipientName[0]||"").trim()||slugWho;
     var lines=[];
     lines.push("Hi "+(who||"there")+",");
@@ -411,7 +411,7 @@ function ShareModal(props){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(report id)</span></div>
-          <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="e.g. mtn-momo" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1}}/>
+          <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="E.G. MTN-MOMO" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase"}}/>
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
@@ -483,7 +483,7 @@ function ShareModal(props){
           <input readOnly value={shareUrl[0]} onClick={function(e){e.target.select();}} style={{flex:1,background:P.glass,border:"1px solid "+P.mint+"40",borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:11,fontFamily:fm,outline:"none"}}/>
           <button onClick={copy} style={{background:copied[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{copied[0]?"COPIED":"COPY"}</button>
         </div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):","} | Client: <span style={{color:P.ember,fontWeight:700}}>{slug[0]}</span></div>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):","} | Client: <span style={{color:P.ember,fontWeight:700}}>{(slug[0]||"").toUpperCase()}</span></div>
 
         {!emailSent[0]&&<div style={{marginTop:16,background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -532,7 +532,7 @@ function ShareModal(props){
                   {filteredAudit.map(function(e,i){
                     var recipients=[].concat(e.to||[]).join(", ")||"—";
                     var periodTxt=(e.fromDate||"—")+" to "+(e.toDate||"—");
-                    var clientTxt=e.clientName||(e.clientSlug?e.clientSlug.split("-").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" "):"Unknown");
+                    var clientTxt=e.clientName||(e.clientSlug?e.clientSlug.split("-").map(function(w){return w.toUpperCase();}).join(" "):"Unknown");
                     var extras=[];
                     if(e.cc&&e.cc.length>0)extras.push("cc: "+e.cc.join(", "));
                     if(e.bcc&&e.bcc.length>0)extras.push("bcc: "+e.bcc.join(", "));

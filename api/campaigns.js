@@ -10,6 +10,17 @@ var metaAccounts = [
   { name: "GAS Agency", id: "act_542990539806888" }
 ];
 
+// Shared name-based objective fallback for cross-platform rows (TikTok,
+// Google, scheduled-but-no-metrics). Mirrors api/ads.js detectObjective.
+function objectiveFromName(name) {
+  var n = (name || "").toLowerCase();
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
+  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
+  return "landingpage";
+}
+
 
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
@@ -103,10 +114,28 @@ export default async function handler(req, res) {
           seenIds[c.campaign_id] = true;
 
           // Raw Meta objective string so we can gate on the strict PAGE_LIKES
-          // value rather than our broader "followers" family.
+          // value rather than our broader "followers" family, and also expose
+          // the canonical objective key on the row so downstream consumers
+          // (email-share aggregation, chat, etc.) can scope outcome counts
+          // by objective without re-doing name detection.
           var rawMetaObj = String((campaignInfo[c.campaign_id] || {}).objective || "").toUpperCase();
           var isPageLikesObj = rawMetaObj === "PAGE_LIKES";
           var isFbPlacement = platName === "Facebook";
+          var canonObj = (function() {
+            var o = rawMetaObj;
+            if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
+            if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
+            if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
+            if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
+            if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
+            // Name-based fallback mirrors ads.js detectObjective().
+            var nm = (c.campaign_name || "").toLowerCase();
+            if (nm.indexOf("appinstal") >= 0 || nm.indexOf("app install") >= 0 || nm.indexOf("app_install") >= 0) return "appinstall";
+            if (nm.indexOf("follower") >= 0 || nm.indexOf("_like_") >= 0 || nm.indexOf("_like ") >= 0 || nm.indexOf("paidsocial_like") >= 0 || nm.indexOf("like_facebook") >= 0 || nm.indexOf("like_instagram") >= 0) return "followers";
+            if (nm.indexOf("lead") >= 0 || nm.indexOf("pos") >= 0) return "leads";
+            if (nm.indexOf("homeloan") >= 0 || nm.indexOf("traffic") >= 0 || nm.indexOf("paidsearch") >= 0) return "landingpage";
+            return "landingpage";
+          })();
 
           var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0;
           if (c.actions) {
@@ -145,6 +174,7 @@ export default async function handler(req, res) {
               campaignId: uniqueId,
               rawCampaignId: c.campaign_id,
               campaignName: c.campaign_name,
+              objective: canonObj,
               _sumImpressions: 0, _sumSpend: 0, _sumClicks: 0, _sumReachPublisher: 0,
               leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, pageFollows: 0,
               actions: []
@@ -199,6 +229,7 @@ export default async function handler(req, res) {
           campaignId: r.campaignId,
           rawCampaignId: r.rawCampaignId,
           campaignName: r.campaignName,
+          objective: r.objective || "landingpage",
           impressions: impsStr,
           reach: reachStr,
           frequency: freq,
@@ -224,7 +255,7 @@ export default async function handler(req, res) {
 
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
-        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: campaignInfo[cid].name, impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
+        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: campaignInfo[cid].name, objective: objectiveFromName(campaignInfo[cid].name), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
       }
     });
   }
@@ -259,7 +290,7 @@ export default async function handler(req, res) {
           if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
             var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : ttStatuses[tc.dimensions.campaign_id] === "DISABLE" ? "paused" : "completed";
-            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: "", endDate: "", status: ttStatus });
+            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: objectiveFromName(ttNames[tc.dimensions.campaign_id] || ""), impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: "", endDate: "", status: ttStatus });
           }
         }
       }
@@ -267,7 +298,7 @@ export default async function handler(req, res) {
 
     Object.keys(ttNames).forEach(function(tid) {
       if (!ttSeenIds[tid]) {
-        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active" });
+        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], objective: objectiveFromName(ttNames[tid]), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active" });
       }
     });
   } catch (ttErr) { console.error("TikTok campaigns error", ttErr); warnings.push({ platform: "TikTok", stage: "campaigns", message: String(ttErr && ttErr.message || ttErr) }); }
@@ -322,6 +353,7 @@ export default async function handler(req, res) {
                 campaignId: "google_" + gc.id,
                 rawCampaignId: gc.id,
                 campaignName: gName,
+                objective: objectiveFromName(gName),
                 impressions: gImps.toString(),
                 reach: "0",
                 frequency: "0",

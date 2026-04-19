@@ -32,22 +32,23 @@ function fmtPct(n) {
   return n.toFixed(2) + "%";
 }
 
-// Detect app-install objective from campaign name. Matches the same logic the
-// dashboard uses on the Summary KPI tile. Meta doesn't always track actual
-// installs (requires SDK integration), so appInstalls in the campaign response
-// is 0 for most click-to-app-store campaigns. Fall back to clicks for those.
-function isAppInstallCampaign(name) {
-  var n = (name || "").toLowerCase();
-  return n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0;
-}
-// Detect landing-page / traffic objective campaigns. Same rules as api/ads.js
-// detectObjective so the email tile matches what the dashboard KPI shows.
-function isLandingPageCampaign(name) {
-  var n = (name || "").toLowerCase();
-  return n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0;
+// Canonical objective for a row. /api/campaigns now sets c.objective for
+// every row (Meta, TikTok, Google), fall back to name detection for older
+// cached responses or any row that slipped through.
+function campObjective(c) {
+  if (c.objective) return c.objective;
+  var n = (c.campaignName || "").toLowerCase();
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
+  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
+  return "landingpage";
 }
 
 // Aggregate a flat array of campaigns into one summed object + derived metrics.
+// Outcome counts are scoped by the campaign's canonical objective so a Lead
+// Gen tile never picks up stray leads attributed to an engagement campaign,
+// and a Follower tile never picks up post reactions on a Lead Gen campaign.
 function aggregate(arr) {
   var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, appStoreClicks: 0, landingPageClicks: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
   arr.forEach(function(c) {
@@ -55,20 +56,30 @@ function aggregate(arr) {
     s.reach += parseFloat(c.reach || 0);
     s.spend += parseFloat(c.spend || 0);
     s.clicks += parseFloat(c.clicks || 0);
-    s.leads += parseFloat(c.leads || 0);
-    s.appInstalls += parseFloat(c.appInstalls || 0);
-    // Click-to-app-store count = clicks on app-install-objective campaigns
-    if (isAppInstallCampaign(c.campaignName)) {
+    var obj = campObjective(c);
+    // Leads: count leads action only on lead-gen-objective campaigns. A brand
+    // awareness or engagement campaign can have a few leads attributed by
+    // Meta, which would wrongly inflate the Leads KPI when the client has
+    // not selected the actual Lead Gen campaign.
+    if (obj === "leads") s.leads += parseFloat(c.leads || 0);
+    // App install outcomes: SDK-tracked installs AND clicks on app-store
+    // objective campaigns (Meta rarely wires the SDK for click-to-store ads).
+    if (obj === "appinstall") {
+      s.appInstalls += parseFloat(c.appInstalls || 0);
       s.appStoreClicks += parseFloat(c.clicks || 0);
     }
-    // Click-to-landing-page count = clicks on traffic/LP-objective campaigns
-    if (isLandingPageCampaign(c.campaignName)) {
+    // Landing page clicks: only on traffic / LP-objective campaigns.
+    if (obj === "landingpage") {
       s.landingPageClicks += parseFloat(c.clicks || 0);
+      s.landingPageViews += parseFloat(c.landingPageViews || 0);
     }
-    s.follows += parseFloat(c.follows || 0);
-    s.pageLikes += parseFloat(c.pageLikes || 0);
-    s.likes += parseFloat(c.likes || 0);
-    s.landingPageViews += parseFloat(c.landingPageViews || 0);
+    // Follower outcomes: follow actions, page likes, and TikTok video likes
+    // only count on follower-objective campaigns.
+    if (obj === "followers") {
+      s.follows += parseFloat(c.follows || 0);
+      s.pageLikes += parseFloat(c.pageLikes || 0);
+      s.likes += parseFloat(c.likes || 0);
+    }
   });
   s.cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : 0;
   s.cpc = s.clicks > 0 ? (s.spend / s.clicks) : 0;
@@ -393,7 +404,7 @@ function buildEmailHtml(opts) {
   // slug so the report always has a clean brand name in the banner.
   var clientName = opts.clientSlug
     .split("-")
-    .map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); })
+    .map(function(w) { return w.toUpperCase(); })
     .join(" ");
   // Greeting name is what appears in "Hi ___,". If the sender gave a recipient
   // name on the form (a person or company), use that. Falls back to the
@@ -601,7 +612,7 @@ export default async function handler(req, res) {
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
-    var clientName = clientSlug.split("-").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ");
+    var clientName = clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" ");
     var greetingName = (body.recipientName || "").trim() || clientName;
     var expiresDisplay = new Date(expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
     var textLines = [];
@@ -674,7 +685,7 @@ export default async function handler(req, res) {
     // Fire-and-forget audit write. Graceful no-op if Upstash env vars aren't set yet.
     logEmailSend({
       clientSlug: clientSlug,
-      clientName: clientSlug.split("-").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" "),
+      clientName: clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" "),
       to: toList,
       cc: ccList,
       bcc: bccList,
