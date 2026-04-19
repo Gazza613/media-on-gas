@@ -38,11 +38,49 @@ function statusOf(deltaPct) {
   return "red";
 }
 
+// Match the canonical objective classifier used in api/ads.js and
+// api/campaigns.js. We scope the followers-combined count by objective so
+// the source-of-truth doesn't treat post reactions on a Lead Gen campaign
+// as followers, which is what the dashboard (after the "like" fix) no
+// longer does.
+function canonicalObjective(rawMetaObj, campaignName) {
+  var o = String(rawMetaObj || "").toUpperCase();
+  if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
+  if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
+  if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
+  if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
+  if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
+  var n = (campaignName || "").toLowerCase();
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
+  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
+  return "landingpage";
+}
+
 // Source-of-truth fetches per platform, aggregated at campaign level
 async function fetchMetaTruth(token, from, to) {
   var out = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
     try {
+      // Pull campaign objectives first so SoT can scope followers the same
+      // way the dashboard does, without this map every campaign would show
+      // its post reactions ("like" action) as followers and drift red.
+      var objMap = {};
+      try {
+        var oUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,objective,name&limit=500&access_token=" + token;
+        var oNext = oUrl;
+        var oGuard = 0;
+        while (oNext && oGuard < 10) {
+          oGuard++;
+          var oR = await fetch(oNext);
+          if (!oR.ok) break;
+          var oD = await oR.json();
+          if (oD.data) oD.data.forEach(function(c) { objMap[c.id] = c.objective || ""; });
+          oNext = oD.paging && oD.paging.next ? oD.paging.next : null;
+        }
+      } catch (_) { /* non-fatal, falls back to name-based detection */ }
+
       var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&time_range={\"since\":\"" + from + "\",\"until\":\"" + to + "\"}&limit=500&access_token=" + token;
       // Follow pagination so large accounts (>500 campaigns) aren't truncated.
       var allRows = [];
@@ -64,7 +102,14 @@ async function fetchMetaTruth(token, from, to) {
           actions["onsite_conversion.lead_grouped"] || 0,
           actions["offsite_conversion.fb_pixel_lead"] || 0
         );
-        var pageLikes = actions["like"] || actions["page_like"] || 0;
+        // "like" is POST REACTIONS on every non-follower campaign, only fold
+        // it into the followers count when the campaign is actually a
+        // follower-family campaign (PAGE_LIKES / OUTCOME_ENGAGEMENT etc.).
+        // This keeps Lead Gen campaigns from showing phantom followers that
+        // contradict the dashboard.
+        var obj = canonicalObjective(objMap[row.campaign_id], row.campaign_name);
+        var pageLikesRaw = actions["page_like"] || 0;
+        if (obj === "followers") pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
         var follows = actions["follow"] || actions["onsite_conversion.follow"] || actions["onsite_conversion.ig_follow"] || 0;
         var appInstalls = Math.max(actions["app_install"] || 0, actions["mobile_app_install"] || 0, actions["omni_app_install"] || 0);
         out.push({
@@ -77,7 +122,7 @@ async function fetchMetaTruth(token, from, to) {
           clicks: parseInt(row.clicks || 0),
           reach: parseInt(row.reach || 0),
           leads: leads,
-          followersCombined: pageLikes + follows,
+          followersCombined: pageLikesRaw + follows,
           appInstalls: appInstalls
         });
       });

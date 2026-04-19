@@ -113,13 +113,11 @@ export default async function handler(req, res) {
           var uniqueId = c.campaign_id + "_" + platName.toLowerCase();
           seenIds[c.campaign_id] = true;
 
-          // Raw Meta objective string so we can gate on the strict PAGE_LIKES
-          // value rather than our broader "followers" family, and also expose
-          // the canonical objective key on the row so downstream consumers
-          // (email-share aggregation, chat, etc.) can scope outcome counts
-          // by objective without re-doing name detection.
+          // Raw Meta objective string + canonical key. Exposing `objective`
+          // on each row lets downstream consumers (email-share aggregation,
+          // chat, etc.) scope outcome counts by objective without re-doing
+          // name detection.
           var rawMetaObj = String((campaignInfo[c.campaign_id] || {}).objective || "").toUpperCase();
-          var isPageLikesObj = rawMetaObj === "PAGE_LIKES";
           var isFbPlacement = platName === "Facebook";
           var canonObj = (function() {
             var o = rawMetaObj;
@@ -159,11 +157,12 @@ export default async function handler(req, res) {
               if (act.action_type === "page_engagement") pageFollows = Math.max(pageFollows, parseInt(act.value));
             }
           }
-          // Fold reactions into page likes only for the strict PAGE_LIKES
-          // objective on FB placements. PAGE_LIKES is an FB-only objective so
-          // this guarantees "like" really does mean page likes here, not IG
-          // post hearts on a broader engagement campaign.
-          if (isPageLikesObj && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+          // Fold reactions into page likes for any follower-family campaign
+          // on an FB placement. Covers strict PAGE_LIKES and the modern
+          // OUTCOME_ENGAGEMENT objective (ODAX consolidated these in 2022+).
+          // The placement check keeps IG post hearts out of the count on
+          // broader engagement-family campaigns that run on IG too.
+          if (canonObj === "followers" && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
 
           if (!rowMap[uniqueId]) {
             rowMap[uniqueId] = {

@@ -270,11 +270,14 @@ export default async function handler(req, res) {
               if (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at === "onsite_conversion.lead_grouped") totals.lead = Math.max(totals.lead, v);
               if (at === "app_install" || at === "mobile_app_install" || at === "omni_app_install") totals.app_install = Math.max(totals.app_install, v);
             });
-            // Only fold reactions for strict PAGE_LIKES objective (FB-only on
-            // Meta, which means it's safe to treat "like" as page likes even
-            // without per-placement detail in this no-breakdown pass).
-            var isPageLikesObj = String(campObjMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
-            var pageLikeFinal = isPageLikesObj ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
+            // Fold reactions for any follower-family campaign (PAGE_LIKES or
+            // OUTCOME_ENGAGEMENT). This pass has no placement breakdown, so
+            // an IG-only follower campaign could in theory over-count, but
+            // in practice follower campaigns on Meta are FB-centric (PAGE_LIKES
+            // is FB-only, and OUTCOME_ENGAGEMENT page-like campaigns target
+            // FB placements). Matches Meta Ads Manager's Results column.
+            var isFollowerObj = mapMetaObjective(campObjMap[row.campaign_id]) === "followers";
+            var pageLikeFinal = isFollowerObj ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
             adTrueTotals[row.ad_id] = {
               pageLikes: pageLikeFinal,
               follows: totals.follow,
@@ -607,12 +610,13 @@ export default async function handler(req, res) {
             if (pageLikes === 0 && follows === 0) follows = Math.max(follows, v);
           }
         });
-        // Fold "like" into page likes ONLY for the strict PAGE_LIKES Meta
-        // objective on FB placements. On IG placements or on broader
-        // engagement-family objectives (POST_ENGAGEMENT etc.), "like" is post
-        // reactions, counting those would wildly overstate follower growth.
-        var isPageLikesObj = rawMetaObj.toUpperCase() === "PAGE_LIKES";
-        if (isPageLikesObj && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+        // Fold "like" into page likes for any follower-family campaign on
+        // an FB placement. That covers strict PAGE_LIKES AND the modern
+        // OUTCOME_ENGAGEMENT objective (ODAX consolidated the two in 2022+).
+        // The FB-placement check keeps IG post reactions out of the count,
+        // IG hearts are returned under the same "like" key but are never
+        // page follows.
+        if (objective === "followers" && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
