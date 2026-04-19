@@ -32,9 +32,18 @@ function fmtPct(n) {
   return n.toFixed(2) + "%";
 }
 
+// Detect app-install objective from campaign name. Matches the same logic the
+// dashboard uses on the Summary KPI tile. Meta doesn't always track actual
+// installs (requires SDK integration), so appInstalls in the campaign response
+// is 0 for most click-to-app-store campaigns. Fall back to clicks for those.
+function isAppInstallCampaign(name) {
+  var n = (name || "").toLowerCase();
+  return n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0;
+}
+
 // Aggregate a flat array of campaigns into one summed object + derived metrics.
 function aggregate(arr) {
-  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
+  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, appStoreClicks: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
   arr.forEach(function(c) {
     s.impressions += parseFloat(c.impressions || 0);
     s.reach += parseFloat(c.reach || 0);
@@ -42,6 +51,10 @@ function aggregate(arr) {
     s.clicks += parseFloat(c.clicks || 0);
     s.leads += parseFloat(c.leads || 0);
     s.appInstalls += parseFloat(c.appInstalls || 0);
+    // Click-to-app-store count = clicks on app-install-objective campaigns
+    if (isAppInstallCampaign(c.campaignName)) {
+      s.appStoreClicks += parseFloat(c.clicks || 0);
+    }
     s.follows += parseFloat(c.follows || 0);
     s.pageLikes += parseFloat(c.pageLikes || 0);
     s.likes += parseFloat(c.likes || 0);
@@ -67,13 +80,16 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
     if (!r.ok) { console.warn("[email-share] /api/ads internal fetch failed", r.status); return null; }
     var d = await r.json();
     var all = d.ads || [];
+    // Ads store raw campaignId (no suffix) with platform on a separate field.
+    // Allowlist carries suffixed IDs (e.g. "123_facebook"). Reconstruct the
+    // suffixed virtual-id per ad from rawId + platform family, then exact match.
+    // For TikTok/Google (no FB/IG split) the virtualCid equals the raw id.
     var idSet = {}; campaignIds.forEach(function(x) { idSet[String(x)] = true; });
-    var nameSet = {}; campaignNames.forEach(function(x) { nameSet[x] = true; });
     var filtered = all.filter(function(a) {
-      var cid = String(a.campaignId || "");
-      if (idSet[cid]) return true;
-      if (a.campaignName && nameSet[a.campaignName]) return true;
-      return false;
+      var raw = String(a.campaignId || "");
+      var plat = String(a.platform || "").toLowerCase();
+      var virtualCid = (plat === "facebook" || plat === "instagram") ? (raw + "_" + plat) : raw;
+      return idSet[virtualCid] === true;
     });
     if (filtered.length === 0) return null;
     // Group by platform, pick top 3 by results then spend
@@ -115,15 +131,12 @@ async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
     if (!r.ok) { console.warn("[email-share] /api/campaigns internal fetch failed", r.status); return null; }
     var d = await r.json();
     var all = d.campaigns || [];
+    // Strict match on the EXACT selected campaignId (suffixed form). No raw-ID
+    // cross-match (which pulled the other publisher variant), no name fallback
+    // (which can cross accounts with same-named campaigns). Frontend now only
+    // sends suffixed IDs so this is lossless.
     var idSet = {}; campaignIds.forEach(function(x) { idSet[String(x)] = true; });
-    var nameSet = {}; campaignNames.forEach(function(x) { nameSet[x] = true; });
-    var filtered = all.filter(function(c) {
-      var raw = String(c.rawCampaignId || "");
-      var cid = String(c.campaignId || "");
-      if (idSet[raw] || idSet[cid]) return true;
-      if (c.campaignName && nameSet[c.campaignName]) return true;
-      return false;
-    });
+    var filtered = all.filter(function(c) { return idSet[String(c.campaignId || "")] === true; });
     if (filtered.length === 0) { console.warn("[email-share] Campaign allowlist matched zero of", all.length, "campaigns. Check campaignIds format."); return null; }
     var grand = aggregate(filtered);
     // Platform buckets
@@ -200,10 +213,14 @@ function renderSummaryBlock(summary) {
   // honest for campaign shapes that focus on a single objective, a leads-only
   // campaign no longer shows empty followers/installs/LP tiles.
   var totalFollows = g.follows + g.pageLikes + g.likes;
+  // App-install outcome uses appStoreClicks (clicks on app-install-objective
+  // campaigns) because Meta rarely tracks actual installs via SDK. Falls back
+  // to g.appInstalls if any real installs exist, whichever is higher.
+  var appStoreValue = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
   var allOutcomes = [
     { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "", accent: "#F43F5E" },
     { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "", accent: "#00F2EA" },
-    { label: "Clicks to App Store", value: g.appInstalls, cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per click" : "", accent: "#4599FF" },
+    { label: "Clicks to App Store", value: appStoreValue, cost: appStoreValue > 0 ? fmtR(g.spend / appStoreValue) + " per click" : "", accent: "#4599FF" },
     { label: "Landing page views", value: g.landingPageViews, cost: g.landingPageViews > 0 ? fmtR(g.spend / g.landingPageViews) + " per view" : "", accent: "#22D3EE" }
   ];
   var outcomes = allOutcomes.filter(function(o) { return o.value > 0; });

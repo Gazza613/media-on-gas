@@ -236,10 +236,12 @@ function ShareModal(props){
   };
   var buildCampaignPayload=function(){
     var selectedCampaigns=(props.campaigns||[]).filter(function(c){return props.selected.indexOf(c.campaignId)>=0;});
+    // Send ONLY the exact selected campaignIds (suffixed form, e.g. "123_facebook").
+    // Previously we also pushed raw and stripped variants which caused the server
+    // filter to over-include the OTHER publisher variant of the same campaign.
+    // Now the email filter matches exactly what the dashboard selection shows.
     var campaignIds=[];var campaignNames=[];
     selectedCampaigns.forEach(function(c){
-      if(c.rawCampaignId)campaignIds.push(String(c.rawCampaignId));
-      if(c.campaignId)campaignIds.push(String(c.campaignId).replace(/_facebook$/,"").replace(/_instagram$/,""));
       if(c.campaignId)campaignIds.push(String(c.campaignId));
       if(c.campaignName)campaignNames.push(c.campaignName);
     });
