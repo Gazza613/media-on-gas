@@ -515,8 +515,8 @@ function CampaignAuditModal(props){
   var objCol={"Lead Generation":P.rose,"Click to App Install":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan};
 
   var exportCsv=function(){
-    var header=["Platform","Account","Campaign Name","Detected Objective","Classification Source","API Objective","Status","Campaign ID"];
-    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.classificationSource,c.apiObjective,c.status,c.campaignId];}));
+    var header=["Platform","Account","Campaign Name","Detected Objective","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
+    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.classificationSource,c.apiObjective,c.status,c.activeLast30Days?"yes":"no",c.campaignId];}));
     var csv=all.map(function(r){return r.map(function(cell){var s=String(cell||"");if(s.indexOf(",")>=0||s.indexOf('"')>=0||s.indexOf("\n")>=0){return '"'+s.replace(/"/g,'""')+'"';}return s;}).join(",");}).join("\n");
     var blob=new Blob([csv],{type:"text/csv"});
     var url=URL.createObjectURL(blob);
@@ -530,7 +530,7 @@ function CampaignAuditModal(props){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
         <div>
           <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Campaign Objective Audit</div>
-          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>{loading[0]?"Loading campaigns from all platforms...":data.length+" campaigns across "+Object.keys(platforms).length+" platforms. Filter or search to verify objective accuracy. Export for review with the team."}</div>
+          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>{loading[0]?"Loading campaigns from all platforms...":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>
@@ -563,6 +563,7 @@ function CampaignAuditModal(props){
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Why</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>API Objective</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Status</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>State</th>
             </tr>
           </thead>
           <tbody>
@@ -576,9 +577,10 @@ function CampaignAuditModal(props){
                 <td style={{padding:"10px",color:P.sub,verticalAlign:"top",fontSize:10,lineHeight:1.5}}>{c.classificationSource}</td>
                 <td style={{padding:"10px",color:P.dim,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.apiObjective||"—"}</td>
                 <td style={{padding:"10px",color:P.dim,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.status||"—"}</td>
+                <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}>{(function(){var s=(c.status||"").toUpperCase();var live=s==="ACTIVE"||s==="ENABLE"||s==="ENABLED";if(live)return <span style={{background:P.mint+"18",border:"1px solid "+P.mint+"50",color:P.mint,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>LIVE</span>;if(c.activeLast30Days)return <span style={{background:P.warning+"18",border:"1px solid "+P.warning+"50",color:P.warning,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>30D</span>;return <span style={{color:P.dim}}>—</span>;})()}</td>
               </tr>;
             })}
-            {filtered.length===0&&!loading[0]&&<tr><td colSpan={7} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the current filter.</td></tr>}
+            {filtered.length===0&&!loading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the current filter.</td></tr>}
           </tbody>
         </table>
       </div>

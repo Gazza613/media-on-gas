@@ -53,19 +53,31 @@ function mapTikTokObjective(ttObj) {
   return null;
 }
 
-async function fetchMeta(account, token) {
+async function fetchMeta(account, token, activeFrom, activeTo) {
   try {
-    var url = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,name,objective,status,effective_status&limit=500&access_token=" + token;
-    var r = await fetch(url);
-    if (!r.ok) return [];
-    var data = await r.json();
-    if (!data.data) return [];
-    return data.data.map(function(c) {
+    // Fetch campaigns + recent-activity campaign_ids in parallel.
+    var campsUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,name,objective,status,effective_status&limit=500&access_token=" + token;
+    var activityUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id&level=campaign&time_range={\"since\":\"" + activeFrom + "\",\"until\":\"" + activeTo + "\"}&limit=500&access_token=" + token;
+    var results = await Promise.all([fetch(campsUrl), fetch(activityUrl)]);
+    var campsRes = results[0], actRes = results[1];
+    if (!campsRes.ok) return [];
+    var campsData = await campsRes.json();
+    if (!campsData.data) return [];
+    var activeSet = {};
+    if (actRes.ok) {
+      var actData = await actRes.json();
+      if (actData.data) actData.data.forEach(function(row) { if (row.campaign_id) activeSet[String(row.campaign_id)] = true; });
+    }
+    var rows = [];
+    campsData.data.forEach(function(c) {
+      var isActive = (c.effective_status === "ACTIVE");
+      var recentlyActive = !!activeSet[String(c.id)];
+      if (!isActive && !recentlyActive) return;
       var apiMapped = mapMetaObjective(c.objective);
       var classification = apiMapped
         ? { obj: apiMapped, source: "Meta API objective: " + c.objective }
         : detectObjectiveFromName(c.name);
-      return {
+      rows.push({
         platform: "Meta",
         accountName: account.name,
         campaignId: c.id,
@@ -73,46 +85,75 @@ async function fetchMeta(account, token) {
         apiObjective: c.objective || "",
         detectedObjective: classification.obj,
         classificationSource: classification.source,
-        status: c.effective_status || c.status || ""
-      };
+        status: c.effective_status || c.status || "",
+        activeLast30Days: recentlyActive
+      });
     });
+    return rows;
   } catch (err) {
     console.error("Meta audit fetch error", account.name, err);
     return [];
   }
 }
 
-async function fetchTikTok(advId, token) {
+async function fetchTikTok(advId, token, activeFrom, activeTo) {
   try {
     var fields = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "objective_type", "operation_status"]));
-    var url = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + advId + "&fields=" + fields + "&page_size=200";
-    var r = await fetch(url, { headers: { "Access-Token": token } });
-    if (!r.ok) return [];
-    var data = await r.json();
+    var campsUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + advId + "&fields=" + fields + "&page_size=200";
+    var actDims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+    var actMetrics = encodeURIComponent(JSON.stringify(["spend", "impressions"]));
+    var activityUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + advId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + actDims + "&metrics=" + actMetrics + "&start_date=" + activeFrom + "&end_date=" + activeTo + "&page_size=200";
+    var results = await Promise.all([
+      fetch(campsUrl, { headers: { "Access-Token": token } }),
+      fetch(activityUrl, { headers: { "Access-Token": token } })
+    ]);
+    var campsRes = results[0], actRes = results[1];
+    if (!campsRes.ok) return [];
+    var data = await campsRes.json();
     if (!data.data || !data.data.list) return [];
-    return data.data.list.map(function(c) {
+    var activeSet = {};
+    if (actRes.ok) {
+      var actData = await actRes.json();
+      if (actData.data && actData.data.list) {
+        actData.data.list.forEach(function(row) {
+          var dim = row.dimensions || {};
+          var m = row.metrics || {};
+          if (dim.campaign_id && (parseFloat(m.spend || 0) > 0 || parseFloat(m.impressions || 0) > 0)) {
+            activeSet[String(dim.campaign_id)] = true;
+          }
+        });
+      }
+    }
+    var rows = [];
+    data.data.list.forEach(function(c) {
+      var cid = String(c.campaign_id || "");
+      var isActive = (c.operation_status === "ENABLE");
+      var recentlyActive = !!activeSet[cid];
+      if (!isActive && !recentlyActive) return;
       var apiMapped = mapTikTokObjective(c.objective_type);
       var classification = apiMapped
         ? { obj: apiMapped, source: "TikTok API objective_type: " + c.objective_type }
         : detectObjectiveFromName(c.campaign_name);
-      return {
+      rows.push({
         platform: "TikTok",
         accountName: "MTN MoMo TikTok",
-        campaignId: String(c.campaign_id || ""),
+        campaignId: cid,
         campaignName: c.campaign_name || "(unnamed)",
         apiObjective: c.objective_type || "",
         detectedObjective: classification.obj,
         classificationSource: classification.source,
-        status: c.operation_status || ""
-      };
+        status: c.operation_status || "",
+        activeLast30Days: recentlyActive
+      });
     });
+    return rows;
   } catch (err) {
     console.error("TikTok audit fetch error", err);
     return [];
   }
 }
 
-async function fetchGoogle() {
+async function fetchGoogle(activeFrom, activeTo) {
   try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
@@ -128,7 +169,10 @@ async function fetchGoogle() {
     });
     var tokenData = await tokenRes.json();
     if (!tokenData.access_token) return [];
-    var query = "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.advertising_channel_sub_type FROM campaign WHERE campaign.status != 'REMOVED'";
+    // Single query: every campaign with metrics in the last 30 days OR currently enabled.
+    // We ask for status + impressions over the period, then filter client-side for
+    // ENABLED or impressions > 0.
+    var query = "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, metrics.impressions FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '" + activeFrom + "' AND '" + activeTo + "'";
     var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
       method: "POST",
       headers: {
@@ -142,32 +186,67 @@ async function fetchGoogle() {
     if (gRes.status !== 200) return [];
     var gData = await gRes.json();
     var rows = gData.results || [];
-    return rows.map(function(r) {
-      var chType = (r.campaign.advertisingChannelType || "").toUpperCase();
-      var chSub = (r.campaign.advertisingChannelSubType || "").toUpperCase();
+    // Group by campaign id, keeping any row with impressions to flag as recently active.
+    var byId = {};
+    rows.forEach(function(r) {
+      var id = String(r.campaign.id || "");
+      if (!id) return;
+      var imps = parseFloat((r.metrics || {}).impressions || 0);
+      if (!byId[id]) byId[id] = { campaign: r.campaign, totalImps: 0 };
+      byId[id].totalImps += imps;
+    });
+    // Some currently-enabled campaigns may have no impressions in the window but
+    // still deserve to appear. Fetch those separately to union in.
+    var enabledQuery = "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.advertising_channel_sub_type FROM campaign WHERE campaign.status = 'ENABLED'";
+    var enRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + tokenData.access_token,
+        "developer-token": gDevToken,
+        "login-customer-id": gManagerId,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query: enabledQuery })
+    });
+    if (enRes.status === 200) {
+      var enData = await enRes.json();
+      (enData.results || []).forEach(function(r) {
+        var id = String(r.campaign.id || "");
+        if (!id) return;
+        if (!byId[id]) byId[id] = { campaign: r.campaign, totalImps: 0 };
+      });
+    }
+    var out = [];
+    Object.keys(byId).forEach(function(id) {
+      var r = byId[id];
+      var campaign = r.campaign;
+      var chType = (campaign.advertisingChannelType || "").toUpperCase();
+      var chSub = (campaign.advertisingChannelSubType || "").toUpperCase();
       var platform = "Google Display";
       if (chType === "VIDEO" || chSub.indexOf("VIDEO") >= 0) platform = "YouTube";
       else if (chType === "SEARCH") platform = "Google Search";
       else if (chType === "PERFORMANCE_MAX") platform = "Performance Max";
       else if (chType === "DISCOVERY" || chType === "DEMAND_GEN") platform = "Demand Gen";
-      var name = r.campaign.name || "(unnamed)";
+      var name = campaign.name || "(unnamed)";
       var classification;
       if (chSub.indexOf("APP") >= 0 || chSub.indexOf("APP_INSTALL") >= 0) {
         classification = { obj: "Click to App Install", source: "Google advertising_channel_sub_type: " + chSub };
       } else {
         classification = detectObjectiveFromName(name);
       }
-      return {
+      out.push({
         platform: platform,
         accountName: "MTN MoMo Google",
-        campaignId: String(r.campaign.id || ""),
+        campaignId: id,
         campaignName: name,
         apiObjective: chType + (chSub ? (" / " + chSub) : ""),
         detectedObjective: classification.obj,
         classificationSource: classification.source,
-        status: r.campaign.status || ""
-      };
+        status: campaign.status || "",
+        activeLast30Days: r.totalImps > 0
+      });
     });
+    return out;
   } catch (err) {
     console.error("Google audit fetch error", err);
     return [];
@@ -186,15 +265,22 @@ export default async function handler(req, res) {
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
 
+  // Compute a 30-day window used for the "active in last 30 days" check on
+  // every platform. ISO date strings are consistent across Meta, TikTok, Google.
+  var now = new Date();
+  var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  var activeFrom = thirtyDaysAgo.toISOString().slice(0, 10);
+  var activeTo = now.toISOString().slice(0, 10);
+
   // Fetch everything in parallel.
   var tasks = [];
   if (metaToken) {
-    META_ACCOUNTS.forEach(function(acc) { tasks.push(fetchMeta(acc, metaToken)); });
+    META_ACCOUNTS.forEach(function(acc) { tasks.push(fetchMeta(acc, metaToken, activeFrom, activeTo)); });
   }
   if (ttToken && ttAdvId) {
-    tasks.push(fetchTikTok(ttAdvId, ttToken));
+    tasks.push(fetchTikTok(ttAdvId, ttToken, activeFrom, activeTo));
   }
-  tasks.push(fetchGoogle());
+  tasks.push(fetchGoogle(activeFrom, activeTo));
 
   var all = [];
   try {
