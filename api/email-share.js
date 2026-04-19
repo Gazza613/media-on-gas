@@ -40,10 +40,16 @@ function isAppInstallCampaign(name) {
   var n = (name || "").toLowerCase();
   return n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0;
 }
+// Detect landing-page / traffic objective campaigns. Same rules as api/ads.js
+// detectObjective so the email tile matches what the dashboard KPI shows.
+function isLandingPageCampaign(name) {
+  var n = (name || "").toLowerCase();
+  return n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0;
+}
 
 // Aggregate a flat array of campaigns into one summed object + derived metrics.
 function aggregate(arr) {
-  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, appStoreClicks: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
+  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, appStoreClicks: 0, landingPageClicks: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
   arr.forEach(function(c) {
     s.impressions += parseFloat(c.impressions || 0);
     s.reach += parseFloat(c.reach || 0);
@@ -54,6 +60,10 @@ function aggregate(arr) {
     // Click-to-app-store count = clicks on app-install-objective campaigns
     if (isAppInstallCampaign(c.campaignName)) {
       s.appStoreClicks += parseFloat(c.clicks || 0);
+    }
+    // Click-to-landing-page count = clicks on traffic/LP-objective campaigns
+    if (isLandingPageCampaign(c.campaignName)) {
+      s.landingPageClicks += parseFloat(c.clicks || 0);
     }
     s.follows += parseFloat(c.follows || 0);
     s.pageLikes += parseFloat(c.pageLikes || 0);
@@ -213,15 +223,17 @@ function renderSummaryBlock(summary) {
   // honest for campaign shapes that focus on a single objective, a leads-only
   // campaign no longer shows empty followers/installs/LP tiles.
   var totalFollows = g.follows + g.pageLikes + g.likes;
-  // App-install outcome uses appStoreClicks (clicks on app-install-objective
-  // campaigns) because Meta rarely tracks actual installs via SDK. Falls back
-  // to g.appInstalls if any real installs exist, whichever is higher.
+  // App-install and landing-page outcomes use CLICKS on objective-matched
+  // campaigns (not action counts) because Meta rarely tracks actual installs
+  // or landing_page_view in SA for these campaign types. Mirrors the
+  // dashboard's Summary KPI tile logic exactly.
   var appStoreValue = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
+  var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var allOutcomes = [
     { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "", accent: "#F43F5E" },
     { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "", accent: "#00F2EA" },
     { label: "Clicks to App Store", value: appStoreValue, cost: appStoreValue > 0 ? fmtR(g.spend / appStoreValue) + " per click" : "", accent: "#4599FF" },
-    { label: "Landing page views", value: g.landingPageViews, cost: g.landingPageViews > 0 ? fmtR(g.spend / g.landingPageViews) + " per view" : "", accent: "#22D3EE" }
+    { label: "Clicks to Landing Page", value: lpClicksValue, cost: lpClicksValue > 0 ? fmtR(g.spend / lpClicksValue) + " per click" : "", accent: "#22D3EE" }
   ];
   var outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
   var OUTCOME_TILE_HEIGHT = 110;
@@ -295,12 +307,17 @@ function renderCommentaryBlock(summary) {
   var engagementText = "The audience responded actively with <strong>" + fmtNum(g.clicks) + "</strong> clicks, converting " + fmtPct(g.ctr) + " of ads served into genuine engagement. That click-through rate is " + ctrQuality + " the SA benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through. A blended cost per click of <strong>" + fmtR(g.cpc) + "</strong> demonstrates efficient value for every user action.";
   paras.push(engagementText);
 
-  // Outcomes paragraph (only if results exist)
+  // Outcomes paragraph (only if results exist). Must mirror the tile logic
+  // exactly, fallback to clicks on objective-matched campaigns when action
+  // counts are missing so commentary and KPI tiles never disagree.
   var totalFollows = g.follows + g.pageLikes + g.likes;
+  var appStoreValue = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
+  var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var outcomeParts = [];
   if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.spend / g.leads) + " per lead");
   if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.spend / totalFollows) + " per follower");
-  if (g.appInstalls > 0) outcomeParts.push("<strong>" + fmtNum(g.appInstalls) + " clicks to app store</strong> at " + fmtR(g.spend / g.appInstalls) + " per click");
+  if (appStoreValue > 0) outcomeParts.push("<strong>" + fmtNum(appStoreValue) + " clicks to app store</strong> at " + fmtR(g.spend / appStoreValue) + " per click");
+  if (lpClicksValue > 0) outcomeParts.push("<strong>" + fmtNum(lpClicksValue) + " clicks to landing page</strong> at " + fmtR(g.spend / lpClicksValue) + " per click");
   if (outcomeParts.length > 0) {
     paras.push("Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action.");
   }
@@ -601,7 +618,13 @@ export default async function handler(req, res) {
       textLines.push("Clicks: " + fmtNum(g.clicks));
       textLines.push("Click-through rate: " + fmtPct(g.ctr));
       textLines.push("Cost per click: " + fmtR(g.cpc));
+      var txtFollows = (parseFloat(g.follows || 0) + parseFloat(g.pageLikes || 0) + parseFloat(g.likes || 0));
+      var txtAppStore = Math.max(parseFloat(g.appStoreClicks || 0), parseFloat(g.appInstalls || 0));
+      var txtLp = parseFloat(g.landingPageClicks || 0);
       if (g.leads > 0) textLines.push("Leads: " + fmtNum(g.leads) + " at " + fmtR(g.spend / g.leads) + " per lead");
+      if (txtFollows > 0) textLines.push("New followers: " + fmtNum(txtFollows) + " at " + fmtR(g.spend / txtFollows) + " per follower");
+      if (txtAppStore > 0) textLines.push("Clicks to App Store: " + fmtNum(txtAppStore) + " at " + fmtR(g.spend / txtAppStore) + " per click");
+      if (txtLp > 0) textLines.push("Clicks to Landing Page: " + fmtNum(txtLp) + " at " + fmtR(g.spend / txtLp) + " per click");
       textLines.push("");
     }
     textLines.push("View full interactive dashboard: " + shareUrl);
