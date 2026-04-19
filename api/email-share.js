@@ -205,7 +205,7 @@ function renderSummaryBlock(summary) {
   var allOutcomes = [
     { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "", accent: "#F43F5E" },
     { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "", accent: "#00F2EA" },
-    { label: "Click to App Install", value: g.appInstalls, cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per click" : "", accent: "#4599FF" },
+    { label: "Clicks to App Store", value: g.appInstalls, cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per click" : "", accent: "#4599FF" },
     { label: "Landing page views", value: g.landingPageViews, cost: g.landingPageViews > 0 ? fmtR(g.spend / g.landingPageViews) + " per view" : "", accent: "#22D3EE" }
   ];
   var outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
@@ -285,7 +285,7 @@ function renderCommentaryBlock(summary) {
   var outcomeParts = [];
   if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.spend / g.leads) + " per lead");
   if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.spend / totalFollows) + " per follower");
-  if (g.appInstalls > 0) outcomeParts.push("<strong>" + fmtNum(g.appInstalls) + " clicks to app install</strong> at " + fmtR(g.spend / g.appInstalls) + " per click");
+  if (g.appInstalls > 0) outcomeParts.push("<strong>" + fmtNum(g.appInstalls) + " clicks to app store</strong> at " + fmtR(g.spend / g.appInstalls) + " per click");
   if (outcomeParts.length > 0) {
     paras.push("Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action.");
   }

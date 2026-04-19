@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 function detectObjectiveFromName(campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) {
-    return { obj: "Click to App Install", source: "name keyword: 'appinstall' / 'app install'" };
+    return { obj: "Clicks to App Store", source: "name keyword: 'appinstall' / 'app install'" };
   }
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) {
     return { obj: "Followers & Likes", source: "name keyword: 'follower' / '_like_' / 'paidsocial_like'" };
@@ -35,7 +35,7 @@ function detectObjectiveFromName(campaignName) {
 function mapMetaObjective(metaObj) {
   if (!metaObj) return null;
   var o = String(metaObj).toUpperCase();
-  if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "Click to App Install";
+  if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "Clicks to App Store";
   if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "Lead Generation";
   if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "Followers & Likes";
   if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "Landing Page Clicks";
@@ -46,7 +46,7 @@ function mapMetaObjective(metaObj) {
 function mapTikTokObjective(ttObj) {
   if (!ttObj) return null;
   var o = String(ttObj).toUpperCase();
-  if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "Click to App Install";
+  if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "Clicks to App Store";
   if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "Lead Generation";
   if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "Followers & Likes";
   if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "Landing Page Clicks";
@@ -230,7 +230,7 @@ async function fetchGoogle(activeFrom, activeTo) {
       var name = campaign.name || "(unnamed)";
       var classification;
       if (chSub.indexOf("APP") >= 0 || chSub.indexOf("APP_INSTALL") >= 0) {
-        classification = { obj: "Click to App Install", source: "Google advertising_channel_sub_type: " + chSub };
+        classification = { obj: "Clicks to App Store", source: "Google advertising_channel_sub_type: " + chSub };
       } else {
         classification = detectObjectiveFromName(name);
       }
