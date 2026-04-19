@@ -131,6 +131,7 @@ function ShareModal(props){
   var personalMsg=useState("");
   var senderName=useState("");
   var senderTitle=useState("");
+  var recipientName=useState("");
   var copy=function(){if(!shareUrl[0])return;navigator.clipboard.writeText(shareUrl[0]);copied[1](true);setTimeout(function(){copied[1](false);},2000);};
   var copyDraft=function(){
     var text=buildPlainDraft();
@@ -138,7 +139,8 @@ function ShareModal(props){
     draftCopied[1](true);setTimeout(function(){draftCopied[1](false);},2000);
   };
   var buildPlainDraft=function(){
-    var who=slug[0]?slug[0].split("-").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" "):"";
+    var slugWho=slug[0]?slug[0].split("-").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" "):"";
+    var who=(recipientName[0]||"").trim()||slugWho;
     var lines=[];
     lines.push("Hi "+(who||"there")+",");
     lines.push("");
@@ -165,7 +167,7 @@ function ShareModal(props){
       if(c.campaignId)campaignIds.push(String(c.campaignId));
       if(c.campaignName)campaignNames.push(c.campaignName);
     });
-    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim()};
+    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim()};
   };
   var validateBasics=function(){
     if(!slug[0].trim()){err[1]("Enter a client slug (e.g. mtn-momo)");return false;}
@@ -210,7 +212,7 @@ function ShareModal(props){
       else{err[1](d.error||"Could not send email");}
     }).catch(function(){busy[1](false);err[1]("Connection error");});
   };
-  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");emailDiagnostic[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");};
+  var reset=function(){shareUrl[1]("");expiresAt[1]("");slug[1]("");emailTo[1]("");emailCc[1]("");emailBcc[1]("");emailSent[1](false);emailSentTo[1]("");emailDiagnostic[1]("");personalMsg[1]("");senderName[1]("");senderTitle[1]("");recipientName[1]("");};
 
   // Audit trail state
   var auditOpen=useState(false);
@@ -286,9 +288,15 @@ function ShareModal(props){
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
       <div style={{fontSize:12,color:P.sub,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
 
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug</div>
-        <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="e.g. mtn-momo" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1}}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(report id)</span></div>
+          <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="e.g. mtn-momo" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1}}/>
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
+          <input value={recipientName[0]} onChange={function(e){recipientName[1](e.target.value);}} placeholder="e.g. Jane or Willowbrook Village" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,outline:"none"}}/>
+        </div>
       </div>
 
       <div style={{marginBottom:18}}>

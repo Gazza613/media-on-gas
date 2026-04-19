@@ -357,10 +357,16 @@ function renderTopAdsBlock(topAds) {
 }
 
 function buildEmailHtml(opts) {
+  // Client name is used for the report title and header. It's derived from the
+  // slug so the report always has a clean brand name in the banner.
   var clientName = opts.clientSlug
     .split("-")
     .map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); })
     .join(" ");
+  // Greeting name is what appears in "Hi ___,". If the sender gave a recipient
+  // name on the form (a person or company), use that. Falls back to the
+  // derived client name so old flows still work.
+  var greetingName = escapeHtml((opts.recipientName || "").trim() || clientName);
   var dateRange = opts.from + " to " + opts.to;
   var url = opts.shareUrl;
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
@@ -405,7 +411,7 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:16px 40px 8px;">
         <div style="font-size:15px;color:#FFFBF8;line-height:1.7;font-weight:400;">
-          Hi ${clientName},
+          Hi ${greetingName},
         </div>
         ${personal ? `<div style="font-size:14px;color:#FFFBF8;line-height:1.75;margin-top:14px;padding:16px 20px;background:rgba(249,98,3,0.06);border-left:3px solid #F96203;border-radius:0 10px 10px 0;">${personal}</div>` : ""}
         <div style="font-size:14px;color:rgba(255,251,248,0.78);line-height:1.7;margin-top:14px;">
@@ -548,6 +554,7 @@ export default async function handler(req, res) {
       personalMessage: body.personalMessage || "",
       senderName: body.senderName || "",
       senderTitle: body.senderTitle || "",
+      recipientName: body.recipientName || "",
       origin: origin,
       summary: summary,
       topAds: topAds
@@ -555,9 +562,10 @@ export default async function handler(req, res) {
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
     var clientName = clientSlug.split("-").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ");
+    var greetingName = (body.recipientName || "").trim() || clientName;
     var expiresDisplay = new Date(expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
     var textLines = [];
-    textLines.push("Hi " + clientName + ",");
+    textLines.push("Hi " + greetingName + ",");
     textLines.push("");
     if (body.personalMessage) { textLines.push(String(body.personalMessage).trim()); textLines.push(""); }
     textLines.push("Performance snapshot for " + from + " to " + to + ":");
