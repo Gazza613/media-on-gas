@@ -205,7 +205,7 @@ function renderSummaryBlock(summary) {
   var allOutcomes = [
     { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "", accent: "#F43F5E" },
     { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "", accent: "#00F2EA" },
-    { label: "App installs", value: g.appInstalls, cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per install" : "", accent: "#4599FF" },
+    { label: "Click to App Install", value: g.appInstalls, cost: g.appInstalls > 0 ? fmtR(g.spend / g.appInstalls) + " per click" : "", accent: "#4599FF" },
     { label: "Landing page views", value: g.landingPageViews, cost: g.landingPageViews > 0 ? fmtR(g.spend / g.landingPageViews) + " per view" : "", accent: "#22D3EE" }
   ];
   var outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
@@ -285,7 +285,7 @@ function renderCommentaryBlock(summary) {
   var outcomeParts = [];
   if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.spend / g.leads) + " per lead");
   if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.spend / totalFollows) + " per follower");
-  if (g.appInstalls > 0) outcomeParts.push("<strong>" + fmtNum(g.appInstalls) + " app installs</strong> at " + fmtR(g.spend / g.appInstalls) + " per install");
+  if (g.appInstalls > 0) outcomeParts.push("<strong>" + fmtNum(g.appInstalls) + " clicks to app install</strong> at " + fmtR(g.spend / g.appInstalls) + " per click");
   if (outcomeParts.length > 0) {
     paras.push("Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action.");
   }
@@ -306,8 +306,8 @@ function renderCommentaryBlock(summary) {
 function renderTopAdsBlock(topAds) {
   if (!topAds || topAds.length === 0) return "";
   var platColors = { "Facebook": "#4599FF", "Instagram": "#E1306C", "TikTok": "#00F2EA", "Google Display": "#34A853", "YouTube": "#FF0000", "Google Search": "#FFAA00", "Performance Max": "#7C3AED", "Demand Gen": "#D946EF" };
-  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "Installs" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "Clicks" : rt === "lp_clicks" ? "Clicks" : rt === "clicks" ? "Clicks" : "Results"; };
-  var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "installs" ? "per install" : rt === "follows" ? "per follower" : "per click"; };
+  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "App Clicks" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "App Clicks" : rt === "lp_clicks" ? "LP Clicks" : rt === "clicks" ? "Clicks" : "Results"; };
+  var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "installs" ? "per click" : rt === "follows" ? "per follower" : "per click"; };
 
   var platformBlocks = topAds.map(function(pl) {
     var accent = platColors[pl.platform] || "#F96203";

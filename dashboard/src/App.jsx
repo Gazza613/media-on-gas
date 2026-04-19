@@ -640,8 +640,8 @@ function ChatPanel(props){
           // Skip fully-empty assistant placeholders (pre-first-token). Keep placeholders that have attachments already.
           if(!isUser&&!m.content&&!(m.attachments&&m.attachments.length>0))return null;
           var platColors={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
-          var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":rt==="store_clicks"?"CLICKS":rt==="lp_clicks"?"CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
-          var costPerLabel=function(rt){return rt==="leads"?"per lead":rt==="installs"?"per install":rt==="follows"?"per follower":"per click";};
+          var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"APP CLICKS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":rt==="store_clicks"?"APP CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
+          var costPerLabel=function(rt){return rt==="leads"?"per lead":rt==="installs"?"per click":rt==="follows"?"per follower":"per click";};
           return <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isUser?"flex-end":"flex-start",gap:8}}>
             {!isUser&&m.attachments&&m.attachments.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:"92%",width:"100%"}}>
               {m.attachments.map(function(ad,ai){

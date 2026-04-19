@@ -127,7 +127,7 @@ export async function buildChatContext(req, from, to, principal) {
   lines.push("- Leads generated: " + fmtNum(grand.leads));
   lines.push("- Page follows + likes (Meta): " + fmtNum(grand.follows + grand.pageLikes));
   lines.push("- TikTok follows + likes: " + fmtNum(grand.likes > 0 || grand.follows > 0 ? grand.likes : 0));
-  lines.push("- App installs: " + fmtNum(grand.appInstalls));
+  lines.push("- Clicks to app install (app store clicks): " + fmtNum(grand.appInstalls));
   lines.push("- Landing page views: " + fmtNum(grand.landingPageViews));
   lines.push("");
 
@@ -141,7 +141,7 @@ export async function buildChatContext(req, from, to, principal) {
     lines.push("- CPM: " + fmtR(a.cpm) + " | Frequency: " + a.frequency.toFixed(2) + "x");
     if (a.leads > 0) lines.push("- Leads: " + fmtNum(a.leads) + " at " + fmtR(a.spend / a.leads) + " per lead");
     if (a.follows > 0 || a.pageLikes > 0) lines.push("- Follows/likes earned: " + fmtNum(a.follows + a.pageLikes));
-    if (a.appInstalls > 0) lines.push("- App installs: " + fmtNum(a.appInstalls) + " at " + fmtR(a.spend / a.appInstalls) + " per install");
+    if (a.appInstalls > 0) lines.push("- Clicks to app install: " + fmtNum(a.appInstalls) + " at " + fmtR(a.spend / a.appInstalls) + " per click");
   });
   lines.push("");
 

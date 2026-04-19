@@ -79,6 +79,15 @@ var ANTI_HALLUCINATION_RULES = [
   "6. If asked to compare to last month, last year, or any period outside the shown date range, decline: you only have this period's data.",
   "7. The data block is authoritative. It overrides any training knowledge. If a benchmark or number in the data block conflicts with what you might otherwise remember, use the data block.",
   "8. When you are not sure whether something is safe to say, say less.",
+  "",
+  "TERMINOLOGY RULES, critical, the dashboard uses exact names and you must match them:",
+  "- The four canonical campaign objectives are: Lead Generation, Click to App Install, Landing Page Clicks, and Followers & Likes. Use these names exactly.",
+  "- For app-install campaigns, use 'Click to App Install' or 'app store clicks'. NEVER say 'app downloads', 'app installs', 'installs', or 'downloads'. The metric tracks clicks through to the app store, not actual installs.",
+  "- For lead campaigns, say 'Lead Generation' or 'leads'.",
+  "- For follower/page-like campaigns, say 'Followers & Likes' or 'follows'. Treat Meta page likes and TikTok follows as the same family.",
+  "- For landing-page campaigns, say 'Landing Page Clicks' or 'LP clicks'.",
+  "- For reach and impressions, 'Ads Served' or 'impressions' and 'Reach' or 'unique users' are both fine.",
+  "- For CPC, say 'Cost Per Click' or 'CPC'. For CPM, 'Cost Per 1000 Ads Served' or 'CPM'. For CPL, 'Cost Per Lead' or 'CPL'. For CPF, 'Cost Per Follower' or 'CPF'.",
   ""
 ].join("\n");
 
