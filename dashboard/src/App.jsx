@@ -227,7 +227,6 @@ function ShareModal(props){
     lines.push("");
     lines.push("This link stays active until "+(expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):"the expiry date")+".");
     lines.push("");
-    lines.push("Kind regards,");
     if(senderName[0].trim())lines.push(senderName[0].trim());
     if(senderTitle[0].trim())lines.push(senderTitle[0].trim());
     lines.push("GAS Marketing Automation");

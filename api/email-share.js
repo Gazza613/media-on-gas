@@ -488,8 +488,7 @@ function buildEmailHtml(opts) {
 
       ${(senderName || senderTitle) ? `
       <tr><td style="padding:18px 40px 4px;">
-        <div style="font-size:13px;color:#FFFBF8;font-weight:600;">Kind regards,</div>
-        ${senderName ? `<div style="font-size:14px;color:#FFFBF8;font-weight:700;margin-top:6px;">${senderName}</div>` : ""}
+        ${senderName ? `<div style="font-size:14px;color:#FFFBF8;font-weight:700;">${senderName}</div>` : ""}
         ${senderTitle ? `<div style="font-size:12px;color:#8B7FA3;margin-top:2px;">${senderTitle}</div>` : ""}
       </td></tr>` : ""}
 
@@ -642,7 +641,6 @@ export default async function handler(req, res) {
     textLines.push("");
     textLines.push("This link stays active until " + expiresDisplay + ".");
     textLines.push("");
-    textLines.push("Kind regards,");
     if (body.senderName) textLines.push(String(body.senderName).trim());
     if (body.senderTitle) textLines.push(String(body.senderTitle).trim());
     textLines.push("GAS Marketing Automation");
