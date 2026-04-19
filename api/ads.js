@@ -649,6 +649,9 @@ export default async function handler(req, res) {
           followsTrue: (ins.trueTotals && ins.trueTotals.followersCombined) || 0,
           leadsTrue: (ins.trueTotals && ins.trueTotals.leads) || 0,
           appInstallsTrue: (ins.trueTotals && ins.trueTotals.appInstalls) || 0,
+          // Meta video id for in-dashboard playback via /api/ad-video proxy.
+          // Falls back to the first DCO variant video if the primary creative is static.
+          videoId: cr.video_id || (candidateVids.length > 0 ? candidateVids[0] : ""),
           placements: ins.placements
         });
       });
@@ -772,6 +775,7 @@ export default async function handler(req, res) {
             results: ttResCount,
             resultType: ttResType,
             followsRaw: follows + likes,
+            videoId: ad.video_id || "",
             placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });
         });
@@ -1030,6 +1034,9 @@ export default async function handler(req, res) {
               results: gResCount,
               resultType: gResType,
               followsRaw: 0,
+              // YouTube ID parsed from preview URL (youtube.com/watch?v=<id>) for in-dashboard
+              // iframe embed. Empty for Display/Search ads (static images or text only).
+              youtubeId: (function(){ var m = /[?&]v=([^&#]+)/.exec(preview||""); return m ? m[1] : ""; })(),
               placements: (function(){ var p={}; p[gPlace]={spend:sp,impressions:imps,clicks:clk}; return p; })()
             });
           });

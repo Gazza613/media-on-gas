@@ -113,6 +113,80 @@ function CampaignSelector(props){
   </div>);
 }
 
+// In-dashboard ad preview modal. Plays Meta / TikTok MP4s via our /api/ad-video
+// proxy (uses admin platform tokens server-side so client share-link users never
+// hit a platform auth wall). YouTube ads embed via public iframe. Static images
+// render as full-size. No platform-link fallback for clients.
+function AdPreviewModal(props){
+  if(!props.ad)return null;
+  var ad=props.ad;
+  var format=(ad.format||"STATIC").toUpperCase();
+  var isVideo=format==="MP4"||format==="VIDEO";
+  var platformLow=(ad.platform||"").toLowerCase();
+  var platformKey=platformLow.indexOf("instagram")>=0||platformLow.indexOf("facebook")>=0?"meta":platformLow.indexOf("tiktok")>=0?"tiktok":platformLow.indexOf("youtube")>=0||ad.youtubeId?"youtube":"other";
+  var campaignIdParam=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+  var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
+  var accent=platAccent[ad.platform]||P.ember;
+  var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"APP CLICKS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":rt==="store_clicks"?"APP CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
+  var costPerLabel=function(rt){return rt==="leads"?"per lead":rt==="installs"?"per click":rt==="follows"?"per follower":"per click";};
+
+  var mediaBlock=null;
+  if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
+    mediaBlock=<iframe title="Ad preview" src={"https://www.youtube.com/embed/"+encodeURIComponent(ad.youtubeId)} style={{width:"100%",aspectRatio:"16/9",border:"none",borderRadius:10,background:"#000"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>;
+  } else if(isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId){
+    var proxySrc=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+    mediaBlock=<video controls playsInline poster={ad.thumbnail||""} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}><source src={proxySrc}/></video>;
+  } else if(ad.thumbnail){
+    mediaBlock=<img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",borderRadius:10,display:"block"}}/>;
+  } else {
+    mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",background:"linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontFamily:fm,letterSpacing:2,fontWeight:800}}>NO PREVIEW AVAILABLE</div>;
+  }
+
+  var results=parseFloat(ad.results||0);
+  var spend=parseFloat(ad.spend||0);
+  var costPerResult=results>0?spend/results:0;
+
+  return <div onClick={props.onClose} style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 16px",overflow:"auto"}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{width:760,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",overflowY:"auto",background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 24px",boxShadow:"0 30px 80px rgba(0,0,0,0.65)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <span style={{background:accent,color:"#fff",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{ad.platform}</span>
+          <span style={{background:"rgba(255,255,255,0.08)",color:P.txt,fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{format}</span>
+        </div>
+        <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      {mediaBlock}
+      <div style={{marginTop:16,fontSize:14,fontWeight:800,color:P.txt,fontFamily:ff,lineHeight:1.4}}>{ad.adName||"Unnamed ad"}</div>
+      {ad.campaignName&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:4}}>Campaign: {ad.campaignName}</div>}
+      <div style={{marginTop:14,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}}>
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:accent,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>{resultLabel(ad.resultType)}</div>
+          <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{results>0?fmt(results):"\u2014"}</div>
+          {results>0&&<div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:4}}>{fR(costPerResult)+" "+costPerLabel(ad.resultType)}</div>}
+        </div>
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Spend</div>
+          <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fR(spend)}</div>
+        </div>
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Impressions</div>
+          <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fmt(parseFloat(ad.impressions||0))}</div>
+        </div>
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>CTR</div>
+          <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{(parseFloat(ad.ctr||0)).toFixed(2)+"%"}</div>
+        </div>
+        <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Cost Per Click</div>
+          <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fR(parseFloat(ad.cpc||0))}</div>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
 function ShareModal(props){
   var slug=useState("");
   var expiry=useState(30);
@@ -1009,6 +1083,7 @@ export default function MediaOnGas(){
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
   var scs=useState(false),showChat=scs[0],setShowChat=scs[1];
   var sa=useState(false),showAudit=sa[0],setShowAudit=sa[1];
+  var pa=useState(null),previewAd=pa[0],setPreviewAd=pa[1];
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
@@ -1271,6 +1346,7 @@ export default function MediaOnGas(){
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt}/>
+    <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} apiKey={viewToken?"":API_KEY} viewToken={viewToken}/>
     <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>
 
     {!isClient&&dataWarnings.length>0&&<div style={{maxWidth:1400,margin:"12px auto 0",padding:"12px 18px",background:P.warning+"15",border:"1px solid "+P.warning+"50",borderLeft:"4px solid "+P.warning,borderRadius:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative",zIndex:2}}>
@@ -1782,7 +1858,7 @@ export default function MediaOnGas(){
                         <span>{fR(ad.spend)}</span>
                         <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
-                      {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"6px 8px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:5,color:P.dim,fontSize:8,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1}}>NO LINK</div>}
+                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%"}}>VIEW AD</button>
                     </div>
                   </div>;
                 };
@@ -2109,7 +2185,7 @@ export default function MediaOnGas(){
                     <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:11}}>{ad.ctr.toFixed(2)+"%"}</div></div>
                     <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
                   </div>
-                  {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",textDecoration:"none",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40"}}>VIEW AD</a>:<div style={{marginTop:"auto",padding:"9px 10px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:6,color:P.dim,fontSize:9,fontWeight:700,fontFamily:fm,textAlign:"center",letterSpacing:1.5}}>NO LINK</div>}
+                  <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%"}}>VIEW AD</button>
                 </div>
               </div>;
             };
@@ -2135,7 +2211,7 @@ export default function MediaOnGas(){
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",background:adPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,textDecoration:"none",letterSpacing:1}}>VIEW AD</a>:<span style={{color:P.dim,fontSize:9,fontFamily:fm}}>-</span>}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><button onClick={function(){setPreviewAd(ad);}} style={{display:"inline-block",background:adPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,border:"none",letterSpacing:1,cursor:"pointer"}}>VIEW AD</button></td>
               </tr>;
             };
 
@@ -2373,7 +2449,7 @@ export default function MediaOnGas(){
                         <span style={{color:P.sub}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
                     </div>
-                    {ad.previewUrl?<a href={ad.previewUrl} target="_blank" rel="noopener noreferrer" style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,textDecoration:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap"}}>VIEW AD</a>:<span style={{flexShrink:0,color:P.dim,fontSize:8,fontFamily:fm,letterSpacing:1,padding:"5px 10px",border:"1px solid "+P.rule,borderRadius:5,whiteSpace:"nowrap"}}>NO LINK</span>}
+                    <button onClick={function(){setPreviewAd(ad);}} style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,border:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap",cursor:"pointer"}}>VIEW AD</button>
                   </div>;
                 };
 
