@@ -303,6 +303,9 @@ function ShareModal(props){
         previewHtml[1]("");
         shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt);
         emailSent[1](true);emailSentTo[1]((d.sentTo||[]).join(", "));emailDiagnostic[1](d.diagnostic||"");
+        // Close the modal and hand control back to the dashboard so it can
+        // show the green toast and land the user on the Summary view.
+        if(typeof props.onSent==="function")props.onSent();
       }
       else{err[1](d.error||"Could not send email");}
     }).catch(function(){busy[1](false);err[1]("Connection error");});
@@ -1082,6 +1085,9 @@ export default function MediaOnGas(){
   var wn=useState([]),dataWarnings=wn[0],setDataWarnings=wn[1];
   var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
+  // Brief success toast after a share email is sent, shown near the top of
+  // the summary view for 3.5s then fades out on its own.
+  var sts=useState(false),showSentToast=sts[0],setShowSentToast=sts[1];
   var scs=useState(false),showChat=scs[0],setShowChat=scs[1];
   var sa=useState(false),showAudit=sa[0],setShowAudit=sa[1];
   var pa=useState(null),previewAd=pa[0],setPreviewAd=pa[1];
@@ -1345,7 +1351,8 @@ export default function MediaOnGas(){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1}}>{tabs.map(function(tb){return<button key={tb.id} onClick={function(){setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:tab===tb.id?P.ember+"10":"transparent",border:"none",borderBottom:tab===tb.id?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:"pointer",color:tab===tb.id?P.ember:P.sub,fontSize:13,fontWeight:tab===tb.id?800:500,fontFamily:ff,letterSpacing:0.3}}>{tb.icon}<span>{tb.label}</span></button>;})}</div></div>
     </header>
 
-    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
+    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
+    {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} apiKey={viewToken?"":API_KEY} viewToken={viewToken}/>
     <ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>
