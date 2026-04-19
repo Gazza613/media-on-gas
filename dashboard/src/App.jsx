@@ -1497,7 +1497,7 @@ export default function MediaOnGas(){
                 // appearing mid-scroll after the fetch resolves.
                 if(!adsList||adsList.length===0){
                   return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                    {secHead(P.mint,"TOP ADS PER PLATFORM (BY OBJECTIVE)",Ic.crown(P.mint,18))}
+                    {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
                     <div style={{padding:"40px 20px",textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12,lineHeight:1.8}}>
                       <div style={{fontSize:14,color:P.sub,marginBottom:6}}>Loading creative performance…</div>
                       <div>Fetching ad-level thumbnails and metrics from Meta, TikTok and Google. This usually takes 5-15 seconds.</div>
@@ -1576,23 +1576,17 @@ export default function MediaOnGas(){
                   return b.ctr-a.ctr;
                 };
 
+                // Reordered: outer = objective, inner = platform.
                 var sections=[];
-                platGroups.forEach(function(pg){
-                  var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
-                  if(platAds.length===0)return;
+                objGroups.forEach(function(og){
                   var groups=[];
-                  objGroups.forEach(function(og){
+                  platGroups.forEach(function(pg){
+                    var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
+                    if(platAds.length===0)return;
                     var objAds;
                     if(og.key==="followers"){
-                      // Strict match: only ads whose campaign objective is Followers / Page Likes /
-                      // Engagement. App Install and other campaigns often pick up a handful of
-                      // incidental likes which previously made them appear here, confusingly.
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")==="followers";});
                     } else if(og.key==="landingpage"){
-                      // LP objective ranks and displays by CLICKS. Some platforms (Google) return
-                      // conversions alongside clicks, and the backend stores results = conversions
-                      // when available. Under LP we override so both the sort and the on-card
-                      // metric use the raw clicks, keeping rank visually consistent.
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
                         var clicks=parseFloat(a.clicks||0);
                         return Object.assign({},a,{results:clicks,resultType:"lp_clicks"});
@@ -1606,10 +1600,10 @@ export default function MediaOnGas(){
                     else if(og.key==="landingpage")sorter=landingPageSort;
                     else sorter=engagementSort;
                     var sorted=objAds.slice().sort(sorter).slice(0,5);
-                    groups.push({og:og,ads:sorted,total:objAds.length});
+                    groups.push({pg:pg,ads:sorted,total:objAds.length});
                   });
                   if(groups.length===0)return;
-                  sections.push({pg:pg,groups:groups,total:platAds.length});
+                  sections.push({og:og,groups:groups});
                 });
                 if(sections.length===0)return null;
 
@@ -1656,23 +1650,23 @@ export default function MediaOnGas(){
                 };
 
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                  {secHead(P.mint,"TOP ADS PER PLATFORM (BY OBJECTIVE)",Ic.crown(P.mint,18))}
+                  {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
                   {sections.map(function(s){
-                    return <div key={s.pg.key} style={{marginBottom:28}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,paddingBottom:10,borderBottom:"2px solid "+s.pg.accent+"50"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:s.pg.accent,boxShadow:"0 0 10px "+s.pg.accent}}/>
-                        <span style={{fontSize:16,fontWeight:900,color:s.pg.accent,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",lineHeight:1}}>{s.pg.label}</span>
-                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.pg.accent+"40, transparent)"}}/>
-                        <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{s.total+" total ads \u00b7 "+s.groups.length+" objectives"}</span>
+                    return <div key={s.og.key} style={{marginBottom:28}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,paddingBottom:10,borderBottom:"2px solid "+s.og.accent+"50"}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:s.og.accent,boxShadow:"0 0 10px "+s.og.accent}}/>
+                        <span style={{fontSize:16,fontWeight:900,color:s.og.accent,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",lineHeight:1}}>{s.og.label}</span>
+                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.og.accent+"40, transparent)"}}/>
+                        <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"ranked "+s.og.criterion+" \u00b7 "+s.groups.length+" platform"+(s.groups.length===1?"":"s")}</span>
                       </div>
                       {s.groups.map(function(g){
-                        return <div key={s.pg.key+"_"+g.og.key} style={{marginBottom:18,paddingLeft:12,borderLeft:"3px solid "+g.og.accent+"55"}}>
+                        return <div key={s.og.key+"_"+g.pg.key} style={{marginBottom:18,paddingLeft:12,borderLeft:"3px solid "+g.pg.accent+"55"}}>
                           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                            <span style={{fontSize:11,fontWeight:900,color:g.og.accent,fontFamily:fm,letterSpacing:2}}>{g.og.label}</span>
-                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"\u2022 ranked "+g.og.criterion+" \u2022 "+g.total+" ad"+(g.total===1?"":"s")}</span>
+                            <span style={{fontSize:11,fontWeight:900,color:g.pg.accent,fontFamily:fm,letterSpacing:2}}>{g.pg.label}</span>
+                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"\u2022 "+g.total+" ad"+(g.total===1?"":"s")}</span>
                           </div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
-                            {g.ads.map(function(ad,i){return renderAdCard(ad,i+1,s.pg.accent,s.pg.short,g.og.accent);})}
+                            {g.ads.map(function(ad,i){return renderAdCard(ad,i+1,g.pg.accent,g.pg.short,s.og.accent);})}
                           </div>
                         </div>;
                       })}
