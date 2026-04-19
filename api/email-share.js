@@ -59,10 +59,10 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, top ads skipped"); return null; }
-    var internalHost = req.headers.host;
-    var internalProto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
-    if (!internalHost) return null;
-    var url = internalProto + "://" + internalHost + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+    // Pin internal-fetch URL to known-good production host. Never trust req.headers.host
+    // for credentialed outbound calls: a crafted Host header would exfil the admin key.
+    var internalHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var url = "https://" + internalHost + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     var r = await fetch(url, { headers: { "x-api-key": apiKey } });
     if (!r.ok) { console.warn("[email-share] /api/ads internal fetch failed", r.status); return null; }
     var d = await r.json();
@@ -109,10 +109,8 @@ async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, summary skipped"); return null; }
-    var internalHost = req.headers.host;
-    var internalProto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
-    if (!internalHost) return null;
-    var url = internalProto + "://" + internalHost + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+    var internalHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var url = "https://" + internalHost + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     var r = await fetch(url, { headers: { "x-api-key": apiKey } });
     if (!r.ok) { console.warn("[email-share] /api/campaigns internal fetch failed", r.status); return null; }
     var d = await r.json();

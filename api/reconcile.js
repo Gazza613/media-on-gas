@@ -44,10 +44,19 @@ async function fetchMetaTruth(token, from, to) {
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
     try {
       var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&time_range={\"since\":\"" + from + "\",\"until\":\"" + to + "\"}&limit=500&access_token=" + token;
-      var r = await fetch(url);
-      if (!r.ok) return;
-      var d = await r.json();
-      (d.data || []).forEach(function(row) {
+      // Follow pagination so large accounts (>500 campaigns) aren't truncated.
+      var allRows = [];
+      var next = url;
+      var guard = 0;
+      while (next && guard < 10) {
+        guard++;
+        var r = await fetch(next);
+        if (!r.ok) break;
+        var d = await r.json();
+        if (d.data) allRows = allRows.concat(d.data);
+        next = d.paging && d.paging.next ? d.paging.next : null;
+      }
+      allRows.forEach(function(row) {
         var actions = {};
         (row.actions || []).forEach(function(a) { actions[a.action_type] = parseInt(a.value || 0); });
         var leads = Math.max(
@@ -81,11 +90,21 @@ async function fetchTikTokTruth(token, advId, from, to) {
   try {
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
     var metrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes"]));
-    var url = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + advId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
-    var r = await fetch(url, { headers: { "Access-Token": token } });
-    if (!r.ok) return [];
-    var d = await r.json();
-    return ((d.data || {}).list || []).map(function(row) {
+    var base = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + advId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
+    // Follow TikTok pagination via page_info.total_page.
+    var all = [];
+    var page = 1;
+    while (page < 10) {
+      var r = await fetch(base + "&page=" + page, { headers: { "Access-Token": token } });
+      if (!r.ok) break;
+      var d = await r.json();
+      var list = (d.data || {}).list || [];
+      all = all.concat(list);
+      var totalPage = (d.data && d.data.page_info && d.data.page_info.total_page) || 1;
+      if (page >= totalPage) break;
+      page++;
+    }
+    return all.map(function(row) {
       var m = row.metrics || {};
       return {
         platform: "TikTok",
@@ -117,14 +136,23 @@ async function fetchGoogleTruth(from, to) {
     var tokD = await tok.json();
     if (!tokD.access_token) return [];
     var q = "SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
-    var r = await fetch("https://googleads.googleapis.com/v21/customers/" + customer + "/googleAds:search", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + tokD.access_token, "developer-token": dt, "login-customer-id": mg, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: q })
-    });
-    if (r.status !== 200) return [];
-    var d = await r.json();
-    var rows = d.results || [];
+    // Follow nextPageToken pagination for accounts exceeding a single page.
+    var rows = [];
+    var pageToken = null;
+    var gGuard = 0;
+    do {
+      gGuard++;
+      var body = pageToken ? { query: q, pageToken: pageToken } : { query: q };
+      var r = await fetch("https://googleads.googleapis.com/v21/customers/" + customer + "/googleAds:search", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + tokD.access_token, "developer-token": dt, "login-customer-id": mg, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (r.status !== 200) break;
+      var d = await r.json();
+      if (d.results) rows = rows.concat(d.results);
+      pageToken = d.nextPageToken || null;
+    } while (pageToken && gGuard < 20);
     var byId = {};
     rows.forEach(function(row) {
       var id = String(row.campaign.id || "");
@@ -158,9 +186,8 @@ async function fetchDashboardNumbers(req, from, to) {
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) return [];
-    var host = req.headers.host;
-    var proto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
-    var r = await fetch(proto + "://" + host + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), { headers: { "x-api-key": apiKey } });
+    var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var r = await fetch("https://" + host + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), { headers: { "x-api-key": apiKey } });
     if (!r.ok) return [];
     var d = await r.json();
     return (d.campaigns || []).map(function(c) {

@@ -21,6 +21,9 @@ export default async function handler(req, res) {
   var to = req.query.to || "2026-04-07";
   var allCampaigns = [];
   var seenIds = {};
+  // Surface per-platform fetch failures so the dashboard can show a banner
+  // instead of silently rendering zeros.
+  var warnings = [];
   var now = new Date();
   var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -38,13 +41,23 @@ export default async function handler(req, res) {
           campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, created: new Date(camp.created_time), startTime: camp.start_time || null, stopTime: camp.stop_time || null };
         }
       }
-    } catch (err) { console.error("Meta campaign list error for", account.name, err); }
+    } catch (err) { console.error("Meta campaign list error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "campaign-list", message: String(err && err.message || err) }); }
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
-      var response = await fetch(url);
-      var data = await response.json();
+      // Follow paging.next to capture all rows, not just the first 500.
+      var allMetaRows = [];
+      var nextUrl = url;
+      var pageGuard = 0;
+      while (nextUrl && pageGuard < 10) {
+        pageGuard++;
+        var pageRes = await fetch(nextUrl);
+        var pageData = await pageRes.json();
+        if (pageData.data) allMetaRows = allMetaRows.concat(pageData.data);
+        nextUrl = pageData.paging && pageData.paging.next ? pageData.paging.next : null;
+      }
+      var data = { data: allMetaRows };
       if (data.data) {
         for (var j = 0; j < data.data.length; j++) {
           var c = data.data[j];
@@ -68,8 +81,14 @@ export default async function handler(req, res) {
                 if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") {
                   leads = Math.max(leads, parseInt(act.value));
                 }
-                if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install") {
-                  appInstalls += parseInt(act.value);
+                // Meta reports overlapping action types (app_install, mobile_app_install,
+                // omni_app_install, app_custom_event.fb_mobile_activate_app). Using += over-counts.
+                // Math.max is the consistent pattern used for leads, landing_page_view, etc.
+                if (act.action_type === "app_custom_event.fb_mobile_activate_app" ||
+                    act.action_type === "app_install" ||
+                    act.action_type === "mobile_app_install" ||
+                    act.action_type === "omni_app_install") {
+                  appInstalls = Math.max(appInstalls, parseInt(act.value));
                 }
                 if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
                   landingPageViews = Math.max(landingPageViews, parseInt(act.value));
@@ -114,7 +133,7 @@ export default async function handler(req, res) {
           }
         }
       }
-    } catch (err) { console.error("Meta insights error for", account.name, err); }
+    } catch (err) { console.error("Meta insights error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "insights", message: String(err && err.message || err) }); }
 
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
@@ -164,7 +183,7 @@ export default async function handler(req, res) {
         allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active" });
       }
     });
-  } catch (ttErr) { console.error("TikTok campaigns error", ttErr); }
+  } catch (ttErr) { console.error("TikTok campaigns error", ttErr); warnings.push({ platform: "TikTok", stage: "campaigns", message: String(ttErr && ttErr.message || ttErr) }); }
 
   // Google Ads
   try {
@@ -241,7 +260,7 @@ export default async function handler(req, res) {
         }
       }
     }
-  } catch (gErr) { console.error("Google Ads error", gErr); }
+  } catch (gErr) { console.error("Google Ads error", gErr); warnings.push({ platform: "Google", stage: "ads", message: String(gErr && gErr.message || gErr) }); }
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 
@@ -292,5 +311,5 @@ export default async function handler(req, res) {
       return false;
     });
   }
-  res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData });
+  res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings });
 }

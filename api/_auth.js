@@ -74,15 +74,22 @@ export function checkAuth(req, res) {
 
 // Helper for data endpoints: given a campaign id/name and the current principal,
 // decide if the caller is allowed to see it. Admins see everything.
+// Strict matching only, no prefix bypass. Accepts raw and _facebook/_instagram
+// suffixed variants explicitly so tokens issued against dashboard IDs still match.
 export function isCampaignAllowed(principal, campaignId, campaignName) {
   if (!principal || principal.role === "admin") return true;
   if (principal.role !== "client") return false;
-  var ids = principal.allowedCampaignIds || [];
+  var ids = (principal.allowedCampaignIds || []).map(String);
   var names = principal.allowedCampaignNames || [];
   if (ids.length === 0 && names.length === 0) return false;
   var idStr = String(campaignId || "");
-  if (ids.indexOf(idStr) >= 0) return true;
-  if (idStr && ids.some(function(a) { return String(a) === idStr || idStr.indexOf(String(a)) === 0; })) return true;
+  var idStrStripped = idStr.replace(/_(facebook|instagram)$/, "");
+  var allowed = {};
+  ids.forEach(function(a) {
+    allowed[a] = true;
+    allowed[a.replace(/_(facebook|instagram)$/, "")] = true;
+  });
+  if (allowed[idStr] || allowed[idStrStripped]) return true;
   if (campaignName && names.indexOf(campaignName) >= 0) return true;
   return false;
 }

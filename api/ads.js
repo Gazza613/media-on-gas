@@ -80,15 +80,23 @@ export default async function handler(req, res) {
   var cacheKey = from + "|" + to;
   var cached = adsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
-    // Apply client-token filtering on cache hits so scoped tokens never see wider data
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
-      var cIds = pCached.allowedCampaignIds || [];
+      var cIds = (pCached.allowedCampaignIds || []).map(String);
       var cNames = pCached.allowedCampaignNames || [];
+      // Normalise to a set that accepts raw, suffix-stripped, and _facebook/_instagram-suffixed
+      // variants. Tokens issued from the dashboard carry all three; ads payload carries raw.
+      var allowed = {};
+      cIds.forEach(function(x) {
+        var s = String(x);
+        allowed[s] = true;
+        allowed[s.replace(/_(facebook|instagram)$/, "")] = true;
+      });
       var cFiltered = (cached.data.ads || []).filter(function(a) {
         var cid = String(a.campaignId || "");
-        if (cIds.indexOf(cid) >= 0) return true;
-        if (cNames.indexOf(a.campaignName || "") >= 0) return true;
+        var rawCid = cid.replace(/_(facebook|instagram)$/, "");
+        if (allowed[cid] || allowed[rawCid]) return true;
+        if (a.campaignName && cNames.indexOf(a.campaignName) >= 0) return true;
         return false;
       });
       res.status(200).json({ ads: cFiltered, total: cFiltered.length });
@@ -122,8 +130,18 @@ export default async function handler(req, res) {
       // similar campaigns (a 45-ad campaign would return just 1 row). We split
       // FB vs IG via publisher_platform but take no further breakdowns.
       var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
-      var insRes = await fetch(insUrl);
-      var insData = await insRes.json();
+      // Follow paging.next so accounts with more than 500 ad rows don't silently drop data.
+      var insAllRows = [];
+      var insNext = insUrl;
+      var insGuard = 0;
+      while (insNext && insGuard < 10) {
+        insGuard++;
+        var insPageRes = await fetch(insNext);
+        var insPageData = await insPageRes.json();
+        if (insPageData.data) insAllRows = insAllRows.concat(insPageData.data);
+        insNext = insPageData.paging && insPageData.paging.next ? insPageData.paging.next : null;
+      }
+      var insData = { data: insAllRows };
       // Aggregate placement-level rows back to one record per ad+publisher
       var insMap = {};
       var normalizePlace = function(pos) {
@@ -1013,13 +1031,18 @@ export default async function handler(req, res) {
   adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
-    var ids = principal.allowedCampaignIds || [];
+    var ids = (principal.allowedCampaignIds || []).map(String);
     var names = principal.allowedCampaignNames || [];
+    var allowedSet = {};
+    ids.forEach(function(x) {
+      allowedSet[x] = true;
+      allowedSet[x.replace(/_(facebook|instagram)$/, "")] = true;
+    });
     var filtered = allAds.filter(function(a) {
       var cid = String(a.campaignId || "");
-      if (ids.indexOf(cid) >= 0) return true;
-      if (ids.some(function(allowed) { return cid && String(allowed) === cid; })) return true;
-      if (names.indexOf(a.campaignName || "") >= 0) return true;
+      var rawCid = cid.replace(/_(facebook|instagram)$/, "");
+      if (allowedSet[cid] || allowedSet[rawCid]) return true;
+      if (a.campaignName && names.indexOf(a.campaignName) >= 0) return true;
       return false;
     });
     res.status(200).json({ ads: filtered, total: filtered.length });

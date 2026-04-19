@@ -41,10 +41,10 @@ function aggregate(arr) {
 async function internalFetch(req, path) {
   var apiKey = process.env.DASHBOARD_API_KEY;
   if (!apiKey) return null;
-  var host = req.headers.host;
-  var proto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
-  if (!host) return null;
-  var r = await fetch(proto + "://" + host + path, { headers: { "x-api-key": apiKey } });
+  // Pin to known-good production host, never trust incoming Host header for
+  // credentialed outbound fetches.
+  var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+  var r = await fetch("https://" + host + path, { headers: { "x-api-key": apiKey } });
   if (!r.ok) return null;
   return r.json();
 }
