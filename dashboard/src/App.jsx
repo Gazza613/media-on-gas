@@ -803,6 +803,19 @@ function ChatPanel(props){
           var platColors={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
           var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"APP CLICKS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONV":rt==="store_clicks"?"APP CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
           var costPerLabel=function(rt){return rt==="leads"?"per lead":rt==="installs"?"per click":rt==="follows"?"per follower":"per click";};
+          // Parse the followups marker out of the assistant content. The model appends
+          // ---FOLLOWUPS--- followed by two lines with suggested next questions.
+          var rawContent=m.content||"";
+          var displayContent=rawContent;
+          var followUps=[];
+          if(!isUser&&rawContent.indexOf("---FOLLOWUPS---")>=0){
+            var parts=rawContent.split("---FOLLOWUPS---");
+            displayContent=parts[0].replace(/\s+$/,"");
+            var tail=(parts[1]||"").split("\n").map(function(l){return l.replace(/^[\s0-9.\-*\"]+|[\s\"]+$/g,"");}).filter(function(l){return l.length>0;});
+            followUps=tail.slice(0,2);
+          }
+          // Only show chips once streaming finishes and we actually parsed at least one.
+          var showFollowUps=!isUser&&!m.streaming&&followUps.length>0&&!busy[0];
           return <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isUser?"flex-end":"flex-start",gap:8}}>
             {!isUser&&m.attachments&&m.attachments.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:"92%",width:"100%"}}>
               {m.attachments.map(function(ad,ai){
@@ -822,7 +835,11 @@ function ChatPanel(props){
                 </a>;
               })}
             </div>}
-            {(isUser||m.content)&&<div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{m.content}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>}
+            {(isUser||displayContent)&&<div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{isUser?m.content:displayContent}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>}
+            {showFollowUps&&<div style={{display:"flex",flexDirection:"column",gap:6,maxWidth:"92%",marginTop:2}}>
+              <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Next questions</div>
+              {followUps.map(function(q,qi){return <button key={qi} onClick={function(){performSend(q);}} style={{textAlign:"left",background:"rgba(249,98,3,0.06)",border:"1px solid "+P.ember+"35",borderRadius:10,padding:"8px 12px",color:P.txt,fontSize:11,fontFamily:ff,cursor:"pointer",lineHeight:1.4,transition:"all 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"80";e.currentTarget.style.background="rgba(249,98,3,0.14)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.ember+"35";e.currentTarget.style.background="rgba(249,98,3,0.06)";}}>{q}</button>;})}
+            </div>}
           </div>;
         })}
         {(function(){
