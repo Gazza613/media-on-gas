@@ -209,6 +209,14 @@ async function fetchGoogleTruth(from, to) {
     });
     return Object.keys(byId).map(function(id) {
       var v = byId[id];
+      // Google conversions count as leads ONLY when the campaign is
+      // lead-gen objective. Traffic / landing-page / YouTube campaigns
+      // often have non-lead conversion tracking set up (button clicks,
+      // video completes) and those must not be reported as leads, or
+      // SoT disagrees with the dashboard which correctly scopes leads
+      // to lead-gen campaigns. Mirrors api/campaigns.js + canonicalObjective.
+      var gObj = canonicalObjective("", v.campaignName);
+      var leadsForRow = gObj === "leads" ? Math.round(v.conversions) : 0;
       return {
         platform: "Google",
         accountName: "MTN MoMo Google",
@@ -218,7 +226,7 @@ async function fetchGoogleTruth(from, to) {
         impressions: v.impressions,
         clicks: v.clicks,
         reach: 0,
-        leads: Math.round(v.conversions),
+        leads: leadsForRow,
         followersCombined: 0,
         appInstalls: 0
       };
