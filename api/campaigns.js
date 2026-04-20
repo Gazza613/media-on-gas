@@ -22,6 +22,14 @@ function objectiveFromName(name) {
 }
 
 
+// Whole-response cache. /api/ads already does this, /api/campaigns did
+// not, so every email-share preview re-fetched Meta + TikTok + Google
+// even though the admin dashboard had just loaded the same data seconds
+// earlier. A 5-minute TTL is the same window share-email preview +
+// confirm-and-send + reconcile run happens in, covering them all.
+var campaignsResponseCache = {};
+var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
+
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
@@ -31,6 +39,28 @@ export default async function handler(req, res) {
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-07";
+
+  var cacheKey = from + "|" + to;
+  var cached = campaignsResponseCache[cacheKey];
+  if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
+    var pCached = req.authPrincipal || { role: "admin" };
+    if (pCached.role === "client") {
+      var cIds = pCached.allowedCampaignIds || [];
+      var cNames = pCached.allowedCampaignNames || [];
+      var filtered = (cached.data.campaigns || []).filter(function(c) {
+        var raw = String(c.rawCampaignId || "");
+        var cid = String(c.campaignId || "");
+        if (cIds.indexOf(raw) >= 0 || cIds.indexOf(cid) >= 0) return true;
+        if (cNames.indexOf(c.campaignName || "") >= 0) return true;
+        return false;
+      });
+      res.status(200).json({ totalCampaigns: filtered.length, dateFrom: cached.data.dateFrom, dateTo: cached.data.dateTo, campaigns: filtered, pages: cached.data.pages, warnings: cached.data.warnings });
+    } else {
+      res.status(200).json(cached.data);
+    }
+    return;
+  }
+
   var allCampaigns = [];
   var seenIds = {};
   // Surface per-platform fetch failures so the dashboard can show a banner
@@ -433,19 +463,27 @@ export default async function handler(req, res) {
   } catch (pgErr) { console.error("Pages error", pgErr); }
 
 
-  // Client-scoped filtering: if request came from a client share token, restrict output
-  // to the campaigns on that token's allowlist. Admin requests are not filtered.
+  // Build the full (unfiltered) response once, cache it keyed by date
+  // range so dashboard + email preview + reconcile within the next 5 min
+  // all reuse the same upstream data instead of re-fetching Meta +
+  // TikTok + Google. Client-scoped filtering happens on read so admin
+  // and client callers share one cache entry safely.
+  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings };
+  campaignsResponseCache[cacheKey] = { data: fullResponse, ts: Date.now() };
+
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
     var ids = principal.allowedCampaignIds || [];
     var names = principal.allowedCampaignNames || [];
-    allCampaigns = allCampaigns.filter(function(c) {
+    var filteredCamps = allCampaigns.filter(function(c) {
       var raw = String(c.rawCampaignId || "");
       var cid = String(c.campaignId || "");
       if (ids.indexOf(raw) >= 0 || ids.indexOf(cid) >= 0) return true;
       if (names.indexOf(c.campaignName || "") >= 0) return true;
       return false;
     });
+    res.status(200).json({ totalCampaigns: filteredCamps.length, dateFrom: from, dateTo: to, campaigns: filteredCamps, pages: pageData, warnings: warnings });
+    return;
   }
-  res.status(200).json({ totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings });
+  res.status(200).json(fullResponse);
 }
