@@ -20,26 +20,35 @@ export default async function handler(req, res) {
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
   var allAdsets = [];
 
+  // Map AN / Messenger / Oculus into Facebook family and Threads into
+  // Instagram. Matches /api/campaigns.js so dashboard totals line up.
+  var mapPubToPlat = function(p) {
+    p = (p || "facebook").toLowerCase();
+    if (p === "instagram" || p === "threads") return "Instagram";
+    if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
+    return null;
+  };
+
   // META ADSETS
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
     try {
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range={\"since\":\"" + from + "\",\"until\":\"" + to + "\"}&breakdowns=publisher_platform&limit=200&access_token=" + metaToken;
-      var r = await fetch(url);
-      var data = await r.json();
-      // Map AN / Messenger / Oculus into Facebook family and Threads into
-      // Instagram. Matches /api/campaigns.js so dashboard totals line up
-      // and so Audience Targeting does not silently drop 40 to 50 percent
-      // of a campaign's spend on FB-placed flights that also serve AN.
-      var mapPubToPlat = function(p) {
-        p = (p || "facebook").toLowerCase();
-        if (p === "instagram" || p === "threads") return "Instagram";
-        if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
-        return null;
-      };
-      if (data.data) {
-        for (var j = 0; j < data.data.length; j++) {
-          var d = data.data[j];
+      var timeRange = "{\"since\":\"" + from + "\",\"until\":\"" + to + "\"}";
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range=" + timeRange + "&breakdowns=publisher_platform&limit=200&access_token=" + metaToken;
+      // Collect all breakdown rows for this account first (paginated) so we
+      // can run the no-breakdown authoritative totals pass below and scale
+      // spend / impressions per adset to match. Without this, Meta's
+      // publisher_platform breakdown drops any spend it cannot cleanly
+      // attribute to a single publisher (Advantage+ cross-placement quirk),
+      // and the Audience Targeting tab drifts below campaign totals.
+      var breakdownRows = [];
+      var page = await fetch(url);
+      var pageData = await page.json();
+      var pGuard = 0;
+      while (pageData && pageData.data && pGuard < 10) {
+        pGuard++;
+        for (var j = 0; j < pageData.data.length; j++) {
+          var d = pageData.data[j];
           var pub = d.publisher_platform || "facebook";
           var platform = mapPubToPlat(pub);
           if (!platform) continue;
@@ -54,21 +63,23 @@ export default async function handler(req, res) {
               if (a.action_type === "onsite_conversion.messaging_first_reply") follows += parseInt(a.value || 0);
             }
           }
-          allAdsets.push({
+          breakdownRows.push({
             platform: platform,
             accountName: account.name,
             campaignName: d.campaign_name,
             campaignId: d.campaign_id,
             adsetName: d.adset_name,
             adsetId: d.adset_id + "_" + pub,
-            impressions: d.impressions || "0",
-            reach: d.reach || "0",
+            rawAdsetId: d.adset_id,
+            publisherRaw: pub,
+            _spend: parseFloat(d.spend || 0),
+            _impressions: parseInt(d.impressions || 0),
+            _clicks: parseInt(d.clicks || 0),
+            _reach: parseInt(d.reach || 0),
             frequency: d.frequency || "0",
-            spend: d.spend || "0",
             cpm: d.cpm || "0",
             cpc: d.cpc || "0",
             ctr: d.ctr || "0",
-            clicks: d.clicks || "0",
             leads: leads.toString(),
             appInstalls: appInstalls.toString(),
             pageLikes: pageLikes.toString(),
@@ -76,52 +87,84 @@ export default async function handler(req, res) {
             follows: follows.toString()
           });
         }
+        if (!(pageData.paging && pageData.paging.next)) break;
+        var nextR = await fetch(pageData.paging.next);
+        pageData = await nextR.json();
       }
-      // Check for pagination
-      while (data.paging && data.paging.next) {
-        var nextR = await fetch(data.paging.next);
-        data = await nextR.json();
-        if (data.data) {
-          for (var j2 = 0; j2 < data.data.length; j2++) {
-            var d2 = data.data[j2];
-            var pub2 = d2.publisher_platform || "facebook";
-            var platform2 = mapPubToPlat(pub2);
-            if (!platform2) continue;
-            var leads2 = 0, appInstalls2 = 0, pageLikes2 = 0, landingPageViews2 = 0, follows2 = 0;
-            if (d2.actions) {
-              for (var k2 = 0; k2 < d2.actions.length; k2++) {
-                var a2 = d2.actions[k2];
-                if (a2.action_type === "lead") leads2 += parseInt(a2.value || 0);
-                if (a2.action_type === "omni_app_install" || a2.action_type === "app_install") appInstalls2 += parseInt(a2.value || 0);
-                if (a2.action_type === "like") pageLikes2 += parseInt(a2.value || 0);
-                if (a2.action_type === "landing_page_view" || a2.action_type === "omni_landing_page_view") landingPageViews2 += parseInt(a2.value || 0);
-                if (a2.action_type === "onsite_conversion.messaging_first_reply") follows2 += parseInt(a2.value || 0);
-              }
-            }
-            allAdsets.push({
-              platform: platform2,
-              accountName: account.name,
-              campaignName: d2.campaign_name,
-              campaignId: d2.campaign_id,
-              adsetName: d2.adset_name,
-              adsetId: d2.adset_id + "_" + pub2,
-              impressions: d2.impressions || "0",
-              reach: d2.reach || "0",
-              frequency: d2.frequency || "0",
-              spend: d2.spend || "0",
-              cpm: d2.cpm || "0",
-              cpc: d2.cpc || "0",
-              ctr: d2.ctr || "0",
-              clicks: d2.clicks || "0",
-              leads: leads2.toString(),
-              appInstalls: appInstalls2.toString(),
-              pageLikes: pageLikes2.toString(),
-              landingPageViews: landingPageViews2.toString(),
-              follows: follows2.toString()
-            });
-          }
+
+      // Authoritative per-adset totals, no breakdown. Fetch once per account
+      // and key by adset_id. These are the numbers the Meta Ads Manager
+      // Reports tab shows, they always match campaign aggregates.
+      var trueByAdset = {};
+      try {
+        var trueUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=adset_id,spend,impressions,clicks&level=adset&time_range=" + timeRange + "&limit=500&access_token=" + metaToken;
+        var trueNext = trueUrl;
+        var trueGuard = 0;
+        while (trueNext && trueGuard < 10) {
+          trueGuard++;
+          var tR = await fetch(trueNext);
+          if (!tR.ok) break;
+          var tJ = await tR.json();
+          (tJ.data || []).forEach(function(row) {
+            trueByAdset[row.adset_id] = {
+              spend: parseFloat(row.spend || 0),
+              impressions: parseInt(row.impressions || 0),
+              clicks: parseInt(row.clicks || 0)
+            };
+          });
+          trueNext = tJ.paging && tJ.paging.next ? tJ.paging.next : null;
         }
-      }
+      } catch (_) { /* non-fatal, falls back to breakdown sums */ }
+
+      // Group breakdown rows by raw adset id, scale each row's spend /
+      // impressions / clicks by the true total to breakdown-sum ratio.
+      var byAdset = {};
+      breakdownRows.forEach(function(r) {
+        if (!byAdset[r.rawAdsetId]) byAdset[r.rawAdsetId] = { rows: [], sumSpend: 0, sumImps: 0, sumClicks: 0 };
+        byAdset[r.rawAdsetId].rows.push(r);
+        byAdset[r.rawAdsetId].sumSpend += r._spend;
+        byAdset[r.rawAdsetId].sumImps += r._impressions;
+        byAdset[r.rawAdsetId].sumClicks += r._clicks;
+      });
+      Object.keys(byAdset).forEach(function(aid) {
+        var bucket = byAdset[aid];
+        var truth = trueByAdset[aid];
+        var spendScale = (truth && bucket.sumSpend > 0) ? (truth.spend / bucket.sumSpend) : 1;
+        var impsScale = (truth && bucket.sumImps > 0) ? (truth.impressions / bucket.sumImps) : 1;
+        var clicksScale = (truth && bucket.sumClicks > 0) ? (truth.clicks / bucket.sumClicks) : 1;
+        // Only scale UP, never down. If breakdown already matches (or exceeds)
+        // the truth, leave it, Meta occasionally reports breakdown higher
+        // than no-breakdown for reach-related metrics.
+        if (spendScale < 1) spendScale = 1;
+        if (impsScale < 1) impsScale = 1;
+        if (clicksScale < 1) clicksScale = 1;
+        bucket.rows.forEach(function(r) {
+          var spend = (r._spend * spendScale);
+          var imps = Math.round(r._impressions * impsScale);
+          var clicks = Math.round(r._clicks * clicksScale);
+          allAdsets.push({
+            platform: r.platform,
+            accountName: r.accountName,
+            campaignName: r.campaignName,
+            campaignId: r.campaignId,
+            adsetName: r.adsetName,
+            adsetId: r.adsetId,
+            impressions: imps.toString(),
+            reach: r._reach.toString(),
+            frequency: r.frequency,
+            spend: spend.toFixed(2),
+            cpm: r.cpm,
+            cpc: r.cpc,
+            ctr: r.ctr,
+            clicks: clicks.toString(),
+            leads: r.leads,
+            appInstalls: r.appInstalls,
+            pageLikes: r.pageLikes,
+            landingPageViews: r.landingPageViews,
+            follows: r.follows
+          });
+        });
+      });
     } catch (err) { console.error("Meta adsets error for", account.name, err); }
   }
 
