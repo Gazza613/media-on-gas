@@ -413,7 +413,7 @@ function ShareModal(props){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(report id)</span></div>
-          <input value={slug[0]} onChange={function(e){slug[1](e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g,""));err[1]("");}} placeholder="E.G. MTN-MOMO" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase"}}/>
+          <input value={slug[0]} onChange={function(e){slug[1](e.target.value.replace(/[^a-zA-Z0-9\- ]/g,""));err[1]("");}} placeholder="E.G. MTN MOMO" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase"}}/>
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
@@ -895,6 +895,26 @@ function ChatPanel(props){
   var scrollRef=useState(null);
   var autoHeightRef=useState(null);
 
+  // Quirky rotating loading copy. Swapped every 2.5s while the bot is
+  // thinking so the spinner feels alive on slower answers instead of
+  // leaving the user staring at the same "Analysing..." for 10+ seconds.
+  var LOADING_PHRASES=[
+    "Analysing","Crunching the numbers","Reading the data block","Scanning your creatives",
+    "Sharpening the CPC math","Cross-checking platform splits","Stalking your top performer",
+    "Benchmarking against SA norms","Sanity-checking the reach","Hunting cost per lead",
+    "Drawing sharp conclusions","Lining up the verdict"
+  ];
+  var loadingPhraseS=useState(LOADING_PHRASES[0]);
+  var loadingPhrase=loadingPhraseS[0];
+  useEffect(function(){
+    if(!busy[0])return;
+    loadingPhraseS[1](LOADING_PHRASES[Math.floor(Math.random()*LOADING_PHRASES.length)]);
+    var iv=setInterval(function(){
+      loadingPhraseS[1](LOADING_PHRASES[Math.floor(Math.random()*LOADING_PHRASES.length)]);
+    },2500);
+    return function(){clearInterval(iv);};
+  },[busy[0]]);
+
   // Closing the chat preserves the conversation so reopening shows the
   // last session. A "New chat" control is available on the panel for
   // an explicit reset.
@@ -1166,11 +1186,13 @@ function ChatPanel(props){
         })}
         {(function(){
           if(!busy[0])return null;
-          if(messages[0].length===0)return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div></div>;
-          var last=messages[0][messages[0].length-1];
-          // Hide once any content or attachments have arrived for the current turn
-          if(last.content||(last.attachments&&last.attachments.length>0))return null;
-          return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>Analysing<span style={{display:"inline-block",width:20}}>...</span></div></div>;
+          var showSpinner=true;
+          if(messages[0].length>0){
+            var last=messages[0][messages[0].length-1];
+            if(last.content||(last.attachments&&last.attachments.length>0))showSpinner=false;
+          }
+          if(!showSpinner)return null;
+          return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>{loadingPhrase}<span style={{display:"inline-block",width:20}}>...</span></div></div>;
         })()}
         {err[0]&&<div style={{background:P.critical+"12",border:"1px solid "+P.critical+"40",borderRadius:10,padding:"10px 14px",fontSize:11,color:P.critical,fontFamily:fm,lineHeight:1.5}}>{err[0]}</div>}
       </div>

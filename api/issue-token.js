@@ -20,7 +20,10 @@ export default async function handler(req, res) {
   }
 
   var body = req.body || {};
-  var clientSlug = (body.clientSlug || "").toString().trim().toLowerCase().replace(/[^a-z0-9\-]/g, "");
+  // Preserve spaces + case so the slug survives round-trips to the email
+  // header / share modal. Strip anything outside letters, digits, hyphens,
+  // spaces, collapse runs of whitespace.
+  var clientSlug = (body.clientSlug || "").toString().replace(/[^a-zA-Z0-9\- ]/g, "").replace(/\s+/g, " ").trim();
   var campaignIds = Array.isArray(body.campaignIds) ? body.campaignIds.map(String) : [];
   var campaignNames = Array.isArray(body.campaignNames) ? body.campaignNames.map(String) : [];
   var from = body.from || "";
