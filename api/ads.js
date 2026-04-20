@@ -75,10 +75,15 @@ export default async function handler(req, res) {
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
 
+  // Admin-only debug flag that returns the raw Meta actionsAgg + trueTotals
+  // per ad so we can verify what Meta is actually returning when a tile
+  // number looks wrong. Bypasses cache so diagnostic is always fresh.
+  var debugFollows = String(req.query.debug || "") === "1";
+
   // Whole-response cache check: if we've served this exact date range within the last
   // 5 minutes on this warm instance, return immediately and skip every downstream fetch.
   var cacheKey = from + "|" + to;
-  var cached = adsResponseCache[cacheKey];
+  var cached = debugFollows ? null : adsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
@@ -612,20 +617,21 @@ export default async function handler(req, res) {
           // objective (where Meta returns page likes under legacy "like").
           if (at === "page_like") pageLikes = Math.max(pageLikes, v);
           if (at === "like") reactionLikes = Math.max(reactionLikes, v);
-          // Follows, FB page follows AND Instagram follows (distinct action types on Meta)
-          var isFollow = (at === "follow" ||
-                          at === "onsite_conversion.follow" ||
-                          at === "ig_follow" ||
-                          at === "onsite_conversion.ig_follow" ||
-                          at === "onsite_conversion.total_ig_follow" ||
-                          atLow.indexOf("ig_follow") >= 0 ||
-                          atLow.indexOf("instagram_follow") >= 0 ||
-                          (atLow.indexOf("follow") >= 0 && atLow.indexOf("post") < 0 && atLow.indexOf("video") < 0));
-          if (isFollow) follows = Math.max(follows, v);
-          if (at === "page_engagement" || at === "onsite_conversion.post_save") {
-            // Generic engagement is not a follow, only carry as a soft fallback when nothing else fires
-            if (pageLikes === 0 && follows === 0) follows = Math.max(follows, v);
+          // Strict follow-type list. No catch-all indexOf("follow") because
+          // Meta has action types that contain "follow" in misleading ways
+          // (experiments + deprecated keys). Track FB + IG follows separately
+          // so we can attach the placement-correct count per row later.
+          if (at === "follow" || at === "onsite_conversion.follow") {
+            // Generic follow, treat as placement-appropriate. On an IG row
+            // Meta should have emitted ig_follow, but be permissive.
+            if (isFbPlacement) follows = Math.max(follows, v);
           }
+          if (at === "ig_follow" || at === "onsite_conversion.ig_follow" || at === "onsite_conversion.total_ig_follow") {
+            if (!isFbPlacement) follows = Math.max(follows, v);
+          }
+          // Drop the page_engagement "soft fallback" — it was too permissive
+          // and caught post-level engagement that is not a follow. If no
+          // page_like or follow action fires, the result is legitimately 0.
         });
         // Fold "like" into page likes for any follower-family campaign on
         // an FB placement. That covers strict PAGE_LIKES AND the modern
@@ -707,6 +713,11 @@ export default async function handler(req, res) {
           })(),
           leadsTrue: (ins.trueTotals && ins.trueTotals.leads) || 0,
           appInstallsTrue: (ins.trueTotals && ins.trueTotals.appInstalls) || 0,
+          // Debug-only, expose raw action aggregation + per-placement splits
+          // so we can verify what Meta actually returns when a tile looks
+          // wrong. Stripped from the payload unless ?debug=1 is passed.
+          _debugActionsAgg: debugFollows ? (ins.actionsAgg || {}) : undefined,
+          _debugTrueTotals: debugFollows ? (ins.trueTotals || null) : undefined,
           // Meta video id for in-dashboard playback via /api/ad-video proxy.
           // Falls back to the first DCO variant video if the primary creative is static.
           videoId: cr.video_id || (candidateVids.length > 0 ? candidateVids[0] : ""),
