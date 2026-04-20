@@ -267,7 +267,7 @@ export async function buildChatContext(req, from, to, principal) {
     // elsewhere if missing.
     var compactList = filteredAds.slice().sort(function(a, b) {
       return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
-    }).slice(0, 300);
+    }).slice(0, 100);
     lines.push("## All ads in scope (compact, sorted by spend)");
     lines.push("Use this to find any specific ad by name. Each line: \"ad name\" (platform, format, objective), metrics.");
     compactList.forEach(function(a) {

@@ -970,9 +970,26 @@ function ChatPanel(props){
     });
     var selectedIds=Object.keys(selectedIdSet);
 
+    // Watchdog: if we hear nothing back within 55s the connection almost
+    // certainly dropped somewhere (serverless timeout, network, CDN).
+    // Abort the request so the user sees an error instead of a frozen
+    // "Analysing..." forever.
+    var watchdog=null;
+    var watchdogController=("AbortController" in window)?new AbortController():null;
+    var resetWatchdog=function(){
+      if(watchdog)clearTimeout(watchdog);
+      watchdog=setTimeout(function(){
+        try{if(watchdogController)watchdogController.abort();}catch(_){}
+        busy[1](false);
+        err[1]("That took too long. The chat timed out, try again or narrow the campaign selection.");
+        messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
+      },55000);
+    };
+    resetWatchdog();
     fetch(props.apiBase+"/api/chat",{
       method:"POST",
       headers:authHeaders(),
+      signal:watchdogController?watchdogController.signal:undefined,
       body:JSON.stringify({
         message:msg,
         history:next.slice(0,-1),
@@ -990,6 +1007,7 @@ function ChatPanel(props){
       var buffer="";
       var accumulated="";
       var finish=function(){
+        if(watchdog)clearTimeout(watchdog);
         busy[1](false);
         // Strip the streaming flag so rerenders don't keep the cursor look,
         // preserve attachments so ad thumbnails stay visible after completion.
@@ -1015,6 +1033,8 @@ function ChatPanel(props){
       var pump=function(){
         return reader.read().then(function(res){
           if(res.done){finish();return;}
+          // Fresh bytes, bot is still alive, restart the watchdog window.
+          resetWatchdog();
           buffer+=decoder.decode(res.value,{stream:true});
           var lines=buffer.split("\n");
           buffer=lines.pop();
@@ -1058,8 +1078,11 @@ function ChatPanel(props){
       };
       return pump();
     }).catch(function(e){
+      if(watchdog)clearTimeout(watchdog);
       busy[1](false);
-      err[1]((e&&e.message)||"Connection error");
+      // An AbortError fired by the watchdog already set a friendly
+      // message, avoid overwriting with "The user aborted a request."
+      if(!(e&&String(e.name||"")==="AbortError"))err[1]((e&&e.message)||"Connection error");
       messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
     });
   };

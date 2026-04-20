@@ -3,6 +3,13 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { buildChatContext } from "./_chatContext.js";
 
+// Vercel function runtime budget. Default (10-15s) cuts the SSE stream
+// off before Sonnet 4.6 finishes thinking on a wide campaign selection,
+// leaving the client stuck on the "Analysing..." spinner forever. 60s
+// covers the worst case a large catalogue + thinking + streamed answer
+// can hit, well inside Anthropic's own request window.
+export const config = { maxDuration: 60 };
+
 // In-memory context cache. The data block is deterministic for
 // (principal + date range) over short windows, so caching it for 60s lets
 // follow-up messages in a conversation skip the /api/campaigns + /api/ads
