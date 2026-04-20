@@ -256,6 +256,46 @@ export async function buildChatContext(req, from, to, principal) {
     lines.push("");
   });
 
+  // Compact catalogue of EVERY ad in the selection so the bot can answer
+  // name-based questions ("how did Ayanda perform on IG", "what was the
+  // CPC on Kabelo on TikTok") without needing those ads to crack the top
+  // 5 of any platform. Minimal fields keep the token budget reasonable
+  // even on wide selections.
+  if (filteredAds.length > 0) {
+    // Soft cap to keep the prompt sensible, sorted by spend so the most
+    // relevant ads are always present, bot can still request names from
+    // elsewhere if missing.
+    var compactList = filteredAds.slice().sort(function(a, b) {
+      return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
+    }).slice(0, 300);
+    lines.push("## All ads in scope (compact, sorted by spend)");
+    lines.push("Use this to find any specific ad by name. Each line: \"ad name\" (platform, format, objective), metrics.");
+    compactList.forEach(function(a) {
+      var spend = parseFloat(a.spend || 0);
+      var imps = parseFloat(a.impressions || 0);
+      var clks = parseFloat(a.clicks || 0);
+      var ctr = parseFloat(a.ctr || 0);
+      var results = parseFloat(a.results || 0);
+      var rt = a.resultType || "results";
+      var obj = a.objective || "landingpage";
+      var parts = ['"' + (a.adName || "Unnamed") + '"'];
+      parts.push(a.platform || "Other");
+      parts.push(a.format || "STATIC");
+      parts.push("obj: " + obj);
+      parts.push(fmtR(spend) + " spend");
+      parts.push(fmtNum(imps) + " imp");
+      parts.push(fmtNum(clks) + " clicks");
+      parts.push(fmtPct(ctr) + " CTR");
+      if (results > 0) parts.push(results + " " + rt);
+      if (a.campaignName) parts.push("from: " + a.campaignName);
+      lines.push("- " + parts.join(" | "));
+    });
+    if (filteredAds.length > compactList.length) {
+      lines.push("(+ " + (filteredAds.length - compactList.length) + " more ads with lower spend, omitted from this listing)");
+    }
+    lines.push("");
+  }
+
   lines.push("## South African paid media benchmarks (for comparison only, use these to say whether something is good/healthy/above-range)");
   lines.push("Meta (Facebook + Instagram):");
   lines.push("- CPM healthy range: R12 to R25");

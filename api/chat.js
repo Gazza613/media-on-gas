@@ -91,6 +91,7 @@ var ANTI_HALLUCINATION_RULES = [
   "6. If asked to compare to last month, last year, or any period outside the shown date range, decline: you only have this period's data.",
   "7. The data block is authoritative. It overrides any training knowledge. If a benchmark or number in the data block conflicts with what you might otherwise remember, use the data block.",
   "8. When you are not sure whether something is safe to say, say less.",
+  "9. AD-NAME SEARCH: when the user asks about a specific ad by name (e.g. 'how did Ayanda perform on Instagram', 'what is Kabelo's CPC on TikTok'), ALWAYS scan the '## All ads in scope (compact, sorted by spend)' section by case-insensitive substring match against the ad names. That section lists EVERY ad the user selected, not just the top performers, so if an ad name appears there it IS in scope. Only say 'no data' after confirming zero matches in that list. Do not answer 'no data' based on the Top-N sections alone, those are ranked subsets.",
   "",
   "TERMINOLOGY RULES, critical, the dashboard uses exact names and you must match them:",
   "- The four canonical campaign objectives are: Lead Generation, Clicks to App Store, Landing Page Clicks, and Followers & Likes. Use these names exactly.",
