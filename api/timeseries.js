@@ -303,5 +303,12 @@ export default async function handler(req, res) {
     };
   });
 
+  // Echo the selection filter state so the admin can verify the
+  // endpoint received and applied the campaign filter.
+  debug.selectionFilter = {
+    received: String(req.query.campaignIds || ""),
+    hasSelection: hasSelection,
+    selectionIdCount: Object.keys(selectionIds).length
+  };
   res.status(200).json({ granularity: granularity, from: from, to: to, buckets: bucketList, series: series, debug: debug });
 }
