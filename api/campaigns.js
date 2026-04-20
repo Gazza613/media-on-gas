@@ -45,14 +45,13 @@ export default async function handler(req, res) {
   if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
-      var cIds = pCached.allowedCampaignIds || [];
-      var cNames = pCached.allowedCampaignNames || [];
+      // Strict exact-match on suffixed campaignId only. No raw-ID fallback
+      // (which pulled the other publisher variant) and no name fallback
+      // (which could cross-match same-named campaigns across clients).
+      // Tokens are issued with suffixed IDs so this is lossless.
+      var cIdSet = {}; (pCached.allowedCampaignIds || []).forEach(function(x) { cIdSet[String(x)] = true; });
       var filtered = (cached.data.campaigns || []).filter(function(c) {
-        var raw = String(c.rawCampaignId || "");
-        var cid = String(c.campaignId || "");
-        if (cIds.indexOf(raw) >= 0 || cIds.indexOf(cid) >= 0) return true;
-        if (cNames.indexOf(c.campaignName || "") >= 0) return true;
-        return false;
+        return cIdSet[String(c.campaignId || "")] === true;
       });
       res.status(200).json({ totalCampaigns: filtered.length, dateFrom: cached.data.dateFrom, dateTo: cached.data.dateTo, campaigns: filtered, pages: cached.data.pages, warnings: cached.data.warnings });
     } else {
@@ -473,14 +472,9 @@ export default async function handler(req, res) {
 
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
-    var ids = principal.allowedCampaignIds || [];
-    var names = principal.allowedCampaignNames || [];
+    var idSet = {}; (principal.allowedCampaignIds || []).forEach(function(x) { idSet[String(x)] = true; });
     var filteredCamps = allCampaigns.filter(function(c) {
-      var raw = String(c.rawCampaignId || "");
-      var cid = String(c.campaignId || "");
-      if (ids.indexOf(raw) >= 0 || ids.indexOf(cid) >= 0) return true;
-      if (names.indexOf(c.campaignName || "") >= 0) return true;
-      return false;
+      return idSet[String(c.campaignId || "")] === true;
     });
     res.status(200).json({ totalCampaigns: filteredCamps.length, dateFrom: from, dateTo: to, campaigns: filteredCamps, pages: pageData, warnings: warnings });
     return;

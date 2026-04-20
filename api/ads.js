@@ -709,7 +709,10 @@ export default async function handler(req, res) {
             if (!ins.trueTotals) return 0;
             if (pub === "facebook") return ins.trueTotals.followsFb || 0;
             if (pub === "instagram") return ins.trueTotals.followsIg || 0;
-            return ins.trueTotals.followersCombined || 0;
+            // Unknown publisher, defensive: return 0 rather than the
+            // combined FB+IG total so an unmapped placement does not
+            // leak FB page likes into an IG-display tile.
+            return 0;
           })(),
           leadsTrue: (ins.trueTotals && ins.trueTotals.leads) || 0,
           appInstallsTrue: (ins.trueTotals && ins.trueTotals.appInstalls) || 0,

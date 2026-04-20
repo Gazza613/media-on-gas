@@ -58,7 +58,11 @@ export default async function handler(req, res) {
               var a = d.actions[k];
               if (a.action_type === "lead") leads += parseInt(a.value || 0);
               if (a.action_type === "omni_app_install" || a.action_type === "app_install") appInstalls += parseInt(a.value || 0);
-              if (a.action_type === "like") pageLikes += parseInt(a.value || 0);
+              // Use the unambiguous "page_like" action. "like" at ad/adset
+              // level is post reactions on non-follower placements and would
+              // inflate adset pageLikes, polluting the Audience tab's
+              // follower-objective rollup.
+              if (a.action_type === "page_like") pageLikes += parseInt(a.value || 0);
               if (a.action_type === "landing_page_view" || a.action_type === "omni_landing_page_view") landingPageViews += parseInt(a.value || 0);
               if (a.action_type === "onsite_conversion.messaging_first_reply") follows += parseInt(a.value || 0);
             }

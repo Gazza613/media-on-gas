@@ -182,7 +182,9 @@ export default async function handler(req, res) {
           var spend = parseFloat(m.spend || 0);
           var imps = parseInt(m.impressions || 0);
           var clk = parseInt(m.clicks || 0);
-          var follows = parseInt(m.follows || 0) + parseInt(m.likes || 0);
+          // TikTok "likes" metric is video hearts (engagement), NOT follows,
+          // never fold them into the follower-objective result count.
+          var follows = parseInt(m.follows || 0);
           var results = objective === "followers" ? follows : clk;
           if (!campaignAllowed(d.campaign_id, m.campaign_name)) return;
           addTo(seriesMap, "TikTok", objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
