@@ -111,6 +111,16 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Admin-only. The chat bot stays disabled for client share links to keep
+  // Anthropic token usage off the public surface, the UI already hides the
+  // panel for client principals, this is a belt-and-suspenders guard for
+  // anyone hitting the endpoint directly with a client JWT.
+  var chatPrincipal = req.authPrincipal || { role: "admin" };
+  if (chatPrincipal.role !== "admin") {
+    res.status(403).json({ error: "Chat is admin-only" });
+    return;
+  }
+
   var apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     res.status(500).json({ error: "Chat not configured on server (ANTHROPIC_API_KEY missing)" });
