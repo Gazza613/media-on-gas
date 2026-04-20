@@ -151,13 +151,13 @@ export default async function handler(req, res) {
               var v = parseInt(a.value || 0);
               if (objective === "leads" && (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at.indexOf("onsite_conversion.lead") >= 0)) results = Math.max(results, v);
               else if (objective === "appinstall" && (at.indexOf("app_install") >= 0 || at.indexOf("mobile_app_install") >= 0)) results = Math.max(results, v);
-              // FB follower-objective: page_like / follow actions are the
-              // real follower signal. IG follower campaigns drive profile
-              // visits (clicks), the "follow" action happens on the profile
-              // after click and Meta rarely emits per-ad ig_follow for
-              // OUTCOME_ENGAGEMENT, so counting action-type data here would
-              // show zero on weeks when the ad genuinely drove traffic.
-              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "follow")) results = Math.max(results, v);
+              // FB follower-objective: accept both page_like (modern) AND
+              // like (legacy PAGE_LIKES objective returns page likes under
+              // this key) plus the follow action. The Facebook placement
+              // check is what keeps IG post reactions out of the count,
+              // IG hearts also come under "like" but never on an FB row.
+              // Matches /api/campaigns.js which Community Growth uses.
+              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "like" || at === "follow" || at === "onsite_conversion.follow")) results = Math.max(results, v);
             });
           }
           // Objective-specific fallback: landing page and click-to-app-store
