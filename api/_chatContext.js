@@ -60,31 +60,35 @@ export async function buildChatContext(req, from, to, principal) {
   var allCamps = campData.campaigns;
   var filteredCamps;
   if (principal && principal.role === "client") {
+    // Strict exact-match on the suffixed campaignId. No raw-ID cross-match
+    // (which pulled the other publisher variant of the same Meta campaign
+    // via shared rawCampaignId) and no name fallback (which cross-matched
+    // same-named campaigns across accounts). Admin requests are downgraded
+    // to this same principal shape in api/chat.js, so both paths share the
+    // same strict rule.
     var idSet = {}; (principal.allowedCampaignIds || []).forEach(function(x) { idSet[String(x)] = true; });
-    var nameSet = {}; (principal.allowedCampaignNames || []).forEach(function(x) { nameSet[x] = true; });
     filteredCamps = allCamps.filter(function(c) {
-      var raw = String(c.rawCampaignId || "");
-      var cid = String(c.campaignId || "");
-      if (idSet[raw] || idSet[cid]) return true;
-      if (c.campaignName && nameSet[c.campaignName]) return true;
-      return false;
+      return idSet[String(c.campaignId || "")] === true;
     });
   } else {
     filteredCamps = allCamps;
   }
   if (filteredCamps.length === 0) return null;
 
-  // Also pull top ads for creative-level questions
+  // Also pull top ads for creative-level questions. Ads store raw campaignId
+  // with platform on a separate field, reconstruct the suffixed virtual id
+  // (raw + "_facebook" / raw + "_instagram") to match the allowlist exactly.
+  // For TikTok + Google (no FB/IG split) the virtual id equals the raw id.
   var adsData = await internalFetch(req, "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to));
   var filteredAds = [];
   if (adsData && Array.isArray(adsData.ads)) {
     if (principal && principal.role === "client") {
       var cIdSet = {}; (principal.allowedCampaignIds || []).forEach(function(x) { cIdSet[String(x)] = true; });
-      var cNameSet = {}; (principal.allowedCampaignNames || []).forEach(function(x) { cNameSet[x] = true; });
       filteredAds = adsData.ads.filter(function(a) {
-        if (cIdSet[String(a.campaignId || "")]) return true;
-        if (a.campaignName && cNameSet[a.campaignName]) return true;
-        return false;
+        var raw = String(a.campaignId || "");
+        var plat = String(a.platform || "").toLowerCase();
+        var virtualCid = (plat === "facebook" || plat === "instagram") ? (raw + "_" + plat) : raw;
+        return cIdSet[virtualCid] === true;
       });
     } else {
       filteredAds = adsData.ads;

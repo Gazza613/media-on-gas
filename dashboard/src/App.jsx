@@ -800,15 +800,14 @@ function ChatPanel(props){
     busy[1](true);
     setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
 
-    // Build the selected-campaign allowlist from the admin's current selection
-    // so the bot only sees campaigns currently on-screen. Client tokens already
-    // enforce this server-side via the token's allowlist, this adds the same
-    // guarantee for admin sessions so cross-client data never leaks.
+    // Build the selected-campaign allowlist from the admin's current selection.
+    // Send ONLY the exact suffixed campaignId (matching what the share modal
+    // does), never raw or stripped variants, raw + name forms would let the
+    // server over-include the OTHER publisher variant of a Meta campaign via
+    // shared rawCampaignId, or cross-client match same-named campaigns.
     var selectedCampaigns=(props.campaigns||[]).filter(function(c){return (props.selected||[]).indexOf(c.campaignId)>=0;});
     var selectedIds=[];var selectedNames=[];
     selectedCampaigns.forEach(function(c){
-      if(c.rawCampaignId)selectedIds.push(String(c.rawCampaignId));
-      if(c.campaignId)selectedIds.push(String(c.campaignId).replace(/_facebook$/,"").replace(/_instagram$/,""));
       if(c.campaignId)selectedIds.push(String(c.campaignId));
       if(c.campaignName)selectedNames.push(c.campaignName);
     });
