@@ -226,6 +226,77 @@ async function fetchGoogleTruth(from, to) {
   } catch (_) { return []; }
 }
 
+// Ad-level sums per raw campaign id. If ads API drops rows (Meta's
+// placement-split attribution quirk, TikTok page paging issues), the sum
+// will drift from the campaign total and the Creative tab shows
+// undercounted spend. This catches that.
+async function fetchAdSumsByCampaign(req, from, to) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return {};
+    var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var r = await fetch("https://" + host + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return {};
+    var d = await r.json();
+    var out = {};
+    (d.ads || []).forEach(function(a) {
+      var id = String(a.campaignId || "").replace(/^google_/, "");
+      if (!id) return;
+      if (!out[id]) out[id] = { spend: 0, impressions: 0, clicks: 0 };
+      out[id].spend += parseFloat(a.spend || 0);
+      out[id].impressions += parseFloat(a.impressions || 0);
+      out[id].clicks += parseFloat(a.clicks || 0);
+    });
+    return out;
+  } catch (_) { return {}; }
+}
+
+// Adset-level sums per raw campaign id. Drives the Audience Targeting tab,
+// same reasoning as ads: if the adsets endpoint drops rows, targeting
+// insights become misleading.
+async function fetchAdsetSumsByCampaign(req, from, to) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return {};
+    var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var r = await fetch("https://" + host + "/api/adsets?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return {};
+    var d = await r.json();
+    var out = {};
+    (d.adsets || []).forEach(function(a) {
+      var id = String(a.campaignId || "").replace(/^google_/, "");
+      if (!id) return;
+      if (!out[id]) out[id] = { spend: 0, impressions: 0, clicks: 0 };
+      out[id].spend += parseFloat(a.spend || 0);
+      out[id].impressions += parseFloat(a.impressions || 0);
+      out[id].clicks += parseFloat(a.clicks || 0);
+    });
+    return out;
+  } catch (_) { return {}; }
+}
+
+// Sum of daily series values across the period. Drives the Budget Pacing
+// spend line. If daily sum does not match campaign total, the chart is
+// lying.
+async function fetchTimeseriesTotals(req, from, to) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return null;
+    var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var r = await fetch("https://" + host + "/api/timeseries?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&granularity=day", { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return null;
+    var d = await r.json();
+    var series = d.series || [];
+    var totals = { spend: 0, impressions: 0, clicks: 0 };
+    series.forEach(function(pt) {
+      totals.spend += parseFloat(pt.spend || 0);
+      totals.impressions += parseFloat(pt.impressions || 0);
+      totals.clicks += parseFloat(pt.clicks || 0);
+    });
+    return totals;
+  } catch (_) { return null; }
+}
+
 // Fetch what our dashboard reports (from /api/campaigns)
 async function fetchDashboardNumbers(req, from, to) {
   try {
@@ -252,8 +323,13 @@ async function fetchDashboardNumbers(req, from, to) {
   } catch (_) { return []; }
 }
 
-// Diff source vs dashboard, produce per-campaign result rows
-function buildReconciliation(sourceRows, dashRows) {
+// Diff source vs dashboard, produce per-campaign result rows. Each metric
+// carries a `tab` field identifying which dashboard surface would be
+// affected if the delta is real. That lets the UI sort/filter by tab so
+// the user can jump straight to the affected section.
+function buildReconciliation(sourceRows, dashRows, adSums, adsetSums) {
+  adSums = adSums || {};
+  adsetSums = adsetSums || {};
   // Index dashboard rows by campaignId. Meta dashboard rows have IDs with suffix
   // (e.g. _facebook / _instagram), so also index by raw id without suffix.
   var dashIndex = {};
@@ -272,10 +348,6 @@ function buildReconciliation(sourceRows, dashRows) {
       dashAgg.spend += r.spend;
       dashAgg.impressions += r.impressions;
       dashAgg.clicks += r.clicks;
-      // Dashboard apportions campaign-level reach across FB / IG rows by impression
-      // share, so summing them returns the authoritative campaign-level reach.
-      // Previously we did Math.max because publisher-level reaches were independent
-      // unique counts. Apportionment makes them additive.
       dashAgg.reach += r.reach;
       dashAgg.leads += r.leads;
       dashAgg.followersCombined += r.followersCombined;
@@ -283,18 +355,43 @@ function buildReconciliation(sourceRows, dashRows) {
     });
 
     var metrics = [];
-    var pushMetric = function(name, source, dash, relevant) {
+    var pushMetric = function(name, source, dash, relevant, tab) {
       if (!relevant) return;
       var delta = pct(source, dash);
-      metrics.push({ name: name, source: source, dashboard: dash, deltaPct: parseFloat(delta.toFixed(2)), status: statusOf(delta) });
+      metrics.push({ name: name, source: source, dashboard: dash, deltaPct: parseFloat(delta.toFixed(2)), status: statusOf(delta), tab: tab || "Summary" });
     };
-    pushMetric("spend", s.spend, dashAgg.spend, true);
-    pushMetric("impressions", s.impressions, dashAgg.impressions, true);
-    pushMetric("clicks", s.clicks, dashAgg.clicks, true);
-    pushMetric("reach", s.reach, dashAgg.reach, s.reach > 0);
-    pushMetric("leads", s.leads, dashAgg.leads, s.leads > 0 || dashAgg.leads > 0);
-    pushMetric("followers", s.followersCombined, dashAgg.followersCombined, s.followersCombined > 0 || dashAgg.followersCombined > 0);
-    pushMetric("appInstalls", s.appInstalls, dashAgg.appInstalls, s.appInstalls > 0 || dashAgg.appInstalls > 0);
+    // Summary tab: campaign-level rollups shown on KPI tiles, tables,
+    // email share, Community Growth.
+    pushMetric("spend", s.spend, dashAgg.spend, true, "Summary");
+    pushMetric("impressions", s.impressions, dashAgg.impressions, true, "Summary");
+    pushMetric("clicks", s.clicks, dashAgg.clicks, true, "Summary");
+    pushMetric("reach", s.reach, dashAgg.reach, s.reach > 0, "Summary");
+    pushMetric("leads", s.leads, dashAgg.leads, s.leads > 0 || dashAgg.leads > 0, "Summary");
+    pushMetric("followers", s.followersCombined, dashAgg.followersCombined, s.followersCombined > 0 || dashAgg.followersCombined > 0, "Summary");
+    pushMetric("appInstalls", s.appInstalls, dashAgg.appInstalls, s.appInstalls > 0 || dashAgg.appInstalls > 0, "Summary");
+
+    // Creative tab: ad-level rows should sum to the campaign total.
+    // Catches dropped ad rows (Meta placement attribution, TikTok paging).
+    var adSum = adSums[s.campaignId];
+    if (adSum) {
+      pushMetric("ads sum spend", s.spend, adSum.spend, s.spend > 0 || adSum.spend > 0, "Creative");
+      pushMetric("ads sum impressions", s.impressions, adSum.impressions, s.impressions > 0 || adSum.impressions > 0, "Creative");
+    }
+
+    // Audience tab: adset-level rows should sum to the campaign total.
+    var adsetSum = adsetSums[s.campaignId];
+    if (adsetSum) {
+      pushMetric("adsets sum spend", s.spend, adsetSum.spend, s.spend > 0 || adsetSum.spend > 0, "Audience");
+      pushMetric("adsets sum impressions", s.impressions, adsetSum.impressions, s.impressions > 0 || adsetSum.impressions > 0, "Audience");
+    }
+
+    // Sort metrics within each campaign red > yellow > green so the
+    // first thing the user sees on a row is the issue.
+    var sev = { red: 0, yellow: 1, green: 2 };
+    metrics.sort(function(a, b) {
+      if (sev[a.status] !== sev[b.status]) return sev[a.status] - sev[b.status];
+      return (a.name || "").localeCompare(b.name || "");
+    });
 
     var worstStatus = "green";
     metrics.forEach(function(m) {
@@ -382,12 +479,53 @@ export default async function handler(req, res) {
     metaToken ? fetchMetaTruth(metaToken, from, to) : Promise.resolve([]),
     ttToken && ttAdvId ? fetchTikTokTruth(ttToken, ttAdvId, from, to) : Promise.resolve([]),
     fetchGoogleTruth(from, to),
-    fetchDashboardNumbers(req, from, to)
+    fetchDashboardNumbers(req, from, to),
+    fetchAdSumsByCampaign(req, from, to),
+    fetchAdsetSumsByCampaign(req, from, to),
+    fetchTimeseriesTotals(req, from, to)
   ]);
   var metaTruth = results[0], ttTruth = results[1], gTruth = results[2], dashRows = results[3];
+  var adSums = results[4], adsetSums = results[5], tsTotals = results[6];
   var sourceRows = metaTruth.concat(ttTruth).concat(gTruth);
 
-  var reconciled = buildReconciliation(sourceRows, dashRows);
+  var reconciled = buildReconciliation(sourceRows, dashRows, adSums, adsetSums);
+
+  // Standalone top-level row comparing the period-wide totals to the
+  // sum of daily timeseries points. Catches a Budget Pacing chart that
+  // drifts from campaign-level truth even when per-campaign rows look ok.
+  if (tsTotals) {
+    var totalTruth = { spend: 0, impressions: 0, clicks: 0 };
+    sourceRows.forEach(function(s) {
+      totalTruth.spend += parseFloat(s.spend || 0);
+      totalTruth.impressions += parseFloat(s.impressions || 0);
+      totalTruth.clicks += parseFloat(s.clicks || 0);
+    });
+    var tsMetrics = [];
+    var tsPush = function(name, src, dash) {
+      var delta = pct(src, dash);
+      tsMetrics.push({ name: name, source: src, dashboard: dash, deltaPct: parseFloat(delta.toFixed(2)), status: statusOf(delta), tab: "Summary (Budget Pacing)" });
+    };
+    tsPush("daily spend sum", totalTruth.spend, tsTotals.spend);
+    tsPush("daily impressions sum", totalTruth.impressions, tsTotals.impressions);
+    tsPush("daily clicks sum", totalTruth.clicks, tsTotals.clicks);
+    var sevTs = { red: 0, yellow: 1, green: 2 };
+    tsMetrics.sort(function(a, b) { return sevTs[a.status] - sevTs[b.status]; });
+    var worstTs = "green";
+    tsMetrics.forEach(function(m) {
+      if (m.status === "red") worstTs = "red";
+      else if (m.status === "yellow" && worstTs !== "red") worstTs = "yellow";
+    });
+    reconciled.push({
+      platform: "All",
+      accountName: "Budget Pacing chart",
+      campaignId: "_timeseries_overall",
+      campaignName: "Daily timeseries totals (across all platforms)",
+      dashboardMatched: true,
+      metrics: tsMetrics,
+      overallStatus: worstTs
+    });
+  }
+
   reconciled.sort(function(a, b) {
     var ord = { red: 0, yellow: 1, green: 2 };
     if (ord[a.overallStatus] !== ord[b.overallStatus]) return ord[a.overallStatus] - ord[b.overallStatus];

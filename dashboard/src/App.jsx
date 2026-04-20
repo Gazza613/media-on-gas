@@ -736,13 +736,14 @@ function CampaignAuditModal(props){
         });
         var statusBg={green:P.mint,yellow:P.warning,red:P.critical};
         var fmtNum=function(n){var v=parseFloat(n||0);if(v>=1e6)return(v/1e6).toFixed(2)+"M";if(v>=1e3)return(v/1e3).toFixed(1)+"K";return Math.round(v).toLocaleString();};
-        var fmtVal=function(name,n){if(name==="spend")return "R"+(parseFloat(n||0)).toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});return fmtNum(n);};
+        var fmtVal=function(name,n){if((name||"").toLowerCase().indexOf("spend")>=0)return "R"+(parseFloat(n||0)).toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});return fmtNum(n);};
         return <div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:1000}}>
             <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
               <tr>
                 <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Platform</th>
                 <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Campaign</th>
+                <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Tab</th>
                 <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Metric</th>
                 <th style={{padding:"10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Source of Truth</th>
                 <th style={{padding:"10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Dashboard</th>
@@ -757,6 +758,7 @@ function CampaignAuditModal(props){
                   return <tr key={r.campaignId+"_"+m.name+"_"+i+"_"+mi} style={{borderBottom:mi===r.metrics.length-1?"2px solid "+P.rule:"1px solid "+P.rule+"30"}}>
                     {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap",borderRight:"1px solid "+P.rule+"40"}}>{r.platform}</td>:null}
                     {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:280,borderRight:"1px solid "+P.rule+"40"}}>{r.campaignName}<div style={{color:P.dim,fontSize:9,marginTop:3,fontFamily:fm}}>{r.accountName}</div></td>:null}
+                    <td style={{padding:"6px 10px",color:P.cyan,verticalAlign:"middle",fontSize:10,fontWeight:700,letterSpacing:0.5}}>{m.tab||"Summary"}</td>
                     <td style={{padding:"6px 10px",color:P.sub,verticalAlign:"middle",textTransform:"uppercase",letterSpacing:1,fontSize:10,fontWeight:700}}>{m.name}</td>
                     <td align="right" style={{padding:"6px 10px",color:P.txt,verticalAlign:"middle",fontFamily:fm}}>{fmtVal(m.name,m.source)}</td>
                     <td align="right" style={{padding:"6px 10px",color:P.txt,verticalAlign:"middle",fontFamily:fm}}>{fmtVal(m.name,m.dashboard)}</td>
@@ -765,7 +767,7 @@ function CampaignAuditModal(props){
                   </tr>;
                 });
               })}
-              {filteredRec.length===0&&!recLoading[0]&&<tr><td colSpan={7} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the filter.</td></tr>}
+              {filteredRec.length===0&&!recLoading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the filter.</td></tr>}
             </tbody>
           </table>
         </div>;
