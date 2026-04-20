@@ -1794,10 +1794,21 @@ export default function MediaOnGas(){
                     if(platAds.length===0)return;
                     var objAds;
                     if(og.key==="followers"){
-                      // Meta's per-ad page_like count drops under publisher_platform breakdown,
-                      // so we use followsTrue from the server no-breakdown pass. Dedup by adId
-                      // (FB + IG rows of the same ad carry the same true total), keep
-                      // highest-impression row.
+                      // Ground-truth-anchored per-ad follower attribution.
+                      // Meta's ad-level follow attribution is either missing
+                      // (modern OUTCOME_ENGAGEMENT doesn't expose per-ad
+                      // ig_follow reliably) or wildly over-attributed (click
+                      // + view-through windows catch follows that happened
+                      // from other sources). The hard-truth pool per platform:
+                      //   IG : Page Insights follower_count delta (igGrowth)
+                      //   FB : Meta-attributed page_like total (m.pageLikes)
+                      //   TT : Sum of TikTok per-ad API follows (ttE2)
+                      // Distribute the pool across follower-objective ads
+                      // proportional to each ad's click share. Clicks are
+                      // the tightest leading indicator of a follow on a
+                      // follower-objective ad, and the distribution will
+                      // sum exactly to the platform total the client sees
+                      // in Community Growth.
                       var follAds=platAds.filter(function(a){return (a.objective||"landingpage")==="followers";});
                       var dedup={};
                       follAds.forEach(function(a){
@@ -1805,11 +1816,22 @@ export default function MediaOnGas(){
                         if(!k)return;
                         if(!dedup[k]||parseFloat(a.impressions||0)>parseFloat(dedup[k].impressions||0))dedup[k]=a;
                       });
-                      objAds=Object.keys(dedup).map(function(k){
-                        var a=dedup[k];
+                      var dedupArr=Object.keys(dedup).map(function(k){return dedup[k];});
+                      var pool=0;
+                      if(pg.key==="instagram")pool=Math.max(0,parseFloat(igGrowth||0));
+                      else if(pg.key==="facebook")pool=Math.max(0,parseFloat(m.pageLikes||0));
+                      else if(pg.key==="tiktok")pool=Math.max(0,parseFloat(ttE2||0));
+                      var totalClicksForShare=0;
+                      dedupArr.forEach(function(a){totalClicksForShare+=parseFloat(a.clicks||0);});
+                      objAds=dedupArr.map(function(a){
+                        if(pool>0&&totalClicksForShare>0){
+                          var share=parseFloat(a.clicks||0)/totalClicksForShare;
+                          var est=Math.round(pool*share);
+                          return Object.assign({},a,{results:est,resultType:"follows"});
+                        }
+                        // No ground-truth pool, fall back to Meta attribution.
                         var ft=parseFloat(a.followsTrue||0);
-                        if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
-                        return a;
+                        return Object.assign({},a,{results:ft,resultType:"follows"});
                       });
                     } else if(og.key==="landingpage"){
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
@@ -2092,9 +2114,12 @@ export default function MediaOnGas(){
               if(!byObj[o])byObj[o]=[];
               byObj[o].push(a);
             });
-            // Followers bucket: dedupe by adId and swap in the no-breakdown per-ad
-            // page_like total from the server, so the creative summary matches the
-            // campaign aggregate rather than showing Meta's placement-split undercount.
+            // Followers bucket: dedupe by adId, then distribute the
+            // platform-level ground-truth follower growth across ads by
+            // click share. Same methodology as the Summary Top Performers
+            // section, see detailed rationale there. Re-computes the
+            // three platform pools locally since this tab is in its own
+            // function scope and does not see Summary's variables.
             if (byObj.followers && byObj.followers.length > 0) {
               var fdedup={};
               byObj.followers.forEach(function(a){
@@ -2102,11 +2127,42 @@ export default function MediaOnGas(){
                 if(!k)return;
                 if(!fdedup[k]||parseFloat(a.impressions||0)>parseFloat(fdedup[k].impressions||0))fdedup[k]=a;
               });
+              // Match selected campaigns to pages for the IG Page Insights delta
+              var crMatchedPages=[];var crMatchedIds={};
+              for(var si=0;si<selCamps.length;si++){
+                var bestPg=null;var bestSc=0;
+                for(var pi=0;pi<pages.length;pi++){
+                  var sc=autoMatchPage(selCamps[si].campaignName,pages[pi].name);
+                  if(sc>bestSc){bestSc=sc;bestPg=pages[pi];}
+                }
+                if(bestPg&&bestSc>=2&&!crMatchedIds[bestPg.id]){crMatchedPages.push(bestPg);crMatchedIds[bestPg.id]=true;}
+              }
+              var crIgGrowth=0;
+              crMatchedPages.forEach(function(mp){if(mp.instagram_business_account)crIgGrowth+=mp.instagram_business_account.follower_growth||0;});
+              // Sum Meta page_like and TikTok follows across selected campaigns.
+              var crFbPool=0;var crTtPool=0;
+              selCamps.forEach(function(c){
+                if(c.platform==="Facebook"||c.platform==="Instagram")crFbPool+=parseFloat(c.pageLikes||0);
+                if(c.platform==="TikTok")crTtPool+=parseFloat(c.follows||0);
+              });
+              var poolByPlat={instagram:Math.max(0,crIgGrowth),facebook:Math.max(0,crFbPool),tiktok:Math.max(0,crTtPool)};
+              var clicksByPlat={instagram:0,facebook:0,tiktok:0};
+              Object.keys(fdedup).forEach(function(k){
+                var pk=platformGroup(fdedup[k].platform);
+                if(clicksByPlat[pk]!==undefined)clicksByPlat[pk]+=parseFloat(fdedup[k].clicks||0);
+              });
               byObj.followers=Object.keys(fdedup).map(function(k){
                 var a=fdedup[k];
+                var pk=platformGroup(a.platform);
+                var pool=poolByPlat[pk]||0;
+                var totClicks=clicksByPlat[pk]||0;
+                if(pool>0&&totClicks>0){
+                  var share=parseFloat(a.clicks||0)/totClicks;
+                  var est=Math.round(pool*share);
+                  return Object.assign({},a,{results:est,resultType:"follows"});
+                }
                 var ft=parseFloat(a.followsTrue||0);
-                if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
-                return a;
+                return Object.assign({},a,{results:ft,resultType:"follows"});
               });
             }
 
