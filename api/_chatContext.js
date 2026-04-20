@@ -18,23 +18,46 @@ function fmtPct(n) {
 }
 
 function aggregate(arr) {
-  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appInstalls: 0, follows: 0, pageLikes: 0, likes: 0, landingPageViews: 0 };
+  // Outcome counts are scoped by the campaign's own objective so a traffic
+  // campaign with stray "conversion" events is not counted as leads, a
+  // lead-gen campaign with incidental profile visits is not counted as
+  // landing-page clicks, and so on. Mirrors the email-share + dashboard
+  // rule so every surface speaks the same numbers.
+  var s = {
+    impressions: 0, reach: 0, spend: 0, clicks: 0,
+    leads: 0, appStoreClicks: 0, landingPageClicks: 0,
+    follows: 0, pageLikes: 0,
+    leadsSpend: 0, appInstallSpend: 0, landingPageSpend: 0, followersSpend: 0
+  };
   arr.forEach(function(c) {
     s.impressions += parseFloat(c.impressions || 0);
     s.reach += parseFloat(c.reach || 0);
     s.spend += parseFloat(c.spend || 0);
     s.clicks += parseFloat(c.clicks || 0);
-    s.leads += parseFloat(c.leads || 0);
-    s.appInstalls += parseFloat(c.appInstalls || 0);
-    s.follows += parseFloat(c.follows || 0);
-    s.pageLikes += parseFloat(c.pageLikes || 0);
-    s.likes += parseFloat(c.likes || 0);
-    s.landingPageViews += parseFloat(c.landingPageViews || 0);
+    var obj = c.objective || "landingpage";
+    if (obj === "leads") {
+      s.leads += parseFloat(c.leads || 0);
+      s.leadsSpend += parseFloat(c.spend || 0);
+    } else if (obj === "appinstall") {
+      s.appStoreClicks += parseFloat(c.clicks || 0);
+      s.appInstallSpend += parseFloat(c.spend || 0);
+    } else if (obj === "landingpage") {
+      s.landingPageClicks += parseFloat(c.clicks || 0);
+      s.landingPageSpend += parseFloat(c.spend || 0);
+    } else if (obj === "followers") {
+      s.follows += parseFloat(c.follows || 0);
+      s.pageLikes += parseFloat(c.pageLikes || 0);
+      s.followersSpend += parseFloat(c.spend || 0);
+    }
   });
   s.cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : 0;
   s.cpc = s.clicks > 0 ? (s.spend / s.clicks) : 0;
   s.ctr = s.impressions > 0 ? (s.clicks / s.impressions * 100) : 0;
   s.frequency = s.reach > 0 ? (s.impressions / s.reach) : 0;
+  s.costPerLead = s.leads > 0 ? (s.leadsSpend / s.leads) : 0;
+  s.costPerFollower = (s.follows + s.pageLikes) > 0 ? (s.followersSpend / (s.follows + s.pageLikes)) : 0;
+  s.costPerAppStoreClick = s.appStoreClicks > 0 ? (s.appInstallSpend / s.appStoreClicks) : 0;
+  s.costPerLandingClick = s.landingPageClicks > 0 ? (s.landingPageSpend / s.landingPageClicks) : 0;
   return s;
 }
 
@@ -128,11 +151,13 @@ export async function buildChatContext(req, from, to, principal) {
   lines.push("- Cost per 1000 ads served (CPM): " + fmtR(grand.cpm));
   lines.push("- Cost per click (CPC): " + fmtR(grand.cpc));
   lines.push("- Frequency (blended across the full media mix, Google Display/YouTube reach is estimated at 2x frequency since Google Ads does not expose unique-user reach): " + grand.frequency.toFixed(2) + "x");
-  lines.push("- Leads generated: " + fmtNum(grand.leads));
-  lines.push("- Page follows + likes (Meta): " + fmtNum(grand.follows + grand.pageLikes));
-  lines.push("- TikTok follows + likes: " + fmtNum(grand.likes > 0 || grand.follows > 0 ? grand.likes : 0));
-  lines.push("- Clicks to app store: " + fmtNum(grand.appInstalls));
-  lines.push("- Landing page views: " + fmtNum(grand.landingPageViews));
+  // Outcome totals and cost-per-result are scoped to the matching
+  // objective's spend. Do not use blended total spend as the denominator
+  // when computing CPL, Cost Per Follower, etc.
+  lines.push("- Leads generated (from Lead Generation campaigns only): " + fmtNum(grand.leads) + (grand.costPerLead > 0 ? " at " + fmtR(grand.costPerLead) + " CPL (on " + fmtR(grand.leadsSpend) + " lead-gen spend)" : ""));
+  lines.push("- New Followers + Page Likes (from Followers & Likes campaigns only): " + fmtNum(grand.follows + grand.pageLikes) + (grand.costPerFollower > 0 ? " at " + fmtR(grand.costPerFollower) + " CPF (on " + fmtR(grand.followersSpend) + " follower-campaign spend)" : ""));
+  lines.push("- Clicks to App Store (from Clicks to App Store campaigns only): " + fmtNum(grand.appStoreClicks) + (grand.costPerAppStoreClick > 0 ? " at " + fmtR(grand.costPerAppStoreClick) + " per click (on " + fmtR(grand.appInstallSpend) + " app-store spend)" : ""));
+  lines.push("- Clicks to Landing Page (from Landing Page Clicks / Traffic campaigns only): " + fmtNum(grand.landingPageClicks) + (grand.costPerLandingClick > 0 ? " at " + fmtR(grand.costPerLandingClick) + " per click (on " + fmtR(grand.landingPageSpend) + " traffic spend)" : ""));
   lines.push("");
 
   lines.push("## Per-platform breakdown (sorted by spend)");
@@ -143,24 +168,39 @@ export async function buildChatContext(req, from, to, principal) {
     lines.push("- Ads served: " + fmtNum(a.impressions) + " | Reach: " + fmtNum(a.reach));
     lines.push("- Clicks: " + fmtNum(a.clicks) + " | CTR: " + fmtPct(a.ctr) + " | CPC: " + fmtR(a.cpc));
     lines.push("- CPM: " + fmtR(a.cpm) + " | Frequency: " + a.frequency.toFixed(2) + "x");
-    if (a.leads > 0) lines.push("- Leads: " + fmtNum(a.leads) + " at " + fmtR(a.spend / a.leads) + " per lead");
-    if (a.follows > 0 || a.pageLikes > 0) lines.push("- Follows/likes earned: " + fmtNum(a.follows + a.pageLikes));
-    if (a.appInstalls > 0) lines.push("- Clicks to app store: " + fmtNum(a.appInstalls) + " at " + fmtR(a.spend / a.appInstalls) + " per click");
+    if (a.leads > 0) lines.push("- Leads (lead-gen campaigns only): " + fmtNum(a.leads) + " at " + fmtR(a.costPerLead) + " per lead");
+    if (a.follows > 0 || a.pageLikes > 0) lines.push("- Follows/likes (follower campaigns only): " + fmtNum(a.follows + a.pageLikes) + (a.costPerFollower > 0 ? " at " + fmtR(a.costPerFollower) + " per follow" : ""));
+    if (a.appStoreClicks > 0) lines.push("- Clicks to App Store (app-install campaigns only): " + fmtNum(a.appStoreClicks) + " at " + fmtR(a.costPerAppStoreClick) + " per click");
+    if (a.landingPageClicks > 0) lines.push("- Clicks to Landing Page (traffic campaigns only): " + fmtNum(a.landingPageClicks) + " at " + fmtR(a.costPerLandingClick) + " per click");
   });
   lines.push("");
 
-  lines.push("## Individual campaigns (name, platform, spend, CTR, outcomes)");
+  lines.push("## Individual campaigns (name, platform, objective, spend, CTR, outcomes)");
+  var objectiveLabel = function(o) {
+    if (o === "leads") return "Lead Generation";
+    if (o === "appinstall") return "Clicks to App Store";
+    if (o === "followers") return "Followers & Likes";
+    if (o === "landingpage") return "Landing Page Clicks";
+    return "Landing Page Clicks";
+  };
   filteredCamps.slice().sort(function(a, b) { return parseFloat(b.spend || 0) - parseFloat(a.spend || 0); }).forEach(function(c) {
     var parts = [];
     parts.push('"' + (c.campaignName || "Unnamed") + '"');
     parts.push(c.platform);
+    parts.push("objective: " + objectiveLabel(c.objective));
     parts.push("spend " + fmtR(c.spend));
     parts.push("impressions " + fmtNum(c.impressions));
     parts.push("CTR " + fmtPct(c.ctr));
     parts.push("CPC " + fmtR(c.cpc));
-    if (parseFloat(c.leads || 0) > 0) parts.push(parseFloat(c.leads) + " leads");
-    if (parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0) > 0) parts.push((parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0)) + " follows/likes");
-    if (parseFloat(c.appInstalls || 0) > 0) parts.push(parseFloat(c.appInstalls) + " installs");
+    // Only surface outcome numbers that match the campaign's objective. A
+    // traffic / landing-page campaign MUST NOT report leads, even if Meta
+    // or Google attributed a stray "lead"-like action to it. This keeps
+    // the bot from answering "what was my CPL" with numbers that came
+    // from a campaign whose actual goal was profile visits or LP clicks.
+    if (c.objective === "leads" && parseFloat(c.leads || 0) > 0) parts.push(parseFloat(c.leads) + " leads");
+    if (c.objective === "followers" && parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0) > 0) parts.push((parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0)) + " follows/likes");
+    if (c.objective === "appinstall" && parseFloat(c.clicks || 0) > 0) parts.push(parseFloat(c.clicks) + " clicks to app store");
+    if (c.objective === "landingpage" && parseFloat(c.clicks || 0) > 0) parts.push(parseFloat(c.clicks) + " clicks to landing page");
     lines.push("- " + parts.join(", "));
   });
   lines.push("");

@@ -344,6 +344,14 @@ export default async function handler(req, res) {
               var gPlatform = "Google Display";
               var gName = gc.name || "";
               if (gName.toLowerCase().indexOf("youtube") >= 0) gPlatform = "YouTube";
+              // Classify the Google campaign BEFORE pushing so we can scope
+              // conversions -> leads only when it's actually a lead-gen
+              // campaign. For a traffic / landing-page Google campaign,
+              // Google "conversions" are typically page-engagement events
+              // (button clicks, page views) not real leads, counting them
+              // as leads misleads the chat bot and email reports.
+              var gObjective = objectiveFromName(gName);
+              var gIsLeadsCampaign = gObjective === "leads";
               allCampaigns.push({
                 platform: gPlatform,
                 metaPlatform: "google",
@@ -352,7 +360,7 @@ export default async function handler(req, res) {
                 campaignId: "google_" + gc.id,
                 rawCampaignId: gc.id,
                 campaignName: gName,
-                objective: objectiveFromName(gName),
+                objective: gObjective,
                 impressions: gImps.toString(),
                 // Google Ads does NOT expose unique-user reach. To keep the
                 // blended frequency meaningful across the media mix we apply
@@ -368,17 +376,17 @@ export default async function handler(req, res) {
                 ctr: gImps > 0 ? ((gClicks / gImps) * 100).toFixed(2) : "0",
                 clicks: gClicks.toString(),
                 conversions: gConv.toFixed(0),
-                // Google Ads reports conversions at the campaign level; for PaidSearch
-                // and Display lead-gen campaigns this IS the leads count. Reconcile
-                // and ads.js treat it identically, so campaigns.js must map it here
-                // or the dashboard shows 0 leads while source-of-truth shows the real count.
-                leads: gConv > 0 ? Math.round(gConv).toString() : "0",
+                // Leads come from Google conversions ONLY on lead-gen
+                // campaigns. Traffic / landing-page campaigns often have
+                // non-lead conversions (engagement, page views) that must
+                // not be reported as leads.
+                leads: (gIsLeadsCampaign && gConv > 0) ? Math.round(gConv).toString() : "0",
                 appInstalls: "0",
                 landingPageViews: "0",
                 pageLikes: "0",
                 follows: "0",
                 likes: "0",
-                costPerLead: gConv > 0 ? (gSpend / gConv).toFixed(2) : "0",
+                costPerLead: (gIsLeadsCampaign && gConv > 0) ? (gSpend / gConv).toFixed(2) : "0",
                 costPerInstall: "0",
                 actions: [],
                 startDate: "", endDate: "", status: gc.status === "ENABLED" ? "active" : "paused"
