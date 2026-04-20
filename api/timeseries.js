@@ -65,11 +65,34 @@ export default async function handler(req, res) {
   var isClientScoped = principal.role === "client";
   (principal.allowedCampaignIds || []).forEach(function(id) { allowedIds[String(id)] = true; });
   (principal.allowedCampaignNames || []).forEach(function(n) { allowedNames[String(n)] = true; });
+
+  // Optional campaignIds query param lets the admin dashboard further
+  // narrow the trendline to the selection on screen. When present it
+  // acts as an AND filter on top of the client-scope allowlist. We
+  // accept any of: suffixed (123_facebook), raw (123), or google_-
+  // prefixed so the backend matches rows from every platform shape.
+  var selectionIds = {};
+  var hasSelection = false;
+  if (req.query.campaignIds) {
+    String(req.query.campaignIds).split(",").forEach(function(raw) {
+      var s = raw.trim();
+      if (!s) return;
+      hasSelection = true;
+      selectionIds[s] = true;
+      selectionIds[s.replace(/_(facebook|instagram)$/, "")] = true;
+      selectionIds[s.replace(/^google_/, "")] = true;
+    });
+  }
+
   var campaignAllowed = function(id, name) {
-    if (!isClientScoped) return true;
-    if (id && allowedIds[String(id)]) return true;
-    if (name && allowedNames[String(name)]) return true;
-    return false;
+    if (isClientScoped) {
+      if (!(id && allowedIds[String(id)]) && !(name && allowedNames[String(name)])) return false;
+    }
+    if (hasSelection) {
+      var sid = String(id || "");
+      if (!selectionIds[sid] && !selectionIds[sid.replace(/^google_/, "")]) return false;
+    }
+    return true;
   };
 
   var seriesMap = {};

@@ -1330,7 +1330,29 @@ export default function MediaOnGas(){
 
   var fetchData=function(){setLoading(true);var h=authHeaders();fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
-  useEffect(function(){if(!isAuthed())return;fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:authHeaders()}).then(function(r){return r.json();}).then(function(d){if(d.series){setTimeseries(d);}}).catch(function(){});},[df,dt,session,viewToken,tsGran]);
+  // Timeseries / Performance Trendlines must honour the current campaign
+  // selection. Without passing campaignIds, the backend aggregated across
+  // every campaign the admin can see, and the chart showed a full-account
+  // trendline even when only a single sub-campaign was selected.
+  useEffect(function(){
+    if(!isAuthed())return;
+    var ids=(selected||[]).slice();
+    // Also push the raw (unsuffixed) form and the bare numeric id so the
+    // backend can match against Meta breakdown rows that carry raw campaign
+    // ids, TikTok / Google ids that are unsuffixed, and so on.
+    var extra=[];
+    (selected||[]).forEach(function(x){
+      var s=String(x||"");
+      var stripped=s.replace(/_(facebook|instagram)$/,"").replace(/^google_/,"");
+      if(stripped&&extra.indexOf(stripped)<0)extra.push(stripped);
+    });
+    var allIds=ids.concat(extra);
+    var idsQs=allIds.length>0?("&campaignIds="+encodeURIComponent(allIds.join(","))):"";
+    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran+idsQs,{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.series){setTimeseries(d);}})
+      .catch(function(){});
+  },[df,dt,session,viewToken,tsGran,selected]);
   var refreshData=function(){fetchData();};
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
