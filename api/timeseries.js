@@ -151,10 +151,21 @@ export default async function handler(req, res) {
               var v = parseInt(a.value || 0);
               if (objective === "leads" && (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at.indexOf("onsite_conversion.lead") >= 0)) results = Math.max(results, v);
               else if (objective === "appinstall" && (at.indexOf("app_install") >= 0 || at.indexOf("mobile_app_install") >= 0)) results = Math.max(results, v);
-              else if (objective === "followers" && (at === "like" || at === "page_like" || at === "follow" || at.indexOf("ig_follow") >= 0)) results = Math.max(results, v);
+              // FB follower-objective: page_like / follow actions are the
+              // real follower signal. IG follower campaigns drive profile
+              // visits (clicks), the "follow" action happens on the profile
+              // after click and Meta rarely emits per-ad ig_follow for
+              // OUTCOME_ENGAGEMENT, so counting action-type data here would
+              // show zero on weeks when the ad genuinely drove traffic.
+              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "follow")) results = Math.max(results, v);
             });
           }
+          // Objective-specific fallback: landing page and click-to-app-store
+          // campaigns always report clicks. IG follower campaigns also fall
+          // back to clicks since that is the "Profile Visit" ad actually
+          // drives (matches the Top Performers tile treatment).
           if (objective === "landingpage" || (results === 0 && objective === "appinstall")) results = clk;
+          if (objective === "followers" && platform === "Instagram") results = clk;
           if (!campaignAllowed(row.campaign_id, row.campaign_name)) return;
           addTo(seriesMap, platform, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
         });
