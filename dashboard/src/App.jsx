@@ -1131,6 +1131,21 @@ export default function MediaOnGas(){
   var handleLogin=function(token,role){setSession(token);setAuthRole(role||"admin");};
   var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setSession(null);setAuthRole(null);};
 
+  // Hard refresh (Ctrl/Cmd + Shift + R) forces admin re-login. The keydown
+  // fires before the browser reload, so clearing sessionStorage synchronously
+  // here means the next page load finds no token and routes to login. Client
+  // share-link viewers are unaffected, their auth lives in the URL, not storage.
+  useEffect(function(){
+    var handler=function(e){
+      var hard=(e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==="R"||e.key==="r");
+      if(!hard)return;
+      if(window.location.pathname.indexOf("/view/")===0)return;
+      try{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");}catch(_){}
+    };
+    window.addEventListener("keydown",handler);
+    return function(){window.removeEventListener("keydown",handler);};
+  },[]);
+
   var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client"||!!viewToken;
   var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-api-key":API_KEY,"x-session-token":session||""};};
   var isAuthed=function(){return !!session||!!viewToken;};
