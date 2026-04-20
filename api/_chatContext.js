@@ -131,12 +131,36 @@ export async function buildChatContext(req, from, to, principal) {
     return { platform: p, agg: aggregate(byPlat[p]), count: byPlat[p].length };
   }).sort(function(a, b) { return b.agg.spend - a.agg.spend; });
 
-  // Top 8 ads by results then spend
+  // Top 5 ads PER PLATFORM (FB / IG / TikTok / Google families) plus the
+  // global top 8. Previously only exposing global top 8 meant a platform-
+  // specific question ("how did ads on IG perform") couldn't reach a
+  // lower-ranked platform ad that never cracked the global list. Group
+  // and keep top 5 each, dedup against the global list, render all.
+  var byPlatAds = {};
+  filteredAds.forEach(function(a) {
+    var p = a.platform || "Other";
+    if (!byPlatAds[p]) byPlatAds[p] = [];
+    byPlatAds[p].push(a);
+  });
   var topAds = filteredAds.slice().sort(function(a, b) {
     var ar = parseFloat(a.results || 0), br = parseFloat(b.results || 0);
     if (br !== ar) return br - ar;
     return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
   }).slice(0, 8);
+  var platformTopAds = [];
+  Object.keys(byPlatAds).forEach(function(p) {
+    var sorted = byPlatAds[p].slice().sort(function(a, b) {
+      var ar = parseFloat(a.results || 0), br = parseFloat(b.results || 0);
+      if (br !== ar) return br - ar;
+      return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
+    }).slice(0, 5);
+    platformTopAds.push({ platform: p, ads: sorted });
+  });
+  platformTopAds.sort(function(a, b) {
+    var as = a.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
+    var bs = b.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
+    return bs - as;
+  });
 
   // Render the data block
   var lines = [];
@@ -205,20 +229,32 @@ export async function buildChatContext(req, from, to, principal) {
   });
   lines.push("");
 
+  var renderAdLine = function(a, rank) {
+    var results = parseFloat(a.results || 0);
+    var rt = a.resultType || "results";
+    var spend = parseFloat(a.spend || 0);
+    var line = "#" + rank + ' "' + (a.adName || "Unnamed") + '" (' + a.platform + ", " + (a.format || "STATIC") + "): ";
+    line += fmtR(spend) + " spend, " + fmtNum(a.impressions) + " impressions, " + fmtPct(a.ctr) + " CTR";
+    if (results > 0) line += ", " + results + " " + rt + " at " + fmtR(spend / results) + " each";
+    if (a.campaignName) line += ". From campaign: " + a.campaignName;
+    return line;
+  };
+
   if (topAds.length > 0) {
-    lines.push("## Top creative ads (ranked by results, then spend)");
-    topAds.forEach(function(a, i) {
-      var results = parseFloat(a.results || 0);
-      var rt = a.resultType || "results";
-      var spend = parseFloat(a.spend || 0);
-      var line = "#" + (i + 1) + ' "' + (a.adName || "Unnamed") + '" (' + a.platform + ", " + (a.format || "STATIC") + "): ";
-      line += fmtR(spend) + " spend, " + fmtNum(a.impressions) + " impressions, " + fmtPct(a.ctr) + " CTR";
-      if (results > 0) line += ", " + results + " " + rt + " at " + fmtR(spend / results) + " each";
-      if (a.campaignName) line += ". From campaign: " + a.campaignName;
-      lines.push(line);
-    });
+    lines.push("## Top creative ads across all platforms (ranked by results, then spend)");
+    topAds.forEach(function(a, i) { lines.push(renderAdLine(a, i + 1)); });
     lines.push("");
   }
+
+  // Per-platform top 5 so the bot can answer platform-specific questions
+  // (e.g. "how did Ayanda ads perform on Instagram", "best TikTok ad") even
+  // when the ads don't rank in the global top 8.
+  platformTopAds.forEach(function(pb) {
+    if (pb.ads.length === 0) return;
+    lines.push("## Top " + Math.min(5, pb.ads.length) + " ads on " + pb.platform + " (ranked by results, then spend)");
+    pb.ads.forEach(function(a, i) { lines.push(renderAdLine(a, i + 1)); });
+    lines.push("");
+  });
 
   lines.push("## South African paid media benchmarks (for comparison only, use these to say whether something is good/healthy/above-range)");
   lines.push("Meta (Facebook + Instagram):");
