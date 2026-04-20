@@ -27,12 +27,22 @@ export default async function handler(req, res) {
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range={\"since\":\"" + from + "\",\"until\":\"" + to + "\"}&breakdowns=publisher_platform&limit=200&access_token=" + metaToken;
       var r = await fetch(url);
       var data = await r.json();
+      // Map AN / Messenger / Oculus into Facebook family and Threads into
+      // Instagram. Matches /api/campaigns.js so dashboard totals line up
+      // and so Audience Targeting does not silently drop 40 to 50 percent
+      // of a campaign's spend on FB-placed flights that also serve AN.
+      var mapPubToPlat = function(p) {
+        p = (p || "facebook").toLowerCase();
+        if (p === "instagram" || p === "threads") return "Instagram";
+        if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
+        return null;
+      };
       if (data.data) {
         for (var j = 0; j < data.data.length; j++) {
           var d = data.data[j];
           var pub = d.publisher_platform || "facebook";
-          if (pub === "audience_network" || pub === "messenger" || pub === "threads") continue;
-          var platform = pub === "instagram" ? "Instagram" : "Facebook";
+          var platform = mapPubToPlat(pub);
+          if (!platform) continue;
           var leads = 0, appInstalls = 0, pageLikes = 0, landingPageViews = 0, follows = 0;
           if (d.actions) {
             for (var k = 0; k < d.actions.length; k++) {
@@ -75,8 +85,8 @@ export default async function handler(req, res) {
           for (var j2 = 0; j2 < data.data.length; j2++) {
             var d2 = data.data[j2];
             var pub2 = d2.publisher_platform || "facebook";
-            if (pub2 === "audience_network" || pub2 === "messenger" || pub2 === "threads") continue;
-            var platform2 = pub2 === "instagram" ? "Instagram" : "Facebook";
+            var platform2 = mapPubToPlat(pub2);
+            if (!platform2) continue;
             var leads2 = 0, appInstalls2 = 0, pageLikes2 = 0, landingPageViews2 = 0, follows2 = 0;
             if (d2.actions) {
               for (var k2 = 0; k2 < d2.actions.length; k2++) {

@@ -794,9 +794,23 @@ export default async function handler(req, res) {
       // Ad-level insights
       var ttDims = encodeURIComponent(JSON.stringify(["ad_id"]));
       var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "adgroup_name", "ad_name", "spend", "impressions", "clicks", "cpm", "cpc", "ctr", "reach", "follows", "likes", "video_views_p100"]));
-      var ttInsUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_AD&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=200";
-      var ttInsRes = await fetch(ttInsUrl, { headers: { "Access-Token": ttToken } });
-      var ttInsData = await ttInsRes.json();
+      var ttInsBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_AD&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=200";
+      // Follow TikTok pagination via page_info.total_page. Single-page fetch
+      // silently dropped ~20% of ads on accounts with >200 ad rows, showing
+      // up as RED "ads sum spend" deltas in the reconcile tab.
+      var ttAllIns = [];
+      var ttPage = 1;
+      while (ttPage < 20) {
+        var ttPageRes = await fetch(ttInsBase + "&page=" + ttPage, { headers: { "Access-Token": ttToken } });
+        if (!ttPageRes.ok) break;
+        var ttPageData = await ttPageRes.json();
+        var ttList = (ttPageData.data || {}).list || [];
+        ttAllIns = ttAllIns.concat(ttList);
+        var ttTotalPage = (ttPageData.data && ttPageData.data.page_info && ttPageData.data.page_info.total_page) || 1;
+        if (ttPage >= ttTotalPage) break;
+        ttPage++;
+      }
+      var ttInsData = { data: { list: ttAllIns } };
       if (ttInsData.data && ttInsData.data.list) {
         ttInsData.data.list.forEach(function(ins) {
           var ad = ttAdsByAdId[ins.dimensions.ad_id] || {};

@@ -286,12 +286,17 @@ async function fetchTimeseriesTotals(req, from, to) {
     var r = await fetch("https://" + host + "/api/timeseries?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&granularity=day", { headers: { "x-api-key": apiKey } });
     if (!r.ok) return null;
     var d = await r.json();
+    // /api/timeseries returns series = [{platform, objective, points: [{bucket, spend, ...}]}]
+    // Need to iterate points across every series, NOT assume series items
+    // carry spend themselves.
     var series = d.series || [];
     var totals = { spend: 0, impressions: 0, clicks: 0 };
-    series.forEach(function(pt) {
-      totals.spend += parseFloat(pt.spend || 0);
-      totals.impressions += parseFloat(pt.impressions || 0);
-      totals.clicks += parseFloat(pt.clicks || 0);
+    series.forEach(function(s) {
+      (s.points || []).forEach(function(pt) {
+        totals.spend += parseFloat(pt.spend || 0);
+        totals.impressions += parseFloat(pt.impressions || 0);
+        totals.clicks += parseFloat(pt.clicks || 0);
+      });
     });
     return totals;
   } catch (_) { return null; }
