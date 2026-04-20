@@ -89,37 +89,53 @@ export default async function handler(req, res) {
           if (campData.data) campData.data.forEach(function(c) { campObjMap[c.id] = c.objective; });
         } catch (e) {}
 
+        // Map AN / Messenger / Oculus into Facebook family and Threads into
+        // Instagram. Dropping them silently undercut timeseries totals by 2 to 5
+        // percent on Advantage+ Meta flights.
+        var tsMapPub = function(p) {
+          p = (p || "facebook").toLowerCase();
+          if (p === "instagram" || p === "threads") return "Instagram";
+          if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
+          return null;
+        };
         var timeRange = encodeURIComponent(JSON.stringify({ since: from, until: to }));
         var incr = granularity === "month" ? "monthly" : "7";
         var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,actions&level=campaign&breakdowns=publisher_platform&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
-        var insRes = await fetch(insUrl);
-        var insData = await insRes.json();
-        if (insData.data) {
-          insData.data.forEach(function(row) {
-            var pub = row.publisher_platform || "facebook";
-            if (pub !== "facebook" && pub !== "instagram") return;
-            var platform = pub === "instagram" ? "Instagram" : "Facebook";
-            var objective = mapMetaObjective(campObjMap[row.campaign_id]) || detectObjective(row.campaign_name);
-            var bucket = row.date_start;
-            var spend = parseFloat(row.spend || 0);
-            var imps = parseInt(row.impressions || 0);
-            var clk = parseInt(row.clicks || 0);
-            var results = 0;
-            if (row.actions) {
-              row.actions.forEach(function(a) {
-                var at = String(a.action_type || "").toLowerCase();
-                var v = parseInt(a.value || 0);
-                if (objective === "leads" && (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at.indexOf("onsite_conversion.lead") >= 0)) results = Math.max(results, v);
-                else if (objective === "appinstall" && (at.indexOf("app_install") >= 0 || at.indexOf("mobile_app_install") >= 0)) results = Math.max(results, v);
-                else if (objective === "followers" && (at === "like" || at === "page_like" || at === "follow" || at.indexOf("ig_follow") >= 0)) results = Math.max(results, v);
-              });
-            }
-            if (objective === "landingpage" || (results === 0 && objective === "appinstall")) results = clk;
-            if (!campaignAllowed(row.campaign_id, row.campaign_name)) return;
-            addTo(seriesMap, platform, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
-          });
+        // Follow pagination for big date ranges / many campaigns.
+        var metaAllRows = [];
+        var insNext = insUrl;
+        var insGuard = 0;
+        while (insNext && insGuard < 10) {
+          insGuard++;
+          var insRes = await fetch(insNext);
+          if (!insRes.ok) break;
+          var insData = await insRes.json();
+          if (insData.data) metaAllRows = metaAllRows.concat(insData.data);
+          insNext = insData.paging && insData.paging.next ? insData.paging.next : null;
         }
-        debug.meta[account.name] = (insData.data || []).length;
+        metaAllRows.forEach(function(row) {
+          var platform = tsMapPub(row.publisher_platform);
+          if (!platform) return;
+          var objective = mapMetaObjective(campObjMap[row.campaign_id]) || detectObjective(row.campaign_name);
+          var bucket = row.date_start;
+          var spend = parseFloat(row.spend || 0);
+          var imps = parseInt(row.impressions || 0);
+          var clk = parseInt(row.clicks || 0);
+          var results = 0;
+          if (row.actions) {
+            row.actions.forEach(function(a) {
+              var at = String(a.action_type || "").toLowerCase();
+              var v = parseInt(a.value || 0);
+              if (objective === "leads" && (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at.indexOf("onsite_conversion.lead") >= 0)) results = Math.max(results, v);
+              else if (objective === "appinstall" && (at.indexOf("app_install") >= 0 || at.indexOf("mobile_app_install") >= 0)) results = Math.max(results, v);
+              else if (objective === "followers" && (at === "like" || at === "page_like" || at === "follow" || at.indexOf("ig_follow") >= 0)) results = Math.max(results, v);
+            });
+          }
+          if (objective === "landingpage" || (results === 0 && objective === "appinstall")) results = clk;
+          if (!campaignAllowed(row.campaign_id, row.campaign_name)) return;
+          addTo(seriesMap, platform, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
+        });
+        debug.meta[account.name] = metaAllRows.length;
       } catch (e) { debug.meta[account.name] = "error: " + String(e); }
     }
   }
@@ -139,9 +155,21 @@ export default async function handler(req, res) {
 
       var ttDims = encodeURIComponent(JSON.stringify(["campaign_id", "stat_time_day"]));
       var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "follows", "likes"]));
-      var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=1000";
-      var ttRes = await fetch(ttUrl, { headers: { "Access-Token": ttToken } });
-      var ttData = await ttRes.json();
+      var ttBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
+      // Follow TikTok pagination, dropping pages 2+ undercounted large date ranges.
+      var ttAllRows = [];
+      var ttPage = 1;
+      while (ttPage < 20) {
+        var ttRes = await fetch(ttBase + "&page=" + ttPage, { headers: { "Access-Token": ttToken } });
+        if (!ttRes.ok) break;
+        var ttPageData = await ttRes.json();
+        var ttList = (ttPageData.data && ttPageData.data.list) || [];
+        ttAllRows = ttAllRows.concat(ttList);
+        var ttTotalPage = (ttPageData.data && ttPageData.data.page_info && ttPageData.data.page_info.total_page) || 1;
+        if (ttPage >= ttTotalPage) break;
+        ttPage++;
+      }
+      var ttData = { data: { list: ttAllRows } };
       if (ttData.data && ttData.data.list) {
         ttData.data.list.forEach(function(row) {
           var d = row.dimensions || {};
@@ -177,13 +205,26 @@ export default async function handler(req, res) {
       var tokenData = await tokenRes.json();
       if (tokenData.access_token) {
         var q = "SELECT campaign.id, campaign.name, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED'";
-        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
-          method: "POST",
-          headers: { "Authorization": "Bearer " + tokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q })
-        });
-        if (gRes.status === 200) {
+        // Follow nextPageToken. Single-request Google fetches truncate on any
+        // account with more than a page's worth of daily rows across the period.
+        var gAllResults = [];
+        var gPageToken = null;
+        var gGuard = 0;
+        do {
+          gGuard++;
+          var gBody = gPageToken ? { query: q, pageToken: gPageToken } : { query: q };
+          var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + tokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
+            body: JSON.stringify(gBody)
+          });
+          if (gRes.status !== 200) break;
           var gData = await gRes.json();
+          if (gData.results) gAllResults = gAllResults.concat(gData.results);
+          gPageToken = gData.nextPageToken || null;
+        } while (gPageToken && gGuard < 20);
+        {
+          var gData = { results: gAllResults };
           (gData.results || []).forEach(function(r) {
             var day = (r.segments && r.segments.date) || "";
             if (!day) return;
@@ -202,8 +243,6 @@ export default async function handler(req, res) {
             addTo(seriesMap, bucketPlat, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
           });
           debug.google.rows = (gData.results || []).length;
-        } else {
-          debug.google.status = gRes.status;
         }
       }
     }

@@ -727,10 +727,24 @@ function CampaignAuditModal(props){
       </div>}
       {view[0]==="reconcile"&&recRows[0].length>0&&(function(){
         var rq=(recQuery[0]||"").toLowerCase().trim();
-        var filteredRec=recRows[0].filter(function(r){
-          if(recStatusFilter[0]==="red"&&r.overallStatus!=="red")return false;
-          if(recStatusFilter[0]==="yellow"&&r.overallStatus==="green")return false;
-          if(recStatusFilter[0]==="green"&&r.overallStatus!=="green")return false;
+        var sf=recStatusFilter[0];
+        // Filter row-by-row AND also prune metrics inside each row so that
+        // picking "Red only" leaves just the red metric lines rather than
+        // the whole campaign block (with greens still visible). Sort within
+        // each row already happens server-side (red > yellow > green).
+        var filteredRec=recRows[0].map(function(r){
+          var metricsKept=(r.metrics||[]).filter(function(m){
+            if(sf==="red")return m.status==="red";
+            if(sf==="yellow")return m.status==="yellow"||m.status==="red";
+            if(sf==="green")return m.status==="green";
+            return true;
+          });
+          return Object.assign({},r,{metrics:metricsKept});
+        }).filter(function(r){
+          if(sf!=="all"&&r.metrics.length===0)return false;
+          if(sf==="red"&&r.overallStatus!=="red")return false;
+          if(sf==="yellow"&&r.overallStatus==="green")return false;
+          if(sf==="green"&&r.overallStatus!=="green")return false;
           if(rq){var hay=(r.campaignName+" "+r.platform+" "+r.accountName).toLowerCase();if(hay.indexOf(rq)<0)return false;}
           return true;
         });

@@ -811,6 +811,42 @@ export default async function handler(req, res) {
         ttPage++;
       }
       var ttInsData = { data: { list: ttAllIns } };
+
+      // Authoritative campaign-level totals (no ad dimension). TikTok's
+      // AUCTION_AD query can undercount by 15 to 25 percent on app-install
+      // campaigns because some delivery types (TopView, boosted-post, RF
+      // spillover) do not attribute to a single ad_id. Fetching without
+      // the ad dimension gives the matching campaign total, which we then
+      // apportion across the ad rows below.
+      var ttCampTruth = {};
+      try {
+        var ttCtDims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+        var ttCtMetrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks"]));
+        var ttCtBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttCtDims + "&metrics=" + ttCtMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
+        var ttCtPage = 1;
+        while (ttCtPage < 20) {
+          var ttCtRes = await fetch(ttCtBase + "&page=" + ttCtPage, { headers: { "Access-Token": ttToken } });
+          if (!ttCtRes.ok) break;
+          var ttCtData = await ttCtRes.json();
+          var ttCtList = (ttCtData.data && ttCtData.data.list) || [];
+          ttCtList.forEach(function(row) {
+            var cid = String((row.dimensions || {}).campaign_id || "");
+            if (!cid) return;
+            ttCampTruth[cid] = {
+              spend: parseFloat((row.metrics || {}).spend || 0),
+              impressions: parseInt((row.metrics || {}).impressions || 0),
+              clicks: parseInt((row.metrics || {}).clicks || 0)
+            };
+          });
+          var ttCtTotal = (ttCtData.data && ttCtData.data.page_info && ttCtData.data.page_info.total_page) || 1;
+          if (ttCtPage >= ttCtTotal) break;
+          ttCtPage++;
+        }
+      } catch (_) { /* non-fatal, falls back to raw ad-level sums */ }
+
+      // Stage ad rows in a temp array so we can apply the per-campaign
+      // scaling pass before pushing to allAds.
+      var ttStaged = [];
       if (ttInsData.data && ttInsData.data.list) {
         ttInsData.data.list.forEach(function(ins) {
           var ad = ttAdsByAdId[ins.dimensions.ad_id] || {};
@@ -840,7 +876,7 @@ export default async function handler(req, res) {
           else if (ttObjective === "appinstall") { ttResCount = ttClicks; ttResType = "store_clicks"; }
           else if (ttObjective === "leads") { ttResCount = ttClicks; ttResType = "clicks"; }
           else { ttResCount = ttClicks; ttResType = "lp_clicks"; }
-          allAds.push({
+          ttStaged.push({
             platform: "TikTok",
             accountName: "MTN MoMo TikTok",
             campaignId: String(mt.campaign_id || ""),
@@ -867,6 +903,34 @@ export default async function handler(req, res) {
           });
         });
       }
+
+      // Per-campaign apportionment: scale staged ad rows up so the sum
+      // matches the campaign-level authoritative total. Only scales up.
+      var ttByCamp = {};
+      ttStaged.forEach(function(r) {
+        if (!ttByCamp[r.campaignId]) ttByCamp[r.campaignId] = { rows: [], spend: 0, imps: 0, clicks: 0 };
+        ttByCamp[r.campaignId].rows.push(r);
+        ttByCamp[r.campaignId].spend += r.spend;
+        ttByCamp[r.campaignId].imps += r.impressions;
+        ttByCamp[r.campaignId].clicks += r.clicks;
+      });
+      Object.keys(ttByCamp).forEach(function(cid) {
+        var bucket = ttByCamp[cid];
+        var truth = ttCampTruth[cid];
+        var sSpend = (truth && bucket.spend > 0) ? (truth.spend / bucket.spend) : 1;
+        var sImps = (truth && bucket.imps > 0) ? (truth.impressions / bucket.imps) : 1;
+        var sClk = (truth && bucket.clicks > 0) ? (truth.clicks / bucket.clicks) : 1;
+        if (sSpend < 1) sSpend = 1;
+        if (sImps < 1) sImps = 1;
+        if (sClk < 1) sClk = 1;
+        bucket.rows.forEach(function(r) {
+          r.spend = parseFloat((r.spend * sSpend).toFixed(2));
+          r.impressions = Math.round(r.impressions * sImps);
+          r.clicks = Math.round(r.clicks * sClk);
+          r.placements = { "FYP": { spend: r.spend, impressions: r.impressions, clicks: r.clicks } };
+          allAds.push(r);
+        });
+      });
     }
   } catch (ttErr) {
     console.error("TikTok ads error", ttErr);
