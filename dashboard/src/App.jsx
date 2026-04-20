@@ -874,19 +874,40 @@ function ChatPanel(props){
   // Controlled mode if parent supplies open + setOpen, otherwise self-manage.
   var isOpen=typeof props.open==="boolean"?props.open:internalOpen[0];
   var setIsOpen=props.setOpen||internalOpen[1];
-  var messages=useState([]);
+  // Messages persist for the whole browser session via sessionStorage
+  // so closing + reopening the chat panel keeps the conversation intact.
+  // Cleared automatically when the tab closes or the user logs out.
+  var CHAT_STORAGE_KEY="gas_chat_history";
+  var messages=useState(function(){
+    try{
+      var raw=sessionStorage.getItem(CHAT_STORAGE_KEY);
+      if(!raw)return [];
+      var parsed=JSON.parse(raw);
+      return Array.isArray(parsed)?parsed:[];
+    }catch(_){return [];}
+  });
+  useEffect(function(){
+    try{sessionStorage.setItem(CHAT_STORAGE_KEY,JSON.stringify(messages[0]||[]));}catch(_){}
+  },[messages[0]]);
   var input=useState("");
   var busy=useState(false);
   var err=useState("");
   var scrollRef=useState(null);
   var autoHeightRef=useState(null);
 
-  // Closing the chat resets state so the next open starts a fresh conversation.
+  // Closing the chat preserves the conversation so reopening shows the
+  // last session. A "New chat" control is available on the panel for
+  // an explicit reset.
   var close=function(){
     setIsOpen(false);
     err[1]("");
+    input[1]("");
+  };
+  var resetChat=function(){
     messages[1]([]);
     input[1]("");
+    err[1]("");
+    try{sessionStorage.removeItem(CHAT_STORAGE_KEY);}catch(_){}
   };
   var openPanel=function(){setIsOpen(true);setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},80);};
   var hover=useState(false);
@@ -907,17 +928,27 @@ function ChatPanel(props){
     busy[1](true);
     setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
 
-    // Build the selected-campaign allowlist from the admin's current selection.
-    // Send ONLY the exact suffixed campaignId (matching what the share modal
-    // does), never raw or stripped variants, raw + name forms would let the
-    // server over-include the OTHER publisher variant of a Meta campaign via
-    // shared rawCampaignId, or cross-client match same-named campaigns.
+    // Build the chat allowlist. The campaign selector lists FB and IG
+    // variants of every Meta campaign as separate rows, a user asking
+    // "did Ayanda run on IG" expects both variants visible when they
+    // picked one, so for every ticked Meta row we also include the
+    // OTHER placement variant of the same raw campaign. Non-Meta rows
+    // (TikTok, Google) stay as-is. Share-email still only sends exact
+    // picks, that flow is stricter on purpose.
     var selectedCampaigns=(props.campaigns||[]).filter(function(c){return (props.selected||[]).indexOf(c.campaignId)>=0;});
-    var selectedIds=[];var selectedNames=[];
+    var selectedIdSet={};var selectedNames=[];
     selectedCampaigns.forEach(function(c){
-      if(c.campaignId)selectedIds.push(String(c.campaignId));
+      if(c.campaignId){
+        var cid=String(c.campaignId);
+        selectedIdSet[cid]=true;
+        // Auto-mirror FB <-> IG so both placement variants of the same
+        // Meta campaign reach the chat data block.
+        if(cid.indexOf("_facebook")>0)selectedIdSet[cid.replace("_facebook","_instagram")]=true;
+        else if(cid.indexOf("_instagram")>0)selectedIdSet[cid.replace("_instagram","_facebook")]=true;
+      }
       if(c.campaignName)selectedNames.push(c.campaignName);
     });
+    var selectedIds=Object.keys(selectedIdSet);
 
     fetch(props.apiBase+"/api/chat",{
       method:"POST",
@@ -1071,6 +1102,7 @@ function ChatPanel(props){
           <div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>GAS Media Expert</div>
           <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:2,letterSpacing:1}}>Live, scoped to your campaigns for {props.dateFrom} to {props.dateTo}</div>
         </div>
+        {messages[0].length>0&&<button onClick={resetChat} title="Start a new conversation" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"0 12px",height:36,color:P.sub,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,fontSize:10,fontFamily:fm,fontWeight:800,letterSpacing:1.5,transition:"all 0.2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.color=P.ember;e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.color=P.sub;e.currentTarget.style.background="transparent";}}>NEW CHAT</button>}
         <button onClick={close} title="Close chat" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",padding:0,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.color=P.ember;e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.color=P.sub;e.currentTarget.style.background="transparent";}}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
