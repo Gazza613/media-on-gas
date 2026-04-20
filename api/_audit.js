@@ -70,19 +70,28 @@ var USAGE_MAX = 5000;
 // Log a usage event (admin login, client share-link view, etc.). Dedupes
 // per (kind, actor) per hour via Redis SETNX with a 1-hour TTL so a client
 // opening a share link and making 20 API calls only records ONE "view"
-// event. Fire-and-forget, failures are swallowed.
-export async function logUsageEvent(kind, actor, meta) {
-  if (!getCreds()) return false;
+// event. Fire-and-forget, failures are swallowed but logged to console so
+// Vercel function logs can surface silent breakages.
+// Pass opts.skipDedup = true to force a write (used by the /api/usage
+// ping diagnostic to verify the pipe end-to-end).
+export async function logUsageEvent(kind, actor, meta, opts) {
+  if (!getCreds()) {
+    console.warn("[usage] Skipping event, no Redis creds", kind, actor);
+    return { ok: false, reason: "no-redis" };
+  }
   var k = String(kind || "event");
   var a = String(actor || "unknown");
+  var skipDedup = !!(opts && opts.skipDedup);
   try {
-    var hourBucket = Math.floor(Date.now() / (60 * 60 * 1000));
-    var dedupKey = "audit:usage-seen:" + k + ":" + a + ":" + hourBucket;
-    // SET with NX + EX: only write if key is new, 2-hour TTL so the bucket
-    // overlaps cleanly and we don't log the same actor twice in one hour.
-    var r = await redisCmd(["SET", dedupKey, "1", "EX", "7200", "NX"]);
-    var wasNew = r && r.result === "OK";
-    if (!wasNew) return false;
+    if (!skipDedup) {
+      var hourBucket = Math.floor(Date.now() / (60 * 60 * 1000));
+      var dedupKey = "audit:usage-seen:" + k + ":" + a + ":" + hourBucket;
+      var r = await redisCmd(["SET", dedupKey, "1", "EX", "7200", "NX"]);
+      var wasNew = r && r.result === "OK";
+      if (!wasNew) {
+        return { ok: false, reason: "deduped", redisResult: r };
+      }
+    }
     var record = {
       id: String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8),
       ts: new Date().toISOString(),
@@ -90,12 +99,13 @@ export async function logUsageEvent(kind, actor, meta) {
       actor: a,
       meta: meta || {}
     };
-    await redisCmd(["LPUSH", USAGE_KEY, JSON.stringify(record)]);
+    var pushRes = await redisCmd(["LPUSH", USAGE_KEY, JSON.stringify(record)]);
     await redisCmd(["LTRIM", USAGE_KEY, "0", String(USAGE_MAX - 1)]);
-    return true;
+    console.log("[usage] wrote event", k, a, "push=", pushRes);
+    return { ok: true, record: record, pushResult: pushRes };
   } catch (err) {
-    console.error("Usage log write failed", err);
-    return false;
+    console.error("[usage] write failed", err);
+    return { ok: false, reason: String(err && err.message || err) };
   }
 }
 

@@ -99,9 +99,10 @@ export default async function handler(req, res) {
     var expires = Date.now() + 24 * 60 * 60 * 1000;
     sessions[newToken] = { role: role, expires: expires };
     // Dedup-per-hour usage event so we can see which day the team is
-    // active. Actor is just the role string since we do not have per-user
-    // identity yet, once multi-user lands, swap actor to the email.
-    logUsageEvent(role === "admin" ? "admin_login" : "client_pw_login", role).catch(function() {});
+    // active. Await the write: in Vercel serverless, a fire-and-forget
+    // promise is cut off when res.json fires and the function freezes,
+    // silently losing the event. The extra ~50ms on a login is nothing.
+    try { await logUsageEvent(role === "admin" ? "admin_login" : "client_pw_login", role); } catch (_) {}
     res.status(200).json({ token: newToken, role: role, expires: expires });
     return;
   }

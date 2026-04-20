@@ -1,10 +1,14 @@
 import { checkAuth } from "./_auth.js";
 import { rateLimit } from "./_rateLimit.js";
-import { readUsageEvents, isAuditEnabled } from "./_audit.js";
+import { readUsageEvents, logUsageEvent, isAuditEnabled } from "./_audit.js";
 
 // Admin-only. Returns the last N usage events (admin logins + client
 // share-link views), deduplicated per (actor, hour) at write time so the
 // list stays meaningful rather than flooded.
+//
+// ?ping=1 writes a synthetic event (bypassing dedup) and returns the
+// Redis response so the admin can verify the write pipe end-to-end from
+// the browser.
 export default async function handler(req, res) {
   if (!rateLimit(req, res, { maxPerMin: 30, maxPerHour: 300 })) return;
   if (!checkAuth(req, res)) return;
@@ -13,9 +17,23 @@ export default async function handler(req, res) {
     return;
   }
   if (!isAuditEnabled()) {
-    res.status(200).json({ enabled: false, events: [] });
+    res.status(200).json({ enabled: false, events: [], reason: "UPSTASH_REDIS_REST_URL / TOKEN not configured on server" });
     return;
   }
+
+  // Write-path diagnostic, skips dedup so you always see a fresh event.
+  if (req.query.ping === "1") {
+    try {
+      var writeResult = await logUsageEvent("ping_test", "diagnostic", { source: "ping endpoint" }, { skipDedup: true });
+      var latest = await readUsageEvents(50);
+      res.status(200).json({ enabled: true, pingWrite: writeResult, latestEvents: latest, totalAfterWrite: latest.length });
+      return;
+    } catch (err) {
+      res.status(500).json({ error: String(err && err.message || err) });
+      return;
+    }
+  }
+
   var limit = parseInt(req.query.limit, 10) || 1000;
   try {
     var events = await readUsageEvents(limit);

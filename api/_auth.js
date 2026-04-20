@@ -32,6 +32,11 @@ export function setCorsHeaders(req, res) {
 
 // Returns true/false for back-compat. Attaches `req.authPrincipal` with role + allowlist info
 // for endpoints that want to apply client-scoped filtering.
+//
+// NOTE: still synchronous. Usage-event writes are handled by the async
+// checkAuthAsync below, callers that want reliable tracking should use
+// that variant. checkAuth stays available so untouched endpoints behave
+// exactly as before.
 export function checkAuth(req, res) {
   setCorsHeaders(req, res);
   if (req.method === "OPTIONS") {
@@ -64,8 +69,12 @@ export function checkAuth(req, res) {
           allowedFrom: payload.from || null,
           allowedTo: payload.to || null
         };
-        // Usage ping, deduped per slug per hour so a client browsing the
-        // dashboard does not spam the log on every API request.
+        // Kick off a usage ping (deduped per slug per hour). In Vercel
+        // serverless fire-and-forget can be cancelled when the response
+        // sends, but the hourly dedup means most invocations short-circuit
+        // on the SETNX quickly. For the first view of the hour the risk
+        // of loss remains, /api/usage also fires server-side tracking via
+        // a separate direct call when the client dashboard mounts.
         logUsageEvent("client_view", payload.sub, { via: "share_link" }).catch(function() {});
         return true;
       }
