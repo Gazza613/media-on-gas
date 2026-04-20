@@ -253,37 +253,54 @@ export default async function handler(req, res) {
         var trueData = await trueRes.json();
         if (trueData.data) {
           trueData.data.forEach(function(row) {
-            var totals = { reactionLikes: 0, page_like: 0, follow: 0, lead: 0, app_install: 0 };
+            // Track follow-like actions per-placement-family so the dashboard
+            // can attach the RIGHT number to each row. Without splitting, the
+            // IG Top Performers tile showed FB page_likes + IG post hearts,
+            // producing "3.3K IG follows" on ads whose real IG follow count
+            // was under 200.
+            var totals = {
+              reactionLikes: 0,  // "like" action, ambiguous (FB page likes OR post reactions)
+              page_like: 0,      // unambiguous FB page likes
+              fbFollow: 0,       // generic FB follow (rare, usually 0)
+              igFollow: 0,       // unambiguous IG follows
+              lead: 0,
+              app_install: 0
+            };
             (row.actions || []).forEach(function(a) {
               var at = a.action_type;
               var v = parseInt(a.value || 0);
-              // "page_like" is the unambiguous page-like signal. "like" at ad
-              // level is POST REACTIONS (hearts, likes on the post itself), NOT
-              // page follows, a high-engagement post can rack up thousands of
-              // reactions that have no relationship to community growth. Keep
-              // them separate and only fold reactions into page_likes when we
-              // KNOW the campaign is Page Likes objective (where Meta returns
-              // page likes under the legacy "like" key).
               if (at === "page_like") totals.page_like = Math.max(totals.page_like, v);
               if (at === "like") totals.reactionLikes = Math.max(totals.reactionLikes, v);
-              if (at === "follow" || at === "ig_follow" || at === "onsite_conversion.follow" || at === "onsite_conversion.ig_follow") totals.follow = Math.max(totals.follow, v);
+              // IG follows: any action type scoped to Instagram. These are
+              // unambiguous, Instagram doesn't have "page likes", only follows.
+              if (at === "ig_follow" || at === "onsite_conversion.ig_follow" || at === "onsite_conversion.total_ig_follow") {
+                totals.igFollow = Math.max(totals.igFollow, v);
+              }
+              // Generic "follow" / "onsite_conversion.follow" are most often
+              // FB page follows (PAGE_LIKES campaigns), but IG can surface
+              // them too. Treat as FB for now, if the primary per-placement
+              // pass shows IG rows with high follows via this field we'd
+              // revisit. In practice the IG follow count comes via ig_follow.
+              if (at === "follow" || at === "onsite_conversion.follow") totals.fbFollow = Math.max(totals.fbFollow, v);
               if (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at === "onsite_conversion.lead_grouped") totals.lead = Math.max(totals.lead, v);
               if (at === "app_install" || at === "mobile_app_install" || at === "omni_app_install") totals.app_install = Math.max(totals.app_install, v);
             });
-            // Fold reactions for any follower-family campaign (PAGE_LIKES or
-            // OUTCOME_ENGAGEMENT). This pass has no placement breakdown, so
-            // an IG-only follower campaign could in theory over-count, but
-            // in practice follower campaigns on Meta are FB-centric (PAGE_LIKES
-            // is FB-only, and OUTCOME_ENGAGEMENT page-like campaigns target
-            // FB placements). Matches Meta Ads Manager's Results column.
+            // Fold the ambiguous "like" into FB page_likes for any follower-
+            // objective campaign. Safe because "like" at ad level reflects
+            // FB page likes for PAGE_LIKES / OUTCOME_ENGAGEMENT page-like
+            // goals, IG post hearts are returned in the same key but we
+            // never attach this value to an IG placement row (see below).
             var isFollowerObj = mapMetaObjective(campObjMap[row.campaign_id]) === "followers";
             var pageLikeFinal = isFollowerObj ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
             adTrueTotals[row.ad_id] = {
               pageLikes: pageLikeFinal,
-              follows: totals.follow,
+              follows: totals.fbFollow + totals.igFollow,  // kept for backward compat
+              // Per-placement true totals. Attached to each row by publisher.
+              followsFb: pageLikeFinal + totals.fbFollow,  // for publisher_platform=facebook rows
+              followsIg: totals.igFollow,                  // for publisher_platform=instagram rows
               leads: totals.lead,
               appInstalls: totals.app_install,
-              followersCombined: pageLikeFinal + totals.follow
+              followersCombined: pageLikeFinal + totals.fbFollow + totals.igFollow
             };
           });
         }
@@ -677,9 +694,17 @@ export default async function handler(req, res) {
           results: resCount,
           resultType: resType,
           followsRaw: pageLikes + follows,
-          // True per-ad total from the no-breakdown insights pass. Survives Meta's
-          // placement-split attribution drops, use this for follower rollups.
-          followsTrue: (ins.trueTotals && ins.trueTotals.followersCombined) || 0,
+          // Per-placement true per-ad total from the no-breakdown insights
+          // pass. FB rows get FB page_likes + FB follows, IG rows get IG
+          // follows only, NOT the combined followersCombined value, which
+          // leaked FB page_likes (and folded-in post reactions on
+          // PAGE_LIKES campaigns) into IG Top Performer tiles.
+          followsTrue: (function() {
+            if (!ins.trueTotals) return 0;
+            if (pub === "facebook") return ins.trueTotals.followsFb || 0;
+            if (pub === "instagram") return ins.trueTotals.followsIg || 0;
+            return ins.trueTotals.followersCombined || 0;
+          })(),
           leadsTrue: (ins.trueTotals && ins.trueTotals.leads) || 0,
           appInstallsTrue: (ins.trueTotals && ins.trueTotals.appInstalls) || 0,
           // Meta video id for in-dashboard playback via /api/ad-video proxy.
@@ -782,7 +807,11 @@ export default async function handler(req, res) {
           var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
           var ttObjective = ttApiObj || detectObjective(mt.campaign_name);
           var ttResCount, ttResType;
-          if (ttObjective === "followers") { ttResCount = follows + likes; ttResType = "follows"; }
+          // TikTok "likes" metric = video hearts (engagement), NOT follows.
+          // Only count actual follows for the Followers objective. Bundling
+          // video likes into follows wildly inflates the Top Performer tile
+          // on any TikTok ad with viral engagement.
+          if (ttObjective === "followers") { ttResCount = follows; ttResType = "follows"; }
           else if (ttObjective === "appinstall") { ttResCount = ttClicks; ttResType = "store_clicks"; }
           else if (ttObjective === "leads") { ttResCount = ttClicks; ttResType = "clicks"; }
           else { ttResCount = ttClicks; ttResType = "lp_clicks"; }
@@ -807,7 +836,7 @@ export default async function handler(req, res) {
             objective: ttObjective,
             results: ttResCount,
             resultType: ttResType,
-            followsRaw: follows + likes,
+            followsRaw: follows,
             videoId: ad.video_id || "",
             placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });
