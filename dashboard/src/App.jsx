@@ -950,6 +950,16 @@ function ChatPanel(props){
           }
           return copy;
         });
+        // Final scroll pass after React has rendered the follow-up
+        // suggestion chips that trail the main answer. Two rAFs ensures
+        // the layout has settled, auto-scrolling mid-stream sometimes
+        // landed just short of the bottom when the follow-ups rendered.
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){
+            var el=scrollRef[0];
+            if(el)el.scrollTop=el.scrollHeight;
+          });
+        });
       };
       var pump=function(){
         return reader.read().then(function(res){
@@ -983,6 +993,9 @@ function ChatPanel(props){
                   }
                   return copy;
                 });
+                // Attachments render as tall thumbnail cards, re-anchor to
+                // the bottom so the message body doesn't get pushed off.
+                setTimeout(function(){var el=scrollRef[0];if(el)el.scrollTop=el.scrollHeight;},20);
               }else if(evt.type==="error"){
                 err[1](evt.error||"Chat error");
                 messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content&&!copy[copy.length-1].attachments)copy.pop();return copy;});
