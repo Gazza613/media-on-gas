@@ -561,7 +561,7 @@ function ShareModal(props){
 // Admin-only full-inventory audit of every campaign and its detected objective.
 // Critical for agency KPI reporting, lets managers spot-check classification accuracy.
 function CampaignAuditModal(props){
-  var view=useState("audit"); // "audit" | "reconcile"
+  var view=useState("audit"); // "audit" | "reconcile" | "usage"
   var rows=useState([]);
   var loading=useState(false);
   var err=useState("");
@@ -578,6 +578,18 @@ function CampaignAuditModal(props){
   var recSent=useState("");
   var recQuery=useState("");
   var recStatusFilter=useState("all");
+
+  // Usage state
+  var usageEvents=useState([]);
+  var usageLoading=useState(false);
+  var usageErr=useState("");
+  var loadUsage=function(){
+    usageLoading[1](true);usageErr[1]("");
+    fetch(props.apiBase+"/api/usage?limit=1000",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){usageLoading[1](false);if(Array.isArray(d.events)){usageEvents[1](d.events);}else{usageErr[1](d.error||"Could not load usage");}})
+      .catch(function(){usageLoading[1](false);usageErr[1]("Connection error");});
+  };
 
   var load=function(){
     loading[1](true);err[1]("");
@@ -604,6 +616,7 @@ function CampaignAuditModal(props){
   };
   useEffect(function(){if(props.open&&view[0]==="audit")load();},[props.open,view[0]]);
   useEffect(function(){if(props.open&&view[0]==="reconcile"&&recRows[0].length===0)loadReconcile(false);},[props.open,view[0]]);
+  useEffect(function(){if(props.open&&view[0]==="usage")loadUsage();},[props.open,view[0]]);
 
   var data=rows[0]||[];
   var q=(query[0]||"").toLowerCase().trim();
@@ -637,12 +650,14 @@ function CampaignAuditModal(props){
         <div style={{display:"flex",gap:6,background:"rgba(0,0,0,0.35)",border:"1px solid "+P.rule,borderRadius:12,padding:4}}>
           <button onClick={function(){view[1]("audit");}} style={{background:view[0]==="audit"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="audit"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="audit"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Objective Audit</button>
           <button onClick={function(){view[1]("reconcile");}} style={{background:view[0]==="reconcile"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="reconcile"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="reconcile"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>Data Reconciliation{recSummary[0]&&recSummary[0].red>0?<span style={{background:P.critical,color:"#fff",fontSize:9,padding:"1px 6px",borderRadius:4}}>{recSummary[0].red}</span>:null}</button>
+          <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage</button>
         </div>
         <div style={{display:"flex",gap:8}}>
           {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
           {view[0]==="audit"&&<button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(false);}} disabled={recLoading[0]||recSending[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recLoading[0]?"RUNNING...":"RE-RUN"}</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(true);}} disabled={recLoading[0]||recSending[0]} title="Run check + email Gary if any deltas found" style={{background:recSending[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recSending[0]?"SENDING...":"CHECK + ALERT"}</button>}
+          {view[0]==="usage"&&<button onClick={loadUsage} disabled={usageLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:usageLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{usageLoading[0]?"LOADING...":"REFRESH"}</button>}
           <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           </button>
@@ -753,6 +768,82 @@ function CampaignAuditModal(props){
               {filteredRec.length===0&&!recLoading[0]&&<tr><td colSpan={7} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the filter.</td></tr>}
             </tbody>
           </table>
+        </div>;
+      })()}
+      {view[0]==="usage"&&(function(){
+        var events=usageEvents[0]||[];
+        // Split into admin vs client buckets.
+        var adminEvts=events.filter(function(e){return e.kind==="admin_login"||e.kind==="client_pw_login";});
+        var clientEvts=events.filter(function(e){return e.kind==="client_view";});
+        // Per-slug rollup: total views, first seen, last seen.
+        var byClient={};
+        clientEvts.forEach(function(e){
+          var slug=e.actor||"unknown";
+          if(!byClient[slug])byClient[slug]={slug:slug,views:0,first:e.ts,last:e.ts};
+          byClient[slug].views++;
+          if(e.ts<byClient[slug].first)byClient[slug].first=e.ts;
+          if(e.ts>byClient[slug].last)byClient[slug].last=e.ts;
+        });
+        var clientRows=Object.keys(byClient).map(function(s){return byClient[s];}).sort(function(a,b){return (b.last||"").localeCompare(a.last||"");});
+        // Admin rollup by day.
+        var adminByDay={};
+        adminEvts.forEach(function(e){
+          var d=(e.ts||"").substring(0,10);
+          if(!d)return;
+          adminByDay[d]=(adminByDay[d]||0)+1;
+        });
+        var adminDays=Object.keys(adminByDay).sort(function(a,b){return b.localeCompare(a);}).slice(0,30);
+        var fmtDate=function(iso){if(!iso)return "-";try{return new Date(iso).toLocaleString("en-ZA",{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return iso;}};
+        var slugDisplay=function(s){return (s||"").split("-").map(function(w){return w.toUpperCase();}).join(" ");};
+        var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
+        var cell={padding:"10px",color:P.txt,fontSize:12,fontFamily:fm,borderBottom:"1px solid "+P.rule+"30"};
+        return <div style={{display:"flex",flexDirection:"column",gap:20,overflow:"auto"}}>
+          {usageLoading[0]&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>Loading usage events...</div>}
+          {usageErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm}}>{usageErr[0]}</div>}
+          {!usageLoading[0]&&!usageErr[0]&&events.length===0&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>No usage events yet. They start recording on the next admin login and client view.</div>}
+          {!usageLoading[0]&&events.length>0&&<>
+            <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Admin login events and client share-link views, each deduplicated per actor per hour so the table stays readable.</div>
+
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Admin usage</span>
+                <span style={{fontSize:11,color:P.sub,fontFamily:fm}}>{adminEvts.length+" logins across "+adminDays.length+" day"+(adminDays.length===1?"":"s")+" (last 30 days shown)"}</span>
+              </div>
+              <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
+                  <thead><tr><th style={hdr}>Date</th><th style={hdr}>Logins</th></tr></thead>
+                  <tbody>
+                    {adminDays.length===0?<tr><td colSpan={2} style={{padding:14,color:P.dim,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
+                      return <tr key={d}><td style={cell}>{d}</td><td style={cell}>{adminByDay[d]}</td></tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Client share-link usage</span>
+                <span style={{fontSize:11,color:P.sub,fontFamily:fm}}>{clientEvts.length+" views across "+clientRows.length+" client"+(clientRows.length===1?"":"s")}</span>
+              </div>
+              <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
+                  <thead><tr><th style={hdr}>Client</th><th style={Object.assign({},hdr,{textAlign:"center"})}>Total Views</th><th style={hdr}>First Seen</th><th style={hdr}>Last Seen</th></tr></thead>
+                  <tbody>
+                    {clientRows.length===0?<tr><td colSpan={4} style={{padding:14,color:P.dim,textAlign:"center",fontSize:11,fontFamily:fm}}>No client share-link views recorded yet.</td></tr>:clientRows.map(function(r){
+                      return <tr key={r.slug}>
+                        <td style={Object.assign({},cell,{fontWeight:700,color:P.ember})}>{slugDisplay(r.slug)}</td>
+                        <td style={Object.assign({},cell,{textAlign:"center",fontWeight:700})}>{r.views}</td>
+                        <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(r.first)}</td>
+                        <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(r.last)}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:8,fontStyle:"italic"}}>Views are counted once per hour per client to avoid inflating the count from routine API calls as the client browses.</div>
+            </div>
+          </>}
         </div>;
       })()}
     </div>

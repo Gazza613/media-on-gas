@@ -64,6 +64,53 @@ export async function readEmailLog(limit) {
   return out;
 }
 
+var USAGE_KEY = "audit:usage-events";
+var USAGE_MAX = 5000;
+
+// Log a usage event (admin login, client share-link view, etc.). Dedupes
+// per (kind, actor) per hour via Redis SETNX with a 1-hour TTL so a client
+// opening a share link and making 20 API calls only records ONE "view"
+// event. Fire-and-forget, failures are swallowed.
+export async function logUsageEvent(kind, actor, meta) {
+  if (!getCreds()) return false;
+  var k = String(kind || "event");
+  var a = String(actor || "unknown");
+  try {
+    var hourBucket = Math.floor(Date.now() / (60 * 60 * 1000));
+    var dedupKey = "audit:usage-seen:" + k + ":" + a + ":" + hourBucket;
+    // SET with NX + EX: only write if key is new, 2-hour TTL so the bucket
+    // overlaps cleanly and we don't log the same actor twice in one hour.
+    var r = await redisCmd(["SET", dedupKey, "1", "EX", "7200", "NX"]);
+    var wasNew = r && r.result === "OK";
+    if (!wasNew) return false;
+    var record = {
+      id: String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8),
+      ts: new Date().toISOString(),
+      kind: k,
+      actor: a,
+      meta: meta || {}
+    };
+    await redisCmd(["LPUSH", USAGE_KEY, JSON.stringify(record)]);
+    await redisCmd(["LTRIM", USAGE_KEY, "0", String(USAGE_MAX - 1)]);
+    return true;
+  } catch (err) {
+    console.error("Usage log write failed", err);
+    return false;
+  }
+}
+
+export async function readUsageEvents(limit) {
+  if (!getCreds()) return [];
+  var cap = Math.min(USAGE_MAX, parseInt(limit, 10) || USAGE_MAX);
+  var result = await redisCmd(["LRANGE", USAGE_KEY, "0", String(cap - 1)]);
+  if (!result || !Array.isArray(result.result)) return [];
+  var out = [];
+  result.result.forEach(function(s) {
+    try { out.push(JSON.parse(s)); } catch (_) {}
+  });
+  return out;
+}
+
 // Delete a single entry by id. Fetches the full list, filters out the match,
 // then replaces the list contents. Safe for <=1000 entries, small and fast enough
 // that atomic semantics aren't needed here.

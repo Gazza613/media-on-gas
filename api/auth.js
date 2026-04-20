@@ -1,4 +1,5 @@
 import { rateLimit } from "./_rateLimit.js";
+import { logUsageEvent } from "./_audit.js";
 
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
@@ -97,6 +98,10 @@ export default async function handler(req, res) {
     var newToken = generateToken();
     var expires = Date.now() + 24 * 60 * 60 * 1000;
     sessions[newToken] = { role: role, expires: expires };
+    // Dedup-per-hour usage event so we can see which day the team is
+    // active. Actor is just the role string since we do not have per-user
+    // identity yet, once multi-user lands, swap actor to the email.
+    logUsageEvent(role === "admin" ? "admin_login" : "client_pw_login", role).catch(function() {});
     res.status(200).json({ token: newToken, role: role, expires: expires });
     return;
   }

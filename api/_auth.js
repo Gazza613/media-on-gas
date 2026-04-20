@@ -1,4 +1,5 @@
 import { verifyToken } from "./_jwt.js";
+import { logUsageEvent } from "./_audit.js";
 
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
@@ -63,6 +64,9 @@ export function checkAuth(req, res) {
           allowedFrom: payload.from || null,
           allowedTo: payload.to || null
         };
+        // Usage ping, deduped per slug per hour so a client browsing the
+        // dashboard does not spam the log on every API request.
+        logUsageEvent("client_view", payload.sub, { via: "share_link" }).catch(function() {});
         return true;
       }
     } catch (_) {}
