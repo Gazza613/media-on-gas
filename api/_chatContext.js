@@ -127,7 +127,7 @@ export async function buildChatContext(req, from, to, principal) {
   lines.push("- Click-through rate: " + fmtPct(grand.ctr));
   lines.push("- Cost per 1000 ads served (CPM): " + fmtR(grand.cpm));
   lines.push("- Cost per click (CPC): " + fmtR(grand.cpc));
-  lines.push("- Frequency (Meta + TikTok only; Google does not expose reach): " + grand.frequency.toFixed(2) + "x");
+  lines.push("- Frequency (blended across the full media mix, Google Display/YouTube reach is estimated at 2x frequency since Google Ads does not expose unique-user reach): " + grand.frequency.toFixed(2) + "x");
   lines.push("- Leads generated: " + fmtNum(grand.leads));
   lines.push("- Page follows + likes (Meta): " + fmtNum(grand.follows + grand.pageLikes));
   lines.push("- TikTok follows + likes: " + fmtNum(grand.likes > 0 || grand.follows > 0 ? grand.likes : 0));
@@ -195,7 +195,7 @@ export async function buildChatContext(req, from, to, principal) {
   lines.push("Google Display/Search:");
   lines.push("- CPM: R8 to R30");
   lines.push("- CPC: R1 to R6");
-  lines.push("Google Ads does NOT expose reach, so frequency and unique-reach questions apply only to Meta and TikTok.");
+  lines.push("Google Ads does NOT expose unique-user reach in standard reporting. For blended totals the dashboard estimates Google Display + YouTube reach at 2x frequency (reach = impressions / 2). Meta and TikTok reach figures remain true unique-user counts. When reasoning about Google reach specifically, flag the number as an estimate, when quoting Meta or TikTok reach it is exact.");
 
   // Shape top ads into a compact structure suitable for UI thumbnail cards.
   var topAdCards = topAds.slice(0, 3).map(function(a) {

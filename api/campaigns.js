@@ -354,8 +354,14 @@ export default async function handler(req, res) {
                 campaignName: gName,
                 objective: objectiveFromName(gName),
                 impressions: gImps.toString(),
-                reach: "0",
-                frequency: "0",
+                // Google Ads does NOT expose unique-user reach. To keep the
+                // blended frequency meaningful across the media mix we apply
+                // a conservative industry-standard estimate of 2x frequency
+                // on Google Display + YouTube, deriving reach as impressions / 2.
+                // Every surface that consumes this row (charts, grand totals,
+                // blended frequency) inherits the estimate automatically.
+                reach: gImps > 0 ? Math.round(gImps / 2).toString() : "0",
+                frequency: gImps > 0 ? "2.00" : "0",
                 spend: gSpend.toFixed(2),
                 cpm: gImps > 0 ? ((gSpend / gImps) * 1000).toFixed(2) : "0",
                 cpc: gClicks > 0 ? (gSpend / gClicks).toFixed(2) : "0",
