@@ -184,14 +184,71 @@ export default async function handler(req, res) {
   }
   var dataBlock = ctx.text;
   var topAdCards = ctx.topAds || [];
+  var allAdCards = ctx.allAds || [];
 
-  // Detect intent for "top performing ad" questions so we can attach a
-  // visual ad card to the response. Keyword-based for reliability, matches
-  // common phrasings and avoids false positives on generic campaign questions.
   var msgLow = message.toLowerCase();
+
+  // Intent: user wants to SEE ads. Covers best/top superlatives plus
+  // direct requests ("show me", "display", "see", "view", "what are",
+  // "list") and plain "ads on <platform>" / "<name> ads" patterns.
   var wantsTopAds = /(best|top|highest|leading|winning|strongest)[^.]{0,40}(ad|ads|creative|creatives|post|posts|performer|performers)/.test(msgLow) ||
                     /(ad|creative|performer)[^.]{0,30}(best|top|highest|winning)/.test(msgLow) ||
                     /which.*(ad|creative).*(best|top|winning|performing)/.test(msgLow);
+  var wantsShowAds = /\b(show|display|see|view|what are|list|give me|find)\b[^.]{0,40}\b(ad|ads|creative|creatives)\b/.test(msgLow) ||
+                     /\b(ad|ads|creative|creatives)\b[^.]{0,25}\b(on|for|in)\b[^.]{0,25}(facebook|instagram|tiktok|google|fb|ig|tt)\b/.test(msgLow);
+  var adsRequested = wantsTopAds || wantsShowAds;
+
+  // Filter the card pool to what the user actually asked for. If the
+  // message mentions a platform, restrict to that. If it mentions ad-
+  // name tokens, keep cards whose adName contains one of them.
+  var cardsToAttach = [];
+  if (adsRequested && allAdCards.length > 0) {
+    var platFilter = null;
+    if (/\binstagram\b|\big\b/.test(msgLow)) platFilter = "Instagram";
+    else if (/\bfacebook\b|\bfb\b/.test(msgLow)) platFilter = "Facebook";
+    else if (/\btiktok\b|\btt\b/.test(msgLow)) platFilter = "TikTok";
+    else if (/\bgoogle\b|\byoutube\b|\byt\b/.test(msgLow)) platFilter = "Google";
+
+    // Pull name tokens from the message, ignore stop-words and platform
+    // terms. Any capitalised word is a strong candidate (ad names like
+    // "Ayanda" / "Kabelo" are proper nouns), fall back to longer lowercase
+    // tokens the user might type.
+    var stopTokens = /^(show|me|the|ads|ad|on|for|in|with|and|or|my|your|our|a|an|of|is|are|was|were|did|do|does|to|at|from|by|perform|performing|performed|perform\?|how|what|which|best|top|highest|leading|winning|strongest|creative|creatives|facebook|instagram|tiktok|google|youtube|fb|ig|tt|yt)$/;
+    var rawTokens = message.match(/[A-Za-z][A-Za-z0-9_\-]{2,}/g) || [];
+    var nameTokens = [];
+    rawTokens.forEach(function(t) {
+      var tl = t.toLowerCase();
+      if (stopTokens.test(tl)) return;
+      if (nameTokens.indexOf(tl) < 0) nameTokens.push(tl);
+    });
+
+    var base = allAdCards;
+    if (platFilter) base = base.filter(function(c) { return c.platform === platFilter; });
+    var matchedByName = [];
+    if (nameTokens.length > 0) {
+      matchedByName = base.filter(function(c) {
+        var nm = (c.adName || "").toLowerCase();
+        for (var i = 0; i < nameTokens.length; i++) {
+          if (nm.indexOf(nameTokens[i]) >= 0) return true;
+        }
+        return false;
+      });
+    }
+    if (matchedByName.length > 0) {
+      cardsToAttach = matchedByName;
+    } else if (platFilter) {
+      // "Show me IG ads" with no specific names, return the top of that platform
+      cardsToAttach = base.slice().sort(function(a, b) {
+        var ar = (a.results || 0), br = (b.results || 0);
+        if (br !== ar) return br - ar;
+        return (b.spend || 0) - (a.spend || 0);
+      });
+    } else {
+      cardsToAttach = topAdCards;
+    }
+    // Cap to 6 cards so the UI row stays scannable.
+    cardsToAttach = cardsToAttach.slice(0, 6);
+  }
 
   // Build messages. Keep history clean: only role + content text. Drop any
   // malformed entries instead of letting them 400 the API call.
@@ -228,8 +285,8 @@ export default async function handler(req, res) {
   };
 
   // Emit ad cards first so the UI can render them above the streaming text.
-  if (wantsTopAds && topAdCards.length > 0) {
-    writeEvent({ type: "attachments", ads: topAdCards });
+  if (cardsToAttach.length > 0) {
+    writeEvent({ type: "attachments", ads: cardsToAttach });
   }
 
   try {

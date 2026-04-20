@@ -313,8 +313,8 @@ export async function buildChatContext(req, from, to, principal) {
   lines.push("- CPC: R1 to R6");
   lines.push("Google Ads does NOT expose unique-user reach in standard reporting. For blended totals the dashboard estimates Google Display + YouTube reach at 2x frequency (reach = impressions / 2). Meta and TikTok reach figures remain true unique-user counts. When reasoning about Google reach specifically, flag the number as an estimate, when quoting Meta or TikTok reach it is exact.");
 
-  // Shape top ads into a compact structure suitable for UI thumbnail cards.
-  var topAdCards = topAds.slice(0, 3).map(function(a) {
+  // Shape ads into a compact card structure for UI thumbnail cards.
+  var toCard = function(a) {
     var results = parseFloat(a.results || 0);
     var spend = parseFloat(a.spend || 0);
     return {
@@ -332,7 +332,11 @@ export async function buildChatContext(req, from, to, principal) {
       resultType: a.resultType || "results",
       costPerResult: results > 0 ? spend / results : 0
     };
-  });
+  };
+  var topAdCards = topAds.slice(0, 3).map(toCard);
+  // Full card list so chat.js can filter by user-mentioned names / platforms
+  // when attaching thumbnails ("show me Ayanda ads on Instagram").
+  var allAdCards = filteredAds.map(toCard);
 
-  return { text: lines.join("\n"), topAds: topAdCards };
+  return { text: lines.join("\n"), topAds: topAdCards, allAds: allAdCards };
 }
