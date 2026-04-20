@@ -55,30 +55,52 @@ function campObjective(c) {
 //   Clicks to App Store   = sum(camp.clicks) on appinstall-name campaigns
 //   Clicks to Landing Page= sum(camp.clicks) on traffic/homeloan-name campaigns
 function aggregate(arr) {
-  var s = { impressions: 0, reach: 0, spend: 0, clicks: 0, leads: 0, appStoreClicks: 0, landingPageClicks: 0, follows: 0, pageLikes: 0, landingPageViews: 0 };
+  var s = {
+    impressions: 0, reach: 0, spend: 0, clicks: 0,
+    leads: 0, appStoreClicks: 0, landingPageClicks: 0, follows: 0, pageLikes: 0, landingPageViews: 0,
+    // Per-objective spend pools so cost-per-result uses the SAME denominator
+    // the dashboard tile shows: CPF = followers-campaign spend / follower count,
+    // NOT total blended spend / follower count.
+    leadsSpend: 0, appInstallSpend: 0, landingPageSpend: 0, followersSpend: 0
+  };
   arr.forEach(function(c) {
+    var spend = parseFloat(c.spend || 0);
     s.impressions += parseFloat(c.impressions || 0);
     s.reach += parseFloat(c.reach || 0);
-    s.spend += parseFloat(c.spend || 0);
+    s.spend += spend;
     s.clicks += parseFloat(c.clicks || 0);
     var obj = campObjective(c);
-    if (obj === "leads") s.leads += parseFloat(c.leads || 0);
-    if (obj === "appinstall") s.appStoreClicks += parseFloat(c.clicks || 0);
+    if (obj === "leads") {
+      s.leads += parseFloat(c.leads || 0);
+      s.leadsSpend += spend;
+    }
+    if (obj === "appinstall") {
+      s.appStoreClicks += parseFloat(c.clicks || 0);
+      s.appInstallSpend += spend;
+    }
     if (obj === "landingpage") {
       s.landingPageClicks += parseFloat(c.clicks || 0);
       s.landingPageViews += parseFloat(c.landingPageViews || 0);
+      s.landingPageSpend += spend;
     }
     if (obj === "followers") {
       // Dashboard uses pageLikes + follows. TikTok video likes (camp.likes)
       // are engagement, not followers, and are intentionally excluded.
       s.pageLikes += parseFloat(c.pageLikes || 0);
       s.follows += parseFloat(c.follows || 0);
+      s.followersSpend += spend;
     }
   });
   s.cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : 0;
   s.cpc = s.clicks > 0 ? (s.spend / s.clicks) : 0;
   s.ctr = s.impressions > 0 ? (s.clicks / s.impressions * 100) : 0;
   s.frequency = s.reach > 0 ? (s.impressions / s.reach) : 0;
+  // Cost-per-result always against the matching pool.
+  s.costPerLead = s.leads > 0 ? (s.leadsSpend / s.leads) : 0;
+  var totalFollowsCalc = s.pageLikes + s.follows;
+  s.costPerFollower = totalFollowsCalc > 0 ? (s.followersSpend / totalFollowsCalc) : 0;
+  s.costPerAppStoreClick = s.appStoreClicks > 0 ? (s.appInstallSpend / s.appStoreClicks) : 0;
+  s.costPerLandingPageClick = s.landingPageClicks > 0 ? (s.landingPageSpend / s.landingPageClicks) : 0;
   return s;
 }
 
@@ -233,10 +255,10 @@ function renderSummaryBlock(summary) {
   var appStoreValue = parseFloat(g.appStoreClicks || 0);
   var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var allOutcomes = [
-    { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.spend / g.leads) + " per lead" : "", accent: "#F43F5E" },
-    { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.spend / totalFollows) + " per follower" : "", accent: "#00F2EA" },
-    { label: "Clicks to App Store", value: appStoreValue, cost: appStoreValue > 0 ? fmtR(g.spend / appStoreValue) + " per click" : "", accent: "#4599FF" },
-    { label: "Clicks to Landing Page", value: lpClicksValue, cost: lpClicksValue > 0 ? fmtR(g.spend / lpClicksValue) + " per click" : "", accent: "#22D3EE" }
+    { label: "Leads generated", value: g.leads, cost: g.leads > 0 ? fmtR(g.costPerLead) + " per lead" : "", accent: "#F43F5E" },
+    { label: "New followers", value: totalFollows, cost: totalFollows > 0 ? fmtR(g.costPerFollower) + " per follower" : "", accent: "#00F2EA" },
+    { label: "Clicks to App Store", value: appStoreValue, cost: appStoreValue > 0 ? fmtR(g.costPerAppStoreClick) + " per click" : "", accent: "#4599FF" },
+    { label: "Clicks to Landing Page", value: lpClicksValue, cost: lpClicksValue > 0 ? fmtR(g.costPerLandingPageClick) + " per click" : "", accent: "#22D3EE" }
   ];
   var outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
   var OUTCOME_TILE_HEIGHT = 110;
@@ -317,10 +339,10 @@ function renderCommentaryBlock(summary) {
   var appStoreValue = parseFloat(g.appStoreClicks || 0);
   var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var outcomeParts = [];
-  if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.spend / g.leads) + " per lead");
-  if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.spend / totalFollows) + " per follower");
-  if (appStoreValue > 0) outcomeParts.push("<strong>" + fmtNum(appStoreValue) + " clicks to app store</strong> at " + fmtR(g.spend / appStoreValue) + " per click");
-  if (lpClicksValue > 0) outcomeParts.push("<strong>" + fmtNum(lpClicksValue) + " clicks to landing page</strong> at " + fmtR(g.spend / lpClicksValue) + " per click");
+  if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.costPerLead) + " per lead");
+  if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.costPerFollower) + " per follower");
+  if (appStoreValue > 0) outcomeParts.push("<strong>" + fmtNum(appStoreValue) + " clicks to app store</strong> at " + fmtR(g.costPerAppStoreClick) + " per click");
+  if (lpClicksValue > 0) outcomeParts.push("<strong>" + fmtNum(lpClicksValue) + " clicks to landing page</strong> at " + fmtR(g.costPerLandingPageClick) + " per click");
   if (outcomeParts.length > 0) {
     paras.push("Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action.");
   }
@@ -623,10 +645,10 @@ export default async function handler(req, res) {
       var txtFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
       var txtAppStore = parseFloat(g.appStoreClicks || 0);
       var txtLp = parseFloat(g.landingPageClicks || 0);
-      if (g.leads > 0) textLines.push("Leads: " + fmtNum(g.leads) + " at " + fmtR(g.spend / g.leads) + " per lead");
-      if (txtFollows > 0) textLines.push("New followers: " + fmtNum(txtFollows) + " at " + fmtR(g.spend / txtFollows) + " per follower");
-      if (txtAppStore > 0) textLines.push("Clicks to App Store: " + fmtNum(txtAppStore) + " at " + fmtR(g.spend / txtAppStore) + " per click");
-      if (txtLp > 0) textLines.push("Clicks to Landing Page: " + fmtNum(txtLp) + " at " + fmtR(g.spend / txtLp) + " per click");
+      if (g.leads > 0) textLines.push("Leads: " + fmtNum(g.leads) + " at " + fmtR(g.costPerLead) + " per lead");
+      if (txtFollows > 0) textLines.push("New followers: " + fmtNum(txtFollows) + " at " + fmtR(g.costPerFollower) + " per follower");
+      if (txtAppStore > 0) textLines.push("Clicks to App Store: " + fmtNum(txtAppStore) + " at " + fmtR(g.costPerAppStoreClick) + " per click");
+      if (txtLp > 0) textLines.push("Clicks to Landing Page: " + fmtNum(txtLp) + " at " + fmtR(g.costPerLandingPageClick) + " per click");
       textLines.push("");
     }
     textLines.push("View full interactive dashboard: " + shareUrl);
