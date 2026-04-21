@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v4-tt-page500";
+var CAMPAIGNS_CACHE_VERSION = "v5-tt-drop-app-promotion-type";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -354,25 +354,26 @@ export default async function handler(req, res) {
     var ttBudgets = {};
     // TikTok budget + scheduling fields. TikTok amounts are already in
     // the account currency unit (ZAR), no conversion needed.
-    // objective_type + app_promotion_type are the definitive signals for
-    // App Install classification on TikTok (name-based matching misses
-    // campaigns like "TT_MoMo_Q2" whose ads are tagged App Install).
-    var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","objective_type","app_promotion_type","budget","budget_mode","schedule_type","schedule_start_time","schedule_end_time"]));
-    // page_size=500 mirrors the Objective Results Audit pattern that
-    // already works. Adding a `page` query parameter caused TikTok to
-    // reject the request and silently return no data.
+    // objective_type is the definitive App Install signal on TikTok.
+    // app_promotion_type is an adgroup-level field, not campaign-level —
+    // including it caused the whole campaign/get/ call to silently
+    // return no data, dropping every TikTok row into 'unknown'.
+    var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","objective_type","budget","budget_mode","schedule_type","schedule_start_time","schedule_end_time"]));
     var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=500&fields=" + ttCampFields;
     var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
     var ttListData = await ttListRes.json();
+    if (ttListData && ttListData.code && ttListData.code !== 0) {
+      console.error("TikTok campaign/get error", ttListData.code, ttListData.message);
+      warnings.push({ platform: "TikTok", stage: "campaign-list", message: "code " + ttListData.code + ": " + (ttListData.message || "unknown") });
+    }
     if (ttListData.data && ttListData.data.list) {
       for (var l = 0; l < ttListData.data.list.length; l++) {
         var ttCamp = ttListData.data.list[l];
         ttNames[ttCamp.campaign_id] = ttCamp.campaign_name;
         ttStatuses[ttCamp.campaign_id] = ttCamp.operation_status;
         var ttObj = String(ttCamp.objective_type || "").toUpperCase();
-        var ttAppPromo = String(ttCamp.app_promotion_type || "").toUpperCase();
         var ttCanonObj;
-        if (ttObj === "APP_PROMOTION" || ttObj === "APP_INSTALL" || ttObj.indexOf("APP") >= 0 || ttAppPromo === "APP_INSTALL" || ttAppPromo === "APP_RETARGETING" || ttAppPromo.indexOf("APP") >= 0) ttCanonObj = "appinstall";
+        if (ttObj === "APP_PROMOTION" || ttObj === "APP_INSTALL" || ttObj.indexOf("APP") >= 0) ttCanonObj = "appinstall";
         else if (ttObj === "LEAD_GENERATION") ttCanonObj = "leads";
         else if (ttObj === "ENGAGEMENT" || ttObj === "COMMUNITY_INTERACTION" || ttObj === "VIDEO_VIEWS") ttCanonObj = "followers";
         else if (ttObj === "TRAFFIC" || ttObj === "REACH" || ttObj === "WEB_CONVERSIONS") ttCanonObj = "landingpage";
