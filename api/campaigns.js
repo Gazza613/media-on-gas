@@ -616,7 +616,22 @@ export default async function handler(req, res) {
   // all reuse the same upstream data instead of re-fetching Meta +
   // TikTok + Google. Client-scoped filtering happens on read so admin
   // and client callers share one cache entry safely.
-  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings };
+  // Diagnostic: per-platform objective breakdown so we can verify the
+  // Summary-tab bucketing matches what the Objective Results Audit reports.
+  // Surfaces classification drift (e.g. a TikTok APP_PROMOTION row
+  // accidentally tagged 'unknown') immediately.
+  var _objDiag = {};
+  allCampaigns.forEach(function(c) {
+    var plat = c.platform || "unknown";
+    var obj = (c.objective || "unknown").toLowerCase();
+    if (!_objDiag[plat]) _objDiag[plat] = {};
+    if (!_objDiag[plat][obj]) _objDiag[plat][obj] = { count: 0, clicks: 0, spend: 0, names: [] };
+    _objDiag[plat][obj].count++;
+    _objDiag[plat][obj].clicks += parseFloat(c.clicks || 0);
+    _objDiag[plat][obj].spend += parseFloat(c.spend || 0);
+    if (_objDiag[plat][obj].names.length < 8) _objDiag[plat][obj].names.push(c.campaignName);
+  });
+  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings, objectiveDiagnostic: _objDiag };
   campaignsResponseCache[cacheKey] = { data: fullResponse, ts: Date.now() };
 
   var principal = req.authPrincipal || { role: "admin" };
