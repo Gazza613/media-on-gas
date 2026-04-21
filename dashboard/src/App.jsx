@@ -214,14 +214,35 @@ function AdPreviewModal(props){
   var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"APP CLICKS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="conversions"?"CONV":rt==="store_clicks"?"APP CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
   var costPerLabel=function(rt){return rt==="leads"?"per lead":rt==="installs"?"per click":rt==="follows"?"per follower":rt==="profile_visits"?"per visit":"per click";};
 
+  // Every image/video URL we surface goes through our own proxy so that
+  // clients viewing a share link get a FRESHLY signed Meta / TikTok CDN
+  // URL on every render. Direct CDN URLs expire in about an hour, which
+  // left client previews broken whenever the share link was opened a day
+  // after issuing. Admin flows carry api_key, client flows carry the view
+  // token, both resolve server-side using platform admin credentials.
+  var authQs=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+  var proxyImage=null;
+  if(ad.adId&&(platformKey==="meta"||platformKey==="tiktok")){
+    proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQs;
+  }
+  var imageSrc=proxyImage||ad.thumbnail||"";
+
   var mediaBlock=null;
   if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
     mediaBlock=<iframe title="Ad preview" src={"https://www.youtube.com/embed/"+encodeURIComponent(ad.youtubeId)} style={{width:"100%",aspectRatio:"16/9",border:"none",borderRadius:10,background:"#000"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>;
   } else if(isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId){
-    var proxySrc=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
-    mediaBlock=<video controls playsInline poster={ad.thumbnail||""} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}><source src={proxySrc}/></video>;
-  } else if(ad.thumbnail){
-    mediaBlock=<img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",borderRadius:10,display:"block"}}/>;
+    var proxySrc=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQs;
+    mediaBlock=<video controls playsInline poster={imageSrc||""} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}><source src={proxySrc}/></video>;
+  } else if(imageSrc){
+    // Graceful fallback: if the refreshed image still fails to load (rare,
+    // would mean the creative was deleted / archived), swap to a branded
+    // placeholder rather than a broken-image icon.
+    mediaBlock=<img src={imageSrc} alt={ad.adName||"Ad"} onError={function(e){
+      var fallback=document.createElement("div");
+      fallback.style.cssText="width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;letter-spacing:2px;font-weight:800;font-family:"+fm+";text-align:center;padding:24px;";
+      fallback.textContent="PREVIEW UNAVAILABLE — creative may have been archived by the platform";
+      if(e.target&&e.target.parentNode)e.target.parentNode.replaceChild(fallback,e.target);
+    }} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",borderRadius:10,display:"block"}}/>;
   } else {
     mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",background:"linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontFamily:fm,letterSpacing:2,fontWeight:800}}>NO PREVIEW AVAILABLE</div>;
   }
