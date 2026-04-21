@@ -1,6 +1,10 @@
 import { rateLimit } from "./_rateLimit.js";
 import { logUsageEvent } from "./_audit.js";
-import { getUser, verifyPassword, recordLogin, ensureSuperadminBootstrap, normalizeEmail, isSuperadminEmail } from "./_users.js";
+import {
+  getUser, verifyPassword, recordLogin, ensureSuperadminBootstrap,
+  normalizeEmail, isSuperadminEmail,
+  saveSession, getSessionByToken, deleteSession, generateToken
+} from "./_users.js";
 
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
@@ -22,41 +26,19 @@ function setAuthCors(req, res) {
   res.setHeader("X-Frame-Options", "DENY");
 }
 
-// In-memory session store. Warm instances only, users re-login after a
-// cold start. Sessions carry the authenticated user's email + role so
-// downstream endpoints can gate on identity without a Redis round-trip.
-var sessions = {};
-
-function generateToken() {
-  var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  var token = "";
-  for (var i = 0; i < 64; i++) {
-    token += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return token;
+// Session helpers, async because they hit Redis. Exported so other
+// endpoints (invite, users) can read the authenticated principal.
+export async function getSession(token) {
+  var s = await getSessionByToken(token);
+  if (!s) return null;
+  if (s.expires && s.expires < Date.now()) { await deleteSession(token); return null; }
+  return s;
 }
-
-function cleanExpired() {
-  var now = Date.now();
-  Object.keys(sessions).forEach(function(t) {
-    if (sessions[t].expires < now) delete sessions[t];
-  });
+export async function validateSession(token) {
+  return !!(await getSession(token));
 }
-
-export function validateSession(token) {
-  if (!token) return false;
-  cleanExpired();
-  return !!sessions[token];
-}
-
-export function getSession(token) {
-  if (!token || !sessions[token]) return null;
-  if (sessions[token].expires < Date.now()) { delete sessions[token]; return null; }
-  return sessions[token];
-}
-
-export function getSessionRole(token) {
-  var s = getSession(token);
+export async function getSessionRole(token) {
+  var s = await getSession(token);
   return s ? s.role : null;
 }
 
@@ -71,12 +53,12 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     var token = req.headers["x-session-token"] || "";
-    var s = getSession(token);
+    var s = await getSession(token);
     if (!s) { res.status(401).json({ valid: false }); return; }
     // Re-check that the user hasn't been revoked since their session began.
     var user = await getUser(s.email);
     if (!user || user.active === false) {
-      delete sessions[token];
+      await deleteSession(token);
       res.status(401).json({ valid: false, reason: "revoked" });
       return;
     }
@@ -100,7 +82,7 @@ export default async function handler(req, res) {
       return;
     }
     if (user.active === false) {
-      res.status(403).json({ error: "This account has been revoked. Contact " + "gary@gasmarketing.co.za" + " if this is unexpected." });
+      res.status(403).json({ error: "This account has been revoked. Contact gary@gasmarketing.co.za if this is unexpected." });
       return;
     }
 
@@ -110,17 +92,15 @@ export default async function handler(req, res) {
       return;
     }
 
-    cleanExpired();
     var newToken = generateToken();
     var expires = Date.now() + 24 * 60 * 60 * 1000;
-    sessions[newToken] = {
+    await saveSession(newToken, {
       email: user.email,
       name: user.name || "",
       role: user.role || "admin",
       expires: expires
-    };
+    });
 
-    // Fire-and-await, log once per hour per email (dedup inside audit).
     try {
       await logUsageEvent("admin_login", user.email, { role: user.role, name: user.name || "" });
       await recordLogin(user.email);

@@ -134,6 +134,30 @@ export function generateToken() {
   return crypto.randomBytes(24).toString("hex");
 }
 
+// ─── Sessions in Redis ──────────────────────────────────────────────
+// Vercel serverless functions are independent Lambdas so an in-memory
+// session map in one file is invisible to another. Redis-backed sessions
+// let /api/invite / /api/users read sessions created by /api/auth.
+var SESSION_TTL_SEC = 24 * 60 * 60;
+
+export async function saveSession(token, data) {
+  if (!token) return false;
+  await redisCmd(["SET", "session:" + token, JSON.stringify(data), "EX", String(SESSION_TTL_SEC)]);
+  return true;
+}
+
+export async function getSessionByToken(token) {
+  if (!token) return null;
+  var r = await redisCmd(["GET", "session:" + token]);
+  if (!r || !r.result) return null;
+  try { return JSON.parse(r.result); } catch (_) { return null; }
+}
+
+export async function deleteSession(token) {
+  if (!token) return;
+  await redisCmd(["DEL", "session:" + token]);
+}
+
 export async function createInvite(email, name, invitedBy) {
   var token = generateToken();
   var record = {

@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (!rateLimit(req, res, { maxPerMin: 30, maxPerHour: 300 })) return;
 
   var token = req.headers["x-session-token"] || "";
-  var session = getSession(token);
+  var session = await getSession(token);
   if (!session) { res.status(401).json({ error: "Sign in required" }); return; }
   if (!isSuperadminEmail(session.email)) { res.status(403).json({ error: "Superadmin only" }); return; }
 
