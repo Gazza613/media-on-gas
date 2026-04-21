@@ -1024,7 +1024,7 @@ function CampaignAuditModal(props){
                     return <tr key={u.email}>
                       <td style={Object.assign({},cell,{fontWeight:700})}>{u.name||"-"}</td>
                       <td style={Object.assign({},cell,{color:P.sub})}>{u.email}</td>
-                      <td style={cell}>{u.role}</td>
+                      <td style={cell}>{u.role==="superadmin"?"Superadmin":"Team Member"}</td>
                       <td style={cell}><span style={{background:s.color+"20",color:s.color,border:"1px solid "+s.color+"50",padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</span></td>
                       <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.createdAt)}</td>
                       <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.lastLogin)}</td>
