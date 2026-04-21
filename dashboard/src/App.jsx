@@ -5,6 +5,38 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#22D3EE",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
 var ff="Poppins,Outfit,Segoe UI,sans-serif",fm="JetBrains Mono,Consolas,monospace";
+
+// Quirky rotating loading messages, shown while data is pulled from the
+// platforms or Redis. Keeps the client engaged during the 5-15 second
+// cold-cache window rather than staring at a static spinner.
+var QUIRKY_DASHBOARD_LOADERS=[
+  "Rounding up your ads from Meta, TikTok and Google, they scatter",
+  "Teaching the numbers to line up in neat little rows",
+  "Polishing your CTR, it comes up shinier that way",
+  "Counting follows, clicks, and every small victory",
+  "Fetching your metrics that matter, no decimal left behind",
+  "Asking Meta nicely for the latest impressions",
+  "Untangling the TikTok data, it's never in a hurry",
+  "Reading your dashboard its morning briefing",
+  "Lining up the spend, the clicks, and the lessons learned",
+  "Brewing fresh insights, please hold the line",
+  "Your numbers are on the way, the van just took a scenic route",
+  "Cross-checking CPMs against what's actually healthy today",
+  "Gathering the platform gossip so you don't have to",
+  "Your KPIs are stretching, it's been a while since they posed for a photo"
+];
+var QUIRKY_SHORT_LOADERS=[
+  "Pulling the good stuff",
+  "Warming up the numbers",
+  "On the way",
+  "Fetching the latest",
+  "Loading, shh",
+  "Two ticks",
+  "Almost there"
+];
+// Pure helper, pick a random quirky loader. Rotates in components via
+// useEffect + setInterval.
+function pickQuirky(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
 var API=window.location.origin;
 var API_KEY="c0c7438297c52d8100494263d97389b5777312af2e88f8cdfc247622454b3d80";
 var LOOKER_URLS={"mtn momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","mtn momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","willowbrook":"https://lookerstudio.google.com/reporting/823fd5fa-b39d-4dc3-b623-549197d0341f/page/p_2upnicpx0d","psycho":"https://lookerstudio.google.com/reporting/0adc106a-50e2-42cc-a4ca-aafc04160e5d/page/p_1ooj1p0nmd","khava":"","concord":"","eden":"","flower":""};
@@ -62,7 +94,7 @@ function SignupScreen(props){
         <div style={{fontSize:10,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Team Invitation</div>
       </div>
       <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(24px)"}}>
-        {loading&&<div style={{textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:2}}>CHECKING INVITE...</div>}
+        {loading&&<div style={{textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:2}}>Dusting off your invite…</div>}
         {!loading&&err&&!invite&&<div style={{textAlign:"center"}}>
           <div style={{fontSize:14,color:P.critical,fontFamily:fm,lineHeight:1.6,marginBottom:14}}>{err}</div>
           <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6}}>Ask <span style={{color:P.ember}}>gary@gasmarketing.co.za</span> for a fresh invitation.</div>
@@ -822,7 +854,7 @@ function CampaignAuditModal(props){
           </button>
         </div>
       </div>
-      {view[0]==="audit"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Loading campaigns from all platforms...":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
+      {view[0]==="audit"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Rounding up your campaigns from every platform, they scatter…":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
       {view[0]==="reconcile"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Ground truth from Meta / TikTok / Google APIs compared to what the dashboard computes for <strong style={{color:P.ember}}>{props.dateFrom}</strong> to <strong style={{color:P.ember}}>{props.dateTo}</strong>. Green = delta less than 1%, yellow = 1 to 5%, red = more than 5%.{recSent[0]?<span style={{color:P.mint,marginLeft:10}}>{recSent[0]}</span>:null}</div>}
       {view[0]==="audit"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
@@ -851,7 +883,7 @@ function CampaignAuditModal(props){
       </div>}
       {view[0]==="audit"&&err[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{err[0]}</div>}
       {view[0]==="reconcile"&&recErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{recErr[0]}</div>}
-      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>Fetching ground truth from each platform, this takes 10 to 20 seconds...</div>}
+      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center",lineHeight:1.7}}>Asking Meta, TikTok and Google to tell the truth, they always take a moment to think about it. 10 to 20 seconds, tops.</div>}
       {view[0]==="audit"&&<div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
           <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
@@ -987,7 +1019,7 @@ function CampaignAuditModal(props){
         var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
         var cell={padding:"10px",color:P.txt,fontSize:12,fontFamily:fm,borderBottom:"1px solid "+P.rule+"30"};
         return <div style={{display:"flex",flexDirection:"column",gap:20,overflow:"auto"}}>
-          {usageLoading[0]&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>Loading usage events...</div>}
+          {usageLoading[0]&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>Thumbing through the visitor log…</div>}
           {usageErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm}}>{usageErr[0]}</div>}
           {!usageLoading[0]&&!usageErr[0]&&events.length===0&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>No usage events yet. They start recording on the next admin login and client view.</div>}
           {!usageLoading[0]&&events.length>0&&<>
@@ -1208,6 +1240,17 @@ function ChatPanel(props){
     // certainly dropped somewhere (serverless timeout, network, CDN).
     // Abort the request so the user sees an error instead of a frozen
     // "Analysing..." forever.
+    // Quirky rotating timeout copy. Most timeouts in the wild are the
+    // client's connection buckling under the streamed response, not the
+    // model running slow, so the message nudges toward wifi checks while
+    // staying warm and never rude.
+    var TIMEOUT_QUIPS=[
+      "That took longer than a loadshedding schedule. Your WiFi might be having a moment, try a different network, maybe the one your neighbour won't stop bragging about, then fire the same question again.",
+      "Your connection seems to have taken a tea break, ours is still waiting at the door. Jump onto a friendlier WiFi and ask me that one more time.",
+      "The answer is cooked, the delivery van just lost signal. Swap to a stronger WiFi and resubmit your question, we'll try that again.",
+      "Hmm, that reply fell off somewhere between here and your browser. Check your WiFi is steady, or hop onto your phone hotspot, and send the question through again.",
+      "Looks like the pipe between us went quiet. If your WiFi is wobbly, try a different network, then pop the same question in again and we'll pick it up."
+    ];
     var watchdog=null;
     var watchdogController=("AbortController" in window)?new AbortController():null;
     var resetWatchdog=function(){
@@ -1215,9 +1258,9 @@ function ChatPanel(props){
       watchdog=setTimeout(function(){
         try{if(watchdogController)watchdogController.abort();}catch(_){}
         busy[1](false);
-        err[1]("That took too long. The chat timed out, try again or narrow the campaign selection.");
+        err[1](TIMEOUT_QUIPS[Math.floor(Math.random()*TIMEOUT_QUIPS.length)]);
         messages[1](function(prev){var copy=prev.slice();if(copy.length>0&&copy[copy.length-1].role==="assistant"&&!copy[copy.length-1].content)copy.pop();return copy;});
-      },55000);
+      },75000);
     };
     resetWatchdog();
     fetch(props.apiBase+"/api/chat",{
@@ -1514,6 +1557,15 @@ export default function MediaOnGas(){
   var us=useState(null),urlSelected=us[0],setUrlSelected=us[1];
   var rs=useState(""),search=rs[0],setSearch=rs[1];
   var ls=useState(true),loading=ls[0],setLoading=ls[1];
+  // Rotating quirky dashboard loader copy, swapped every 3.2s while
+  // platform data is pulling so long cold-cache loads feel alive.
+  var lqs=useState(QUIRKY_DASHBOARD_LOADERS[0]),loaderQuip=lqs[0],setLoaderQuip=lqs[1];
+  useEffect(function(){
+    if(!loading)return;
+    setLoaderQuip(pickQuirky(QUIRKY_DASHBOARD_LOADERS));
+    var iv=setInterval(function(){setLoaderQuip(pickQuirky(QUIRKY_DASHBOARD_LOADERS));},3200);
+    return function(){clearInterval(iv);};
+  },[loading]);
   var wn=useState([]),dataWarnings=wn[0],setDataWarnings=wn[1];
   var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
@@ -1767,7 +1819,11 @@ export default function MediaOnGas(){
   }
   useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
 
-  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
+  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}>
+    <div style={{width:42,height:42,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+    <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+    <div style={{color:P.sub,fontFamily:fm,fontSize:11,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Checking you in</div>
+  </div>);
   // Invitation signup flow, routed when the URL path starts with /signup.
   // Lives outside the session check so new invitees reach the form even
   // though they are not yet authenticated.
@@ -1903,7 +1959,7 @@ export default function MediaOnGas(){
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
-        {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:14,color:P.sub,fontFamily:fm}}>Your metrics that matter are loading,settle in…</div></div>):(<>
+        {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:14,color:P.sub,fontFamily:ff,fontStyle:"italic",textAlign:"center",maxWidth:420,lineHeight:1.6,transition:"opacity 0.3s"}}>{loaderQuip}<span style={{display:"inline-block",width:20}}>…</span></div></div>):(<>
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
