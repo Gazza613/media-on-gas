@@ -36,6 +36,9 @@ function objectiveFromName(name) {
 // confirm-and-send + reconcile run happens in, covering them all.
 var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
+// Bump this when the classification logic changes so any pre-existing
+// cache entries on warm function instances are treated as stale.
+var CAMPAIGNS_CACHE_VERSION = "v3-tt-obj-pagination";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -80,8 +83,8 @@ export default async function handler(req, res) {
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-07";
 
-  var cacheKey = from + "|" + to;
-  var cached = campaignsResponseCache[cacheKey];
+  var cacheKey = CAMPAIGNS_CACHE_VERSION + "|" + from + "|" + to;
+  var cached = req.query.fresh === "1" ? null : campaignsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
@@ -355,12 +358,26 @@ export default async function handler(req, res) {
     // App Install classification on TikTok (name-based matching misses
     // campaigns like "TT_MoMo_Q2" whose ads are tagged App Install).
     var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","objective_type","app_promotion_type","budget","budget_mode","schedule_type","schedule_start_time","schedule_end_time"]));
-    var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100&fields=" + ttCampFields;
-    var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
-    var ttListData = await ttListRes.json();
-    if (ttListData.data && ttListData.data.list) {
-      for (var l = 0; l < ttListData.data.list.length; l++) {
-        var ttCamp = ttListData.data.list[l];
+    // Paginate through every TikTok campaign. Clients accumulate historical
+    // campaigns over time and a 100-entry cap was dropping active App Install
+    // campaigns past the first page, so they fell through to name-based
+    // detection with an empty name and ended up "unknown".
+    var ttAllCamps = [];
+    var ttPage = 1;
+    while (true) {
+      var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=1000&page=" + ttPage + "&fields=" + ttCampFields;
+      var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
+      var ttListData = await ttListRes.json();
+      if (!ttListData.data || !ttListData.data.list || ttListData.data.list.length === 0) break;
+      for (var li = 0; li < ttListData.data.list.length; li++) ttAllCamps.push(ttListData.data.list[li]);
+      var ttPageInfo = ttListData.data.page_info || {};
+      if (!ttPageInfo.total_page || ttPage >= ttPageInfo.total_page) break;
+      ttPage++;
+      if (ttPage > 10) break; // safety cap
+    }
+    if (ttAllCamps.length > 0) {
+      for (var l = 0; l < ttAllCamps.length; l++) {
+        var ttCamp = ttAllCamps[l];
         ttNames[ttCamp.campaign_id] = ttCamp.campaign_name;
         ttStatuses[ttCamp.campaign_id] = ttCamp.operation_status;
         var ttObj = String(ttCamp.objective_type || "").toUpperCase();
@@ -392,16 +409,30 @@ export default async function handler(req, res) {
 
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
     var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","reach","clicks","cpm","cpc","ctr","follows","likes","comments","shares"]));
-    var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=50";
-    var ttRes = await fetch(ttUrl, {headers: {"Access-Token": ttToken}});
-    var ttRaw = await ttRes.text();
+    // Paginate reports too — page_size=50 was silently dropping campaigns
+    // past the first page from the insights response.
+    var ttAllRows = [];
+    var ttRptPage = 1;
+    while (true) {
+      var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=1000&page=" + ttRptPage;
+      var ttRes = await fetch(ttUrl, {headers: {"Access-Token": ttToken}});
+      var ttRaw = await ttRes.text();
+      try {
+        var ttPageData = JSON.parse(ttRaw);
+        if (!ttPageData.data || !ttPageData.data.list || ttPageData.data.list.length === 0) break;
+        for (var rli = 0; rli < ttPageData.data.list.length; rli++) ttAllRows.push(ttPageData.data.list[rli]);
+        var ttRptPageInfo = ttPageData.data.page_info || {};
+        if (!ttRptPageInfo.total_page || ttRptPage >= ttRptPageInfo.total_page) break;
+        ttRptPage++;
+        if (ttRptPage > 10) break;
+      } catch (e) { break; }
+    }
     var ttSeenIds = {};
 
     try {
-      var ttData = JSON.parse(ttRaw);
-      if (ttData.data && ttData.data.list) {
-        for (var n = 0; n < ttData.data.list.length; n++) {
-          var tc = ttData.data.list[n];
+      if (ttAllRows.length > 0) {
+        for (var n = 0; n < ttAllRows.length; n++) {
+          var tc = ttAllRows[n];
           var tm = tc.metrics;
           if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
