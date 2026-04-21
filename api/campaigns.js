@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v5-tt-drop-app-promotion-type";
+var CAMPAIGNS_CACHE_VERSION = "v6-tt-campaign-fields-valid";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -355,10 +355,12 @@ export default async function handler(req, res) {
     // TikTok budget + scheduling fields. TikTok amounts are already in
     // the account currency unit (ZAR), no conversion needed.
     // objective_type is the definitive App Install signal on TikTok.
-    // app_promotion_type is an adgroup-level field, not campaign-level —
-    // including it caused the whole campaign/get/ call to silently
-    // return no data, dropping every TikTok row into 'unknown'.
-    var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","objective_type","budget","budget_mode","schedule_type","schedule_start_time","schedule_end_time"]));
+    // schedule_type + schedule_start_time + schedule_end_time are adgroup-
+    // level fields on TikTok (the API rejects the whole request if you
+    // request them at campaign level), so flight dates can't be read
+    // from campaign/get/. Budget mode still drives pacing logic —
+    // ongoing vs lifetime — just without day counting.
+    var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","objective_type","budget","budget_mode"]));
     var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=500&fields=" + ttCampFields;
     var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
     var ttListData = await ttListRes.json();
@@ -381,19 +383,17 @@ export default async function handler(req, res) {
         ttObjectives[ttCamp.campaign_id] = ttCanonObj;
         var ttMode = String(ttCamp.budget_mode || "").toUpperCase();
         var ttRawBudget = parseFloat(ttCamp.budget || 0);
-        var ttStart = ttCamp.schedule_start_time || null;
-        var ttEnd = ttCamp.schedule_end_time || null;
         var ttBudgetCalc;
         if (ttMode === "BUDGET_MODE_INFINITE") {
           ttBudgetCalc = { budgetMode: "infinite", budgetAmount: null, budgetDaily: null };
         } else if (ttMode === "BUDGET_MODE_TOTAL") {
-          ttBudgetCalc = buildBudget({ lifetimeBudget: ttRawBudget, startTime: ttStart, stopTime: ttEnd });
+          ttBudgetCalc = buildBudget({ lifetimeBudget: ttRawBudget });
         } else if (ttMode === "BUDGET_MODE_DAY" || ttMode === "BUDGET_MODE_DYNAMIC_DAILY_BUDGET") {
-          ttBudgetCalc = buildBudget({ dailyBudget: ttRawBudget, startTime: ttStart, stopTime: ttEnd });
+          ttBudgetCalc = buildBudget({ dailyBudget: ttRawBudget });
         } else {
           ttBudgetCalc = { budgetMode: "unset", budgetAmount: null, budgetDaily: null };
         }
-        ttBudgets[ttCamp.campaign_id] = Object.assign({ startTime: ttStart, stopTime: ttEnd }, ttBudgetCalc);
+        ttBudgets[ttCamp.campaign_id] = ttBudgetCalc;
       }
     }
 
@@ -415,7 +415,7 @@ export default async function handler(req, res) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
             var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : ttStatuses[tc.dimensions.campaign_id] === "DISABLE" ? "paused" : "completed";
             var ttB = ttBudgets[tc.dimensions.campaign_id] || {};
-            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: ttObjectives[tc.dimensions.campaign_id] || objectiveFromName(ttNames[tc.dimensions.campaign_id] || ""), impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: ttB.startTime ? String(ttB.startTime).substring(0,10) : "", endDate: ttB.stopTime ? String(ttB.stopTime).substring(0,10) : "", status: ttStatus, budgetAmount: ttB.budgetAmount || null, budgetDaily: ttB.budgetDaily || null, budgetMode: ttB.budgetMode || "unset", budgetFlightDays: ttB.budgetFlightDays || null });
+            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: ttObjectives[tc.dimensions.campaign_id] || objectiveFromName(ttNames[tc.dimensions.campaign_id] || ""), impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: "", endDate: "", status: ttStatus, budgetAmount: ttB.budgetAmount || null, budgetDaily: ttB.budgetDaily || null, budgetMode: ttB.budgetMode || "unset", budgetFlightDays: ttB.budgetFlightDays || null });
           }
         }
       }
@@ -424,7 +424,7 @@ export default async function handler(req, res) {
     Object.keys(ttNames).forEach(function(tid) {
       if (!ttSeenIds[tid]) {
         var ttB2 = ttBudgets[tid] || {};
-        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], objective: ttObjectives[tid] || objectiveFromName(ttNames[tid]), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active", startDate: ttB2.startTime ? String(ttB2.startTime).substring(0,10) : "", endDate: ttB2.stopTime ? String(ttB2.stopTime).substring(0,10) : "", budgetAmount: ttB2.budgetAmount || null, budgetDaily: ttB2.budgetDaily || null, budgetMode: ttB2.budgetMode || "unset", budgetFlightDays: ttB2.budgetFlightDays || null });
+        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], objective: ttObjectives[tid] || objectiveFromName(ttNames[tid]), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active", startDate: "", endDate: "", budgetAmount: ttB2.budgetAmount || null, budgetDaily: ttB2.budgetDaily || null, budgetMode: ttB2.budgetMode || "unset", budgetFlightDays: ttB2.budgetFlightDays || null });
       }
     });
   } catch (ttErr) { console.error("TikTok campaigns error", ttErr); warnings.push({ platform: "TikTok", stage: "campaigns", message: String(ttErr && ttErr.message || ttErr) }); }
