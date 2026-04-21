@@ -14,40 +14,48 @@ var META_ACCOUNTS = [
   { id: "act_542990539806888", name: "GAS Agency" }
 ];
 
-// Mirror the exact rules from api/ads.js so the audit matches runtime behaviour.
+// Mirror the exact rules the Summary tab uses via api/campaigns.js.
+// Bucket names intentionally match the Summary labels so Audit and
+// Summary are directly comparable ("Leads" not "Lead Generation",
+// "Unclassified" rather than silently defaulting to Landing Page).
 function detectObjectiveFromName(campaignName) {
   var n = (campaignName || "").toLowerCase();
-  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) {
-    return { obj: "Clicks to App Store", source: "name keyword: 'appinstall' / 'app install'" };
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0
+      || n.indexOf("app-install") >= 0 || n.indexOf("app_campaign") >= 0 || n.indexOf("app campaign") >= 0
+      || n.indexOf("appcampaign") >= 0 || n.indexOf("app_promo") >= 0 || n.indexOf("app promo") >= 0
+      || n.indexOf("appprom") >= 0 || n.indexOf("app_promotion") >= 0 || n.indexOf("app promotion") >= 0
+      || n.indexOf("app_download") >= 0 || n.indexOf("app download") >= 0 || n.indexOf("uac") >= 0
+      || n.indexOf("googleapp") >= 0 || n.indexOf("google_app") >= 0 || n.indexOf("google app") >= 0) {
+    return { obj: "Clicks to App Store", source: "name keyword: app install / app campaign / UAC / app promo" };
   }
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) {
     return { obj: "Followers & Likes", source: "name keyword: 'follower' / '_like_' / 'paidsocial_like'" };
   }
   if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) {
-    return { obj: "Lead Generation", source: "name keyword: 'lead' / 'pos'" };
+    return { obj: "Leads", source: "name keyword: 'lead' / 'pos'" };
   }
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) {
     return { obj: "Landing Page Clicks", source: "name keyword: 'homeloan' / 'traffic' / 'paidsearch'" };
   }
-  return { obj: "Landing Page Clicks", source: "default fallback (no keyword match)" };
+  return { obj: "Unclassified", source: "default fallback (no keyword match, dropped from Summary)" };
 }
 
 function mapMetaObjective(metaObj) {
   if (!metaObj) return null;
   var o = String(metaObj).toUpperCase();
   if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "Clicks to App Store";
-  if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "Lead Generation";
+  if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "Leads";
   if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "Followers & Likes";
   if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "Landing Page Clicks";
-  if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "Lead Generation";
+  if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "Leads";
   return null;
 }
 
 function mapTikTokObjective(ttObj) {
   if (!ttObj) return null;
   var o = String(ttObj).toUpperCase();
-  if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "Clicks to App Store";
-  if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "Lead Generation";
+  if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP") >= 0) return "Clicks to App Store";
+  if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "Leads";
   if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "Followers & Likes";
   if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "Landing Page Clicks";
   return null;
@@ -229,8 +237,10 @@ async function fetchGoogle(activeFrom, activeTo) {
       else if (chType === "DISCOVERY" || chType === "DEMAND_GEN") platform = "Demand Gen";
       var name = campaign.name || "(unnamed)";
       var classification;
-      if (chSub.indexOf("APP") >= 0 || chSub.indexOf("APP_INSTALL") >= 0) {
-        classification = { obj: "Clicks to App Store", source: "Google advertising_channel_sub_type: " + chSub };
+      // MULTI_CHANNEL is Google's channel type for UAC / App campaigns.
+      // advertising_channel_sub_type can also contain APP_CAMPAIGN / APP_INSTALL.
+      if (chType === "MULTI_CHANNEL" || chSub.indexOf("APP") >= 0) {
+        classification = { obj: "Clicks to App Store", source: "Google channel: " + chType + (chSub ? (" / " + chSub) : "") };
       } else {
         classification = detectObjectiveFromName(name);
       }

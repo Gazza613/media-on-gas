@@ -23,7 +23,9 @@ function objectiveFromName(name) {
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
-  return "landingpage";
+  // "unknown" is distinct from "landingpage" so the frontend can drop
+  // it from Objective Highlights rather than inflating Landing Page.
+  return "unknown";
 }
 
 
@@ -206,12 +208,7 @@ export default async function handler(req, res) {
             if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
             if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
             // Name-based fallback mirrors ads.js detectObjective().
-            var nm = (c.campaign_name || "").toLowerCase();
-            if (nm.indexOf("appinstal") >= 0 || nm.indexOf("app install") >= 0 || nm.indexOf("app_install") >= 0) return "appinstall";
-            if (nm.indexOf("follower") >= 0 || nm.indexOf("_like_") >= 0 || nm.indexOf("_like ") >= 0 || nm.indexOf("paidsocial_like") >= 0 || nm.indexOf("like_facebook") >= 0 || nm.indexOf("like_instagram") >= 0) return "followers";
-            if (nm.indexOf("lead") >= 0 || nm.indexOf("pos") >= 0) return "leads";
-            if (nm.indexOf("homeloan") >= 0 || nm.indexOf("traffic") >= 0 || nm.indexOf("paidsearch") >= 0) return "landingpage";
-            return "landingpage";
+            return objectiveFromName(c.campaign_name || "");
           })();
 
           var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0;
@@ -308,7 +305,7 @@ export default async function handler(req, res) {
           campaignId: r.campaignId,
           rawCampaignId: r.rawCampaignId,
           campaignName: r.campaignName,
-          objective: r.objective || "landingpage",
+          objective: r.objective || "unknown",
           impressions: impsStr,
           reach: reachStr,
           frequency: freq,
@@ -369,7 +366,7 @@ export default async function handler(req, res) {
         var ttObj = String(ttCamp.objective_type || "").toUpperCase();
         var ttAppPromo = String(ttCamp.app_promotion_type || "").toUpperCase();
         var ttCanonObj;
-        if (ttObj === "APP_PROMOTION" || ttAppPromo === "APP_INSTALL" || ttAppPromo === "APP_RETARGETING") ttCanonObj = "appinstall";
+        if (ttObj === "APP_PROMOTION" || ttObj === "APP_INSTALL" || ttObj.indexOf("APP") >= 0 || ttAppPromo === "APP_INSTALL" || ttAppPromo === "APP_RETARGETING" || ttAppPromo.indexOf("APP") >= 0) ttCanonObj = "appinstall";
         else if (ttObj === "LEAD_GENERATION") ttCanonObj = "leads";
         else if (ttObj === "ENGAGEMENT" || ttObj === "COMMUNITY_INTERACTION" || ttObj === "VIDEO_VIEWS") ttCanonObj = "followers";
         else if (ttObj === "TRAFFIC" || ttObj === "REACH" || ttObj === "WEB_CONVERSIONS") ttCanonObj = "landingpage";

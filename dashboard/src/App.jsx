@@ -821,7 +821,7 @@ function CampaignAuditModal(props){
   });
   var platforms={};data.forEach(function(c){platforms[c.platform]=true;});
   var objectives={};data.forEach(function(c){objectives[c.detectedObjective]=true;});
-  var objCol={"Lead Generation":P.rose,"Click to App Install":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan};
+  var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Unclassified":P.sub};
 
   var exportCsv=function(){
     var header=["Platform","Account","Campaign Name","Detected Objective","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
@@ -1986,15 +1986,19 @@ export default function MediaOnGas(){
               var obj="Traffic";
               // Backend already classifies every row with a canonical
               // objective (Meta via API objective field, Google via
-              // advertising_channel_sub_type, TikTok/fallback via name).
-              // Prefer that — it catches App Campaigns even when the
-              // campaign name doesn't say "app install".
+              // advertising_channel_sub_type, TikTok via objective_type,
+              // or name-based fallback). Prefer that signal. Only trust
+              // "landingpage" when the backend is confident — the
+              // name-based fallback returns "unknown" for unrecognised
+              // campaigns so they stay out of Landing Page instead of
+              // inflating it.
               var canon=(camp.objective||"").toLowerCase();
               if(canon==="appinstall")obj="Clicks to App Store";
               else if(canon==="leads")obj="Leads";
               else if(canon==="followers")obj="Followers & Likes";
               else if(canon==="landingpage")obj="Landing Page Clicks";
               else{
+                // canon is "unknown" / empty, fall through to name-based.
                 var n=(camp.campaignName||"").toLowerCase();
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
                 else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
