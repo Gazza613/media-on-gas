@@ -998,7 +998,7 @@ function CampaignAuditModal(props){
         var users=teamUsers[0]||[];
         var fmtDate=function(iso){if(!iso)return "-";try{return new Date(iso).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"});}catch(_){return iso;}};
         var statusPill=function(u){
-          if(u.role==="superadmin")return{label:"SUPERADMIN",color:P.ember};
+          if(u.role==="superadmin")return{label:"SUPER ADMIN",color:P.ember};
           if(u.status==="pending_invite")return{label:"PENDING INVITE",color:P.warning};
           if(u.status==="revoked"||u.active===false)return{label:"REVOKED",color:P.critical};
           return{label:"ACTIVE",color:P.mint};
@@ -1035,7 +1035,7 @@ function CampaignAuditModal(props){
                     return <tr key={u.email}>
                       <td style={Object.assign({},cell,{fontWeight:700})}>{u.name||"-"}</td>
                       <td style={Object.assign({},cell,{color:P.sub})}>{u.email}</td>
-                      <td style={cell}>{u.role==="superadmin"?"Superadmin":"Team Member"}</td>
+                      <td style={cell}>{u.role==="superadmin"?"Super Admin":"Team Member"}</td>
                       <td style={cell}><span style={{background:s.color+"20",color:s.color,border:"1px solid "+s.color+"50",padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</span></td>
                       <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.createdAt)}</td>
                       <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.lastLogin)}</td>
