@@ -15,8 +15,22 @@ import { listUsers, normalizeEmail } from "./_users.js";
 // with a logged-in admin session, the response shows what would or did fire.
 
 var SUPERADMIN_EMAIL = "gary@gasmarketing.co.za";
+var TEAM_DOMAIN = "gasmarketing.co.za";
 var SLA_DAYS = 7;
 var BUFFER_HOURS = 2; // hit right after SLA, not in the middle of day 7
+
+// Hard rule: nudges are internal-only. A nudge MUST NEVER reach a client
+// address, no matter what the audit log says about who sent the last
+// report. Every send site runs the address through this filter.
+function isTeamEmail(addr) {
+  var e = String(addr || "").toLowerCase().trim();
+  var at = e.lastIndexOf("@");
+  if (at < 0) return false;
+  return e.slice(at + 1) === TEAM_DOMAIN;
+}
+function filterTeamOnly(list) {
+  return (list || []).filter(isTeamEmail);
+}
 
 function getCreds() {
   var url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
@@ -222,7 +236,11 @@ export default async function handler(req, res) {
 
   for (var i = 0; i < overdue.length; i++) {
     var c = overdue[i];
-    var am = c.lastSenderEmail || SUPERADMIN_EMAIL;
+    // HARD ALLOWLIST. The recorded "last sender" becomes the AM only if
+    // it is a @gasmarketing.co.za address. Any other value (client email,
+    // corrupted data, test record) is overridden to the superadmin.
+    var rawAm = c.lastSenderEmail || "";
+    var am = isTeamEmail(rawAm) ? rawAm.toLowerCase() : SUPERADMIN_EMAIL;
     var daysOverdue = Math.floor((now - c.lastSentTs) / (24 * 60 * 60 * 1000));
     var clientName = displayNameFromIdentity(c.identity, c.lastSlug);
     var lastSentDisplay = new Date(c.lastSentTs).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
@@ -252,28 +270,45 @@ export default async function handler(req, res) {
       "GAS Marketing Automation";
 
     if (dryRun || !canSend) {
+      // Preview uses the same final allowlist as the real send path.
+      var previewTo = filterTeamOnly([am]);
+      if (previewTo.length === 0) previewTo = [SUPERADMIN_EMAIL];
+      var previewBcc = previewTo.indexOf(SUPERADMIN_EMAIL) >= 0 ? [] : [SUPERADMIN_EMAIL];
       results.push({
         identity: c.identity, clientName: clientName, am: am,
         lastSent: c.lastSentIso, daysOverdue: daysOverdue,
-        wouldNotify: [am, SUPERADMIN_EMAIL], status: dryRun ? "dry_run" : "mailer_not_configured"
+        wouldNotify: { to: previewTo, bcc: filterTeamOnly(previewBcc) },
+        lastSenderRaw: c.lastSenderEmail || "",
+        senderWasInternal: isTeamEmail(c.lastSenderEmail),
+        status: dryRun ? "dry_run" : "mailer_not_configured"
       });
       continue;
     }
 
+    // FINAL GATE before handing the message to nodemailer. Rebuild the
+    // to: + bcc: fields from scratch using only team-domain addresses.
+    // Any other value is dropped here, no matter what upstream logic
+    // produced it. If the to: would be empty after filtering (can't
+    // happen given the force-fallback above, but belt-and-suspenders),
+    // send to Gary. Nothing exits the function to a client domain.
+    var toList = filterTeamOnly([am]);
+    if (toList.length === 0) toList = [SUPERADMIN_EMAIL];
+    var bccCandidates = toList.indexOf(SUPERADMIN_EMAIL) >= 0 ? [] : [SUPERADMIN_EMAIL];
+    var bccList = filterTeamOnly(bccCandidates);
+
     try {
-      var bccList = am.toLowerCase() === SUPERADMIN_EMAIL ? [] : [SUPERADMIN_EMAIL];
       await transporter.sendMail({
         from: "GAS Marketing Automation <" + gmailUser + ">",
-        to: am,
-        bcc: bccList,
+        to: toList.join(", "),
+        bcc: bccList.length ? bccList.join(", ") : undefined,
         subject: "Pssst, " + clientName + " is " + daysOverdue + " days overdue for a report",
         text: text,
         html: html
       });
-      results.push({ identity: c.identity, clientName: clientName, am: am, daysOverdue: daysOverdue, status: "sent" });
+      results.push({ identity: c.identity, clientName: clientName, to: toList, bcc: bccList, daysOverdue: daysOverdue, status: "sent" });
     } catch (err) {
       console.error("Nudge send failed", c.identity, err);
-      results.push({ identity: c.identity, clientName: clientName, am: am, status: "error: " + String(err && err.message || err) });
+      results.push({ identity: c.identity, clientName: clientName, to: toList, status: "error: " + String(err && err.message || err) });
     }
   }
 
