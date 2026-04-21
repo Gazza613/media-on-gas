@@ -874,6 +874,10 @@ function ChatPanel(props){
   // Controlled mode if parent supplies open + setOpen, otherwise self-manage.
   var isOpen=typeof props.open==="boolean"?props.open:internalOpen[0];
   var setIsOpen=props.setOpen||internalOpen[1];
+  // Defensive: force the panel closed on first mount, independent of any
+  // persisted session state elsewhere. The panel only opens when the user
+  // clicks the FAB or the "Start Chat" CTA.
+  useEffect(function(){setIsOpen(false);},[]);
   // Messages persist for the whole browser session via sessionStorage
   // so closing + reopening the chat panel keeps the conversation intact.
   // Cleared automatically when the tab closes or the user logs out.
@@ -1326,7 +1330,7 @@ export default function MediaOnGas(){
   },[]);
 
   var handleLogin=function(token,role){setSession(token);setAuthRole(role||"admin");};
-  var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setSession(null);setAuthRole(null);};
+  var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_chat_history");setSession(null);setAuthRole(null);};
 
   // Hard refresh (Ctrl/Cmd + Shift + R) forces admin re-login. The keydown
   // fires before the browser reload, so clearing sessionStorage synchronously
@@ -1337,7 +1341,7 @@ export default function MediaOnGas(){
       var hard=(e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==="R"||e.key==="r");
       if(!hard)return;
       if(window.location.pathname.indexOf("/view/")===0)return;
-      try{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");}catch(_){}
+      try{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_chat_history");}catch(_){}
     };
     window.addEventListener("keydown",handler);
     return function(){window.removeEventListener("keydown",handler);};
