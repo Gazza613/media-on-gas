@@ -2015,6 +2015,21 @@ export default function MediaOnGas(){
             var cpcData=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,cpc:pb.clicks>0?parseFloat((pb.spend/pb.clicks).toFixed(2)):0,color:platCol4[pl]||P.ember,_currency:true};});
             var cpmData=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,cpm:pb.imps>0?parseFloat((pb.spend/pb.imps*1000).toFixed(2)):0,color:platCol4[pl]||P.ember,_currency:true};});
 
+            /* --- Community (computed early so Objective Highlights can use the ground-truth follower total) --- */
+            var matchedPages3=[];var matchedIds3={};
+            for(var s3=0;s3<sel.length;s3++){var bestPg3=null;var bestSc3=0;for(var p3=0;p3<pages.length;p3++){var sc4=autoMatchPage(sel[s3].campaignName,pages[p3].name);if(sc4>bestSc3){bestSc3=sc4;bestPg3=pages[p3];}}if(bestPg3&&bestSc3>=2&&matchedIds3[bestPg3.id]!==true){matchedPages3.push(bestPg3);matchedIds3[bestPg3.id]=true;}}
+            var fbT2=0;var igT2=0;var igGrowth=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;igGrowth+=mp.instagram_business_account.follower_growth||0;}});
+            var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"){ttE2+=parseFloat(camp.follows||0);}});
+            var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
+            var grandT2=fbT2+igT2+ttT2;
+            var earnedTotal=parseFloat(m.pageLikes||0)+igGrowth+ttE2;
+            // Ground-truth override so Objective Highlights matches Community Growth.
+            if(objectives4["Followers & Likes"]&&earnedTotal>0)objectives4["Followers & Likes"].results=earnedTotal;
+            var communityData=[];
+            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:parseFloat(m.pageLikes||0),color:P.fb});
+            if(igT2>0)communityData.push({name:"IG",total:igT2,earned:igGrowth,color:P.ig});
+            if(ttT2>0)communityData.push({name:"TT",total:ttT2,earned:ttE2,color:P.tt});
+
             /* --- Executive Narrative --- */
             var execLines=[];
             var bestCpmPlat="";var bestCpmVal=Infinity;var worstCpmPlat="";var worstCpmVal=0;
@@ -2035,19 +2050,6 @@ export default function MediaOnGas(){
               for(var si3=0;si3<sel.length;si3++){if(a.campaignName===sel[si3].campaignName||a.campaignId===(sel[si3].rawCampaignId||sel[si3].campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"")))return true;}
               return false;
             }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
-
-            /* --- Community --- */
-            var matchedPages3=[];var matchedIds3={};
-            for(var s3=0;s3<sel.length;s3++){var bestPg3=null;var bestSc3=0;for(var p3=0;p3<pages.length;p3++){var sc4=autoMatchPage(sel[s3].campaignName,pages[p3].name);if(sc4>bestSc3){bestSc3=sc4;bestPg3=pages[p3];}}if(bestPg3&&bestSc3>=2&&matchedIds3[bestPg3.id]!==true){matchedPages3.push(bestPg3);matchedIds3[bestPg3.id]=true;}}
-            var fbT2=0;var igT2=0;var igGrowth=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;igGrowth+=mp.instagram_business_account.follower_growth||0;}});
-            var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"){ttE2+=parseFloat(camp.follows||0);}});
-            var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
-            var grandT2=fbT2+igT2+ttT2;
-            var earnedTotal=parseFloat(m.pageLikes||0)+igGrowth+ttE2;
-            var communityData=[];
-            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:parseFloat(m.pageLikes||0),color:P.fb});
-            if(igT2>0)communityData.push({name:"IG",total:igT2,earned:igGrowth,color:P.ig});
-            if(ttT2>0)communityData.push({name:"TT",total:ttT2,earned:ttE2,color:P.tt});
 
             var tHead={padding:"9px 10px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:P.ember,letterSpacing:1,background:"rgba(249,98,3,0.12)",border:"1px solid rgba(249,98,3,0.25)",fontFamily:fm};
             var tCell=function(extra){return Object.assign({padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12},extra||{});};
