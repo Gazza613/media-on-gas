@@ -1047,7 +1047,7 @@ function CampaignAuditModal(props){
                 </tbody>
               </table>
             </div>
-            <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:10,fontStyle:"italic",lineHeight:1.6}}>Passwords are stored as bcrypt hashes, plaintext is never visible to anyone. Revoking an account invalidates the user's next request instantly.</div>
+            <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Passwords are stored as bcrypt hashes, plaintext is never visible to anyone. Revoking an account invalidates the user's next request instantly.</div>
           </div>
         </div>;
       })()}
