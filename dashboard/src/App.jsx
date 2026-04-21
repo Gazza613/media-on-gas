@@ -1088,7 +1088,7 @@ function CampaignAuditModal(props){
                 </tbody>
               </table>
             </div>
-            <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Passwords are stored as bcrypt hashes, plaintext is never visible to anyone. Revoking an account invalidates the user's next request instantly.</div>
+            <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
           </div>
         </div>;
       })()}
@@ -1552,6 +1552,25 @@ export default function MediaOnGas(){
     var to=params.get("to");
     if(to)setDt(to);
     if(token){
+      // Decode the JWT payload client-side (no verification, the backend
+      // still validates every request) so we can auto-apply the campaigns
+      // and date range the AM locked in when they sent the share link.
+      // Without this, the client landed on "Select campaigns to view
+      // summary" because the URL only carries ?token= with no separate
+      // campaigns / from / to params.
+      try{
+        var parts=token.split(".");
+        if(parts.length>=2){
+          var b64=parts[1].replace(/-/g,"+").replace(/_/g,"/");
+          while(b64.length%4!==0)b64+="=";
+          var payload=JSON.parse(atob(b64));
+          if(Array.isArray(payload.camps)&&payload.camps.length>0){
+            setUrlSelected(payload.camps.map(String));
+          }
+          if(payload.from)setDf(payload.from);
+          if(payload.to)setDt(payload.to);
+        }
+      }catch(_){/* malformed token — backend will reject it anyway */}
       setViewToken(token);
       setAuthRole("client");
       setAuthChecking(false);
