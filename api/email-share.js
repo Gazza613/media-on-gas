@@ -3,6 +3,8 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { issueToken } from "./_jwt.js";
 import { logEmailSend } from "./_audit.js";
+import { getSession } from "./auth.js";
+import { clientIdentity, registeredDomain } from "./_clientIdentity.js";
 
 // Admin-only endpoint. Issues a signed share token, fetches the campaign summary,
 // and emails a branded HTML report from grow@gasmarketing.co.za via Gmail SMTP.
@@ -697,7 +699,26 @@ export default async function handler(req, res) {
       html: html
     });
 
-    // Fire-and-forget audit write. Graceful no-op if Upstash env vars aren't set yet.
+    // Capture authenticated sender identity for the nudge cron. The
+    // frontend sends both x-api-key (admin proof) and x-session-token
+    // (user identity). checkAuth above trusted the api key, now we
+    // look up the session token for the human email so the audit log
+    // can tell a future nudge who actually sent the report.
+    var senderEmail = "";
+    try {
+      var sessTok = req.headers["x-session-token"] || "";
+      if (sessTok) {
+        var sess = await getSession(sessTok);
+        if (sess && sess.email) senderEmail = sess.email;
+      }
+    } catch (_) {}
+
+    // Pre-compute the client identity + recipient domains so the nudge
+    // cron can group without re-deriving from raw recipient lists.
+    var primaryRecipient = toList && toList.length > 0 ? toList[0] : "";
+    var identity = clientIdentity(primaryRecipient, clientSlug) || "";
+    var recipientDomains = (toList || []).map(function(e) { return registeredDomain(e); }).filter(function(d) { return !!d; });
+
     logEmailSend({
       clientSlug: clientSlug,
       clientName: clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" "),
@@ -709,6 +730,9 @@ export default async function handler(req, res) {
       campaignCount: campaignIds.length + campaignNames.length,
       senderName: body.senderName || "",
       senderTitle: body.senderTitle || "",
+      senderEmail: senderEmail,
+      clientIdentity: identity,
+      recipientDomains: recipientDomains,
       summaryEmbedded: !!summary,
       topAdsEmbedded: !!topAds,
       messageId: info.messageId || ""

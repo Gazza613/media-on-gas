@@ -5,6 +5,10 @@
     {
       "path": "/api/reconcile?alert=1",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/nudge-cron",
+      "schedule": "0 7 * * *"
     }
   ],
   "rewrites": [
