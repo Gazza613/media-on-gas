@@ -1596,6 +1596,23 @@ export default function MediaOnGas(){
     return function(){if(timer)clearTimeout(timer);events.forEach(function(e){window.removeEventListener(e,resetIdle);});};
   },[session,isClient]);
 
+  // Client idle refresh: on a share link we don't log the viewer out (it's
+  // a read-only report), but after 15 minutes of no activity we nudge them
+  // to refresh so the metrics they're looking at are current and not stale
+  // from when they first opened the tab.
+  var idleNudgeS=useState(false),showIdleNudge=idleNudgeS[0],setShowIdleNudge=idleNudgeS[1];
+  useEffect(function(){
+    if(!isClient||!viewToken)return;
+    var IDLE_MS=15*60*1000;
+    var timer=null;
+    var trigger=function(){setShowIdleNudge(true);};
+    var resetIdle=function(){if(timer)clearTimeout(timer);if(!showIdleNudge)timer=setTimeout(trigger,IDLE_MS);};
+    var events=["mousemove","mousedown","keydown","scroll","touchstart","wheel"];
+    events.forEach(function(e){window.addEventListener(e,resetIdle,{passive:true});});
+    resetIdle();
+    return function(){if(timer)clearTimeout(timer);events.forEach(function(e){window.removeEventListener(e,resetIdle);});};
+  },[isClient,viewToken,showIdleNudge]);
+
   var pageOverrides=[
     {campaign:"willowbrook",page:"flower foundation"},
     {campaign:"flower",page:"flower foundation"}
@@ -1828,6 +1845,19 @@ export default function MediaOnGas(){
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
     {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}
+    {showIdleNudge&&<div style={{position:"fixed",inset:0,zIndex:2100,background:"rgba(6,2,14,0.72)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
+      <div style={{width:420,maxWidth:"94vw",background:"linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%)",border:"1px solid rgba(249,98,3,0.35)",borderRadius:18,padding:"28px 28px 22px",boxShadow:"0 30px 80px rgba(0,0,0,0.65),0 0 60px rgba(249,98,3,0.18)",textAlign:"center",animation:"gasEnter 0.45s cubic-bezier(0.2,0.8,0.2,1) both"}}>
+        <div style={{fontSize:38,marginBottom:6}}>{"😴"}</div>
+        <div style={{fontSize:11,color:P.ember,letterSpacing:3,fontWeight:800,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Pssst, still there?</div>
+        <div style={{fontSize:15,color:P.txt,fontFamily:ff,lineHeight:1.6,fontWeight:700,marginBottom:8}}>Your dashboard just took a 15 minute coffee break.</div>
+        <div style={{fontSize:12,color:"rgba(255,251,248,0.72)",fontFamily:fm,lineHeight:1.7,marginBottom:20}}>Tap refresh to pull the latest metrics hot off the platforms. Your ads have been busy, we promise.</div>
+        <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+          <button onClick={function(){window.location.reload();}} style={{background:gEmber,border:"none",borderRadius:10,padding:"12px 24px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2,boxShadow:"0 6px 20px rgba(249,98,3,0.35)"}}>Refresh Now</button>
+          <button onClick={function(){setShowIdleNudge(false);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>Not yet</button>
+        </div>
+        <div style={{marginTop:16,fontSize:10,color:P.dim,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google.</div>
+      </div>
+    </div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} apiKey={viewToken?"":API_KEY} viewToken={viewToken}/>
     {!isClient&&<ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>}
