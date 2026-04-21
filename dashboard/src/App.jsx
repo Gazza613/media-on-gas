@@ -128,9 +128,6 @@ function LoginScreen(props){
     <div style={{position:"absolute",inset:0,opacity:0.015,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px",pointerEvents:"none"}}/>
     <div style={{position:"absolute",left:0,right:0,height:"100vh",background:"linear-gradient(180deg,transparent 0%,rgba(249,98,3,0.04) 50%,transparent 100%)",animation:"gasScan 8s linear infinite",pointerEvents:"none",mixBlendMode:"screen"}}/>
 
-    {/* Aurora band, soft gradient ribbon drifting across the upper third */}
-    <div style={{position:"absolute",top:"8%",left:"-20%",right:"-20%",height:"32vh",background:"linear-gradient(100deg,transparent 0%,rgba(249,98,3,0.18) 25%,rgba(255,61,0,0.22) 45%,rgba(168,85,247,0.18) 70%,transparent 100%)",filter:"blur(60px)",animation:"gasAurora 18s ease-in-out infinite, gasHueShift 24s ease-in-out infinite",pointerEvents:"none",transformOrigin:"center",mixBlendMode:"screen"}}/>
-
     {/* Ambient drifting sparks, faint embers rising like a slow fire — fully decorative */}
     {[0,1,2,3,4,5,6,7].map(function(i){var delay=(i*1.4).toFixed(1);var left=(10+(i*11)%80);var bottom=-8-(i%4)*6;var size=i%2===0?3:4;var color=i%3===0?"#F96203":i%3===1?"#FFAA00":"#A855F7";return <div key={"spark-"+i} style={{position:"absolute",left:left+"%",bottom:bottom+"%",width:size,height:size,borderRadius:"50%",background:color,boxShadow:"0 0 8px "+color+",0 0 16px "+color+"55",animation:"gasSpark 7s ease-in-out "+delay+"s infinite",pointerEvents:"none",zIndex:1}}/>;})}
 
