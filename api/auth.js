@@ -1,5 +1,6 @@
 import { rateLimit } from "./_rateLimit.js";
 import { logUsageEvent } from "./_audit.js";
+import { getUser, verifyPassword, recordLogin, ensureSuperadminBootstrap, normalizeEmail, isSuperadminEmail } from "./_users.js";
 
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
@@ -21,17 +22,10 @@ function setAuthCors(req, res) {
   res.setHeader("X-Frame-Options", "DENY");
 }
 
+// In-memory session store. Warm instances only, users re-login after a
+// cold start. Sessions carry the authenticated user's email + role so
+// downstream endpoints can gate on identity without a Redis round-trip.
 var sessions = {};
-
-function timingSafeEqual(a, b) {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  if (a.length !== b.length) return false;
-  var mismatch = 0;
-  for (var i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
-}
 
 function generateToken() {
   var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -55,10 +49,15 @@ export function validateSession(token) {
   return !!sessions[token];
 }
 
-export function getSessionRole(token) {
+export function getSession(token) {
   if (!token || !sessions[token]) return null;
   if (sessions[token].expires < Date.now()) { delete sessions[token]; return null; }
-  return sessions[token].role;
+  return sessions[token];
+}
+
+export function getSessionRole(token) {
+  var s = getSession(token);
+  return s ? s.role : null;
 }
 
 export default async function handler(req, res) {
@@ -66,44 +65,75 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 })) return;
 
+  // Make sure Gary's superadmin row is provisioned. No-op after the first
+  // successful bootstrap.
+  try { await ensureSuperadminBootstrap(); } catch (_) {}
+
   if (req.method === "GET") {
     var token = req.headers["x-session-token"] || "";
-    if (validateSession(token)) {
-      res.status(200).json({ valid: true, role: getSessionRole(token) });
-    } else {
-      res.status(401).json({ valid: false });
+    var s = getSession(token);
+    if (!s) { res.status(401).json({ valid: false }); return; }
+    // Re-check that the user hasn't been revoked since their session began.
+    var user = await getUser(s.email);
+    if (!user || user.active === false) {
+      delete sessions[token];
+      res.status(401).json({ valid: false, reason: "revoked" });
+      return;
     }
+    res.status(200).json({ valid: true, role: s.role, email: s.email, name: user.name || "" });
     return;
   }
 
   if (req.method === "POST") {
     var body = req.body || {};
-    var password = body.password || "";
-    var dashPass = process.env.DASHBOARD_PASSWORD || "";
-    var clientPass = process.env.DASHBOARD_CLIENT_PASSWORD || "";
-    var role = null;
+    var email = normalizeEmail(body.email);
+    var password = String(body.password || "");
 
-    if (dashPass && timingSafeEqual(password, dashPass)) {
-      role = "admin";
-    } else if (clientPass && timingSafeEqual(password, clientPass)) {
-      role = "client";
+    if (!email || !password) {
+      res.status(400).json({ error: "Email and password required" });
+      return;
     }
 
-    if (!role) {
-      res.status(401).json({ error: "Invalid password" });
+    var user = await getUser(email);
+    if (!user || !user.passwordHash) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+    if (user.active === false) {
+      res.status(403).json({ error: "This account has been revoked. Contact " + "gary@gasmarketing.co.za" + " if this is unexpected." });
+      return;
+    }
+
+    var ok = await verifyPassword(password, user.passwordHash);
+    if (!ok) {
+      res.status(401).json({ error: "Invalid email or password" });
       return;
     }
 
     cleanExpired();
     var newToken = generateToken();
     var expires = Date.now() + 24 * 60 * 60 * 1000;
-    sessions[newToken] = { role: role, expires: expires };
-    // Dedup-per-hour usage event so we can see which day the team is
-    // active. Await the write: in Vercel serverless, a fire-and-forget
-    // promise is cut off when res.json fires and the function freezes,
-    // silently losing the event. The extra ~50ms on a login is nothing.
-    try { await logUsageEvent(role === "admin" ? "admin_login" : "client_pw_login", role); } catch (_) {}
-    res.status(200).json({ token: newToken, role: role, expires: expires });
+    sessions[newToken] = {
+      email: user.email,
+      name: user.name || "",
+      role: user.role || "admin",
+      expires: expires
+    };
+
+    // Fire-and-await, log once per hour per email (dedup inside audit).
+    try {
+      await logUsageEvent("admin_login", user.email, { role: user.role, name: user.name || "" });
+      await recordLogin(user.email);
+    } catch (_) {}
+
+    res.status(200).json({
+      token: newToken,
+      role: user.role,
+      email: user.email,
+      name: user.name || "",
+      expires: expires,
+      isSuperadmin: isSuperadminEmail(user.email)
+    });
     return;
   }
 

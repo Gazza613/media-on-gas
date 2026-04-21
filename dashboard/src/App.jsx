@@ -14,19 +14,101 @@ var fmt=function(n){var v=parseFloat(n);if(isNaN(v))return"0";if(v>=1e6)return(v
 var fR=function(n){var v=parseFloat(n);return isNaN(v)?"R0.00":"R"+v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});};
 var pc=function(n){var v=parseFloat(n);return isNaN(v)?"0.00%":v.toFixed(2)+"%";};
 
+function SignupScreen(props){
+  var loadingS=useState(true),loading=loadingS[0],setLoading=loadingS[1];
+  var errS=useState(""),err=errS[0],setErr=errS[1];
+  var inviteS=useState(null),invite=inviteS[0],setInvite=inviteS[1];
+  var pwS=useState(""),pw=pwS[0],setPw=pwS[1];
+  var pw2S=useState(""),pw2=pw2S[0],setPw2=pw2S[1];
+  var busyS=useState(false),busy=busyS[0],setBusy=busyS[1];
+  var doneS=useState(false),done=doneS[0],setDone=doneS[1];
+
+  useEffect(function(){
+    var params=new URLSearchParams(window.location.search);
+    var token=params.get("token")||"";
+    if(!token){setErr("Invite link is missing its token.");setLoading(false);return;}
+    fetch(API+"/api/accept-invite?token="+encodeURIComponent(token))
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        setLoading(false);
+        if(r.status===200)setInvite(r.data);
+        else setErr(r.data.error||"Invite not found or expired.");
+      }).catch(function(){setLoading(false);setErr("Connection error");});
+  },[]);
+
+  var submit=function(){
+    if(!invite)return;
+    if(pw.length<8){setErr("Password must be at least 8 characters.");return;}
+    if(pw!==pw2){setErr("Passwords do not match.");return;}
+    setBusy(true);setErr("");
+    var params=new URLSearchParams(window.location.search);
+    var token=params.get("token")||"";
+    fetch(API+"/api/accept-invite",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:token,password:pw})})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        setBusy(false);
+        if(r.status===200){setDone(true);}
+        else{setErr(r.data.error||"Could not set password.");}
+      }).catch(function(){setBusy(false);setErr("Connection error");});
+  };
+
+  return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse at 50% 20%,#1a0b2e 0%,#0d0618 45%,#06020e 100%)",fontFamily:ff,position:"relative",overflow:"hidden",padding:"40px 16px"}}>
+    <div style={{width:"100%",maxWidth:440,padding:32,position:"relative",zIndex:2}}>
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{width:80,height:80,borderRadius:"50%",overflow:"hidden",margin:"0 auto 22px",position:"relative"}}>
+          <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+        </div>
+        <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{color:"#FF3D00"}}>GAS</span></div>
+        <div style={{fontSize:10,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Team Invitation</div>
+      </div>
+      <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(24px)"}}>
+        {loading&&<div style={{textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:2}}>CHECKING INVITE...</div>}
+        {!loading&&err&&!invite&&<div style={{textAlign:"center"}}>
+          <div style={{fontSize:14,color:P.critical,fontFamily:fm,lineHeight:1.6,marginBottom:14}}>{err}</div>
+          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6}}>Ask <span style={{color:P.ember}}>gary@gasmarketing.co.za</span> for a fresh invitation.</div>
+        </div>}
+        {!loading&&invite&&!done&&<>
+          <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,textAlign:"center"}}>Set your password</div>
+          <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>Welcome <span style={{color:P.ember,fontWeight:800}}>{invite.name||invite.email}</span><div style={{fontSize:11,color:P.sub,marginTop:4}}>{invite.email}</div></div>
+          <input type="password" placeholder="Choose a password (8+ chars)" value={pw} onChange={function(e){setPw(e.target.value);setErr("");}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:12,letterSpacing:2}}/>
+          <input type="password" placeholder="Confirm password" value={pw2} onChange={function(e){setPw2(e.target.value);setErr("");}} onKeyDown={function(e){if(e.key==="Enter")submit();}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2}}/>
+          {err&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center"}}>{err}</div>}
+          <button onClick={submit} disabled={busy} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2}}>{busy?"SETTING PASSWORD...":"ACCEPT & ACTIVATE"}</button>
+        </>}
+        {done&&<div style={{textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:10,color:P.mint}}>{"✓"}</div>
+          <div style={{fontSize:14,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>Account Ready</div>
+          <div style={{fontSize:12,color:P.sub,fontFamily:ff,marginBottom:20,lineHeight:1.6}}>Password set. Sign in with your email and new password.</div>
+          <button onClick={function(){window.location.href="/";}} style={{width:"100%",background:gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:2}}>GO TO SIGN IN</button>
+        </div>}
+      </div>
+    </div>
+  </div>);
+}
+
 function LoginScreen(props){
   var es=useState(""),loginErr=es[0],setLoginErr=es[1];
+  var em=useState(""),email=em[0],setEmail=em[1];
   var ps=useState(""),pw=ps[0],setPw=ps[1];
   var ls=useState(false),busy=ls[0],setBusy=ls[1];
   var handleLogin=function(){
-    if(!pw){setLoginErr("Please enter a password");return;}
+    if(!email){setLoginErr("Enter your email");return;}
+    if(!pw){setLoginErr("Enter your password");return;}
     setBusy(true);setLoginErr("");
-    fetch(API+"/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})})
-    .then(function(r){return r.json();})
-    .then(function(d){
+    fetch(API+"/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email.trim().toLowerCase(),password:pw})})
+    .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+    .then(function(r){
       setBusy(false);
-      if(d.token){sessionStorage.setItem("gas_session",d.token);sessionStorage.setItem("gas_role",d.role||"admin");props.onLogin(d.token,d.role);}
-      else{setLoginErr("Invalid password");}
+      var d=r.data||{};
+      if(d.token){
+        sessionStorage.setItem("gas_session",d.token);
+        sessionStorage.setItem("gas_role",d.role||"admin");
+        sessionStorage.setItem("gas_email",d.email||"");
+        sessionStorage.setItem("gas_name",d.name||"");
+        props.onLogin(d.token,d.role,d.email,d.name);
+      }else{
+        setLoginErr(d.error||"Invalid email or password");
+      }
     }).catch(function(){setBusy(false);setLoginErr("Connection error");});
   };
   return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse at 50% 20%,#1a0b2e 0%,#0d0618 45%,#06020e 100%)",fontFamily:ff,position:"relative",overflow:"hidden"}}>
@@ -58,9 +140,11 @@ function LoginScreen(props){
       </div>
       <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",animation:"gasBorderGlow 5s ease-in-out infinite"}}>
         <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:16,textAlign:"center"}}>Dashboard Access</div>
-        <input type="password" placeholder="Enter password" value={pw} onChange={function(e){setPw(e.target.value);setLoginErr("");}} onKeyDown={function(e){if(e.key==="Enter")handleLogin();}} autoFocus onFocus={function(e){e.target.style.borderColor="rgba(249,98,3,0.5)";e.target.style.boxShadow="0 0 0 3px rgba(249,98,3,0.1)";}} onBlur={function(e){e.target.style.borderColor=P.rule;e.target.style.boxShadow="none";}} style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2,transition:"border-color 0.25s, box-shadow 0.25s"}}/>
+        <input type="email" placeholder="Your work email" value={email} onChange={function(e){setEmail(e.target.value);setLoginErr("");}} onKeyDown={function(e){if(e.key==="Enter")handleLogin();}} autoFocus autoComplete="username" onFocus={function(e){e.target.style.borderColor="rgba(249,98,3,0.5)";e.target.style.boxShadow="0 0 0 3px rgba(249,98,3,0.1)";}} onBlur={function(e){e.target.style.borderColor=P.rule;e.target.style.boxShadow="none";}} style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:12,letterSpacing:1,transition:"border-color 0.25s, box-shadow 0.25s"}}/>
+        <input type="password" placeholder="Your password" value={pw} onChange={function(e){setPw(e.target.value);setLoginErr("");}} onKeyDown={function(e){if(e.key==="Enter")handleLogin();}} autoComplete="current-password" onFocus={function(e){e.target.style.borderColor="rgba(249,98,3,0.5)";e.target.style.boxShadow="0 0 0 3px rgba(249,98,3,0.1)";}} onBlur={function(e){e.target.style.borderColor=P.rule;e.target.style.boxShadow="none";}} style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2,transition:"border-color 0.25s, box-shadow 0.25s"}}/>
         {loginErr&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center",animation:"gasEnter 0.3s ease both"}}>{loginErr}</div>}
-        <button onClick={handleLogin} disabled={busy} onMouseEnter={function(e){if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(249,98,3,0.35)";}}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 4px 14px rgba(249,98,3,0.2)";}} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2,opacity:busy?0.7:1,transition:"transform 0.18s, box-shadow 0.25s",boxShadow:"0 4px 14px rgba(249,98,3,0.2)",position:"relative",overflow:"hidden"}}>{busy?"AUTHENTICATING...":"ENTER"}</button>
+        <button onClick={handleLogin} disabled={busy} onMouseEnter={function(e){if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(249,98,3,0.35)";}}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 4px 14px rgba(249,98,3,0.2)";}} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2,opacity:busy?0.7:1,transition:"transform 0.18s, box-shadow 0.25s",boxShadow:"0 4px 14px rgba(249,98,3,0.2)",position:"relative",overflow:"hidden"}}>{busy?"AUTHENTICATING...":"SIGN IN"}</button>
+        <div style={{fontSize:10,color:P.dim,fontFamily:fm,letterSpacing:1,marginTop:14,textAlign:"center",lineHeight:1.6}}>Access is by invitation only.<br/>Contact <span style={{color:P.ember}}>gary@gasmarketing.co.za</span> to request access.</div>
       </div>
       <div style={{textAlign:"center",marginTop:24,fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>Secure access, end-to-end</div>
     </div>
@@ -591,6 +675,41 @@ function CampaignAuditModal(props){
       .catch(function(){usageLoading[1](false);usageErr[1]("Connection error");});
   };
 
+  // Team (Users) state — superadmin-only surface.
+  var teamUsers=useState([]);
+  var teamLoading=useState(false);
+  var teamErr=useState("");
+  var teamBusy=useState(false);
+  var inviteName=useState("");
+  var inviteEmail=useState("");
+  var inviteNote=useState("");
+  var loadTeam=function(){
+    teamLoading[1](true);teamErr[1]("");
+    fetch(props.apiBase+"/api/users",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){teamLoading[1](false);if(Array.isArray(d.users))teamUsers[1](d.users);else teamErr[1](d.error||"Could not load users");})
+      .catch(function(){teamLoading[1](false);teamErr[1]("Connection error");});
+  };
+  var sendInvite=function(){
+    if(teamBusy[0])return;
+    teamBusy[1](true);inviteNote[1]("");teamErr[1]("");
+    fetch(props.apiBase+"/api/invite",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({name:inviteName[0].trim(),email:inviteEmail[0].trim().toLowerCase()})})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        teamBusy[1](false);
+        if(r.status===200){inviteNote[1]("Invitation emailed to "+r.data.email);inviteName[1]("");inviteEmail[1]("");loadTeam();}
+        else teamErr[1](r.data.error||"Could not send invite");
+      })
+      .catch(function(){teamBusy[1](false);teamErr[1]("Connection error");});
+  };
+  var toggleUser=function(email,currentlyActive){
+    if(!window.confirm((currentlyActive?"Revoke access for ":"Restore access for ")+email+"?"))return;
+    fetch(props.apiBase+"/api/users",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({action:currentlyActive?"revoke":"restore",email:email})})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.ok)loadTeam();else teamErr[1](d.error||"Action failed");})
+      .catch(function(){teamErr[1]("Connection error");});
+  };
+
   var load=function(){
     loading[1](true);err[1]("");
     fetch(props.apiBase+"/api/objective-audit",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
@@ -617,6 +736,7 @@ function CampaignAuditModal(props){
   useEffect(function(){if(props.open&&view[0]==="audit")load();},[props.open,view[0]]);
   useEffect(function(){if(props.open&&view[0]==="reconcile"&&recRows[0].length===0)loadReconcile(false);},[props.open,view[0]]);
   useEffect(function(){if(props.open&&view[0]==="usage")loadUsage();},[props.open,view[0]]);
+  useEffect(function(){if(props.open&&view[0]==="users"&&props.isSuperadmin)loadTeam();},[props.open,view[0],props.isSuperadmin]);
 
   var data=rows[0]||[];
   var q=(query[0]||"").toLowerCase().trim();
@@ -651,6 +771,7 @@ function CampaignAuditModal(props){
           <button onClick={function(){view[1]("audit");}} style={{background:view[0]==="audit"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="audit"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="audit"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Objective Audit</button>
           <button onClick={function(){view[1]("reconcile");}} style={{background:view[0]==="reconcile"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="reconcile"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="reconcile"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>Data Reconciliation{recSummary[0]&&recSummary[0].red>0?<span style={{background:P.critical,color:"#fff",fontSize:9,padding:"1px 6px",borderRadius:4}}>{recSummary[0].red}</span>:null}</button>
           <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage</button>
+          {props.isSuperadmin&&<button onClick={function(){view[1]("users");}} style={{background:view[0]==="users"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="users"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="users"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Team</button>}
         </div>
         <div style={{display:"flex",gap:8}}>
           {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
@@ -860,6 +981,63 @@ function CampaignAuditModal(props){
               <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:8,fontStyle:"italic"}}>Views are counted once per hour per client to avoid inflating the count from routine API calls as the client browses.</div>
             </div>
           </>}
+        </div>;
+      })()}
+      {view[0]==="users"&&props.isSuperadmin&&(function(){
+        var users=teamUsers[0]||[];
+        var fmtDate=function(iso){if(!iso)return "-";try{return new Date(iso).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"});}catch(_){return iso;}};
+        var statusPill=function(u){
+          if(u.role==="superadmin")return{label:"SUPERADMIN",color:P.ember};
+          if(u.status==="pending_invite")return{label:"PENDING INVITE",color:P.warning};
+          if(u.status==="revoked"||u.active===false)return{label:"REVOKED",color:P.critical};
+          return{label:"ACTIVE",color:P.mint};
+        };
+        var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
+        var cell={padding:"10px",color:P.txt,fontSize:12,fontFamily:fm,borderBottom:"1px solid "+P.rule+"30"};
+        return <div style={{display:"flex",flexDirection:"column",gap:20,overflow:"auto"}}>
+          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Invite team members by email, revoke access when someone leaves. Invited users set their own password via the emailed link. Client share-link viewers are a separate system and are not listed here.</div>
+
+          <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:16}}>
+            <div style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Invite a Team Member</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr auto",gap:10,alignItems:"stretch"}}>
+              <input value={inviteName[0]} onChange={function(e){inviteName[1](e.target.value);}} placeholder="Full name" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+              <input value={inviteEmail[0]} onChange={function(e){inviteEmail[1](e.target.value);}} placeholder="work@domain.com" type="email" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+              <button onClick={sendInvite} disabled={teamBusy[0]||!inviteName[0].trim()||!inviteEmail[0].trim()} style={{background:teamBusy[0]||!inviteName[0].trim()||!inviteEmail[0].trim()?"#555":gEmber,border:"none",borderRadius:8,padding:"10px 20px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:teamBusy[0]?"wait":"pointer",letterSpacing:1.5,whiteSpace:"nowrap"}}>{teamBusy[0]?"SENDING...":"SEND INVITE"}</button>
+            </div>
+            {inviteNote[0]&&<div style={{marginTop:10,fontSize:11,color:P.mint,fontFamily:fm}}>{inviteNote[0]}</div>}
+            {teamErr[0]&&<div style={{marginTop:10,fontSize:11,color:P.critical,fontFamily:fm}}>{teamErr[0]}</div>}
+          </div>
+
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{fontSize:13,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Team Members</span>
+              <span style={{fontSize:11,color:P.sub,fontFamily:fm}}>{users.length+" user"+(users.length===1?"":"s")}</span>
+              <button onClick={loadTeam} disabled={teamLoading[0]} style={{marginLeft:"auto",background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"6px 12px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:teamLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{teamLoading[0]?"LOADING":"REFRESH"}</button>
+            </div>
+            <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
+                <thead><tr><th style={hdr}>Name</th><th style={hdr}>Email</th><th style={hdr}>Role</th><th style={hdr}>Status</th><th style={hdr}>Invited</th><th style={hdr}>Last Login</th><th style={Object.assign({},hdr,{textAlign:"right"})}>Action</th></tr></thead>
+                <tbody>
+                  {users.length===0&&!teamLoading[0]?<tr><td colSpan={7} style={{padding:20,color:P.dim,textAlign:"center",fontSize:11,fontFamily:fm,fontStyle:"italic"}}>No team members yet. Invite someone above.</td></tr>:users.map(function(u){
+                    var s=statusPill(u);
+                    var canToggle=u.role!=="superadmin";
+                    return <tr key={u.email}>
+                      <td style={Object.assign({},cell,{fontWeight:700})}>{u.name||"-"}</td>
+                      <td style={Object.assign({},cell,{color:P.sub})}>{u.email}</td>
+                      <td style={cell}>{u.role}</td>
+                      <td style={cell}><span style={{background:s.color+"20",color:s.color,border:"1px solid "+s.color+"50",padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</span></td>
+                      <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.createdAt)}</td>
+                      <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.lastLogin)}</td>
+                      <td style={Object.assign({},cell,{textAlign:"right"})}>
+                        {canToggle?<button onClick={function(){toggleUser(u.email,u.active);}} style={{background:u.active?"transparent":P.mint+"15",border:"1px solid "+(u.active?P.critical+"60":P.mint+"60"),borderRadius:6,padding:"4px 12px",color:u.active?P.critical:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{u.active?"REVOKE":"RESTORE"}</button>:<span style={{color:P.dim,fontSize:10}}>-</span>}
+                      </td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:10,fontStyle:"italic",lineHeight:1.6}}>Passwords are stored as bcrypt hashes, plaintext is never visible to anyone. Revoking an account invalidates the user's next request instantly.</div>
+          </div>
         </div>;
       })()}
     </div>
@@ -1274,6 +1452,8 @@ export default function MediaOnGas(){
   var au=useState(null),session=au[0],setSession=au[1];
   var ac=useState(true),authChecking=ac[0],setAuthChecking=ac[1];
   var ar=useState(null),authRole=ar[0],setAuthRole=ar[1];
+  var ae=useState(""),authEmail=ae[0],setAuthEmail=ae[1];
+  var an=useState(""),authName=an[0],setAuthName=an[1];
   var ts=useState("summary"),tab=ts[0],setTab=ts[1];
   var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
@@ -1329,12 +1509,13 @@ export default function MediaOnGas(){
     if(!saved){setAuthChecking(false);return;}
     fetch(API+"/api/auth",{headers:{"x-session-token":saved}})
     .then(function(r){return r.json();})
-    .then(function(d){if(d.valid){setSession(saved);setAuthRole(d.role||sessionStorage.getItem("gas_role")||"admin");}else{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");}setAuthChecking(false);})
-    .catch(function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");setAuthChecking(false);});
+    .then(function(d){if(d.valid){setSession(saved);setAuthRole(d.role||sessionStorage.getItem("gas_role")||"admin");setAuthEmail(d.email||sessionStorage.getItem("gas_email")||"");setAuthName(d.name||sessionStorage.getItem("gas_name")||"");}else{sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");}setAuthChecking(false);})
+    .catch(function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");setAuthChecking(false);});
   },[]);
 
-  var handleLogin=function(token,role){setSession(token);setAuthRole(role||"admin");};
-  var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_chat_history");setSession(null);setAuthRole(null);};
+  var handleLogin=function(token,role,em,nm){setSession(token);setAuthRole(role||"admin");setAuthEmail(em||"");setAuthName(nm||"");};
+  var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");sessionStorage.removeItem("gas_chat_history");setSession(null);setAuthRole(null);setAuthEmail("");setAuthName("");};
+  var isSuperadmin=String(authEmail||"").toLowerCase()==="gary@gasmarketing.co.za";
 
   // Hard refresh (Ctrl/Cmd + Shift + R) forces admin re-login. The keydown
   // fires before the browser reload, so clearing sessionStorage synchronously
@@ -1499,6 +1680,10 @@ export default function MediaOnGas(){
   useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
 
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}><div style={{color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:3}}>LOADING...</div></div>);
+  // Invitation signup flow, routed when the URL path starts with /signup.
+  // Lives outside the session check so new invitees reach the form even
+  // though they are not yet authenticated.
+  if(window.location.pathname.indexOf("/signup")===0)return(<SignupScreen/>);
   if(!session&&!viewToken)return(<LoginScreen onLogin={handleLogin}/>);
 
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
@@ -1598,7 +1783,7 @@ export default function MediaOnGas(){
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
     {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}
-    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt}/>
+    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} apiKey={viewToken?"":API_KEY} viewToken={viewToken}/>
     {!isClient&&<ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>}
 

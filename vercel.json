@@ -10,7 +10,10 @@
   "rewrites": [
     { "source": "/view", "destination": "/index.html" },
     { "source": "/view/", "destination": "/index.html" },
-    { "source": "/view/:path*", "destination": "/index.html" }
+    { "source": "/view/:path*", "destination": "/index.html" },
+    { "source": "/signup", "destination": "/index.html" },
+    { "source": "/signup/", "destination": "/index.html" },
+    { "source": "/signup/:path*", "destination": "/index.html" }
   ],
   "headers": [
     {
