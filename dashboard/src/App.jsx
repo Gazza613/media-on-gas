@@ -880,14 +880,17 @@ function CampaignAuditModal(props){
                 <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}>{(function(){
                   var s=(c.status||"").toUpperCase();
                   var switchedOn=s==="ACTIVE"||s==="ENABLE"||s==="ENABLED";
-                  // LIVE only when the campaign is switched on AND has actually
-                  // delivered in the last 30 days. Meta's effective_status=ACTIVE
-                  // alone lies on campaigns where adsets are paused, ads got
-                  // rejected, budget dried up, etc.
+                  // Four visible states:
+                  //   LIVE         - on and delivering
+                  //   NO DELIVERY  - on but zero spend/impressions in 30d (adsets
+                  //                  paused, ads rejected, budget exhausted, etc.)
+                  //   PAUSED       - switched off but had recent delivery (still
+                  //                  counts as recently active, just paused for now)
+                  //   DORMANT      - switched off and no 30d delivery
                   if(switchedOn&&c.activeLast30Days)return <span title="Switched on AND delivered in last 30 days" style={{background:P.mint+"18",border:"1px solid "+P.mint+"50",color:P.mint,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>LIVE</span>;
                   if(switchedOn&&!c.activeLast30Days)return <span title="Campaign is switched ON but has had ZERO delivery in the last 30 days. Likely paused at the adset or ad level, rejected creative, or exhausted budget." style={{background:P.warning+"18",border:"1px solid "+P.warning+"50",color:P.warning,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,cursor:"help"}}>NO DELIVERY</span>;
-                  if(c.activeLast30Days)return <span title="Campaign is switched off now but had delivery in the last 30 days" style={{background:P.cyan+"18",border:"1px solid "+P.cyan+"50",color:P.cyan,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>30D</span>;
-                  return <span style={{color:P.dim}}>—</span>;
+                  if(c.activeLast30Days)return <span title="Switched off now but delivered in the last 30 days, paused after being live" style={{background:P.cyan+"18",border:"1px solid "+P.cyan+"50",color:P.cyan,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>PAUSED</span>;
+                  return <span title="Switched off with no delivery in the last 30 days" style={{background:P.dim+"20",border:"1px solid "+P.sub+"40",color:P.sub,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>DORMANT</span>;
                 })()}</td>
               </tr>;
             })}

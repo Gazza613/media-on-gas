@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog } from "./_audit.js";
 import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain } from "./_clientIdentity.js";
+import { listUsers, normalizeEmail } from "./_users.js";
 
 // Daily cron: finds every client whose last report was sent more than 7
 // days ago and emails the account manager a quirky nudge, BCCing Gary.
@@ -119,11 +120,25 @@ function buildNudgeHtml(opts) {
 </html>`;
 }
 
+// A send whose ENTIRE to: list is internal team members is a test/internal
+// round-trip, not a real client delivery. Excluded from the SLA watch.
+// CC'ing yourself on a real send is fine, only the to: list is checked.
+function isInternalTestSend(entry, teamEmailSet) {
+  var to = Array.isArray(entry.to) ? entry.to : [];
+  if (to.length === 0) return true; // nobody was really emailed
+  for (var i = 0; i < to.length; i++) {
+    if (!teamEmailSet[normalizeEmail(to[i])]) return false;
+  }
+  return true;
+}
+
 // Groups audit entries by client identity, returns the last-send record
-// per client plus derived fields.
-function groupByClient(entries) {
+// per client plus derived fields. Skips internal test sends so the SLA
+// watcher only reasons over real client-facing emails.
+function groupByClient(entries, teamEmailSet) {
   var byIdentity = {};
   entries.forEach(function(e) {
+    if (isInternalTestSend(e, teamEmailSet)) return;
     // Identity is stored on each entry now (added in email-share.js). Fall
     // back to deriving on the fly for historical rows that predate the
     // field being captured.
@@ -175,7 +190,17 @@ export default async function handler(req, res) {
   var entries = [];
   try { entries = await readEmailLog(1000); } catch (_) { entries = []; }
 
-  var byClient = groupByClient(entries);
+  // Team email set, used to filter out internal test sends (emails sent
+  // only to team members, e.g. when an AM tests the share email to
+  // themselves). Always include the superadmin even if not listed.
+  var teamEmailSet = {};
+  teamEmailSet[SUPERADMIN_EMAIL] = true;
+  try {
+    var users = await listUsers();
+    users.forEach(function(u) { if (u && u.email) teamEmailSet[normalizeEmail(u.email)] = true; });
+  } catch (_) {}
+
+  var byClient = groupByClient(entries, teamEmailSet);
   var identities = Object.keys(byClient);
   var now = Date.now();
   var slaMs = SLA_DAYS * 24 * 60 * 60 * 1000 + BUFFER_HOURS * 60 * 60 * 1000;
