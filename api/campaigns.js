@@ -14,7 +14,12 @@ var metaAccounts = [
 // Google, scheduled-but-no-metrics). Mirrors api/ads.js detectObjective.
 function objectiveFromName(name) {
   var n = (name || "").toLowerCase();
-  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0
+      || n.indexOf("app-install") >= 0 || n.indexOf("app_campaign") >= 0 || n.indexOf("app campaign") >= 0
+      || n.indexOf("appcampaign") >= 0 || n.indexOf("app_promo") >= 0 || n.indexOf("app promo") >= 0
+      || n.indexOf("appprom") >= 0 || n.indexOf("app_promotion") >= 0 || n.indexOf("app promotion") >= 0
+      || n.indexOf("app_download") >= 0 || n.indexOf("app download") >= 0 || n.indexOf("uac") >= 0
+      || n.indexOf("googleapp") >= 0 || n.indexOf("google_app") >= 0 || n.indexOf("google app") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
@@ -425,7 +430,7 @@ export default async function handler(req, res) {
         // campaign_budget.* joins on the campaign through Google's automatic
         // relation. amount_micros -> ZAR via /1,000,000. period = DAILY / CUSTOM
         // (CUSTOM with an end_date acts like a lifetime cap).
-        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, campaign.start_date, campaign.end_date, campaign_budget.amount_micros, campaign_budget.period, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
+        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, campaign.start_date, campaign.end_date, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, campaign_budget.amount_micros, campaign_budget.period, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -457,7 +462,13 @@ export default async function handler(req, res) {
               // Google "conversions" are typically page-engagement events
               // (button clicks, page views) not real leads, counting them
               // as leads misleads the chat bot and email reports.
-              var gObjective = objectiveFromName(gName);
+              // Google's advertising_channel_sub_type is the definitive
+              // App Campaign signal — any UAC / App campaign surfaces as
+              // "APP_CAMPAIGN" regardless of how the campaign is named.
+              // Fall through to name-based detection for everything else.
+              var gSubType = String((gc.advertisingChannelSubType || gc.advertising_channel_sub_type || "")).toUpperCase();
+              var gChanType = String((gc.advertisingChannelType || gc.advertising_channel_type || "")).toUpperCase();
+              var gObjective = (gSubType.indexOf("APP_CAMPAIGN") >= 0 || gChanType === "MULTI_CHANNEL") ? "appinstall" : objectiveFromName(gName);
               var gIsLeadsCampaign = gObjective === "leads";
               // Google budgets: CUSTOM period with an end_date means the
               // account-level budget is a total/lifetime figure, treat it

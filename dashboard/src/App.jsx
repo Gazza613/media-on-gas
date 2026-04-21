@@ -1983,11 +1983,24 @@ export default function MediaOnGas(){
             var blFreq=(m.reach+t.reach+computed.gd.reach)>0?(m.impressions+t.impressions+computed.gd.impressions)/(m.reach+t.reach+computed.gd.reach):0;
 
             var objectives4={};sel.forEach(function(camp){
-              var n=(camp.campaignName||"").toLowerCase();var obj="Traffic";
-              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)obj="Clicks to App Store";
-              else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
-              else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
-              else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
+              var obj="Traffic";
+              // Backend already classifies every row with a canonical
+              // objective (Meta via API objective field, Google via
+              // advertising_channel_sub_type, TikTok/fallback via name).
+              // Prefer that — it catches App Campaigns even when the
+              // campaign name doesn't say "app install".
+              var canon=(camp.objective||"").toLowerCase();
+              if(canon==="appinstall")obj="Clicks to App Store";
+              else if(canon==="leads")obj="Leads";
+              else if(canon==="followers")obj="Followers & Likes";
+              else if(canon==="landingpage")obj="Landing Page Clicks";
+              else{
+                var n=(camp.campaignName||"").toLowerCase();
+                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
+                else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
+                else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
+                else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
+              }
               if(!objectives4[obj])objectives4[obj]={spend:0,clicks:0,imps:0,results:0};
               objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);
               var result;
