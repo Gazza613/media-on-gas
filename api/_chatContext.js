@@ -199,6 +199,52 @@ export async function buildChatContext(req, from, to, principal) {
   });
   lines.push("");
 
+  // Budget block — derived per-campaign budgets sourced from Meta /
+  // TikTok / Google campaign-level settings. De-dup by rawCampaignId
+  // because Meta campaigns appear on both FB and IG rows with the same
+  // campaign-level budget on each.
+  var seenBudgetIds = {};
+  var budgetLines = [];
+  var totalBudget = 0;
+  var totalBudgetKnown = 0;
+  var ongoingDaily = 0;
+  filteredCamps.forEach(function(c) {
+    var raw = String(c.rawCampaignId || c.campaignId || "");
+    if (seenBudgetIds[raw]) return;
+    seenBudgetIds[raw] = true;
+    var mode = c.budgetMode || "unset";
+    var amt = parseFloat(c.budgetAmount || 0);
+    var daily = parseFloat(c.budgetDaily || 0);
+    var spent = parseFloat(c.spend || 0);
+    if (mode === "unset" || mode === "infinite") return;
+    if (amt > 0) { totalBudget += amt; totalBudgetKnown += amt; }
+    if (mode === "daily_ongoing" && daily > 0) ongoingDaily += daily;
+    var line = "- " + (c.campaignName || "Unnamed") + " (" + c.platform + "): ";
+    if (amt > 0) {
+      var usedPct = amt > 0 ? (spent / amt * 100).toFixed(1) : "0.0";
+      line += fmtR(amt) + " budget, " + fmtR(spent) + " spent (" + usedPct + "%). Mode: " + mode;
+      if (mode === "daily_inferred") line += " (inferred from daily cap × flight days)";
+    } else if (mode === "daily_ongoing") {
+      line += fmtR(daily) + "/day ongoing (no end date set, total cap unknown)";
+    }
+    budgetLines.push(line);
+  });
+  if (budgetLines.length > 0) {
+    lines.push("## Budget by campaign (campaign-level caps from Meta / TikTok / Google)");
+    if (totalBudgetKnown > 0) {
+      var totalSpent = parseFloat(grand.spend || 0);
+      var totalUsedPct = totalBudgetKnown > 0 ? (totalSpent / totalBudgetKnown * 100).toFixed(1) : "0.0";
+      lines.push("- Known-total budget across campaigns with a set cap: " + fmtR(totalBudgetKnown) + ", spent " + fmtR(totalSpent) + " (" + totalUsedPct + "% used, " + fmtR(Math.max(0, totalBudgetKnown - totalSpent)) + " remaining).");
+    }
+    if (ongoingDaily > 0) {
+      lines.push("- Ongoing daily-capped campaigns (no end date) run at " + fmtR(ongoingDaily) + "/day combined. Treat remaining budget as open-ended.");
+    }
+    lines.push("- Per-campaign breakdown:");
+    budgetLines.forEach(function(l) { lines.push(l); });
+    lines.push("- budgetMode meanings: \"lifetime\" = total cap set on the campaign. \"daily_inferred\" = daily cap × flight duration with a known end date. \"daily_ongoing\" = daily cap but no end date, no lifetime total can be derived. \"infinite\" / \"unset\" = no budget cap visible.");
+    lines.push("");
+  }
+
   lines.push("## Individual campaigns (name, platform, objective, spend, CTR, outcomes)");
   var objectiveLabel = function(o) {
     if (o === "leads") return "Lead Generation";

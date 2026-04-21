@@ -30,6 +30,39 @@ function objectiveFromName(name) {
 var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 
+// Budget helpers.
+//   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
+//   budgetAmount = number in ZAR, null for daily_ongoing / infinite / unset
+// For a daily-budget flight with a defined end date, we infer the total
+// commit as daily × number of flight days. For ongoing daily budgets
+// (no stop date) we don't fake a total, just surface the daily rate so
+// the UI can say "Rxxx/day, ongoing".
+function flightDays(startIso, endIso) {
+  if (!startIso) return 0;
+  var s = new Date(startIso).getTime();
+  var e = endIso ? new Date(endIso).getTime() : Date.now();
+  if (isNaN(s) || isNaN(e) || e <= s) return 0;
+  return Math.max(1, Math.round((e - s) / (24 * 60 * 60 * 1000)));
+}
+function buildBudget(opts) {
+  // opts: { lifetimeBudget, dailyBudget, spendCap, startTime, stopTime, currencyRate }
+  // All amount inputs expected in ZAR already (callers divide cents/micros before passing).
+  var rate = opts.currencyRate || 1;
+  var life = parseFloat(opts.lifetimeBudget || 0);
+  var daily = parseFloat(opts.dailyBudget || 0);
+  var cap = parseFloat(opts.spendCap || 0);
+  if (life > 0) return { budgetMode: "lifetime", budgetAmount: +(life * rate).toFixed(2), budgetDaily: null };
+  if (cap > 0) return { budgetMode: "lifetime", budgetAmount: +(cap * rate).toFixed(2), budgetDaily: null };
+  if (daily > 0) {
+    var days = flightDays(opts.startTime, opts.stopTime);
+    if (days > 0 && opts.stopTime) {
+      return { budgetMode: "daily_inferred", budgetAmount: +(daily * rate * days).toFixed(2), budgetDaily: +(daily * rate).toFixed(2), budgetFlightDays: days };
+    }
+    return { budgetMode: "daily_ongoing", budgetAmount: null, budgetDaily: +(daily * rate).toFixed(2) };
+  }
+  return { budgetMode: "unset", budgetAmount: null, budgetDaily: null };
+}
+
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
@@ -73,13 +106,25 @@ export default async function handler(req, res) {
     var campaignInfo = {};
 
     try {
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,objective,effective_status,created_time,start_time,stop_time&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
+      // daily_budget / lifetime_budget / spend_cap come back in account
+      // currency CENTS (Meta's convention), so divide by 100 before use.
+      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,objective,effective_status,created_time,start_time,stop_time,daily_budget,lifetime_budget,spend_cap,budget_remaining&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
       var listRes = await fetch(listUrl);
       var listData = await listRes.json();
       if (listData.data) {
         for (var k = 0; k < listData.data.length; k++) {
           var camp = listData.data[k];
-          campaignInfo[camp.id] = { name: camp.name, status: camp.effective_status, objective: camp.objective || "", created: new Date(camp.created_time), startTime: camp.start_time || null, stopTime: camp.stop_time || null };
+          var dailyB = parseFloat(camp.daily_budget || 0) / 100;
+          var lifetimeB = parseFloat(camp.lifetime_budget || 0) / 100;
+          var spendCapB = parseFloat(camp.spend_cap || 0) / 100;
+          var budget = buildBudget({ lifetimeBudget: lifetimeB, dailyBudget: dailyB, spendCap: spendCapB, startTime: camp.start_time, stopTime: camp.stop_time });
+          campaignInfo[camp.id] = {
+            name: camp.name, status: camp.effective_status, objective: camp.objective || "",
+            created: new Date(camp.created_time),
+            startTime: camp.start_time || null, stopTime: camp.stop_time || null,
+            budgetMode: budget.budgetMode, budgetAmount: budget.budgetAmount,
+            budgetDaily: budget.budgetDaily, budgetFlightDays: budget.budgetFlightDays || null
+          };
         }
       }
     } catch (err) { console.error("Meta campaign list error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "campaign-list", message: String(err && err.message || err) }); }
@@ -249,6 +294,7 @@ export default async function handler(req, res) {
         var cpc = r._sumClicks > 0 ? (r._sumSpend / r._sumClicks).toFixed(2) : "0";
         var ctr = r._sumImpressions > 0 ? ((r._sumClicks / r._sumImpressions) * 100).toFixed(2) : "0";
         var freq = reachForRow > 0 ? (r._sumImpressions / reachForRow).toFixed(2) : "0";
+        var _info = campaignInfo[r.rawCampaignId] || {};
         allCampaigns.push({
           platform: r.platform,
           metaPlatform: r.metaPlatform,
@@ -274,16 +320,24 @@ export default async function handler(req, res) {
           costPerLead: r.leads > 0 ? (r._sumSpend / r.leads).toFixed(2) : "0",
           costPerInstall: r.appInstalls > 0 ? (r._sumSpend / r.appInstalls).toFixed(2) : "0",
           actions: r.actions || [],
-          startDate: campaignInfo[r.rawCampaignId] && campaignInfo[r.rawCampaignId].startTime ? campaignInfo[r.rawCampaignId].startTime.substring(0,10) : "",
-          endDate: campaignInfo[r.rawCampaignId] && campaignInfo[r.rawCampaignId].stopTime ? campaignInfo[r.rawCampaignId].stopTime.substring(0,10) : "",
-          status: campaignInfo[r.rawCampaignId] ? campaignInfo[r.rawCampaignId].status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active"
+          startDate: _info.startTime ? _info.startTime.substring(0,10) : "",
+          endDate: _info.stopTime ? _info.stopTime.substring(0,10) : "",
+          status: _info.status ? _info.status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active",
+          // Budget fields are campaign-level, the same value appears on
+          // both the FB and IG variant rows of a Meta campaign. Dashboard
+          // sums budget deduped by rawCampaignId to avoid double-count.
+          budgetAmount: _info.budgetAmount || null,
+          budgetDaily: _info.budgetDaily || null,
+          budgetMode: _info.budgetMode || "unset",
+          budgetFlightDays: _info.budgetFlightDays || null
         });
       });
     } catch (err) { console.error("Meta insights error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "insights", message: String(err && err.message || err) }); }
 
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
-        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: campaignInfo[cid].name, objective: objectiveFromName(campaignInfo[cid].name), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled" });
+        var si = campaignInfo[cid];
+        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: si.name, objective: objectiveFromName(si.name), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled", budgetAmount: si.budgetAmount || null, budgetDaily: si.budgetDaily || null, budgetMode: si.budgetMode || "unset", budgetFlightDays: si.budgetFlightDays || null });
       }
     });
   }
@@ -291,7 +345,11 @@ export default async function handler(req, res) {
   try {
     var ttNames = {};
     var ttStatuses = {};
-    var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100";
+    var ttBudgets = {};
+    // TikTok budget + scheduling fields. TikTok amounts are already in
+    // the account currency unit (ZAR), no conversion needed.
+    var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","budget","budget_mode","schedule_type","schedule_start_time","schedule_end_time"]));
+    var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=100&fields=" + ttCampFields;
     var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
     var ttListData = await ttListRes.json();
     if (ttListData.data && ttListData.data.list) {
@@ -299,6 +357,21 @@ export default async function handler(req, res) {
         var ttCamp = ttListData.data.list[l];
         ttNames[ttCamp.campaign_id] = ttCamp.campaign_name;
         ttStatuses[ttCamp.campaign_id] = ttCamp.operation_status;
+        var ttMode = String(ttCamp.budget_mode || "").toUpperCase();
+        var ttRawBudget = parseFloat(ttCamp.budget || 0);
+        var ttStart = ttCamp.schedule_start_time || null;
+        var ttEnd = ttCamp.schedule_end_time || null;
+        var ttBudgetCalc;
+        if (ttMode === "BUDGET_MODE_INFINITE") {
+          ttBudgetCalc = { budgetMode: "infinite", budgetAmount: null, budgetDaily: null };
+        } else if (ttMode === "BUDGET_MODE_TOTAL") {
+          ttBudgetCalc = buildBudget({ lifetimeBudget: ttRawBudget, startTime: ttStart, stopTime: ttEnd });
+        } else if (ttMode === "BUDGET_MODE_DAY" || ttMode === "BUDGET_MODE_DYNAMIC_DAILY_BUDGET") {
+          ttBudgetCalc = buildBudget({ dailyBudget: ttRawBudget, startTime: ttStart, stopTime: ttEnd });
+        } else {
+          ttBudgetCalc = { budgetMode: "unset", budgetAmount: null, budgetDaily: null };
+        }
+        ttBudgets[ttCamp.campaign_id] = Object.assign({ startTime: ttStart, stopTime: ttEnd }, ttBudgetCalc);
       }
     }
 
@@ -318,7 +391,8 @@ export default async function handler(req, res) {
           if (parseFloat(tm.impressions) > 0 || parseFloat(tm.spend) > 0) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
             var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : ttStatuses[tc.dimensions.campaign_id] === "DISABLE" ? "paused" : "completed";
-            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: objectiveFromName(ttNames[tc.dimensions.campaign_id] || ""), impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: "", endDate: "", status: ttStatus });
+            var ttB = ttBudgets[tc.dimensions.campaign_id] || {};
+            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: objectiveFromName(ttNames[tc.dimensions.campaign_id] || ""), impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: ttB.startTime ? String(ttB.startTime).substring(0,10) : "", endDate: ttB.stopTime ? String(ttB.stopTime).substring(0,10) : "", status: ttStatus, budgetAmount: ttB.budgetAmount || null, budgetDaily: ttB.budgetDaily || null, budgetMode: ttB.budgetMode || "unset", budgetFlightDays: ttB.budgetFlightDays || null });
           }
         }
       }
@@ -326,7 +400,8 @@ export default async function handler(req, res) {
 
     Object.keys(ttNames).forEach(function(tid) {
       if (!ttSeenIds[tid]) {
-        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], objective: objectiveFromName(ttNames[tid]), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active" });
+        var ttB2 = ttBudgets[tid] || {};
+        allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tid, rawCampaignId: tid, campaignName: ttNames[tid], objective: objectiveFromName(ttNames[tid]), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", follows: "0", likes: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", status: "active", startDate: ttB2.startTime ? String(ttB2.startTime).substring(0,10) : "", endDate: ttB2.stopTime ? String(ttB2.stopTime).substring(0,10) : "", budgetAmount: ttB2.budgetAmount || null, budgetDaily: ttB2.budgetDaily || null, budgetMode: ttB2.budgetMode || "unset", budgetFlightDays: ttB2.budgetFlightDays || null });
       }
     });
   } catch (ttErr) { console.error("TikTok campaigns error", ttErr); warnings.push({ platform: "TikTok", stage: "campaigns", message: String(ttErr && ttErr.message || ttErr) }); }
@@ -347,7 +422,10 @@ export default async function handler(req, res) {
       });
       var gTokenData = await gTokenRes.json();
       if (gTokenData.access_token) {
-        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
+        // campaign_budget.* joins on the campaign through Google's automatic
+        // relation. amount_micros -> ZAR via /1,000,000. period = DAILY / CUSTOM
+        // (CUSTOM with an end_date acts like a lifetime cap).
+        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, campaign.start_date, campaign.end_date, campaign_budget.amount_micros, campaign_budget.period, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -381,6 +459,20 @@ export default async function handler(req, res) {
               // as leads misleads the chat bot and email reports.
               var gObjective = objectiveFromName(gName);
               var gIsLeadsCampaign = gObjective === "leads";
+              // Google budgets: CUSTOM period with an end_date means the
+              // account-level budget is a total/lifetime figure, treat it
+              // as the lifetime cap. DAILY is the common case — infer total
+              // as daily × flight length if end_date is known, otherwise
+              // show as ongoing daily. No end_date → we fall back to an
+              // ongoing read.
+              var gPeriod = String((gr.campaignBudget && gr.campaignBudget.period) || "").toUpperCase();
+              var gBudgetAmt = gr.campaignBudget && gr.campaignBudget.amountMicros ? parseFloat(gr.campaignBudget.amountMicros) / 1000000 : 0;
+              var gStart = gc.startDate || null;
+              var gEnd = gc.endDate && gc.endDate !== "2037-12-30" ? gc.endDate : null; // Google sentinel end
+              var gBudget;
+              if (gBudgetAmt <= 0) gBudget = { budgetMode: "unset", budgetAmount: null, budgetDaily: null };
+              else if (gPeriod === "CUSTOM") gBudget = buildBudget({ lifetimeBudget: gBudgetAmt, startTime: gStart, stopTime: gEnd });
+              else gBudget = buildBudget({ dailyBudget: gBudgetAmt, startTime: gStart, stopTime: gEnd });
               allCampaigns.push({
                 platform: gPlatform,
                 metaPlatform: "google",
@@ -418,7 +510,12 @@ export default async function handler(req, res) {
                 costPerLead: (gIsLeadsCampaign && gConv > 0) ? (gSpend / gConv).toFixed(2) : "0",
                 costPerInstall: "0",
                 actions: [],
-                startDate: "", endDate: "", status: gc.status === "ENABLED" ? "active" : "paused"
+                startDate: gStart || "", endDate: gEnd || "",
+                status: gc.status === "ENABLED" ? "active" : "paused",
+                budgetAmount: gBudget.budgetAmount || null,
+                budgetDaily: gBudget.budgetDaily || null,
+                budgetMode: gBudget.budgetMode || "unset",
+                budgetFlightDays: gBudget.budgetFlightDays || null
               });
             }
           }

@@ -2005,12 +2005,42 @@ export default function MediaOnGas(){
               <div style={{marginBottom:28}}>
                 <div style={{background:P.glass,borderRadius:18,padding:"24px 28px",border:"1px solid "+P.rule}}>
                   {secHead(P.ember,"BUDGET PACING",Ic.chart(P.ember,18))}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:14,marginBottom:20}}>
-                    <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL MEDIA SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div></Glass>
-                    <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>DAILY RUN RATE</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(dailySpend)}</div></Glass>
-                    <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>PROJECTED TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fR(projSpend)}</div></Glass>
-                    <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>MEDIA PLATFORMS</div><div style={{fontSize:22,fontWeight:900,color:P.orchid,fontFamily:fm}}>{sortedPlats.length}</div></Glass>
-                  </div>
+                  {(function(){
+                    // Roll budgets up dedup'd by rawCampaignId so a Meta
+                    // campaign split across FB+IG rows only contributes its
+                    // budget once.
+                    var seen={};var totalBudget=0;var ongoingDaily=0;var hasInferred=false;var anyBudget=false;
+                    sel.forEach(function(c){
+                      var raw=String(c.rawCampaignId||c.campaignId||"");
+                      if(seen[raw])return;seen[raw]=true;
+                      var mode=c.budgetMode||"unset";
+                      var amt=parseFloat(c.budgetAmount||0);
+                      var daily=parseFloat(c.budgetDaily||0);
+                      if(mode==="unset"||mode==="infinite")return;
+                      anyBudget=true;
+                      if(amt>0)totalBudget+=amt;
+                      if(mode==="daily_ongoing"&&daily>0)ongoingDaily+=daily;
+                      if(mode==="daily_inferred")hasInferred=true;
+                    });
+                    var budgetPct=totalBudget>0?Math.min(999,Math.round(computed.totalSpend/totalBudget*100)):0;
+                    var remaining=Math.max(0,totalBudget-computed.totalSpend);
+                    var budgetColor=budgetPct>95?P.rose:budgetPct>80?P.solar:P.mint;
+                    return <>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:14,marginBottom:14}}>
+                        <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL MEDIA SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div></Glass>
+                        <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>DAILY RUN RATE</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(dailySpend)}</div></Glass>
+                        <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>PROJECTED TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fR(projSpend)}</div></Glass>
+                        <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>MEDIA PLATFORMS</div><div style={{fontSize:22,fontWeight:900,color:P.orchid,fontFamily:fm}}>{sortedPlats.length}</div></Glass>
+                      </div>
+                      {anyBudget&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:14,marginBottom:20}}>
+                        <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}} title={hasInferred?"Some campaigns use a daily cap — that slice of the budget is inferred as daily × flight days.":"Sum of the lifetime / inferred budgets set on the selected campaigns."}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL BUDGET{hasInferred?" *":""}</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{totalBudget>0?fR(totalBudget):"—"}</div></Glass>
+                        <Glass accent={budgetColor} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BUDGET USED</div><div style={{fontSize:22,fontWeight:900,color:budgetColor,fontFamily:fm}}>{totalBudget>0?budgetPct+"%":"—"}</div></Glass>
+                        <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BUDGET REMAINING</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{totalBudget>0?fR(remaining):"—"}</div></Glass>
+                        <Glass accent={P.warning} hv={true} st={{padding:16,textAlign:"center"}} title="Sum of daily caps on ongoing campaigns (no end date set). Total spend cannot be derived for these, so they are tracked separately."><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ONGOING DAILY CAPS</div><div style={{fontSize:22,fontWeight:900,color:P.warning,fontFamily:fm}}>{ongoingDaily>0?fR(ongoingDaily)+"/day":"—"}</div></Glass>
+                      </div>}
+                      {hasInferred&&<div style={{fontSize:10,color:P.sub,fontFamily:fm,fontStyle:"italic",marginBottom:14,letterSpacing:0.5,lineHeight:1.6}}>* Campaigns using a daily budget with a fixed end date, total is inferred as daily cap × flight length.</div>}
+                    </>;
+                  })()}
                   <div style={{padding:"18px 0 10px"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                       <span style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2}}>{"SPEND TO DATE: "+fR(computed.totalSpend)}</span>
