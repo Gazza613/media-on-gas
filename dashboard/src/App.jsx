@@ -1289,6 +1289,10 @@ export default function MediaOnGas(){
   // the summary view for 3.5s then fades out on its own.
   var sts=useState(false),showSentToast=sts[0],setShowSentToast=sts[1];
   var scs=useState(false),showChat=scs[0],setShowChat=scs[1];
+  // Force the chat to stay closed on every fresh mount / login. The FAB
+  // stays visible so the user can still open it explicitly, but the
+  // panel itself never auto-maximises on page load.
+  useEffect(function(){ setShowChat(false); },[]);
   var sa=useState(false),showAudit=sa[0],setShowAudit=sa[1];
   var pa=useState(null),previewAd=pa[0],setPreviewAd=pa[1];
   var fs=useState([]),flags=fs[0],setFlags=fs[1];
