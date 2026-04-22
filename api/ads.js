@@ -206,12 +206,44 @@ export default async function handler(req, res) {
               cur.actionsAgg[a.action_type] += parseInt(a.value || 0);
             });
           }
-          if (!cur.placements[place]) cur.placements[place] = { spend: 0, impressions: 0, clicks: 0 };
-          cur.placements[place].spend += spend;
-          cur.placements[place].impressions += imps;
-          cur.placements[place].clicks += clk;
+          // placements populated from a secondary query below with the
+          // publisher_platform + platform_position breakdown. Don't seed
+          // from this query — the main query doesn't carry position data.
         });
       }
+
+      // Secondary insights call purely for placement distribution. Meta drops
+      // rows if we pile too many fields onto a platform_position breakdown,
+      // so request only impressions here. Merge the breakdown back into
+      // insMap so the preview modal can show Feed / Stories / Reels / etc.
+      try {
+        var placeUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,impressions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform,platform_position&limit=500&access_token=" + metaToken;
+        var placeRows = [];
+        var placeNext = placeUrl;
+        var placeGuard = 0;
+        while (placeNext && placeGuard < 10) {
+          placeGuard++;
+          var placeRes = await fetch(placeNext);
+          var placeData = await placeRes.json();
+          if (placeData.data) placeRows = placeRows.concat(placeData.data);
+          placeNext = placeData.paging && placeData.paging.next ? placeData.paging.next : null;
+        }
+        placeRows.forEach(function(pr) {
+          var rawP = (pr.publisher_platform || "facebook").toLowerCase();
+          var pub2;
+          if (rawP === "instagram" || rawP === "threads") pub2 = "instagram";
+          else if (rawP === "facebook" || rawP === "audience_network" || rawP === "messenger" || rawP === "oculus") pub2 = "facebook";
+          else return;
+          var key2 = pr.ad_id + "_" + pub2;
+          var row = insMap[key2];
+          if (!row) return;
+          var place2 = normalizePlace(pr.platform_position);
+          var imps2 = parseInt(pr.impressions || 0);
+          if (imps2 <= 0) return;
+          if (!row.placements[place2]) row.placements[place2] = { spend: 0, impressions: 0, clicks: 0 };
+          row.placements[place2].impressions += imps2;
+        });
+      } catch (placeErr) { console.error("Meta placement breakdown error", account.name, placeErr); }
 
       // Second insights pull WITHOUT platform_position breakdown. Meta doesn't attribute
       // lead/install conversion actions cleanly across position rows (they get duplicated

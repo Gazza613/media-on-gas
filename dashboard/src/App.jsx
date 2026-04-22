@@ -390,7 +390,7 @@ function AdPreviewModal(props){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <span style={{background:accent,color:"#fff",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{ad.platform}</span>
-          <span style={{background:"rgba(255,255,255,0.08)",color:P.txt,fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{format}</span>
+          <span style={{background:P.mint,color:"#062014",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{format}</span>
         </div>
         <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
