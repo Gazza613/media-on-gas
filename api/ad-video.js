@@ -81,5 +81,13 @@ export default async function handler(req, res) {
   if (!cdnUrl) { res.status(404).json({ error: "Video URL not available" }); return; }
 
   resolveCache[cacheKey] = { url: cdnUrl, ts: Date.now() };
+  // resolveOnly=1 returns the CDN URL as JSON so the client can set it
+  // directly on a <video> src. 302 redirects on video sources break on
+  // Safari + some Chrome builds because byte-range requests don't follow
+  // the redirect reliably, leaving controls visible but playback dead.
+  if (req.query.resolveOnly === "1") {
+    res.status(200).json({ url: cdnUrl });
+    return;
+  }
   res.redirect(302, cdnUrl);
 }

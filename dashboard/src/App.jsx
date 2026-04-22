@@ -251,13 +251,29 @@ function CampaignSelector(props){
 // hit a platform auth wall). YouTube ads embed via public iframe. Static images
 // render as full-size. No platform-link fallback for clients.
 function AdPreviewModal(props){
-  if(!props.ad)return null;
+  // Hooks must be called unconditionally on every render, so keep them
+  // ahead of any early return.
+  var vs=useState(null),videoSrc=vs[0],setVideoSrc=vs[1];
   var ad=props.ad;
-  var format=(ad.format||"STATIC").toUpperCase();
+  var format=((ad&&ad.format)||"STATIC").toUpperCase();
   var isVideo=format==="MP4"||format==="VIDEO";
-  var platformLow=(ad.platform||"").toLowerCase();
-  var platformKey=platformLow.indexOf("instagram")>=0||platformLow.indexOf("facebook")>=0?"meta":platformLow.indexOf("tiktok")>=0?"tiktok":platformLow.indexOf("youtube")>=0||ad.youtubeId?"youtube":"other";
-  var campaignIdParam=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+  var platformLow=((ad&&ad.platform)||"").toLowerCase();
+  var platformKey=platformLow.indexOf("instagram")>=0||platformLow.indexOf("facebook")>=0?"meta":platformLow.indexOf("tiktok")>=0?"tiktok":platformLow.indexOf("youtube")>=0||(ad&&ad.youtubeId)?"youtube":"other";
+  var campaignIdParam=String((ad&&ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+  useEffect(function(){
+    setVideoSrc(null);
+    if(!ad||!isVideo)return;
+    if(platformKey!=="meta"&&platformKey!=="tiktok")return;
+    if(!ad.videoId)return;
+    var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+    var url=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQ+"&resolveOnly=1";
+    var cancelled=false;
+    fetch(url).then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!cancelled&&d&&d.url)setVideoSrc(d.url);
+    }).catch(function(){});
+    return function(){cancelled=true;};
+  },[ad&&ad.adId,ad&&ad.videoId,isVideo,platformKey]);
+  if(!props.ad)return null;
   var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
   var accent=platAccent[ad.platform]||P.ember;
   var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"APP CLICKS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="conversions"?"CONV":rt==="store_clicks"?"APP CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
@@ -280,8 +296,15 @@ function AdPreviewModal(props){
   if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
     mediaBlock=<iframe title="Ad preview" src={"https://www.youtube.com/embed/"+encodeURIComponent(ad.youtubeId)} style={{width:"100%",aspectRatio:"16/9",border:"none",borderRadius:10,background:"#000"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>;
   } else if(isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId){
-    var proxySrc=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQs;
-    mediaBlock=<video controls playsInline poster={imageSrc||""} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}><source src={proxySrc}/></video>;
+    // Video src is resolved asynchronously via the useEffect above and set
+    // directly on the element — serving a 302 redirect via <source> broke
+    // playback because the browser's byte-range requests didn't follow the
+    // redirect reliably.
+    if(videoSrc){
+      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
+    } else {
+      mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:imageSrc?("url("+imageSrc+") center/contain no-repeat #000"):"#000",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontFamily:fm,letterSpacing:2,fontWeight:800}}><div style={{background:"rgba(0,0,0,0.6)",padding:"10px 18px",borderRadius:8,letterSpacing:3}}>LOADING VIDEO…</div></div>;
+    }
   } else if(imageSrc){
     // Graceful fallback: if the refreshed image still fails to load (rare,
     // would mean the creative was deleted / archived), swap to a branded
