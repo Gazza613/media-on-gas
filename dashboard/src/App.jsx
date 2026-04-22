@@ -2354,70 +2354,10 @@ export default function MediaOnGas(){
                 {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;active.forEach(function(k){totalResults+=objectives4[k].results;});return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);})()}
               </div>}
 
-              {/* ═══ 6. TARGETING STANDOUTS ═══ */}
-              {selAdsets2.length>0&&(function(){
-                var topAd=selAdsets2.map(function(a){
-                  var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);
-                  var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;
-                  return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0,imps:im};
-                }).filter(function(a){return a.result>=3&&a.spend>100;}).sort(function(a,b){return(b.result>0?b.result/b.spend:0)-(a.result>0?a.result/a.spend:0);});
-                var worstAd=selAdsets2.map(function(a){
-                  var sp=parseFloat(a.spend||0);var cl=parseFloat(a.clicks||0);var im=parseFloat(a.impressions||0);
-                  var res=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0)+parseFloat(a.leads||0);if(res===0)res=cl;
-                  return{name:a.adsetName,platform:a.platform,spend:sp,result:res,costPer:res>0?sp/res:0,ctr:im>0?(cl/im*100):0};
-                }).filter(function(a){return a.spend>200&&(a.result===0||(a.ctr<0.5&&a.spend>300));}).sort(function(a,b){return b.spend-a.spend;});
-                if(topAd.length===0)return null;
-                var topChart=topAd.slice(0,4).map(function(a,idx){var trunc=a.name.length>26?a.name.substring(0,24)+"…":a.name;return{name:"#"+(idx+1)+" "+trunc,fullName:a.name,results:a.result,costPer:a.costPer>0?parseFloat(a.costPer.toFixed(2)):0,color:platCol4[a.platform]||P.ember,platform:a.platform};});
-                var AudienceTick=function(props){var payload=props.payload||{};var row=(topChart||[]).filter(function(d){return d.name===payload.value;})[0];var full=row?row.fullName:payload.value;var isX=props.axis==="x";return (<g transform={"translate("+props.x+","+props.y+")"}><title>{full}</title><text x={0} y={0} dy={isX?12:4} textAnchor={isX?"middle":"end"} fill="rgba(255,255,255,0.75)" fontSize={10} fontFamily={fm} fontWeight={600}>{payload.value}</text></g>);};
-                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                  {secHead(P.solar,"TARGETING STANDOUTS",Ic.radar(P.solar,18))}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.mint+"15",border:"1px solid "+P.mint+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.check(P.mint,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>TOP PERFORMERS</span></div>
-                      {topAd.slice(0,4).map(function(ta,ti){
-                        var pc7=platCol4[ta.platform]||P.ember;
-                        return <div key={ti} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",marginBottom:8,background:"linear-gradient(135deg,"+P.mint+"08,transparent)",borderLeft:"3px solid "+P.mint,borderRadius:"0 12px 12px 0",border:"1px solid "+P.mint+"15",borderLeftWidth:3}}>
-                          <span style={{background:pc7,color:"#fff",fontSize:8,fontWeight:800,padding:"3px 10px",borderRadius:8,flexShrink:0,letterSpacing:1}}>{platShort[ta.platform]||ta.platform}</span>
-                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ta.name}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmt(ta.imps)+" impressions | "+ta.ctr.toFixed(2)+"% CTR"}</div></div>
-                          <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm,lineHeight:1}}>{fmt(ta.result)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fR(ta.costPer)+"/ea"}</div></div>
-                        </div>;})}
-                    </div>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:28,height:28,borderRadius:8,background:P.solar+"15",border:"1px solid "+P.solar+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.chart(P.solar,16)}</div><span style={{fontSize:13,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:1}}>BEST AUDIENCES</span></div>
-                      {topChart.length>=2?<div style={{height:280}}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={topChart} layout="vertical" margin={{top:6,right:52,left:0,bottom:6}} barSize={26}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                            <XAxis type="number" tick={{fontSize:11,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
-                            <YAxis type="category" dataKey="name" tick={<AudienceTick/>} axisLine={false} tickLine={false} width={170}/>
-                            <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                            <Bar dataKey="results" name="Results" radius={[0,6,6,0]}>
-                              {topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}
-                              <LabelList dataKey="results" position="right" formatter={function(v){return fmt(v);}} style={lblStyle}/>
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>:<div style={{padding:18,textAlign:"center",color:P.dim,fontSize:11,fontFamily:fm,background:"rgba(0,0,0,0.2)",borderRadius:10}}>Need at least 2 top-performing audiences to render the chart. Let more data accumulate.</div>}
-                    </div>
-                  </div>
-                  {topChart.length>=2&&<div style={{height:320}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>TOP AD SET EFFICIENCY (RESULTS VS COST)</div>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <ComposedChart data={topChart} barSize={36} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={<AudienceTick axis="x"/>} axisLine={false} tickLine={false} interval={0}/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar yAxisId="left" dataKey="results" name="Results" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{topChart.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="results" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar><Line yAxisId="right" type="monotone" dataKey="costPer" name="Cost Per Result" stroke={P.solar} strokeWidth={2} dot={{fill:P.solar,r:4}}><LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyleSm}/></Line></ComposedChart>
-                    </ResponsiveContainer>
-                  </div>}
-                  {(function(){
-                    var wrapStand=function(label,name,suffix,color){return <div title={name||""} style={{flex:1,minWidth:160,background:"rgba(0,0,0,0.25)",border:"1px solid "+color+"30",borderLeft:"3px solid "+color,borderRadius:"0 10px 10px 0",padding:"12px 14px"}}><div style={{fontSize:9,fontWeight:800,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>{label}</div><div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:fm,lineHeight:1.45,whiteSpace:"normal",wordBreak:"break-word"}}>{name}</div>{suffix&&<div style={{fontSize:11,fontWeight:700,color:color,fontFamily:fm,marginTop:4}}>{suffix}</div>}</div>;};
-                    return <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:16}}>
-                      {topAd.length>0?wrapStand("BEST AD SET",topAd[0].name,fR(topAd[0].costPer)+" / result",platCol4[topAd[0].platform]||P.mint):null}
-                      <div style={{flex:1,minWidth:160,background:"rgba(0,0,0,0.25)",border:"1px solid "+P.cyan+"30",borderLeft:"3px solid "+P.cyan,borderRadius:"0 10px 10px 0",padding:"12px 14px"}}><div style={{fontSize:9,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>ACTIVE AD SETS</div><div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:fm}}>{selAdsets2.length}</div></div>
-                      {topAd.length>1?wrapStand("SECOND BEST",topAd[1].name,fR(topAd[1].costPer)+" / result",platCol4[topAd[1].platform]||P.solar):null}
-                    </div>;
-                  })()}
-                </div>;
-              })()}
+              {/* Targeting Standouts block removed from Summary, lives on
+                  the Targeting tab instead. */}
 
-              {/* ═══ 7. COMMUNITY GROWTH ═══ */}
+              {/* ═══ COMMUNITY GROWTH ═══ */}
               {grandT2>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.tt,"COMMUNITY GROWTH",Ic.users(P.tt,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
@@ -2442,6 +2382,126 @@ export default function MediaOnGas(){
                 </div>
                 {(function(){var biggestPlat=communityData.slice().sort(function(a,b){return b.total-a.total;})[0];var fastestGrow=communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})[0];return standRow([biggestPlat?stand("LARGEST FOLLOWER COUNT PLATFORM",biggestPlat.name+", "+fmt(biggestPlat.total),biggestPlat.color):null,fastestGrow?stand("TOP GROWTH THIS PERIOD",fastestGrow.name+", +"+fmt(fastestGrow.earned),fastestGrow.color):null,(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;return earnedTotal>0&&cs>0?stand("COST PER MEMBER",fR(cs/earnedTotal)+" (community spend only)",P.solar):null;})()]);})()}
               </div>}
+
+              {/* ═══ ENGAGEMENT PULSE (mirrors Community tab) ═══ */}
+              {(function(){
+                var types=["love","like","haha","wow","sad","angry","shares","comments"];
+                var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,other:0,shares:0,comments:0};};
+                var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
+                sel.forEach(function(camp){
+                  var plat=camp.platform;
+                  if(plat==="TikTok"){
+                    perPlat.TikTok.like+=parseFloat(camp.likes||0);
+                    perPlat.TikTok.comments+=parseFloat(camp.comments||0);
+                    perPlat.TikTok.shares+=parseFloat(camp.shares||0);
+                  } else if(plat==="Facebook"||plat==="Instagram"){
+                    var bucket=perPlat[plat];
+                    var seen={};
+                    (camp.actions||[]).forEach(function(a){
+                      var at=String(a.action_type||"").toLowerCase();
+                      var v=parseFloat(a.value||0);
+                      if(v>(seen[at]||0))seen[at]=v;
+                    });
+                    var rxn=camp.reactionsByType||{};
+                    var rxnSum=parseFloat(rxn.like||0)+parseFloat(rxn.love||0)+parseFloat(rxn.haha||0)+parseFloat(rxn.wow||0)+parseFloat(rxn.sad||0)+parseFloat(rxn.angry||0);
+                    var totalFromMeta=parseFloat(camp.reactionsTotal||0);
+                    if(rxnSum>0){
+                      bucket.like+=parseFloat(rxn.like||0);
+                      bucket.love+=parseFloat(rxn.love||0);
+                      bucket.haha+=parseFloat(rxn.haha||0);
+                      bucket.wow+=parseFloat(rxn.wow||0);
+                      bucket.sad+=parseFloat(rxn.sad||0);
+                      bucket.angry+=parseFloat(rxn.angry||0);
+                      if(totalFromMeta>rxnSum) bucket.other+=(totalFromMeta-rxnSum);
+                    } else if(totalFromMeta>0) {
+                      bucket.other+=totalFromMeta;
+                    } else {
+                      bucket.like+=(seen.like||0);
+                      bucket.love+=(seen.love||0);
+                      bucket.haha+=(seen.haha||0);
+                      bucket.wow+=(seen.wow||0);
+                      bucket.sad+=(seen.sad||0);
+                      bucket.angry+=(seen.angry||0);
+                    }
+                    bucket.comments+=(seen.comment||0);
+                    bucket.shares+=(seen.post_share||seen.share||seen.post||0);
+                  }
+                });
+                var totals={};
+                types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
+                var totalAll=types.reduce(function(a,t){return a+totals[t];},0);
+                if(totalAll===0)return null;
+                var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry;
+                var positiveSum=totals.love+totals.like+totals.haha+totals.wow;
+                var negativeSum=totals.sad+totals.angry;
+                var classifiedSum=positiveSum+negativeSum;
+                var sentimentPct=classifiedSum>0?(positiveSum/classifiedSum*100):0;
+                var sentColor=sentimentPct>=90?P.mint:sentimentPct>=75?P.cyan:sentimentPct>=50?P.solar:P.rose;
+                var sentLabel=sentimentPct>=90?"OVERWHELMINGLY POSITIVE":sentimentPct>=75?"STRONGLY POSITIVE":sentimentPct>=60?"POSITIVE":sentimentPct>=50?"MIXED":sentimentPct>=30?"NEGATIVE LEAN":"STRONGLY NEGATIVE";
+                var typeMeta={
+                  love:{label:"Love",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose} strokeLinejoin="round"/></svg>},
+                  like:{label:"Like",color:P.fb,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 22V11m0 0V6a3 3 0 014.9-2.3L13 5l-1 5h6a2 2 0 012 2l-2 8a2 2 0 01-2 2H7z" stroke={P.fb} strokeWidth="1.6" fill={P.fb+"25"} strokeLinejoin="round"/></svg>},
+                  haha:{label:"Haha",color:P.solar,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.solar} strokeWidth="1.6" fill={P.solar+"25"}/><path d="M8 10l0 1M16 10l0 1M7 14s2 3 5 3 5-3 5-3" stroke={P.solar} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                  wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
+                  sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                  angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                  shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
+                  comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
+                };
+                var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).sort(function(a,b){return b.value-a.value;});
+                var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
+                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(P.mint,"ENGAGEMENT PULSE",Ic.pulse(P.mint,18))}
+                  <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
+                  <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,marginBottom:14,textAlign:"right"}}>{fmt(totalAll)} total interactions</div>
+                  {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:16}}>
+                      {(function(){
+                        var circ=2*Math.PI*50;
+                        var offset=circ-(sentimentPct/100)*circ;
+                        return <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
+                          <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
+                          <circle cx="60" cy="60" r="50" stroke={sentColor} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
+                          <text x="60" y="58" textAnchor="middle" style={{fontSize:22,fontWeight:900,fill:sentColor,fontFamily:fm}}>{sentimentPct.toFixed(0)+"%"}</text>
+                          <text x="60" y="76" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
+                        </svg>;
+                      })()}
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:800,color:sentColor,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
+                      <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
+                      <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
+                      <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.sub}}>Positive {fmt(positiveSum)}</span></div>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.sub}}>Negative {fmt(negativeSum)}</span></div>
+                      </div>
+                    </div>
+                  </div>}
+                  {rows.map(function(r){
+                    var pct=maxVal>0?(r.value/maxVal*100):0;
+                    var ppParts=[];
+                    if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
+                    if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
+                    if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
+                    var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.dim,margin:"0 4px"}}>·</span>);parted.push(n);});
+                    return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
+                        <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{r.label}</div>
+                          <div style={{fontSize:9,fontFamily:fm,marginTop:2}}>{parted}</div>
+                        </div>
+                      </div>
+                      <div style={{flex:1,height:20,background:"rgba(0,0,0,0.4)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
+                        <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+r.color+"cc,"+r.color+"ff)",borderRadius:10,color:r.color,animation:"barFill 0.8s ease-out, pulseBar 2.8s ease-in-out infinite",transition:"width 0.6s ease-out"}}></div>
+                      </div>
+                      <div style={{minWidth:84,textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:20,fontWeight:900,color:r.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmt(r.value)}</div>
+                      </div>
+                    </div>;
+                  })}
+                </div>;
+              })()}
 
               {/* ═══ TOP 5 ADS PER PLATFORM ═══ */}
               {(function(){
