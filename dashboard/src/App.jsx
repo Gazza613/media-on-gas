@@ -1462,7 +1462,7 @@ function ChatPanel(props){
             {!isUser&&m.attachments&&m.attachments.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,maxWidth:"92%",width:"100%"}}>
               {m.attachments.map(function(ad,ai){
                 var accent=platColors[ad.platform]||P.ember;
-                return <a key={ai} href={ad.previewUrl||ad.thumbnail||"#"} target="_blank" rel="noopener noreferrer" style={{display:"flex",gap:10,background:"rgba(0,0,0,0.35)",border:"1px solid "+accent+"35",borderLeft:"3px solid "+accent,borderRadius:12,padding:10,textDecoration:"none",color:"inherit"}}>
+                return <div key={ai} onClick={function(){if(props.onOpenAd)props.onOpenAd(ad);}} style={{display:"flex",gap:10,background:"rgba(0,0,0,0.35)",border:"1px solid "+accent+"35",borderLeft:"3px solid "+accent,borderRadius:12,padding:10,textDecoration:"none",color:"inherit",cursor:"pointer"}}>
                   <div style={{width:74,height:74,borderRadius:8,flexShrink:0,overflow:"hidden",background:"linear-gradient(135deg,"+accent+"55,"+accent+"10 55%,#0a0618)",position:"relative"}}>
                     {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:800,letterSpacing:1}}>{ad.platform}</div>}
                   </div>
@@ -1474,7 +1474,7 @@ function ChatPanel(props){
                     <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,lineHeight:1.3,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ad.adName}</div>
                     {ad.results>0?<div style={{fontSize:11,color:accent,fontWeight:800,fontFamily:fm}}>{fmt(ad.results)+" "+resultLabel(ad.resultType)+" | "+fR(ad.costPerResult)+" "+costPerLabel(ad.resultType)}</div>:<div style={{fontSize:10,color:P.sub,fontFamily:fm}}>{fR(ad.spend)+" spend | "+ad.ctr.toFixed(2)+"% CTR"}</div>}
                   </div>
-                </a>;
+                </div>;
               })}
             </div>}
             {(isUser||displayContent)&&<div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{isUser?m.content:displayContent}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>}
@@ -1942,7 +1942,7 @@ export default function MediaOnGas(){
     </div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} apiKey={viewToken?"":API_KEY} viewToken={viewToken}/>
-    {!isClient&&<ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected}/>}
+    {!isClient&&<ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected} onOpenAd={setPreviewAd}/>}
 
     {!isClient&&dataWarnings.length>0&&<div style={{maxWidth:1400,margin:"12px auto 0",padding:"12px 18px",background:P.warning+"15",border:"1px solid "+P.warning+"50",borderLeft:"4px solid "+P.warning,borderRadius:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative",zIndex:2}}>
       <div style={{color:P.warning,fontSize:18,flexShrink:0,marginTop:1}}>{"\u26A0"}</div>
@@ -2469,7 +2469,7 @@ export default function MediaOnGas(){
                           {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
                         </div>}
                       </div>
-                      {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
+                      {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                       {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
                         <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabelS(ad.resultType)}</div>
                         <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
@@ -2805,7 +2805,7 @@ export default function MediaOnGas(){
               return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
-                  {ad.thumbnail&&<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"block",zIndex:1}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>}
+                  {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                   {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabel(ad.resultType)}</div>
                     <div style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
@@ -2843,7 +2843,7 @@ export default function MediaOnGas(){
               return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.sub}}>{"#"+rank}</td>
                 <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
-                  {ad.thumbnail?<a href={ad.previewUrl||ad.thumbnail} target="_blank" rel="noopener noreferrer"><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block",cursor:"pointer"}} onError={function(e){e.target.style.display="none";}}/></a>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
+                  {ad.thumbnail?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
@@ -3078,13 +3078,12 @@ export default function MediaOnGas(){
                   var pc=platCol5[ad.platform]||P.ember;
                   var ps=platShort2[ad.platform]||ad.platform;
                   var fm2=fmtMeta(ad.format);
-                  var href=ad.previewUrl||ad.thumbnail||"";
                   var thumbBlock=<div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
                     {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
                     <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:"#fff",fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
                   </div>;
                   return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
-                    {href?<a href={href} target="_blank" rel="noopener noreferrer" style={{display:"block",flexShrink:0}}>{thumbBlock}</a>:thumbBlock}
+                    <div onClick={function(){setPreviewAd(ad);}} style={{display:"block",flexShrink:0,cursor:"pointer"}}>{thumbBlock}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
                       <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
