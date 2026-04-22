@@ -4072,8 +4072,8 @@ export default function MediaOnGas(){
                   // array. TikTok's top-level likes / comments / shares
                   // count here too; TikTok has no love/haha/wow/sad/angry
                   // equivalents so TT likes fold into Like.
-                  var types=["love","like","haha","wow","sad","angry","shares","comments"];
-                  var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,shares:0,comments:0};};
+                  var types=["love","like","haha","wow","sad","angry","other","shares","comments"];
+                  var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,other:0,shares:0,comments:0};};
                   var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
                   sel.forEach(function(camp){
                     var plat=camp.platform;
@@ -4089,22 +4089,30 @@ export default function MediaOnGas(){
                         var v=parseFloat(a.value||0);
                         if(v>(seen[at]||0))seen[at]=v;
                       });
-                      // action_reactions (from the secondary Meta insights call)
-                      // carries the full per-type breakdown. Fall back to the
-                      // main actions[] array if that breakdown is missing,
-                      // which still surfaces Like + an approximation.
                       var rxn=camp.reactionsByType||{};
-                      var hasRxn=(parseFloat(rxn.like||0)+parseFloat(rxn.love||0)+parseFloat(rxn.haha||0)+parseFloat(rxn.wow||0)+parseFloat(rxn.sad||0)+parseFloat(rxn.angry||0))>0;
-                      if(hasRxn){
+                      var rxnSum=parseFloat(rxn.like||0)+parseFloat(rxn.love||0)+parseFloat(rxn.haha||0)+parseFloat(rxn.wow||0)+parseFloat(rxn.sad||0)+parseFloat(rxn.angry||0);
+                      // reactionsTotal = Meta's authoritative post_reaction
+                      // aggregate. If the per-type breakdown came back empty
+                      // or short, the difference goes into an "Other" bucket
+                      // so the client can see the full reaction volume
+                      // without us faking the sub-type distribution.
+                      var totalFromMeta=parseFloat(camp.reactionsTotal||0);
+                      if(rxnSum>0){
                         bucket.like+=parseFloat(rxn.like||0);
                         bucket.love+=parseFloat(rxn.love||0);
                         bucket.haha+=parseFloat(rxn.haha||0);
                         bucket.wow+=parseFloat(rxn.wow||0);
                         bucket.sad+=parseFloat(rxn.sad||0);
                         bucket.angry+=parseFloat(rxn.angry||0);
+                        if(totalFromMeta>rxnSum) bucket.other+=(totalFromMeta-rxnSum);
+                      } else if(totalFromMeta>0) {
+                        // Breakdown unavailable, but post_reaction total is
+                        // known. Show everything as 'Other reactions' so the
+                        // UI is honest about having a total without the split.
+                        bucket.other+=totalFromMeta;
                       } else {
-                        // main actions[] often contains individual reaction
-                        // types too when the account has them.
+                        // Last resort, pull from actions[] if individual
+                        // reaction types happened to surface there.
                         bucket.like+=(seen.like||0);
                         bucket.love+=(seen.love||0);
                         bucket.haha+=(seen.haha||0);
@@ -4113,9 +4121,6 @@ export default function MediaOnGas(){
                         bucket.angry+=(seen.angry||0);
                       }
                       bucket.comments+=(seen.comment||0);
-                      // Shares: Meta uses several action_types depending on
-                      // account / surface. post_share is the current name,
-                      // share and post are legacy variants.
                       bucket.shares+=(seen.post_share||seen.share||seen.post||0);
                     }
                   });
@@ -4123,14 +4128,17 @@ export default function MediaOnGas(){
                   types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
                   var totalAll=types.reduce(function(a,t){return a+totals[t];},0);
                   if(totalAll===0)return null;
-                  // Brand sentiment: reactions only (comments + shares not
-                  // emotion-bearing on their own). Positive = love + like +
-                  // haha + wow. Negative = sad + angry. Score is positive's
-                  // share of all reactions.
-                  var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry;
+                  // Brand sentiment — reactions only, not shares / comments.
+                  // Positive = love + like + haha + wow. Negative = sad + angry.
+                  // 'Other' covers reactions Meta tallied as post_reaction but
+                  // didn't break down by type — neutral-weighted in the ratio
+                  // so we don't bias the score either way.
+                  var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry+totals.other;
                   var positiveSum=totals.love+totals.like+totals.haha+totals.wow;
                   var negativeSum=totals.sad+totals.angry;
-                  var sentimentPct=reactionSum>0?(positiveSum/reactionSum*100):0;
+                  var classifiedSum=positiveSum+negativeSum;
+                  var sentimentPct=classifiedSum>0?(positiveSum/classifiedSum*100):0;
+                  var hasUnclassified=totals.other>0;
                   var sentColor=sentimentPct>=90?P.mint:sentimentPct>=75?P.cyan:sentimentPct>=50?P.solar:P.rose;
                   var sentLabel=sentimentPct>=90?"OVERWHELMINGLY POSITIVE":sentimentPct>=75?"STRONGLY POSITIVE":sentimentPct>=60?"POSITIVE":sentimentPct>=50?"MIXED":sentimentPct>=30?"NEGATIVE LEAN":"STRONGLY NEGATIVE";
                   var typeMeta={
@@ -4140,6 +4148,7 @@ export default function MediaOnGas(){
                     wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
                     sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                    other:{label:"Other Reactions",color:P.sub,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.sub} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.sub}/><circle cx="15" cy="11" r="1" fill={P.sub}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.sub} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                     comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                   };
@@ -4172,10 +4181,11 @@ export default function MediaOnGas(){
                       <div>
                         <div style={{fontSize:10,fontWeight:800,color:sentColor,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
                         <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
-                        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive reactions (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(reactionSum)} total reactions.</div>
-                        <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm}}>
+                        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions{hasUnclassified?". Plus "+fmt(totals.other)+" reactions Meta reported as a total without a per-type breakdown, excluded from the ratio":""}.</div>
+                        <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
                           <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.sub}}>Positive {fmt(positiveSum)}</span></div>
                           <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.sub}}>Negative {fmt(negativeSum)}</span></div>
+                          {hasUnclassified&&<div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.sub}}></span><span style={{color:P.sub}}>Unclassified {fmt(totals.other)}</span></div>}
                         </div>
                       </div>
                     </div>}

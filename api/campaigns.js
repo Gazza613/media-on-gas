@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v8-action-reactions-secondary";
+var CAMPAIGNS_CACHE_VERSION = "v9-reactions-total";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -214,7 +214,7 @@ export default async function handler(req, res) {
             return objectiveFromName(c.campaign_name || "");
           })();
 
-          var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0;
+          var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0, reactionsTotal = 0;
           if (c.actions) {
             for (var a = 0; a < c.actions.length; a++) {
               var act = c.actions[a];
@@ -234,6 +234,10 @@ export default async function handler(req, res) {
               if (act.action_type === "page_like") pageLikes = Math.max(pageLikes, parseInt(act.value));
               if (act.action_type === "like") reactionLikes = Math.max(reactionLikes, parseInt(act.value));
               if (act.action_type === "page_engagement") pageFollows = Math.max(pageFollows, parseInt(act.value));
+              // Authoritative total post reactions (all types combined).
+              // Used as a confidence check against the per-type breakdown
+              // from the action_reactions secondary call.
+              if (act.action_type === "post_reaction") reactionsTotal = Math.max(reactionsTotal, parseInt(act.value));
             }
           }
           // Fold reactions into page likes for any follower-family campaign
@@ -256,7 +260,8 @@ export default async function handler(req, res) {
               _sumImpressions: 0, _sumSpend: 0, _sumClicks: 0, _sumReachPublisher: 0,
               leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, pageFollows: 0,
               actions: [],
-              reactionsByType: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 }
+              reactionsByType: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+              reactionsTotal: 0
             };
           }
           var row = rowMap[uniqueId];
@@ -269,6 +274,7 @@ export default async function handler(req, res) {
           row.landingPageViews = Math.max(row.landingPageViews, landingPageViews);
           row.pageLikes = Math.max(row.pageLikes, pageLikes);
           row.pageFollows = Math.max(row.pageFollows, pageFollows);
+          row.reactionsTotal += reactionsTotal;
           if (c.actions) row.actions = row.actions.concat(c.actions);
         }
       }
@@ -285,10 +291,21 @@ export default async function handler(req, res) {
         while (rxnNext && rxnGuard < 10) {
           rxnGuard++;
           var rxnPageRes = await fetch(rxnNext);
-          if (!rxnPageRes.ok) break;
+          if (!rxnPageRes.ok) {
+            var errText = await rxnPageRes.text();
+            console.warn("[action_reactions] non-ok response", account.name, rxnPageRes.status, errText.substring(0, 300));
+            break;
+          }
           var rxnPageData = await rxnPageRes.json();
           if (rxnPageData.data) rxnRows = rxnRows.concat(rxnPageData.data);
           rxnNext = rxnPageData.paging && rxnPageData.paging.next ? rxnPageData.paging.next : null;
+        }
+        // Log a sample so we can verify Meta is returning the full reaction
+        // breakdown (like, love, haha, wow, sad, angry) and not just 'like'.
+        if (rxnRows.length > 0) {
+          var sample = rxnRows.find(function(r) { return r.action_reactions && r.action_reactions.length > 0; });
+          if (sample) console.log("[action_reactions] sample from " + account.name + ":", JSON.stringify(sample.action_reactions));
+          else console.log("[action_reactions] " + account.name + ": " + rxnRows.length + " rows but none had action_reactions populated");
         }
         rxnRows.forEach(function(rr) {
           if (!rr.action_reactions || !Array.isArray(rr.action_reactions)) return;
@@ -297,7 +314,6 @@ export default async function handler(req, res) {
           if (rawPub === "instagram" || rawPub === "threads") pub = "instagram";
           else if (rawPub === "facebook" || rawPub === "audience_network" || rawPub === "messenger" || rawPub === "oculus") pub = "facebook";
           else return;
-          var keyRx = pub.charAt(0).toUpperCase() + pub.slice(1);
           var uniqueIdRx = rr.campaign_id + "_" + pub;
           var row = rowMap[uniqueIdRx];
           if (!row) return;
@@ -362,6 +378,7 @@ export default async function handler(req, res) {
           costPerInstall: r.appInstalls > 0 ? (r._sumSpend / r.appInstalls).toFixed(2) : "0",
           actions: r.actions || [],
           reactionsByType: r.reactionsByType || { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+          reactionsTotal: r.reactionsTotal || 0,
           startDate: _info.startTime ? _info.startTime.substring(0,10) : "",
           endDate: _info.stopTime ? _info.stopTime.substring(0,10) : "",
           status: _info.status ? _info.status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active",
