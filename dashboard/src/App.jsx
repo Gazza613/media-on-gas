@@ -2257,8 +2257,15 @@ export default function MediaOnGas(){
             // value on Summary KPI tiles when compareMode is on. Higher is
             // better for most metrics (green up), invertColor=true flips
             // that for lower-is-better metrics like CPC / CPM / CPL.
+            // Loading state: if the comparison fetch hasn't populated
+            // compareComputed yet, show a muted 'MoM' / 'WoW' placeholder
+            // so the tile isn't flashing 'NEW' while prior data arrives.
             var deltaChip=function(cur,prev,invertColor){
               if(compareMode==="off")return null;
+              if(!compareComputed){
+                var pendingLabel=compareMode==="mom"?"MoM":"WoW";
+                return <span style={{fontSize:9,fontWeight:800,color:P.sub,background:P.sub+"20",border:"1px dashed "+P.sub+"55",padding:"1px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm,marginLeft:6,verticalAlign:"middle",opacity:0.8}}>{pendingLabel}</span>;
+              }
               cur=parseFloat(cur||0);prev=parseFloat(prev||0);
               if(prev===0&&cur===0)return null;
               if(prev===0)return <span style={{fontSize:8,fontWeight:800,color:P.solar,background:P.solar+"22",padding:"2px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm,marginLeft:6,verticalAlign:"middle"}}>NEW</span>;
