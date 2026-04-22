@@ -4017,21 +4017,21 @@ export default function MediaOnGas(){
               var ttTotal=(function(){var selNames2=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames2,ttEarned);})();var grandTotal=fbTotal+igTotal+ttTotal;
               return <div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
-                  <Glass accent={P.fb} hv={true} st={{padding:22}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.fb}}></span><span style={{fontSize:11,fontWeight:700,color:P.fb,fontFamily:fm}}>FACEBOOK</span></div>
-                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:"rgba(255,255,255,0.6)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL FOLLOWERS</div><div style={{fontSize:36,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(fbTotal)}</div></div>
-                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>EARNED THIS PERIOD</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(fbEarned)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOWER</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{fbEarned>0?fR(fbSpend/fbEarned):"-"}</div></div></div>
-                  </Glass>
-                  <Glass accent={P.ig} hv={true} st={{padding:22}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.ig}}></span><span style={{fontSize:11,fontWeight:700,color:P.ig,fontFamily:fm}}>INSTAGRAM</span></div>
-                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:"rgba(255,255,255,0.6)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL FOLLOWERS</div><div style={{fontSize:36,fontWeight:900,color:P.ig,fontFamily:fm}}>{fmt(igTotal)}</div></div>
-                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>EARNED THIS PERIOD</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(igEarned)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOW</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{igEarned>0?fR(igSpend/igEarned):"-"}</div></div></div>
-                  </Glass>
-                  <Glass accent={P.tt} hv={true} st={{padding:22}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:P.tt}}></span><span style={{fontSize:11,fontWeight:700,color:P.tt,fontFamily:fm}}>TIKTOK</span></div>
-                    <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:"rgba(255,255,255,0.6)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL FOLLOWERS</div><div style={{fontSize:36,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt((function(){var selNames=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames,ttEarned);})())}</div></div>
-                    <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>EARNED THIS PERIOD</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(ttEarned)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>COST PER FOLLOW</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{ttEarned>0?fR(ttSpend/ttEarned):"-"}</div></div></div>
-                  </Glass>
+                  {(function(){
+                    var ttTotalResolved=(function(){var selNames=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames,ttEarned);})();
+                    var boxes=[
+                      {name:"FACEBOOK",color:P.fb,total:fbTotal,earned:fbEarned,spend:fbSpend,costLabel:"COST PER FOLLOWER"},
+                      {name:"INSTAGRAM",color:P.ig,total:igTotal,earned:igEarned,spend:igSpend,costLabel:"COST PER FOLLOW"},
+                      {name:"TIKTOK",color:P.tt,total:ttTotalResolved,earned:ttEarned,spend:ttSpend,costLabel:"COST PER FOLLOW"}
+                    ].sort(function(a,b){return b.total-a.total;});
+                    return boxes.map(function(b){
+                      return <Glass key={b.name} accent={b.color} hv={true} st={{padding:22}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:b.color}}></span><span style={{fontSize:11,fontWeight:700,color:b.color,fontFamily:fm}}>{b.name}</span></div>
+                        <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:"rgba(255,255,255,0.6)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL FOLLOWERS</div><div style={{fontSize:36,fontWeight:900,color:b.color,fontFamily:fm}}>{fmt(b.total)}</div></div>
+                        <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>EARNED THIS PERIOD</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>+{fmt(b.earned)}</div></div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>{b.costLabel}</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{b.earned>0?fR(b.spend/b.earned):"-"}</div></div></div>
+                      </Glass>;
+                    });
+                  })()}
                 </div>
                 <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
                   <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
