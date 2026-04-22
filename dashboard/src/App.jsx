@@ -1984,7 +1984,7 @@ export default function MediaOnGas(){
     tiktok:{cpm:{low:4,mid:8,high:15,label:"R4-R15"},cpc:{low:0.01,mid:0.05,high:0.20,label:"R0.01-R0.20"},cpf:{low:1.0,mid:2.5,high:5.0,label:"R1-R5"}},
     google:{cpm:{low:8,mid:15,high:30,label:"R8-R30"},cpc:{low:1.0,mid:3.0,high:6.0,label:"R1-R6"}}
   };
-  var benchLabel=function(val,bm){if(!bm)return"";if(val<=bm.low)return"well below the SA benchmark ("+bm.label+")";if(val<=bm.mid)return"within the efficient range of the SA benchmark ("+bm.label+")";if(val<=bm.high)return"at the upper end of the SA benchmark ("+bm.label+")";return"above the SA benchmark range ("+bm.label+")";};
+  var benchLabel=function(val,bm){if(!bm)return"";if(val<=bm.low)return"well below the industry benchmark ("+bm.label+")";if(val<=bm.mid)return"within the efficient range of the industry benchmark ("+bm.label+")";if(val<=bm.high)return"at the upper end of the industry benchmark ("+bm.label+")";return"above the industry benchmark range ("+bm.label+")";};
   var daysBetween=function(a,b){return Math.max(1,Math.round((new Date(b)-new Date(a))/86400000)+1);};
   // "Today" in Africa/Johannesburg (UTC+2) rather than UTC. Prevents the pacing % from
   // shifting by a day between 22:00-23:59 local time when UTC date rolls over first.
@@ -2009,6 +2009,9 @@ export default function MediaOnGas(){
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
   }
   useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
+  // Scroll to top whenever the tab changes so each page lands cleanly
+  // at its header rather than wherever the previous scroll position was.
+  useEffect(function(){try{window.scrollTo({top:0,behavior:"smooth"});}catch(_){window.scrollTo(0,0);}},[tab]);
 
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}>
     <div style={{width:42,height:42,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
@@ -2417,8 +2420,8 @@ export default function MediaOnGas(){
                 {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS",Ic.bolt(P.mint,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"SA benchmark: 0.9\u20131.4%"}</div></Glass>
-                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"SA benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
+                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
@@ -2569,7 +2572,7 @@ export default function MediaOnGas(){
                 var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).sort(function(a,b){return b.value-a.value;});
                 var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                  {secHead(P.mint,"ENGAGEMENT PULSE",Ic.pulse(P.mint,18))}
+                  {secHead(P.mint,"BRAND PULSE",Ic.pulse(P.mint,18))}
                   <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
                   <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,marginBottom:14,textAlign:"right"}}>{fmt(totalAll)} total interactions</div>
                   {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
@@ -2852,9 +2855,9 @@ export default function MediaOnGas(){
                 var ctrQuality=blCtr>=2.0?"exceptionally strong, well above":blCtr>=1.4?"outstanding, clearly above":blCtr>=0.9?"healthy and within":"steady and close to";
                 var freqMessage=blFreq>=2&&blFreq<=3?"a balanced level that helps people remember the brand without feeling over-exposed":blFreq>3&&blFreq<=4?"building strong memorability as the same audience sees the message more than once":blFreq>4?"delivering very high recall as the audience sees the message multiple times":"still building early frequency as awareness ramps up";
 
-                var awarenessRead="Across the selected period, your campaigns delivered "+fmt(computed.totalImps)+" impressions to an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people, confirming meaningful brand presence in market. The blended cost to reach 1,000 ads served sits at "+fR(computed.blendedCpm)+" which reflects "+cpmQuality+" against the South African benchmark."+(bestCpmPlat&&sortedPlats.length>1?" "+bestCpmPlat+" emerged as the most cost-efficient reach platform, stretching every rand of awareness budget further than the rest.":"")+(blFreq>0?" The average person who saw your ads viewed them "+blFreq.toFixed(2)+" times on average across Meta and TikTok, "+freqMessage+".":"");
+                var awarenessRead="Across the selected period, your campaigns delivered "+fmt(computed.totalImps)+" impressions to an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people, confirming meaningful brand presence in market. The blended cost to reach 1,000 ads served sits at "+fR(computed.blendedCpm)+" which reflects "+cpmQuality+" against the industry benchmark."+(bestCpmPlat&&sortedPlats.length>1?" "+bestCpmPlat+" emerged as the most cost-efficient reach platform, stretching every rand of awareness budget further than the rest.":"")+(blFreq>0?" The average person who saw your ads viewed them "+blFreq.toFixed(2)+" times on average across Meta and TikTok, "+freqMessage+".":"");
 
-                var engagementRead="The audience responded actively with "+fmt(computed.totalClicks)+" clicks, converting "+blCtr.toFixed(2)+"% of impressions into real engagement. That click-through rate is "+ctrQuality+" the SA benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through and earning genuine attention. The blended cost per click of "+fR(blCpc)+" demonstrates efficient value for every user action."+(bestCpcPlatLocal?" "+bestCpcPlatLocal+" is the most cost-efficient click driver at "+fR(bestCpcValLocal)+" per click, amplifying the impact of engagement spend.":"");
+                var engagementRead="The audience responded actively with "+fmt(computed.totalClicks)+" clicks, converting "+blCtr.toFixed(2)+"% of impressions into real engagement. That click-through rate is "+ctrQuality+" the industry benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through and earning genuine attention. The blended cost per click of "+fR(blCpc)+" demonstrates efficient value for every user action."+(bestCpcPlatLocal?" "+bestCpcPlatLocal+" is the most cost-efficient click driver at "+fR(bestCpcValLocal)+" per click, amplifying the impact of engagement spend.":"");
 
                 var objectiveRead=(function(){
                   var lines=[];
@@ -2862,7 +2865,7 @@ export default function MediaOnGas(){
                     var od=objectives4[objName];
                     var cp=od.results>0?od.spend/od.results:0;
                     var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
-                    var verdict=cp>0&&bm?(cp<=bm.low?"top-quartile efficiency":cp<=bm.mid?"a healthy, efficient cost in line with SA benchmarks":cp<=bm.high?"a steady cost within benchmark range":"a cost tracking just above benchmark midpoint"):"";
+                    var verdict=cp>0&&bm?(cp<=bm.low?"top-quartile efficiency":cp<=bm.mid?"a healthy, efficient cost in line with industry benchmarks":cp<=bm.high?"a steady cost within benchmark range":"a cost tracking just above benchmark midpoint"):"";
                     if(objName==="Leads"&&od.results>0){
                       lines.push("Lead Generation produced "+fmt(od.results)+" qualified leads at "+fR(cp)+" per lead"+(verdict?", "+verdict:"")+". Each lead represents a genuine prospect who chose to share their contact details, the highest-value first-party signal in the entire funnel.");
                     } else if(objName==="Clicks to App Store"&&od.results>0){
@@ -2951,8 +2954,8 @@ export default function MediaOnGas(){
                 var cpmQ=computed.blendedCpm<=benchmarks.meta.cpm.low?"well below":computed.blendedCpm<=benchmarks.meta.cpm.mid?"within":computed.blendedCpm<=benchmarks.meta.cpm.high?"within the upper band of":"just above";
                 var ctrQ=blCtr>=2?"markedly above":blCtr>=1.4?"above":blCtr>=0.9?"within":"close to";
                 parts.push("Over the selected period, "+fR(computed.totalSpend)+" has been invested across "+sortedPlats.length+" platforms, delivering a consistent daily run rate of "+fR(dailySpend)+" and an expected total investment of "+fR(projSpend)+" by period end.");
-                parts.push("The campaigns reached an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people with "+fmt(computed.totalImps)+" impressions, keeping cost to reach 1,000 ads served at "+fR(computed.blendedCpm)+", "+cpmQ+" the South African benchmark.");
-                parts.push("Engagement is tracking "+ctrQ+" the SA benchmark on click-through rate ("+blCtr.toFixed(2)+"% vs 0.9 to 1.4%), with a blended cost per click of "+fR(blCpc)+" reflecting efficient value for every user action.");
+                parts.push("The campaigns reached an estimated "+fmt(m.reach+t.reach+computed.gd.reach)+" unique people with "+fmt(computed.totalImps)+" impressions, keeping cost to reach 1,000 ads served at "+fR(computed.blendedCpm)+", "+cpmQ+" the industry benchmark.");
+                parts.push("Engagement is tracking "+ctrQ+" the industry benchmark on click-through rate ("+blCtr.toFixed(2)+"% vs 0.9 to 1.4%), with a blended cost per click of "+fR(blCpc)+" reflecting efficient value for every user action.");
                 var activeO=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
                 if(activeO.length>0){var topO=activeO.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var tot=0;activeO.forEach(function(k){tot+=objectives4[k].results;});parts.push("Objective delivery produced "+fmt(tot)+" measurable results across "+activeO.length+" objective area"+(activeO.length===1?"":"s")+", with "+topO+" leading on total volume this period.");}
                 if(bestCpmPlat&&worstCpmPlat&&bestCpmPlat!==worstCpmPlat)parts.push(bestCpmPlat+" is the most cost-efficient platform for reach across the media mix, while the broader platform split ensures the audience encounters the brand in multiple environments.");
@@ -3240,7 +3243,7 @@ export default function MediaOnGas(){
                 var bm=sec.bench;
                 var verdict="";
                 if(totals.cpr>0&&bm){
-                  if(totals.cpr<=bm.low)verdict="WELL BELOW SA BENCHMARK";
+                  if(totals.cpr<=bm.low)verdict="WELL BELOW INDUSTRY BENCHMARK";
                   else if(totals.cpr<=bm.mid)verdict="WITHIN BENCHMARK RANGE";
                   else if(totals.cpr<=bm.high)verdict="ABOVE BENCHMARK MIDPOINT";
                   else verdict="ABOVE BENCHMARK CEILING";
@@ -3502,7 +3505,7 @@ export default function MediaOnGas(){
                           }
                           // L4: benchmark read
                           if(o.totals.cpr>0&&bm){
-                            var bVerd=o.totals.cpr<=bm.low?"well below the SA benchmark floor ("+fR(bm.low)+"), top-quartile efficiency":o.totals.cpr<=bm.mid?"inside the SA benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+"), performing to standard":o.totals.cpr<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+"), room to tighten":"above the SA benchmark ceiling ("+fR(bm.high)+"), red flag, revisit targeting and creative hooks";
+                            var bVerd=o.totals.cpr<=bm.low?"well below the industry benchmark floor ("+fR(bm.low)+"), top-quartile efficiency":o.totals.cpr<=bm.mid?"inside the industry benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+"), performing to standard":o.totals.cpr<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+"), room to tighten":"above the industry benchmark ceiling ("+fR(bm.high)+"), red flag, revisit targeting and creative hooks";
                             lines.push("Blended "+sec.costLabel+" at "+fR(o.totals.cpr)+" is "+bVerd+".");
                           }
                           // L5: format mix insight
@@ -3544,7 +3547,7 @@ export default function MediaOnGas(){
                       });
                       if(objRanked.length>=2){
                         var best=objRanked[0],worst=objRanked[objRanked.length-1];
-                        lines.push("Objective efficiency ranking (vs SA benchmark midpoint): "+objRanked.map(function(o){var bm=o.sec.bench;var r=bm?(o.totals.cpr/bm.mid):0;return o.sec.label+" "+(r>0?(r<1?"-":"+")+Math.round(Math.abs(1-r)*100)+"%":"n/a");}).join(" | ")+". Strongest: "+best.sec.label+". Weakest: "+worst.sec.label+".");
+                        lines.push("Objective efficiency ranking (vs industry benchmark midpoint): "+objRanked.map(function(o){var bm=o.sec.bench;var r=bm?(o.totals.cpr/bm.mid):0;return o.sec.label+" "+(r>0?(r<1?"-":"+")+Math.round(Math.abs(1-r)*100)+"%":"n/a");}).join(" | ")+". Strongest: "+best.sec.label+". Weakest: "+worst.sec.label+".");
                       }
                       // Platform-objective fit
                       var fits=[];

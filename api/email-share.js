@@ -331,7 +331,7 @@ function renderCommentaryBlock(summary) {
 
   // Engagement paragraph
   var ctrQuality = g.ctr >= 2.0 ? "exceptionally strong, well above" : g.ctr >= 1.4 ? "outstanding, clearly above" : g.ctr >= 0.9 ? "healthy and within" : "steady and close to";
-  var engagementText = "The audience responded actively with <strong>" + fmtNum(g.clicks) + "</strong> clicks, converting " + fmtPct(g.ctr) + " of ads served into genuine engagement. That click-through rate is " + ctrQuality + " the SA benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through. A blended cost per click of <strong>" + fmtR(g.cpc) + "</strong> demonstrates efficient value for every user action.";
+  var engagementText = "The audience responded actively with <strong>" + fmtNum(g.clicks) + "</strong> clicks, converting " + fmtPct(g.ctr) + " of ads served into genuine engagement. That click-through rate is " + ctrQuality + " the industry benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through. A blended cost per click of <strong>" + fmtR(g.cpc) + "</strong> demonstrates efficient value for every user action.";
   paras.push(engagementText);
 
   // Outcomes paragraph (only if results exist). Must mirror the tile logic

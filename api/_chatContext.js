@@ -1,6 +1,6 @@
 // Build the rich campaign-data context string the AI analyst reasons over.
 // Anti-hallucination principle: pack in actual numbers (not vague descriptions) plus
-// SA benchmarks, so every claim the AI makes can be grounded in this block.
+// industry benchmarks, so every claim the AI makes can be grounded in this block.
 
 function fmtNum(n) {
   n = parseFloat(n) || 0;
@@ -342,7 +342,7 @@ export async function buildChatContext(req, from, to, principal) {
     lines.push("");
   }
 
-  lines.push("## South African paid media benchmarks (for comparison only, use these to say whether something is good/healthy/above-range)");
+  lines.push("## Industry paid media benchmarks (for comparison only, use these to say whether something is good/healthy/above-range)");
   lines.push("Meta (Facebook + Instagram):");
   lines.push("- CPM healthy range: R12 to R25");
   lines.push("- CPC healthy range: R0.80 to R3.00");
