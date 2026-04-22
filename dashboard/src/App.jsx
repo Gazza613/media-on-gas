@@ -841,14 +841,14 @@ function ShareModal(props){
             {auditLoading[0]&&<div style={{color:P.sub,fontSize:11,fontFamily:fm,padding:"16px 4px"}}>Loading send log...</div>}
             {!auditLoading[0]&&filteredAudit.length===0&&<div style={{color:P.dim,fontSize:11,fontFamily:fm,padding:"18px 4px",textAlign:"center",fontStyle:"italic"}}>{auditEntries[0].length===0?"No emails sent yet. Send your first report to start the log.":"No matches for that search."}</div>}
             {!auditLoading[0]&&filteredAudit.length>0&&<div style={{maxHeight:420,overflowY:"auto",overflowX:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.25)"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:700}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
                 <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
                   <tr>
-                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Sent</th>
-                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Client</th>
-                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Sender</th>
-                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>To</th>
-                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Period</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,whiteSpace:"nowrap"}}>Client</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,whiteSpace:"nowrap"}}>To</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,whiteSpace:"nowrap"}}>Sent</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,whiteSpace:"nowrap"}}>Sender</th>
+                    <th style={{padding:"9px 10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,whiteSpace:"nowrap"}}>Period</th>
                     <th style={{padding:"9px 10px",textAlign:"right",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,width:40}}></th>
                   </tr>
                 </thead>
@@ -856,16 +856,18 @@ function ShareModal(props){
                   {filteredAudit.map(function(e,i){
                     var recipients=[].concat(e.to||[]).join(", ")||"—";
                     var periodTxt=(e.fromDate||"—")+" to "+(e.toDate||"—");
-                    var clientTxt=e.clientName||(e.clientSlug?e.clientSlug.split("-").map(function(w){return w.toUpperCase();}).join(" "):"Unknown");
+                    // Show the raw client slug in the first column (falls
+                    // back to clientName / 'Unknown' when slug missing).
+                    var slugTxt=e.clientSlug?e.clientSlug.split("-").map(function(w){return w.toUpperCase();}).join(" "):(e.clientName||"Unknown");
                     var extras=[];
                     if(e.cc&&e.cc.length>0)extras.push("cc: "+e.cc.join(", "));
                     if(e.bcc&&e.bcc.length>0)extras.push("bcc: "+e.bcc.join(", "));
                     return <tr key={e.id||i} style={{borderBottom:"1px solid "+P.rule+"50"}}>
+                      <td style={{padding:"10px",color:P.ember,fontWeight:700,verticalAlign:"top",whiteSpace:"nowrap"}}>{slugTxt}</td>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{recipients}{extras.length>0?<div style={{color:P.dim,fontSize:9,marginTop:3,whiteSpace:"nowrap"}}>{extras.join("  |  ")}</div>:null}</td>
                       <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{fmtDate(e.sentAt)}</td>
-                      <td style={{padding:"10px",color:P.ember,fontWeight:700,verticalAlign:"top"}}>{clientTxt}</td>
-                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{e.senderName||"—"}{e.senderTitle?<div style={{color:P.dim,fontSize:9,marginTop:2}}>{e.senderTitle}</div>:null}</td>
-                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",wordBreak:"break-all"}}>{recipients}{extras.length>0?<div style={{color:P.dim,fontSize:9,marginTop:3}}>{extras.join("  |  ")}</div>:null}</td>
-                      <td style={{padding:"10px",color:P.sub,verticalAlign:"top",whiteSpace:"nowrap"}}>{periodTxt}{e.campaignCount?<div style={{color:P.dim,fontSize:9,marginTop:2}}>{e.campaignCount+" campaign"+(e.campaignCount===1?"":"s")}</div>:null}</td>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{e.senderName||"—"}{e.senderTitle?<div style={{color:P.dim,fontSize:9,marginTop:2,whiteSpace:"nowrap"}}>{e.senderTitle}</div>:null}</td>
+                      <td style={{padding:"10px",color:P.sub,verticalAlign:"top",whiteSpace:"nowrap"}}>{periodTxt}{e.campaignCount?<div style={{color:P.dim,fontSize:9,marginTop:2,whiteSpace:"nowrap"}}>{e.campaignCount+" campaign"+(e.campaignCount===1?"":"s")}</div>:null}</td>
                       <td style={{padding:"10px",textAlign:"right",verticalAlign:"top"}}><button onClick={function(){deleteAuditEntry(e.id);}} title="Delete this entry" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.dim,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}} onMouseEnter={function(ev){ev.currentTarget.style.borderColor=P.critical;ev.currentTarget.style.color=P.critical;}} onMouseLeave={function(ev){ev.currentTarget.style.borderColor=P.rule;ev.currentTarget.style.color=P.dim;}}>{"\u00D7"}</button></td>
                     </tr>;
                   })}
