@@ -254,24 +254,42 @@ function AdPreviewModal(props){
   // Hooks must be called unconditionally on every render, so keep them
   // ahead of any early return.
   var vs=useState(null),videoSrc=vs[0],setVideoSrc=vs[1];
+  var ve=useState(null),videoErr=ve[0],setVideoErr=ve[1];
   var ad=props.ad;
   var format=((ad&&ad.format)||"STATIC").toUpperCase();
   var isVideo=format==="MP4"||format==="VIDEO";
+  var isText=format==="TEXT";
   var platformLow=((ad&&ad.platform)||"").toLowerCase();
   var platformKey=platformLow.indexOf("instagram")>=0||platformLow.indexOf("facebook")>=0?"meta":platformLow.indexOf("tiktok")>=0?"tiktok":platformLow.indexOf("youtube")>=0||(ad&&ad.youtubeId)?"youtube":"other";
   var campaignIdParam=String((ad&&ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
   useEffect(function(){
     setVideoSrc(null);
+    setVideoErr(null);
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
     var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
     var url=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQ+"&resolveOnly=1";
     var cancelled=false;
-    fetch(url).then(function(r){return r.ok?r.json():null;}).then(function(d){
-      if(!cancelled&&d&&d.url)setVideoSrc(d.url);
-    }).catch(function(){});
-    return function(){cancelled=true;};
+    // 15 second timeout — if the platform API is slow or the creative was
+    // archived we'd rather show an error than leave the user staring at a
+    // spinner forever.
+    var timer=setTimeout(function(){if(!cancelled)setVideoErr("timeout");},15000);
+    var httpStatus=null;
+    fetch(url).then(function(r){
+      if(!r.ok){httpStatus=r.status;return null;}
+      return r.json();
+    }).then(function(d){
+      if(cancelled)return;
+      clearTimeout(timer);
+      if(d&&d.url)setVideoSrc(d.url);
+      else setVideoErr(httpStatus?("http_"+httpStatus):"no_url");
+    }).catch(function(){
+      if(cancelled)return;
+      clearTimeout(timer);
+      setVideoErr("network");
+    });
+    return function(){cancelled=true;clearTimeout(timer);};
   },[ad&&ad.adId,ad&&ad.videoId,isVideo,platformKey]);
   if(!props.ad)return null;
   var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
@@ -292,8 +310,16 @@ function AdPreviewModal(props){
   }
   var imageSrc=proxyImage||ad.thumbnail||"";
 
+  var placeholder=function(title,sub){
+    return <div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:"linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%)",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:"#fff",padding:"28px 24px",textAlign:"center",gap:10}}>
+      <div style={{fontSize:14,fontFamily:fm,letterSpacing:2,fontWeight:800}}>{title}</div>
+      {sub&&<div style={{fontSize:11,fontFamily:fm,color:"rgba(255,255,255,0.7)",letterSpacing:0.5,lineHeight:1.5,maxWidth:400}}>{sub}</div>}
+    </div>;
+  };
   var mediaBlock=null;
-  if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
+  if(isText){
+    mediaBlock=placeholder("TEXT AD","Search campaigns use headline/description copy only, no visual creative is uploaded.");
+  } else if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
     mediaBlock=<iframe title="Ad preview" src={"https://www.youtube.com/embed/"+encodeURIComponent(ad.youtubeId)} style={{width:"100%",aspectRatio:"16/9",border:"none",borderRadius:10,background:"#000"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>;
   } else if(isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId){
     // Video src is resolved asynchronously via the useEffect above and set
@@ -302,6 +328,9 @@ function AdPreviewModal(props){
     // redirect reliably.
     if(videoSrc){
       mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
+    } else if(videoErr){
+      var errMsg=videoErr==="timeout"?"Video took too long to load.":videoErr==="network"?"Network error fetching video.":videoErr==="http_404"?"Creative may have been archived on the platform.":"Video could not be loaded.";
+      mediaBlock=placeholder("VIDEO UNAVAILABLE",errMsg);
     } else {
       mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:imageSrc?("url("+imageSrc+") center/contain no-repeat #000"):"#000",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontFamily:fm,letterSpacing:2,fontWeight:800}}><div style={{background:"rgba(0,0,0,0.6)",padding:"10px 18px",borderRadius:8,letterSpacing:3}}>LOADING VIDEO…</div></div>;
     }
@@ -316,7 +345,7 @@ function AdPreviewModal(props){
       if(e.target&&e.target.parentNode)e.target.parentNode.replaceChild(fallback,e.target);
     }} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",borderRadius:10,display:"block"}}/>;
   } else {
-    mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",background:"linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontFamily:fm,letterSpacing:2,fontWeight:800}}>NO PREVIEW AVAILABLE</div>;
+    mediaBlock=placeholder("NO PREVIEW AVAILABLE","This ad format doesn't have a downloadable creative asset.");
   }
 
   var results=parseFloat(ad.results||0);
