@@ -1938,7 +1938,7 @@ export default function MediaOnGas(){
     // tab state from admin mode cannot leak through.
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)}];
   } else {
-    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
   }
   useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
 
