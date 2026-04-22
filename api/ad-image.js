@@ -12,35 +12,87 @@ var resolveCache = {};
 var RESOLVE_TTL_MS = 10 * 60 * 1000;
 
 async function resolveMetaAdThumbnail(adId, token) {
-  // Fetch the creative block, then walk every field that can carry a
-  // thumbnail / preview image. Same fallback chain the dashboard uses
-  // when first fetching ads.
-  var fields = "id,thumbnail_url,image_url,effective_object_story_id,video_id,asset_feed_spec,object_story_spec";
-  var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=creative{" + fields + "}&access_token=" + token;
+  // Order matters: try every HIGH-RES source first, only fall back to
+  // thumbnail_url at the very end. Meta's thumbnail_url is typically
+  // 64–192px which looks blurry when displayed at modal size.
+  //   1. Video: largest entry in thumbnails[] > picture
+  //   2. Post's full_picture (via effective_object_story_id) — original upload
+  //   3. Creative image_hash resolved to the adaccount's /adimages url
+  //   4. asset_feed_spec.images[].url (full-size DCO assets)
+  //   5. creative.image_url (full-size when available)
+  //   6. object_story_spec.link_data.picture
+  //   7. creative.thumbnail_url (last resort, low-res)
+  var fields = "id,thumbnail_url,image_url,effective_object_story_id,video_id,image_hash,asset_feed_spec,object_story_spec,account_id";
+  var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=account_id,creative{" + fields + "}&access_token=" + token;
   var r = await fetch(url);
   if (!r.ok) return null;
   var d = await r.json();
   var c = d.creative || {};
+  var accountId = d.account_id ? "act_" + d.account_id : null;
+
   if (c.video_id) {
     try {
-      var vr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(c.video_id) + "?fields=picture,thumbnails{uri}&access_token=" + token);
+      var vr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(c.video_id) + "?fields=picture,thumbnails{uri,is_preferred,width,height}&access_token=" + token);
       if (vr.ok) {
         var vd = await vr.json();
-        if (vd.thumbnails && vd.thumbnails.data && vd.thumbnails.data.length > 0 && vd.thumbnails.data[0].uri) return vd.thumbnails.data[0].uri;
+        if (vd.thumbnails && vd.thumbnails.data && vd.thumbnails.data.length > 0) {
+          // Pick the thumbnail marked preferred, else the largest.
+          var best = null;
+          var bestArea = 0;
+          for (var ti = 0; ti < vd.thumbnails.data.length; ti++) {
+            var t = vd.thumbnails.data[ti];
+            if (t.is_preferred && t.uri) { best = t.uri; bestArea = Infinity; break; }
+            var area = parseInt(t.width || 0) * parseInt(t.height || 0);
+            if (t.uri && area > bestArea) { best = t.uri; bestArea = area; }
+          }
+          if (best) return best;
+          if (vd.thumbnails.data[0].uri) return vd.thumbnails.data[0].uri;
+        }
         if (vd.picture) return vd.picture;
       }
     } catch (_) {}
   }
-  if (c.thumbnail_url) return c.thumbnail_url;
-  if (c.image_url) return c.image_url;
+
+  // Post's full_picture is the original creative image upload (not a thumbnail).
+  if (c.effective_object_story_id) {
+    try {
+      var pr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(c.effective_object_story_id) + "?fields=full_picture&access_token=" + token);
+      if (pr.ok) {
+        var pd = await pr.json();
+        if (pd.full_picture) return pd.full_picture;
+      }
+    } catch (_) {}
+  }
+
+  // image_hash → adaccount/adimages returns the original upload URL.
+  if (c.image_hash && accountId) {
+    try {
+      var hashes = encodeURIComponent(JSON.stringify([c.image_hash]));
+      var ir = await fetch("https://graph.facebook.com/v25.0/" + accountId + "/adimages?hashes=" + hashes + "&fields=url,permalink_url&access_token=" + token);
+      if (ir.ok) {
+        var id = await ir.json();
+        if (id.data && id.data.length > 0) {
+          if (id.data[0].url) return id.data[0].url;
+          if (id.data[0].permalink_url) return id.data[0].permalink_url;
+        }
+      }
+    } catch (_) {}
+  }
+
   var afs = c.asset_feed_spec || {};
   if (afs.images && afs.images.length > 0) {
+    // DCO variants: prefer the first one with a url, url_tags rarely varies.
     for (var i = 0; i < afs.images.length; i++) {
       if (afs.images[i].url) return afs.images[i].url;
     }
   }
+
+  if (c.image_url) return c.image_url;
+
   var oss = c.object_story_spec || {};
   if (oss.link_data && oss.link_data.picture) return oss.link_data.picture;
+
+  if (c.thumbnail_url) return c.thumbnail_url;
   return null;
 }
 
