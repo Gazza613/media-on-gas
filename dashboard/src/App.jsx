@@ -705,25 +705,36 @@ function ShareModal(props){
   };
   var fmtDate=function(iso){if(!iso)return"—";var d=new Date(iso);if(isNaN(d.getTime()))return iso;return d.toLocaleString("en-ZA",{year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit"});};
   return(<>
-  {/* Preview overlay (on top of the share modal) */}
-  {previewHtml[0]&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:1100,padding:"24px 16px",backdropFilter:"blur(8px)"}} onClick={function(e){if(e.target===e.currentTarget)cancelPreview();}}>
-    <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"18px 22px",maxWidth:780,width:"100%",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 48px)",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
+  {/* Preview overlay. Appears immediately when the user clicks Preview +
+      Send — shows a building spinner while the /api/email-share HTML
+      renders server-side, then swaps to the iframe. Backdrop-filter blur
+      was removed because it forced the entire overlay to re-rasterize on
+      every scroll frame inside the iframe, making scroll feel sluggish.
+      The modal sits on a solid near-black fill instead (cheaper to
+      composite) with will-change hints for smooth scrolling. */}
+  {(previewLoading[0]||previewHtml[0])&&<div style={{position:"fixed",inset:0,background:"rgba(6,2,14,0.92)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:1100,padding:"24px 16px",willChange:"transform"}} onClick={function(e){if(e.target===e.currentTarget&&!previewLoading[0])cancelPreview();}}>
+    <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"18px 22px",maxWidth:780,width:"100%",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 48px)",boxShadow:"0 24px 80px rgba(0,0,0,0.6)",willChange:"transform",contain:"layout"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
         <div>
           <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:4}}>Email Preview</div>
           <div style={{fontSize:12,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Review this before confirming. To: <span style={{color:P.txt,fontWeight:700}}>{emailTo[0]}</span>{emailCc[0]?<span> | cc: <span style={{color:P.txt}}>{emailCc[0]}</span></span>:null}{emailBcc[0]?<span> | bcc: <span style={{color:P.txt}}>{emailBcc[0]}</span></span>:null}</div>
         </div>
-        <button onClick={cancelPreview} title="Close preview" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <button onClick={cancelPreview} disabled={previewLoading[0]} title="Close preview" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:previewLoading[0]?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:previewLoading[0]?0.5:1}}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
       </div>
-      <div style={{flex:1,background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid "+P.rule,minHeight:400}}>
-        <iframe title="Email preview" srcDoc={previewHtml[0]} style={{width:"100%",height:"100%",minHeight:"60vh",border:"none",display:"block",background:"#06020e"}}/>
+      <div style={{flex:1,background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid "+P.rule,minHeight:400,position:"relative",contain:"content"}}>
+        {previewLoading[0]&&!previewHtml[0]&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18,background:P.cosmos,color:P.txt}}>
+          <div style={{width:40,height:40,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+          <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+          <div style={{fontSize:13,color:"rgba(255,251,248,0.75)",fontStyle:"italic",fontFamily:ff,letterSpacing:0.3,textAlign:"center",maxWidth:380,lineHeight:1.5}}>Building your email preview, pulling the numbers and laying them out tidy. About 5 to 10 seconds.</div>
+        </div>}
+        {previewHtml[0]&&<iframe title="Email preview" srcDoc={previewHtml[0]} loading="lazy" style={{width:"100%",height:"100%",minHeight:"60vh",border:"none",display:"block",background:"#fff"}}/>}
       </div>
       {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginTop:10}}>{err[0]}</div>}
       <div style={{display:"flex",gap:10,marginTop:14}}>
-        <button onClick={cancelPreview} disabled={busy[0]} style={{flex:1,background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>Go Back and Edit</button>
-        <button onClick={confirmSend} disabled={busy[0]} style={{flex:2,background:busy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:2}}>{busy[0]?"SENDING...":"CONFIRM AND SEND"}</button>
+        <button onClick={cancelPreview} disabled={busy[0]||previewLoading[0]} style={{flex:1,background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:(busy[0]||previewLoading[0])?"wait":"pointer",letterSpacing:1.5,opacity:previewLoading[0]?0.5:1}}>Go Back and Edit</button>
+        <button onClick={confirmSend} disabled={busy[0]||previewLoading[0]||!previewHtml[0]} style={{flex:2,background:(busy[0]||previewLoading[0]||!previewHtml[0])?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:(busy[0]||previewLoading[0]||!previewHtml[0])?"wait":"pointer",letterSpacing:2}}>{busy[0]?"SENDING...":previewLoading[0]?"BUILDING...":"CONFIRM AND SEND"}</button>
       </div>
     </div>
   </div>}
