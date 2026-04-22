@@ -274,25 +274,28 @@ function AdPreviewModal(props){
     // 15 second timeout — if the platform API is slow or the creative was
     // archived we'd rather show an error than leave the user staring at a
     // spinner forever.
-    var timer=setTimeout(function(){if(!cancelled){setVideoErr("timeout");console.warn("[GAS] Video resolve timed out",{adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform});}},15000);
+    var timer=setTimeout(function(){if(!cancelled){setVideoErr("timeout");console.warn("[GAS] Video resolve timed out\n"+JSON.stringify({adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform},null,2));}},15000);
     var httpStatus=null;
+    var respText=null;
     fetch(url).then(function(r){
-      if(!r.ok){httpStatus=r.status;return null;}
-      return r.json();
-    }).then(function(d){
+      httpStatus=r.status;
+      return r.text();
+    }).then(function(t){
       if(cancelled)return;
       clearTimeout(timer);
-      if(d&&d.url)setVideoSrc(d.url);
+      respText=t;
+      var parsed=null;try{parsed=t?JSON.parse(t):null;}catch(_){}
+      if(parsed&&parsed.url)setVideoSrc(parsed.url);
       else{
-        var code=httpStatus?("http_"+httpStatus):"no_url";
+        var code=httpStatus&&httpStatus!==200?("http_"+httpStatus):"no_url";
         setVideoErr(code);
-        console.warn("[GAS] Video resolve failed",{code:code,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,httpStatus:httpStatus,responseBody:d});
+        console.warn("[GAS] Video resolve failed\n"+JSON.stringify({code:code,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,httpStatus:httpStatus,responseBody:(respText||"").slice(0,500)},null,2));
       }
     }).catch(function(e){
       if(cancelled)return;
       clearTimeout(timer);
       setVideoErr("network");
-      console.warn("[GAS] Video resolve network error",{adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,error:String(e&&e.message||e)});
+      console.warn("[GAS] Video resolve network error\n"+JSON.stringify({adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,error:String(e&&e.message||e)},null,2));
     });
     return function(){cancelled=true;clearTimeout(timer);};
   },[ad&&ad.adId,ad&&ad.videoId,isVideo,platformKey]);
