@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v6-tt-campaign-fields-valid";
+var CAMPAIGNS_CACHE_VERSION = "v7-action-reactions";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -141,7 +141,12 @@ export default async function handler(req, res) {
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+      // action_reactions returns the per-reaction-type breakdown
+      // (like / love / haha / wow / sad / angry) that Meta keeps out of
+      // the default actions array — needed for the Engagement Pulse panel
+      // to split Love from Like rather than collapsing both into a
+      // single post_reaction total.
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions,action_reactions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
       // Follow paging.next to capture all rows, not just the first 500.
       var allMetaRows = [];
       var nextUrl = url;
@@ -255,7 +260,8 @@ export default async function handler(req, res) {
               objective: canonObj,
               _sumImpressions: 0, _sumSpend: 0, _sumClicks: 0, _sumReachPublisher: 0,
               leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, pageFollows: 0,
-              actions: []
+              actions: [],
+              reactionsByType: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 }
             };
           }
           var row = rowMap[uniqueId];
@@ -269,6 +275,14 @@ export default async function handler(req, res) {
           row.pageLikes = Math.max(row.pageLikes, pageLikes);
           row.pageFollows = Math.max(row.pageFollows, pageFollows);
           if (c.actions) row.actions = row.actions.concat(c.actions);
+          // Sum action_reactions across placement rows. Each entry is
+          // { action_type: 'like'|'love'|... , value: '<n>' }.
+          if (c.action_reactions && Array.isArray(c.action_reactions)) {
+            c.action_reactions.forEach(function(ar) {
+              var rt = String(ar.action_type || "").toLowerCase();
+              if (row.reactionsByType[rt] !== undefined) row.reactionsByType[rt] += parseInt(ar.value || 0, 10);
+            });
+          }
         }
       }
 
@@ -325,6 +339,7 @@ export default async function handler(req, res) {
           costPerLead: r.leads > 0 ? (r._sumSpend / r.leads).toFixed(2) : "0",
           costPerInstall: r.appInstalls > 0 ? (r._sumSpend / r.appInstalls).toFixed(2) : "0",
           actions: r.actions || [],
+          reactionsByType: r.reactionsByType || { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
           startDate: _info.startTime ? _info.startTime.substring(0,10) : "",
           endDate: _info.stopTime ? _info.stopTime.substring(0,10) : "",
           status: _info.status ? _info.status.toLowerCase().replace('campaign_paused','paused').replace('adset_paused','paused') : "active",

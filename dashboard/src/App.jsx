@@ -4061,47 +4061,46 @@ export default function MediaOnGas(){
                   <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{totalEarned>0?fR(totalSpend/totalEarned):"-"}</div></Glass>
                 </div>
                 {(function(){
-                  // Aggregate engagement per type per platform from campaign rows.
-                  // Meta actions live in camp.actions[]; TikTok exposes likes /
-                  // comments / shares / follows as top-level fields.
-                  var types=["reactions","comments","shares","follows"];
-                  var perPlat={Facebook:{reactions:0,comments:0,shares:0,follows:0},Instagram:{reactions:0,comments:0,shares:0,follows:0},TikTok:{reactions:0,comments:0,shares:0,follows:0}};
+                  // Aggregate engagement per type per platform. Meta exposes
+                  // individual reactions (like / love / haha / ...) via the
+                  // action_reactions field on each campaign row; comments and
+                  // shares still come from the actions[] array. TikTok's
+                  // top-level likes / comments / shares count here too; TikTok
+                  // has no separate love reaction so all TT likes fall into
+                  // the Like row.
+                  var types=["love","like","shares","comments"];
+                  var empty=function(){return {love:0,like:0,shares:0,comments:0};};
+                  var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
                   sel.forEach(function(camp){
                     var plat=camp.platform;
                     if(plat==="TikTok"){
-                      perPlat.TikTok.reactions+=parseFloat(camp.likes||0);
+                      perPlat.TikTok.like+=parseFloat(camp.likes||0);
                       perPlat.TikTok.comments+=parseFloat(camp.comments||0);
                       perPlat.TikTok.shares+=parseFloat(camp.shares||0);
-                      perPlat.TikTok.follows+=parseFloat(camp.follows||0);
                     } else if(plat==="Facebook"||plat==="Instagram"){
                       var bucket=perPlat[plat];
+                      var rxn=camp.reactionsByType||{};
+                      bucket.like+=parseFloat(rxn.like||0);
+                      bucket.love+=parseFloat(rxn.love||0);
                       var seen={};
                       (camp.actions||[]).forEach(function(a){
                         var at=String(a.action_type||"").toLowerCase();
                         var v=parseFloat(a.value||0);
                         if(v>(seen[at]||0))seen[at]=v;
                       });
-                      // Prefer post_reaction (canonical); fall back to `like`
-                      // when the breakdown doesn't expose post_reaction.
-                      bucket.reactions+=(seen.post_reaction||seen.like||0);
                       bucket.comments+=(seen.comment||0);
                       bucket.shares+=(seen.post||seen.share||0);
-                      bucket.follows+=parseFloat(camp.pageLikes||0);
-                      if(plat==="Instagram"){
-                        var igG=findIgGrowth(camp.campaignName,pages);
-                        if(igG>0)bucket.follows+=igG;
-                      }
                     }
                   });
                   var totals={};
                   types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
-                  var totalAll=totals.reactions+totals.comments+totals.shares+totals.follows;
+                  var totalAll=totals.love+totals.like+totals.shares+totals.comments;
                   if(totalAll===0)return null;
                   var typeMeta={
-                    reactions:{label:"Reactions",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose+"30"} strokeLinejoin="round"/></svg>},
-                    comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>},
+                    love:{label:"Love",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose} strokeLinejoin="round"/></svg>},
+                    like:{label:"Like",color:P.fb,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 22V11m0 0V6a3 3 0 014.9-2.3L13 5l-1 5h6a2 2 0 012 2l-2 8a2 2 0 01-2 2H7z" stroke={P.fb} strokeWidth="1.6" fill={P.fb+"25"} strokeLinejoin="round"/></svg>},
                     shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
-                    follows:{label:"New Follows",color:P.mint,icon:Ic.users(P.mint,18)}
+                    comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                   };
                   var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).filter(function(r){return r.value>0;}).sort(function(a,b){return b.value-a.value;});
                   var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
