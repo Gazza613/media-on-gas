@@ -4036,12 +4036,12 @@ export default function MediaOnGas(){
                 <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
                   <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={[{name:"FB Likes",value:fbEarned},{name:"IG Followers",value:igEarned},{name:"TT Follows",value:ttEarned}]} barSize={50}>
+                    <BarChart data={[{name:"FB Likes",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;})} barSize={50}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
                       <XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/>
                       <YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/>
                       <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)"><Cell fill={P.fb}/><Cell fill={P.ig}/><Cell fill={P.tt}/></Bar>
+                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{[{name:"FB Likes",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;}).map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
