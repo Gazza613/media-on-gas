@@ -274,7 +274,7 @@ function AdPreviewModal(props){
     // 15 second timeout — if the platform API is slow or the creative was
     // archived we'd rather show an error than leave the user staring at a
     // spinner forever.
-    var timer=setTimeout(function(){if(!cancelled)setVideoErr("timeout");},15000);
+    var timer=setTimeout(function(){if(!cancelled){setVideoErr("timeout");console.warn("[GAS] Video resolve timed out",{adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform});}},15000);
     var httpStatus=null;
     fetch(url).then(function(r){
       if(!r.ok){httpStatus=r.status;return null;}
@@ -283,11 +283,16 @@ function AdPreviewModal(props){
       if(cancelled)return;
       clearTimeout(timer);
       if(d&&d.url)setVideoSrc(d.url);
-      else setVideoErr(httpStatus?("http_"+httpStatus):"no_url");
-    }).catch(function(){
+      else{
+        var code=httpStatus?("http_"+httpStatus):"no_url";
+        setVideoErr(code);
+        console.warn("[GAS] Video resolve failed",{code:code,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,httpStatus:httpStatus,responseBody:d});
+      }
+    }).catch(function(e){
       if(cancelled)return;
       clearTimeout(timer);
       setVideoErr("network");
+      console.warn("[GAS] Video resolve network error",{adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,error:String(e&&e.message||e)});
     });
     return function(){cancelled=true;clearTimeout(timer);};
   },[ad&&ad.adId,ad&&ad.videoId,isVideo,platformKey]);
@@ -327,9 +332,14 @@ function AdPreviewModal(props){
     // playback because the browser's byte-range requests didn't follow the
     // redirect reliably.
     if(videoSrc){
-      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
+      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} onError={function(e){
+        var me=e.target&&e.target.error;
+        var code=me?("media_"+(me.code||"unknown")):"playback";
+        setVideoErr(code);
+        console.warn("[GAS] Video playback failed",{code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc});
+      }} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
     } else if(videoErr){
-      var errMsg=videoErr==="timeout"?"Video took too long to load.":videoErr==="network"?"Network error fetching video.":videoErr==="http_404"?"Creative may have been archived on the platform.":"Video could not be loaded.";
+      var errMsg=videoErr==="timeout"?"Video took too long to load.":videoErr==="network"?"Network error fetching video.":videoErr==="http_404"?"Creative may have been archived on the platform.":videoErr==="http_403"?"Access denied by the platform (permissions or region).":videoErr==="no_url"?"The platform returned no playable URL for this video.":videoErr==="media_4"?"Video URL expired or format unsupported, try closing and reopening.":videoErr==="media_3"?"Video file could not be decoded.":videoErr==="media_2"?"Network interrupted during playback.":"Video could not be loaded.";
       mediaBlock=placeholder("VIDEO UNAVAILABLE",errMsg);
     } else {
       mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:imageSrc?("url("+imageSrc+") center/contain no-repeat #000"):"#000",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontFamily:fm,letterSpacing:2,fontWeight:800}}><div style={{background:"rgba(0,0,0,0.6)",padding:"10px 18px",borderRadius:8,letterSpacing:3}}>LOADING VIDEO…</div></div>;
