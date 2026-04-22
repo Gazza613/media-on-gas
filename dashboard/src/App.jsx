@@ -359,7 +359,11 @@ function AdPreviewModal(props){
     // directly on the element — serving a 302 redirect via <source> broke
     // playback because the browser's byte-range requests didn't follow the
     // redirect reliably.
-    if(videoSrc){
+    if(videoSrc&&videoType==="iframe"){
+      // Meta Ad Preview iframe — Facebook-hosted player that handles
+      // video playback natively without needing a direct MP4 URL.
+      mediaBlock=<iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",height:"60vh",border:"none",borderRadius:10,background:"#000",display:"block"}}/>;
+    } else if(videoSrc){
       mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} onError={function(e){
         var me=e.target&&e.target.error;
         var code=me?("media_"+(me.code||"unknown")):"playback";
@@ -4062,14 +4066,14 @@ export default function MediaOnGas(){
                 </div>
                 {(function(){
                   // Aggregate engagement per type per platform. Meta exposes
-                  // individual reactions (like / love / haha / ...) via the
-                  // action_reactions field on each campaign row; comments and
-                  // shares still come from the actions[] array. TikTok's
-                  // top-level likes / comments / shares count here too; TikTok
-                  // has no separate love reaction so all TT likes fall into
-                  // the Like row.
-                  var types=["love","like","shares","comments"];
-                  var empty=function(){return {love:0,like:0,shares:0,comments:0};};
+                  // individual reactions (like / love / haha / wow / sad /
+                  // angry) via the action_reactions field on each campaign
+                  // row; comments and shares still come from the actions[]
+                  // array. TikTok's top-level likes / comments / shares
+                  // count here too; TikTok has no love/haha/wow/sad/angry
+                  // equivalents so TT likes fold into Like.
+                  var types=["love","like","haha","wow","sad","angry","shares","comments"];
+                  var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,shares:0,comments:0};};
                   var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
                   sel.forEach(function(camp){
                     var plat=camp.platform;
@@ -4082,6 +4086,10 @@ export default function MediaOnGas(){
                       var rxn=camp.reactionsByType||{};
                       bucket.like+=parseFloat(rxn.like||0);
                       bucket.love+=parseFloat(rxn.love||0);
+                      bucket.haha+=parseFloat(rxn.haha||0);
+                      bucket.wow+=parseFloat(rxn.wow||0);
+                      bucket.sad+=parseFloat(rxn.sad||0);
+                      bucket.angry+=parseFloat(rxn.angry||0);
                       var seen={};
                       (camp.actions||[]).forEach(function(a){
                         var at=String(a.action_type||"").toLowerCase();
@@ -4094,24 +4102,61 @@ export default function MediaOnGas(){
                   });
                   var totals={};
                   types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
-                  var totalAll=totals.love+totals.like+totals.shares+totals.comments;
+                  var totalAll=types.reduce(function(a,t){return a+totals[t];},0);
                   if(totalAll===0)return null;
+                  // Brand sentiment: reactions only (comments + shares not
+                  // emotion-bearing on their own). Positive = love + like +
+                  // haha + wow. Negative = sad + angry. Score is positive's
+                  // share of all reactions.
+                  var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry;
+                  var positiveSum=totals.love+totals.like+totals.haha+totals.wow;
+                  var negativeSum=totals.sad+totals.angry;
+                  var sentimentPct=reactionSum>0?(positiveSum/reactionSum*100):0;
+                  var sentColor=sentimentPct>=90?P.mint:sentimentPct>=75?P.cyan:sentimentPct>=50?P.solar:P.rose;
+                  var sentLabel=sentimentPct>=90?"OVERWHELMINGLY POSITIVE":sentimentPct>=75?"STRONGLY POSITIVE":sentimentPct>=60?"POSITIVE":sentimentPct>=50?"MIXED":sentimentPct>=30?"NEGATIVE LEAN":"STRONGLY NEGATIVE";
                   var typeMeta={
                     love:{label:"Love",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose} strokeLinejoin="round"/></svg>},
                     like:{label:"Like",color:P.fb,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 22V11m0 0V6a3 3 0 014.9-2.3L13 5l-1 5h6a2 2 0 012 2l-2 8a2 2 0 01-2 2H7z" stroke={P.fb} strokeWidth="1.6" fill={P.fb+"25"} strokeLinejoin="round"/></svg>},
+                    haha:{label:"Haha",color:P.solar,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.solar} strokeWidth="1.6" fill={P.solar+"25"}/><path d="M8 10l0 1M16 10l0 1M7 14s2 3 5 3 5-3 5-3" stroke={P.solar} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                    wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
+                    sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                    angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                     comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                   };
                   var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).filter(function(r){return r.value>0;}).sort(function(a,b){return b.value-a.value;});
                   var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                   return <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(244,63,94,0.04) 50%,rgba(168,85,247,0.06))",borderRadius:16,padding:"22px 24px",marginBottom:20,border:"1px solid "+P.rule}}>
-                    <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
+                    <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}@keyframes sentRing{from{stroke-dashoffset:314}to{stroke-dashoffset:var(--sent-offset)}}"}</style>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
                       {Ic.pulse(P.mint,18)}
                       <span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:3,textTransform:"uppercase"}}>Engagement Pulse</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}></div>
                       <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(totalAll)} total interactions</span>
                     </div>
+                    {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:16}}>
+                        {(function(){
+                          var circ=2*Math.PI*50;
+                          var offset=circ-(sentimentPct/100)*circ;
+                          return <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
+                            <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
+                            <circle cx="60" cy="60" r="50" stroke={sentColor} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
+                            <text x="60" y="58" textAnchor="middle" style={{fontSize:22,fontWeight:900,fill:sentColor,fontFamily:fm}}>{sentimentPct.toFixed(0)+"%"}</text>
+                            <text x="60" y="76" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
+                          </svg>;
+                        })()}
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:800,color:sentColor,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
+                        <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
+                        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive reactions (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(reactionSum)} total reactions.</div>
+                        <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm}}>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.sub}}>Positive {fmt(positiveSum)}</span></div>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.sub}}>Negative {fmt(negativeSum)}</span></div>
+                        </div>
+                      </div>
+                    </div>}
                     {rows.map(function(r){
                       var pct=maxVal>0?(r.value/maxVal*100):0;
                       var ppParts=[];

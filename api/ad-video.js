@@ -66,10 +66,28 @@ async function resolveMetaVideo(videoId, token, adId) {
           } catch (postErr) { console.warn("[ad-video] Meta post-fallback error", postErr && postErr.message); }
         }
 
-        // Path 3 (Instagram public embed) was removed: Meta dark-posts
-        // most ad creatives so the permalink URL routes to Instagram's
-        // broken-link page. Better to fall through to a null return so the
-        // modal renders the high-res poster image with an overlay banner.
+        // Path 3: Meta Ad Preview API — returns a Facebook-hosted iframe
+        // that plays the ad creative natively (same player clients see
+        // in Ads Manager previews). Works for dark-posted Instagram
+        // creatives where /video/{id} and post attachments both fail.
+        // Try multiple formats — Meta accepts DESKTOP_FEED_STANDARD for
+        // most feed ads, MOBILE_FEED_STANDARD as fallback, Instagram
+        // formats for IG-only placements.
+        var prevFormats = ["DESKTOP_FEED_STANDARD", "MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD"];
+        for (var pf = 0; pf < prevFormats.length; pf++) {
+          try {
+            var prevUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "/previews?ad_format=" + prevFormats[pf] + "&access_token=" + token;
+            var prevRes = await fetch(prevUrl);
+            if (!prevRes.ok) continue;
+            var prevData = await prevRes.json();
+            if (!prevData.data || !prevData.data[0] || !prevData.data[0].body) continue;
+            var srcMatch = /src=["']([^"']+)["']/.exec(prevData.data[0].body);
+            if (srcMatch && srcMatch[1]) {
+              var iframeUrl = srcMatch[1].replace(/&amp;/g, "&");
+              return { url: iframeUrl, type: "iframe" };
+            }
+          } catch (_) {}
+        }
       }
     } catch (pathErr) { console.warn("[ad-video] Meta fallback-chain error", pathErr && pathErr.message); }
   }
