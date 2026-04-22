@@ -4083,21 +4083,40 @@ export default function MediaOnGas(){
                       perPlat.TikTok.shares+=parseFloat(camp.shares||0);
                     } else if(plat==="Facebook"||plat==="Instagram"){
                       var bucket=perPlat[plat];
-                      var rxn=camp.reactionsByType||{};
-                      bucket.like+=parseFloat(rxn.like||0);
-                      bucket.love+=parseFloat(rxn.love||0);
-                      bucket.haha+=parseFloat(rxn.haha||0);
-                      bucket.wow+=parseFloat(rxn.wow||0);
-                      bucket.sad+=parseFloat(rxn.sad||0);
-                      bucket.angry+=parseFloat(rxn.angry||0);
                       var seen={};
                       (camp.actions||[]).forEach(function(a){
                         var at=String(a.action_type||"").toLowerCase();
                         var v=parseFloat(a.value||0);
                         if(v>(seen[at]||0))seen[at]=v;
                       });
+                      // action_reactions (from the secondary Meta insights call)
+                      // carries the full per-type breakdown. Fall back to the
+                      // main actions[] array if that breakdown is missing,
+                      // which still surfaces Like + an approximation.
+                      var rxn=camp.reactionsByType||{};
+                      var hasRxn=(parseFloat(rxn.like||0)+parseFloat(rxn.love||0)+parseFloat(rxn.haha||0)+parseFloat(rxn.wow||0)+parseFloat(rxn.sad||0)+parseFloat(rxn.angry||0))>0;
+                      if(hasRxn){
+                        bucket.like+=parseFloat(rxn.like||0);
+                        bucket.love+=parseFloat(rxn.love||0);
+                        bucket.haha+=parseFloat(rxn.haha||0);
+                        bucket.wow+=parseFloat(rxn.wow||0);
+                        bucket.sad+=parseFloat(rxn.sad||0);
+                        bucket.angry+=parseFloat(rxn.angry||0);
+                      } else {
+                        // main actions[] often contains individual reaction
+                        // types too when the account has them.
+                        bucket.like+=(seen.like||0);
+                        bucket.love+=(seen.love||0);
+                        bucket.haha+=(seen.haha||0);
+                        bucket.wow+=(seen.wow||0);
+                        bucket.sad+=(seen.sad||0);
+                        bucket.angry+=(seen.angry||0);
+                      }
                       bucket.comments+=(seen.comment||0);
-                      bucket.shares+=(seen.post||seen.share||0);
+                      // Shares: Meta uses several action_types depending on
+                      // account / surface. post_share is the current name,
+                      // share and post are legacy variants.
+                      bucket.shares+=(seen.post_share||seen.share||seen.post||0);
                     }
                   });
                   var totals={};
@@ -4124,7 +4143,10 @@ export default function MediaOnGas(){
                     shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                     comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                   };
-                  var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).filter(function(r){return r.value>0;}).sort(function(a,b){return b.value-a.value;});
+                  // Keep every row, even at 0, so the reader can verify which
+                  // reactions the brand got and which it didn't. Sort by
+                  // value desc so the dominant reaction always leads.
+                  var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).sort(function(a,b){return b.value-a.value;});
                   var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                   return <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(244,63,94,0.04) 50%,rgba(168,85,247,0.06))",borderRadius:16,padding:"22px 24px",marginBottom:20,border:"1px solid "+P.rule}}>
                     <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}@keyframes sentRing{from{stroke-dashoffset:314}to{stroke-dashoffset:var(--sent-offset)}}"}</style>
