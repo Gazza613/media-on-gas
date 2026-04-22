@@ -51,6 +51,38 @@ var QUIRKY_AD_LOADERS=[
 // Pure helper, pick a random quirky loader. Rotates in components via
 // useEffect + setInterval.
 function pickQuirky(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
+// Given a selected date range and a comparison mode, return { from, to }
+// for the prior period to fetch. WoW = the equivalent N-day window
+// immediately before. MoM = same calendar dates, previous month (with
+// day-of-month clamped to the last day of that month if it overshoots
+// e.g. Mar 31 -> Feb 28).
+function computeComparisonRange(fromStr, toStr, mode) {
+  if (mode !== "wow" && mode !== "mom") return null;
+  if (!fromStr || !toStr) return null;
+  var f = new Date(fromStr + "T00:00:00");
+  var t = new Date(toStr + "T00:00:00");
+  if (isNaN(f.getTime()) || isNaN(t.getTime()) || t < f) return null;
+  var pad = function(n) { return String(n).padStart(2, "0"); };
+  var iso = function(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+  if (mode === "wow") {
+    var msDay = 86400000;
+    var rangeDays = Math.round((t.getTime() - f.getTime()) / msDay) + 1;
+    var pt = new Date(f.getTime() - msDay);
+    var pf = new Date(pt.getTime() - (rangeDays - 1) * msDay);
+    return { from: iso(pf), to: iso(pt) };
+  }
+  // mom
+  var pfy = f.getFullYear(), pfm = f.getMonth() - 1;
+  if (pfm < 0) { pfm = 11; pfy--; }
+  var pty = t.getFullYear(), ptm = t.getMonth() - 1;
+  if (ptm < 0) { ptm = 11; pty--; }
+  var lastF = new Date(pfy, pfm + 1, 0).getDate();
+  var lastT = new Date(pty, ptm + 1, 0).getDate();
+  return {
+    from: pfy + "-" + pad(pfm + 1) + "-" + pad(Math.min(f.getDate(), lastF)),
+    to: pty + "-" + pad(ptm + 1) + "-" + pad(Math.min(t.getDate(), lastT))
+  };
+}
 // Desktop button label for the ad preview CTA, mobile collapses via CSS.
 function viewAdLabel(platform) {
   var p = String(platform || "").toLowerCase();
@@ -1678,6 +1710,11 @@ export default function MediaOnGas(){
   var ts=useState("summary"),tab=ts[0],setTab=ts[1];
   var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
+  // Summary-only comparison toggle: "off" | "wow" | "mom". When enabled,
+  // the Summary tab's KPI tiles render a delta chip next to the value
+  // showing vs the equivalent prior period. Other tabs are not affected.
+  var cmo=useState("off"),compareMode=cmo[0],setCompareMode=cmo[1];
+  var cmp=useState([]),compareCampaigns=cmp[0],setCompareCampaigns=cmp[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
   var ss=useState([]),selected=ss[0],setSelected=ss[1];
   var us=useState(null),urlSelected=us[0],setUrlSelected=us[1];
@@ -1872,6 +1909,24 @@ export default function MediaOnGas(){
 
   var fetchData=function(){setLoading(true);var h=authHeaders();fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
+  // Comparison data fetch. Only runs when compareMode is on. Reuses the
+  // same /api/campaigns endpoint for the prior date range so the existing
+  // 5-minute response cache makes the second toggle of the same period
+  // instant. Clears compareCampaigns on 'off' so the Summary deltas
+  // disappear immediately.
+  useEffect(function(){
+    if(!isAuthed())return;
+    if(compareMode==="off"){setCompareCampaigns([]);return;}
+    var range=computeComparisonRange(df,dt,compareMode);
+    if(!range)return;
+    var cancelled=false;
+    var h=authHeaders();
+    fetch(API+"/api/campaigns?from="+range.from+"&to="+range.to,{headers:h})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){if(!cancelled&&d&&d.campaigns)setCompareCampaigns(d.campaigns);})
+      .catch(function(){});
+    return function(){cancelled=true;};
+  },[df,dt,compareMode,session,viewToken]);
   // Timeseries / Performance Trendlines must honour the current campaign
   // selection. Without passing campaignIds, the backend aggregated across
   // every campaign the admin can see, and the chart showed a full-account
@@ -2051,6 +2106,11 @@ export default function MediaOnGas(){
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.sub,14)} {selected.length} Campaigns</button>}
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
+            {/* Summary-only compare toggle. Other tabs show the selected
+                range without period-over-period deltas. */}
+            <div title="Summary-tab compare mode: show deltas vs the prior period" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
+              {[{k:"off",l:"OFF"},{k:"wow",l:"WoW"},{k:"mom",l:"MoM"}].map(function(opt){var active=compareMode===opt.k;return <button key={opt.k} onClick={function(){setCompareMode(opt.k);}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 10px",color:active?"#fff":P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2}}>{opt.l}</button>;})}
+            </div>
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
             {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Settings, Audit, Reconciliation, Usage, Team" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.solar,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,14)} Settings</button>}
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
@@ -2103,6 +2163,61 @@ export default function MediaOnGas(){
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
+            // Build comparison aggregates when the toggle is on. Match
+            // compareCampaigns to the currently selected campaigns by raw
+            // id so we only compare like-for-like.
+            var compareComputed=null;
+            if(compareMode!=="off"&&compareCampaigns&&compareCampaigns.length>0){
+              var cmpIdSet={};
+              sel.forEach(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");cmpIdSet[raw]=true;cmpIdSet[c.campaignId]=true;});
+              var cmpSel=compareCampaigns.filter(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");return cmpIdSet[raw]||cmpIdSet[c.campaignId];});
+              var cSpend=0,cImps=0,cClicks=0,cReach=0;
+              cmpSel.forEach(function(c){cSpend+=parseFloat(c.spend||0);cImps+=parseFloat(c.impressions||0);cClicks+=parseFloat(c.clicks||0);cReach+=parseFloat(c.reach||0);});
+              var cObj={};
+              cmpSel.forEach(function(camp){
+                var obj="Traffic";var canon=(camp.objective||"").toLowerCase();
+                if(canon==="appinstall")obj="Clicks to App Store";
+                else if(canon==="leads")obj="Leads";
+                else if(canon==="followers")obj="Followers & Likes";
+                else if(canon==="landingpage")obj="Landing Page Clicks";
+                else{var n=(camp.campaignName||"").toLowerCase();
+                  if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)obj="Clicks to App Store";
+                  else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
+                  else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
+                  else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
+                }
+                if(!cObj[obj])cObj[obj]={spend:0,results:0};
+                cObj[obj].spend+=parseFloat(camp.spend||0);
+                var r=0;
+                if(obj==="Leads")r=parseFloat(camp.leads||0);
+                else if(obj==="Followers & Likes")r=parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+                else r=parseFloat(camp.clicks||0);
+                cObj[obj].results+=r;
+              });
+              // Community-ish aggregate from prior period
+              var cFbEarned=0,cIgEarned=0,cTtEarned=0;
+              cmpSel.forEach(function(camp){
+                if(camp.platform==="Facebook")cFbEarned+=parseFloat(camp.pageLikes||0);
+                if(camp.platform==="TikTok")cTtEarned+=parseFloat(camp.follows||0);
+              });
+              compareComputed={totalSpend:cSpend,totalImps:cImps,totalClicks:cClicks,totalReach:cReach,objectives:cObj,earnedTotal:cFbEarned+cIgEarned+cTtEarned};
+            }
+            // Inline delta chip. Returns a small coloured chip next to a
+            // value on Summary KPI tiles when compareMode is on. Higher is
+            // better for most metrics (green up), invertColor=true flips
+            // that for lower-is-better metrics like CPC / CPM / CPL.
+            var deltaChip=function(cur,prev,invertColor){
+              if(compareMode==="off")return null;
+              cur=parseFloat(cur||0);prev=parseFloat(prev||0);
+              if(prev===0&&cur===0)return null;
+              if(prev===0)return <span style={{fontSize:8,fontWeight:800,color:P.solar,background:P.solar+"22",padding:"2px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm,marginLeft:6,verticalAlign:"middle"}}>NEW</span>;
+              var pct=((cur-prev)/prev)*100;
+              var isUp=pct>=0;
+              var isGood=invertColor?!isUp:isUp;
+              var color=isGood?P.mint:P.rose;
+              var arrow=isUp?"▲":"▼";
+              return <span style={{fontSize:9,fontWeight:800,color:color,background:color+"22",padding:"2px 6px",borderRadius:4,letterSpacing:0.5,fontFamily:fm,marginLeft:6,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}>{arrow} {Math.abs(pct).toFixed(0)+"%"}</span>;
+            };
             var totalDays2=Math.max(1,Math.round((new Date(dt)-new Date(df))/86400000)+1);
             var todayStr=todayLocal();
             var elapsedDays=Math.max(1,Math.round((new Date(todayStr>dt?dt:todayStr)-new Date(df))/86400000)+1);
@@ -2220,9 +2335,9 @@ export default function MediaOnGas(){
                 <div style={{background:P.glass,borderRadius:18,padding:"24px 28px",border:"1px solid "+P.rule}}>
                   {secHead(P.ember,"BUDGET PACING",Ic.chart(P.ember,18))}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:14,marginBottom:20}}>
-                    <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL MEDIA SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}</div></Glass>
-                    <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>DAILY RUN RATE</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(dailySpend)}</div></Glass>
-                    <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>PROJECTED TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fR(projSpend)}</div></Glass>
+                    <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL MEDIA SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(computed.totalSpend)}{deltaChip(computed.totalSpend,compareComputed&&compareComputed.totalSpend,false)}</div></Glass>
+                    <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>DAILY RUN RATE</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(dailySpend)}{(function(){if(!compareComputed)return null;var pDaily=compareComputed.totalSpend/Math.max(1,totalDays2);return deltaChip(dailySpend,pDaily,false);})()}</div></Glass>
+                    <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>PROJECTED TOTAL SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fR(projSpend)}{deltaChip(projSpend,compareComputed&&compareComputed.totalSpend,false)}</div></Glass>
                     <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>MEDIA PLATFORMS</div><div style={{fontSize:22,fontWeight:900,color:P.orchid,fontFamily:fm}}>{sortedPlats.length}</div></Glass>
                   </div>
                   <div style={{padding:"18px 0 10px"}}>
@@ -2340,12 +2455,15 @@ export default function MediaOnGas(){
                     var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
                     var bmCol=costPer>0&&bm&&costPer<=bm.mid?P.mint:costPer>0&&bm&&costPer>bm.high?P.rose:P.solar;
                     var bmTag=costPer>0&&bm?(costPer<=bm.low?"EXCELLENT":costPer<=bm.mid?"GOOD":costPer<=bm.high?"ON TRACK":"OPTIMISE"):"";
+                    var cObjPrev=(compareComputed&&compareComputed.objectives&&compareComputed.objectives[objName])||null;
+                    var prevResults=cObjPrev?cObjPrev.results:null;
+                    var prevCostPer=cObjPrev&&cObjPrev.results>0?cObjPrev.spend/cObjPrev.results:null;
                     return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{objName}</span></div>
-                      <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}</div>
+                      <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}{prevResults!==null&&deltaChip(od.results,prevResults,false)}</div>
                       <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:14}}>from {fR(od.spend)} invested</div>
                       <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?bmCol:P.dim,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}</div></div>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?bmCol:P.dim,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}{costPer>0&&prevCostPer!==null&&deltaChip(costPer,prevCostPer,true)}</div></div>
                         {bmTag&&<span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:bmCol}}>{bmTag}</span>}
                       </div>
                     </div>;})}
@@ -2362,9 +2480,9 @@ export default function MediaOnGas(){
                 {secHead(P.tt,"COMMUNITY GROWTH",Ic.users(P.tt,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL COMMUNITY</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></Glass>
-                  <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>EARNED THIS PERIOD</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{earnedTotal>0?"+"+fmt(earnedTotal):"-"}</div></Glass>
+                  <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>EARNED THIS PERIOD</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{earnedTotal>0?"+"+fmt(earnedTotal):"-"}{compareComputed&&deltaChip(earnedTotal,compareComputed.earnedTotal,false)}</div></Glass>
                   <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>GROWTH RATE</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{grandT2>0&&earnedTotal>0?(earnedTotal/grandT2*100).toFixed(1)+"%":"-"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;return earnedTotal>0&&cs>0?fR(cs/earnedTotal):"-";})()}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginTop:4,fontStyle:"italic"}}>community spend only</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;var curCpm=earnedTotal>0&&cs>0?cs/earnedTotal:0;var prevCpm=0;if(compareComputed&&compareComputed.objectives&&compareComputed.objectives["Followers & Likes"]&&compareComputed.earnedTotal>0){prevCpm=compareComputed.objectives["Followers & Likes"].spend/compareComputed.earnedTotal;}return <span>{curCpm>0?fR(curCpm):"-"}{curCpm>0&&prevCpm>0&&deltaChip(curCpm,prevCpm,true)}</span>;})()}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginTop:4,fontStyle:"italic"}}>community spend only</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
