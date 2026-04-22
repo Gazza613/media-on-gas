@@ -1009,7 +1009,7 @@ function CampaignAuditModal(props){
       </div>}
       {view[0]==="audit"&&err[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{err[0]}</div>}
       {view[0]==="reconcile"&&recErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{recErr[0]}</div>}
-      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center",lineHeight:1.7}}>Asking Meta, TikTok and Google to tell the truth, they always take a moment to think about it. 10 to 20 seconds, tops.</div>}
+      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center",lineHeight:1.7}}>Asking Meta, TikTok and Google to tell the truth, they always take a moment to think about it. This one can run a minute or so, the platforms like to double-check their homework.</div>}
       {view[0]==="audit"&&<div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
           <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
