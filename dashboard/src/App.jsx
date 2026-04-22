@@ -2951,18 +2951,19 @@ export default function MediaOnGas(){
                   // Opening: frames the portfolio, not a "only 3 work" read
                   lines.push("Across "+fAds.length+" active creatives, a broader portfolio is working to deliver consistent volume and keep the audience engaged without fatigue. Within that mix, three standouts are delivering especially strong engagement this period and offer the clearest signals about what the audience responds to.");
                   var a=top3[0],b=top3[1],c=top3[2];
+                  var adTag=function(ad){var n=String(ad.adName||"").trim();if(!n)return"";return" ("+n+")";};
                   if(a){
                     var aFmt=fmtOf(a.format);
-                    lines.push("Leading the pack is a "+aFmt+" on "+a.platform+" that captured a "+a.ctr.toFixed(2)+"% click-through rate from "+fmt(a.impressions)+" impressions"+(a.results>0?", converting that attention into "+fmt(a.results)+" results at just "+fR(a.spend/a.results)+" each":"")+". This ad sets the tone for what is currently resonating most with the audience.");
+                    lines.push("Leading the pack is a "+aFmt+" on "+a.platform+adTag(a)+" that captured a "+a.ctr.toFixed(2)+"% click-through rate from "+fmt(a.impressions)+" impressions"+(a.results>0?", converting that attention into "+fmt(a.results)+" results at just "+fR(a.spend/a.results)+" each":"")+". This ad sets the tone for what is currently resonating most with the audience.");
                   }
                   if(b){
                     var bFmt=fmtOf(b.format);
                     var same1=aFmt===bFmt?" same "+bFmt+" formula":"a "+bFmt;
-                    lines.push("Close behind, "+same1+" on "+b.platform+" reached "+b.ctr.toFixed(2)+"% click-through across "+fmt(b.impressions)+" impressions"+(b.results>0?" and drove "+fmt(b.results)+" results at "+fR(b.spend/b.results)+" each":"")+", reinforcing that the creative direction is finding its audience.");
+                    lines.push("Close behind, "+same1+" on "+b.platform+adTag(b)+" reached "+b.ctr.toFixed(2)+"% click-through across "+fmt(b.impressions)+" impressions"+(b.results>0?" and drove "+fmt(b.results)+" results at "+fR(b.spend/b.results)+" each":"")+", reinforcing that the creative direction is finding its audience.");
                   }
                   if(c){
                     var cFmt=fmtOf(c.format);
-                    lines.push("Rounding out the top three, a "+cFmt+" on "+c.platform+" sustained "+c.ctr.toFixed(2)+"% click-through over "+fmt(c.impressions)+" impressions"+(c.results>0?", adding "+fmt(c.results)+" results at "+fR(c.spend/c.results)+" each":"")+", a steady contributor that underlines the broader campaign is building momentum.");
+                    lines.push("Rounding out the top three, a "+cFmt+" on "+c.platform+adTag(c)+" sustained "+c.ctr.toFixed(2)+"% click-through over "+fmt(c.impressions)+" impressions"+(c.results>0?", adding "+fmt(c.results)+" results at "+fR(c.spend/c.results)+" each":"")+", a steady contributor that underlines the broader campaign is building momentum.");
                   }
                   // Pattern detection
                   var fmtCount={};var platCount={};
