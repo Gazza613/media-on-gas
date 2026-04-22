@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v7-action-reactions";
+var CAMPAIGNS_CACHE_VERSION = "v8-action-reactions-secondary";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -141,12 +141,7 @@ export default async function handler(req, res) {
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
-      // action_reactions returns the per-reaction-type breakdown
-      // (like / love / haha / wow / sad / angry) that Meta keeps out of
-      // the default actions array — needed for the Engagement Pulse panel
-      // to split Love from Like rather than collapsing both into a
-      // single post_reaction total.
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions,action_reactions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
       // Follow paging.next to capture all rows, not just the first 500.
       var allMetaRows = [];
       var nextUrl = url;
@@ -275,16 +270,43 @@ export default async function handler(req, res) {
           row.pageLikes = Math.max(row.pageLikes, pageLikes);
           row.pageFollows = Math.max(row.pageFollows, pageFollows);
           if (c.actions) row.actions = row.actions.concat(c.actions);
-          // Sum action_reactions across placement rows. Each entry is
-          // { action_type: 'like'|'love'|... , value: '<n>' }.
-          if (c.action_reactions && Array.isArray(c.action_reactions)) {
-            c.action_reactions.forEach(function(ar) {
-              var rt = String(ar.action_type || "").toLowerCase();
-              if (row.reactionsByType[rt] !== undefined) row.reactionsByType[rt] += parseInt(ar.value || 0, 10);
-            });
-          }
         }
       }
+
+      // Secondary insights call for action_reactions breakdown only. Isolating
+      // this keeps the main campaign query reliable — early deploys mixed
+      // action_reactions into the main fields list and caused Meta to drop
+      // campaign rows from certain accounts.
+      try {
+        var rxnUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,action_reactions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+        var rxnRows = [];
+        var rxnNext = rxnUrl;
+        var rxnGuard = 0;
+        while (rxnNext && rxnGuard < 10) {
+          rxnGuard++;
+          var rxnPageRes = await fetch(rxnNext);
+          if (!rxnPageRes.ok) break;
+          var rxnPageData = await rxnPageRes.json();
+          if (rxnPageData.data) rxnRows = rxnRows.concat(rxnPageData.data);
+          rxnNext = rxnPageData.paging && rxnPageData.paging.next ? rxnPageData.paging.next : null;
+        }
+        rxnRows.forEach(function(rr) {
+          if (!rr.action_reactions || !Array.isArray(rr.action_reactions)) return;
+          var rawPub = String(rr.publisher_platform || "facebook").toLowerCase();
+          var pub;
+          if (rawPub === "instagram" || rawPub === "threads") pub = "instagram";
+          else if (rawPub === "facebook" || rawPub === "audience_network" || rawPub === "messenger" || rawPub === "oculus") pub = "facebook";
+          else return;
+          var keyRx = pub.charAt(0).toUpperCase() + pub.slice(1);
+          var uniqueIdRx = rr.campaign_id + "_" + pub;
+          var row = rowMap[uniqueIdRx];
+          if (!row) return;
+          rr.action_reactions.forEach(function(ar) {
+            var rt = String(ar.action_type || "").toLowerCase();
+            if (row.reactionsByType[rt] !== undefined) row.reactionsByType[rt] += parseInt(ar.value || 0, 10);
+          });
+        });
+      } catch (rxnErr) { console.error("Meta action_reactions breakdown error", account.name, rxnErr); }
 
       // Apportion authoritative campaign reach across merged FB / IG rows by
       // impression share so the dashboard total matches the authoritative number.
