@@ -53,23 +53,40 @@ async function resolveMetaAdThumbnail(adId, token) {
   }
 
   // image_hash → adaccount/adimages returns the original upload URL.
-  // Taking priority over post-based sources because Meta sometimes serves a
-  // downscaled copy on the post feed — adimages returns the source upload.
-  if (c.image_hash && accountId) {
+  // Collect hashes from BOTH creative.image_hash AND asset_feed_spec.images
+  // (DCO / Advantage+ creatives put the hash inside asset_feed_spec, not
+  // at the top level). Any hit returns the source upload at full fidelity.
+  var afs = c.asset_feed_spec || {};
+  var candidateHashes = [];
+  if (c.image_hash) candidateHashes.push(c.image_hash);
+  if (afs.images && afs.images.length > 0) {
+    for (var ah = 0; ah < afs.images.length; ah++) {
+      if (afs.images[ah].hash) candidateHashes.push(afs.images[ah].hash);
+    }
+  }
+  if (candidateHashes.length > 0 && accountId) {
     try {
-      var hashes = encodeURIComponent(JSON.stringify([c.image_hash]));
-      var ir = await fetch("https://graph.facebook.com/v25.0/" + accountId + "/adimages?hashes=" + hashes + "&fields=url,permalink_url&access_token=" + token);
+      var hashes = encodeURIComponent(JSON.stringify(candidateHashes));
+      var ir = await fetch("https://graph.facebook.com/v25.0/" + accountId + "/adimages?hashes=" + hashes + "&fields=hash,url,permalink_url,width,height&access_token=" + token);
       if (ir.ok) {
         var id = await ir.json();
         if (id.data && id.data.length > 0) {
-          if (id.data[0].url) return id.data[0].url;
-          if (id.data[0].permalink_url) return id.data[0].permalink_url;
+          // Pick the largest result (measured by width × height) that has a URL.
+          var bestUrl = "";
+          var bestArea2 = 0;
+          for (var iri = 0; iri < id.data.length; iri++) {
+            var row = id.data[iri];
+            var area2 = parseInt(row.width || 0) * parseInt(row.height || 0);
+            var u = row.url || row.permalink_url;
+            if (u && area2 >= bestArea2) { bestUrl = u; bestArea2 = area2; }
+          }
+          if (bestUrl) return bestUrl;
         }
       }
     } catch (_) {}
   }
 
-  var afs = c.asset_feed_spec || {};
+  // asset_feed_spec.images[].url — pre-resolved DCO asset URLs (full size).
   if (afs.images && afs.images.length > 0) {
     for (var i = 0; i < afs.images.length; i++) {
       if (afs.images[i].url) return afs.images[i].url;
