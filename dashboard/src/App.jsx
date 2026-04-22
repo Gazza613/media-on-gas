@@ -2178,13 +2178,37 @@ export default function MediaOnGas(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
             // Build comparison aggregates when the toggle is on. Match
-            // compareCampaigns to the currently selected campaigns by raw
-            // id so we only compare like-for-like.
+            // compareCampaigns to the currently selected campaigns using
+            // BOTH rawCampaignId (for long-running campaigns) AND a
+            // normalized template-name key (for agency monthly-replicated
+            // campaigns, where 'Campaign X | Apr 26' and 'Campaign X | Mar
+            // 26' are the same template on different monthly IDs). Also
+            // require the same platform-family (Meta vs TikTok vs Google)
+            // so we don't cross-match a Meta template name onto TikTok.
             var compareComputed=null;
+            var templateKey=function(name,plat){
+              var s=String(name||"").toLowerCase();
+              // Strip month+year suffixes like "apr 26", "apr26", "april 2026"
+              s=s.replace(/\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\s*\d{0,4}\b/g,"");
+              s=s.replace(/\b20\d{2}\b/g,"");
+              s=s.replace(/[|_\-\s]+/g," ").trim();
+              return (plat||"")+"::"+s;
+            };
             if(compareMode!=="off"&&compareCampaigns&&compareCampaigns.length>0){
               var cmpIdSet={};
-              sel.forEach(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");cmpIdSet[raw]=true;cmpIdSet[c.campaignId]=true;});
-              var cmpSel=compareCampaigns.filter(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");return cmpIdSet[raw]||cmpIdSet[c.campaignId];});
+              var cmpTplSet={};
+              sel.forEach(function(c){
+                var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+                cmpIdSet[raw]=true;cmpIdSet[c.campaignId]=true;
+                var tk=templateKey(c.campaignName,c.platform);
+                if(tk)cmpTplSet[tk]=true;
+              });
+              var cmpSel=compareCampaigns.filter(function(c){
+                var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+                if(cmpIdSet[raw]||cmpIdSet[c.campaignId])return true;
+                var tk=templateKey(c.campaignName,c.platform);
+                return tk&&cmpTplSet[tk];
+              });
               var cSpend=0,cImps=0,cClicks=0,cReach=0;
               cmpSel.forEach(function(c){cSpend+=parseFloat(c.spend||0);cImps+=parseFloat(c.impressions||0);cClicks+=parseFloat(c.clicks||0);cReach+=parseFloat(c.reach||0);});
               var cObj={};
