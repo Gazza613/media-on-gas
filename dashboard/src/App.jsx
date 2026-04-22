@@ -51,6 +51,15 @@ var QUIRKY_AD_LOADERS=[
 // Pure helper, pick a random quirky loader. Rotates in components via
 // useEffect + setInterval.
 function pickQuirky(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
+// Desktop button label for the ad preview CTA, mobile collapses via CSS.
+function viewAdLabel(platform) {
+  var p = String(platform || "").toLowerCase();
+  if (p.indexOf("facebook") >= 0) return "VIEW FACEBOOK AD";
+  if (p.indexOf("instagram") >= 0) return "VIEW INSTAGRAM AD";
+  if (p.indexOf("tiktok") >= 0) return "VIEW TIKTOK AD";
+  if (p.indexOf("youtube") >= 0 || p.indexOf("google") >= 0 || p.indexOf("demand") >= 0 || p.indexOf("performance max") >= 0) return "VIEW GOOGLE AD";
+  return "VIEW AD";
+}
 var API=window.location.origin;
 var API_KEY="c0c7438297c52d8100494263d97389b5777312af2e88f8cdfc247622454b3d80";
 var LOOKER_URLS={"mtn momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","mtn momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","willowbrook":"https://lookerstudio.google.com/reporting/823fd5fa-b39d-4dc3-b623-549197d0341f/page/p_2upnicpx0d","psycho":"https://lookerstudio.google.com/reporting/0adc106a-50e2-42cc-a4ca-aafc04160e5d/page/p_1ooj1p0nmd","khava":"","concord":"","eden":"","flower":""};
@@ -2620,7 +2629,7 @@ export default function MediaOnGas(){
                         <span>{fR(ad.spend)}</span>
                         <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
-                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%"}}>VIEW AD</button>
+                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                     </div>
                   </div>;
                 };
@@ -2956,7 +2965,7 @@ export default function MediaOnGas(){
                     <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:11}}>{ad.ctr.toFixed(2)+"%"}</div></div>
                     <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
                   </div>
-                  <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%"}}>VIEW AD</button>
+                  <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                 </div>
               </div>;
             };
@@ -2982,7 +2991,7 @@ export default function MediaOnGas(){
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><button onClick={function(){setPreviewAd(ad);}} style={{display:"inline-block",background:adPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,border:"none",letterSpacing:1,cursor:"pointer"}}>VIEW AD</button></td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><button onClick={function(){setPreviewAd(ad);}} style={{display:"inline-block",background:adPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,border:"none",letterSpacing:1,cursor:"pointer",whiteSpace:"nowrap"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button></td>
               </tr>;
             };
 
@@ -3219,7 +3228,7 @@ export default function MediaOnGas(){
                         <span style={{color:P.sub}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
                     </div>
-                    <button onClick={function(){setPreviewAd(ad);}} style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,border:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap",cursor:"pointer"}}>VIEW AD</button>
+                    <button onClick={function(){setPreviewAd(ad);}} style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,border:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap",cursor:"pointer"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                   </div>;
                 };
 

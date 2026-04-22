@@ -43,3 +43,12 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* VIEW AD button labels: show the full platform-specific label on desktop,
+   collapse to a generic 'VIEW AD' on mobile so the button never wraps. */
+.gas-view-ad-full { display: inline; white-space: nowrap; }
+.gas-view-ad-short { display: none; }
+@media (max-width: 900px) {
+  .gas-view-ad-full { display: none; }
+  .gas-view-ad-short { display: inline; }
+}
