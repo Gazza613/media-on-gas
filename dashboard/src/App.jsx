@@ -366,6 +366,24 @@ function AdPreviewModal(props){
       {mediaBlock}
       <div style={{marginTop:16,fontSize:14,fontWeight:800,color:P.txt,fontFamily:ff,lineHeight:1.4}}>{ad.adName||"Unnamed ad"}</div>
       {ad.campaignName&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:4}}>Campaign: {ad.campaignName}</div>}
+      {(function(){
+        // Placements already travel on the ad row: Meta has Feed/Stories/Reels/etc,
+        // TikTok is FYP, Google maps to Display/Pmax/Demand/Search/YouTube.
+        var pl=ad.placements||{};
+        var keys=Object.keys(pl);
+        if(keys.length===0)return null;
+        var totalImps=keys.reduce(function(a,k){return a+parseFloat(pl[k].impressions||0);},0);
+        // Sort by impressions desc so dominant placement leads.
+        keys.sort(function(a,b){return parseFloat(pl[b].impressions||0)-parseFloat(pl[a].impressions||0);});
+        return <div style={{marginTop:10,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <span style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginRight:2}}>Placements</span>
+          {keys.map(function(k){
+            var imps=parseFloat(pl[k].impressions||0);
+            var pctStr=totalImps>0&&keys.length>1?" · "+Math.round(imps/totalImps*100)+"%":"";
+            return <span key={k} style={{background:accent+"18",border:"1px solid "+accent+"50",color:accent,fontSize:10,fontWeight:800,padding:"3px 9px",borderRadius:5,letterSpacing:1,textTransform:"uppercase",fontFamily:fm}}>{k+pctStr}</span>;
+          })}
+        </div>;
+      })()}
       <div style={{marginTop:14,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}}>
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
           <div style={{fontSize:8,color:accent,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>{resultLabel(ad.resultType)}</div>
