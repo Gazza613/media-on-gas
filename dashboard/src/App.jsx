@@ -4051,6 +4051,84 @@ export default function MediaOnGas(){
                   <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>GROWTH RATE</div><div style={{fontSize:22,fontWeight:900,color:P.orchid,fontFamily:fm}}>{grandTotal>0?(totalEarned/grandTotal*100).toFixed(1)+"%":"-"}</div></Glass>
                   <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{totalEarned>0?fR(totalSpend/totalEarned):"-"}</div></Glass>
                 </div>
+                {(function(){
+                  // Aggregate engagement per type per platform from campaign rows.
+                  // Meta actions live in camp.actions[]; TikTok exposes likes /
+                  // comments / shares / follows as top-level fields.
+                  var types=["reactions","comments","shares","follows"];
+                  var perPlat={Facebook:{reactions:0,comments:0,shares:0,follows:0},Instagram:{reactions:0,comments:0,shares:0,follows:0},TikTok:{reactions:0,comments:0,shares:0,follows:0}};
+                  sel.forEach(function(camp){
+                    var plat=camp.platform;
+                    if(plat==="TikTok"){
+                      perPlat.TikTok.reactions+=parseFloat(camp.likes||0);
+                      perPlat.TikTok.comments+=parseFloat(camp.comments||0);
+                      perPlat.TikTok.shares+=parseFloat(camp.shares||0);
+                      perPlat.TikTok.follows+=parseFloat(camp.follows||0);
+                    } else if(plat==="Facebook"||plat==="Instagram"){
+                      var bucket=perPlat[plat];
+                      var seen={};
+                      (camp.actions||[]).forEach(function(a){
+                        var at=String(a.action_type||"").toLowerCase();
+                        var v=parseFloat(a.value||0);
+                        if(v>(seen[at]||0))seen[at]=v;
+                      });
+                      // Prefer post_reaction (canonical); fall back to `like`
+                      // when the breakdown doesn't expose post_reaction.
+                      bucket.reactions+=(seen.post_reaction||seen.like||0);
+                      bucket.comments+=(seen.comment||0);
+                      bucket.shares+=(seen.post||seen.share||0);
+                      bucket.follows+=parseFloat(camp.pageLikes||0);
+                      if(plat==="Instagram"){
+                        var igG=findIgGrowth(camp.campaignName,pages);
+                        if(igG>0)bucket.follows+=igG;
+                      }
+                    }
+                  });
+                  var totals={};
+                  types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
+                  var totalAll=totals.reactions+totals.comments+totals.shares+totals.follows;
+                  if(totalAll===0)return null;
+                  var typeMeta={
+                    reactions:{label:"Reactions",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose+"30"} strokeLinejoin="round"/></svg>},
+                    comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>},
+                    shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
+                    follows:{label:"New Follows",color:P.mint,icon:Ic.users(P.mint,18)}
+                  };
+                  var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).filter(function(r){return r.value>0;}).sort(function(a,b){return b.value-a.value;});
+                  var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
+                  return <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(244,63,94,0.04) 50%,rgba(168,85,247,0.06))",borderRadius:16,padding:"22px 24px",marginBottom:20,border:"1px solid "+P.rule}}>
+                    <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+                      {Ic.pulse(P.mint,18)}
+                      <span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:3,textTransform:"uppercase"}}>Engagement Pulse</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}></div>
+                      <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(totalAll)} total interactions</span>
+                    </div>
+                    {rows.map(function(r){
+                      var pct=maxVal>0?(r.value/maxVal*100):0;
+                      var ppParts=[];
+                      if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
+                      if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
+                      if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
+                      var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.dim,margin:"0 4px"}}>·</span>);parted.push(n);});
+                      return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
+                          <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{r.label}</div>
+                            <div style={{fontSize:9,fontFamily:fm,marginTop:2}}>{parted}</div>
+                          </div>
+                        </div>
+                        <div style={{flex:1,height:20,background:"rgba(0,0,0,0.4)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
+                          <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+r.color+"cc,"+r.color+"ff)",borderRadius:10,color:r.color,animation:"barFill 0.8s ease-out, pulseBar 2.8s ease-in-out infinite",transition:"width 0.6s ease-out"}}></div>
+                        </div>
+                        <div style={{minWidth:84,textAlign:"right",flexShrink:0}}>
+                          <div style={{fontSize:20,fontWeight:900,color:r.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmt(r.value)}</div>
+                        </div>
+                      </div>;
+                    })}
+                  </div>;
+                })()}
                 <Insight title="Community Growth Analysis" accent={P.mint} icon={Ic.users(P.mint,16)}>{(function(){var p=[];if(totalEarned===0&&grandTotal===0){return "No community data available for the selected campaigns.";}if(grandTotal>0){p.push("The brand\'s total social community stands at "+fmt(grandTotal)+" members across Facebook, Instagram, and TikTok.");}if(totalEarned>0){p.push("During the selected period, the community grew by "+fmt(totalEarned)+" new members with "+fR(totalSpend)+" invested at a blended cost of "+fR(totalSpend/totalEarned)+" per new member.");}if(fbTotal>0){p.push("Facebook leads with "+fmt(fbTotal)+" total page likes"+(fbEarned>0?", adding "+fmt(fbEarned)+" new likes at "+fR(fbSpend/fbEarned)+" cost per follower during this period":"")+". Each page like permanently increases organic News Feed distribution.");}if(igTotal>0){p.push("Instagram has "+fmt(igTotal)+" total followers"+(igEarned>0?", growing by "+fmt(igEarned)+" followers during this period":"")+". Instagram followers directly increase Stories, Reels, and Feed visibility.");}if(ttEarned>0){p.push("TikTok has "+fmt(ttTotal)+" total followers, growing by "+fmt(ttEarned)+" new follows this period at "+fR(ttSpend/ttEarned)+" cost per follow. Each TikTok follower feeds into the For You page recommendation engine, amplifying organic reach.");}return p.join(" ");})()}</Insight>
               </div>;
             })()}
