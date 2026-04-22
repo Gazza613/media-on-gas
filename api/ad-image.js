@@ -12,16 +12,16 @@ var resolveCache = {};
 var RESOLVE_TTL_MS = 10 * 60 * 1000;
 
 async function resolveMetaAdThumbnail(adId, token) {
-  // Order matters: try every HIGH-RES source first, only fall back to
-  // thumbnail_url at the very end. Meta's thumbnail_url is typically
-  // 64–192px which looks blurry when displayed at modal size.
-  //   1. Video: largest entry in thumbnails[] > picture
-  //   2. Post's full_picture (via effective_object_story_id) — original upload
-  //   3. Creative image_hash resolved to the adaccount's /adimages url
-  //   4. asset_feed_spec.images[].url (full-size DCO assets)
-  //   5. creative.image_url (full-size when available)
-  //   6. object_story_spec.link_data.picture
-  //   7. creative.thumbnail_url (last resort, low-res)
+  // Order mirrors the proven-sharp priority in api/ads.js:
+  //   1. video thumbnail (largest / preferred frame)
+  //   2. image_hash → /adaccount/adimages?fields=url,permalink_url (original upload)
+  //   3. asset_feed_spec.images[].url (DCO full-size assets)
+  //   4. post attachments.media.image.src (Meta's highest-res cached copy)
+  //   5. post picture_attachment.image.src
+  //   6. post full_picture
+  //   7. creative.image_url
+  //   8. object_story_spec.link_data.picture
+  //   9. creative.thumbnail_url (last resort, ~64-192px, blurry)
   var fields = "id,thumbnail_url,image_url,effective_object_story_id,video_id,image_hash,asset_feed_spec,object_story_spec,account_id";
   var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=account_id,creative{" + fields + "}&access_token=" + token;
   var r = await fetch(url);
@@ -36,7 +36,6 @@ async function resolveMetaAdThumbnail(adId, token) {
       if (vr.ok) {
         var vd = await vr.json();
         if (vd.thumbnails && vd.thumbnails.data && vd.thumbnails.data.length > 0) {
-          // Pick the thumbnail marked preferred, else the largest.
           var best = null;
           var bestArea = 0;
           for (var ti = 0; ti < vd.thumbnails.data.length; ti++) {
@@ -53,18 +52,9 @@ async function resolveMetaAdThumbnail(adId, token) {
     } catch (_) {}
   }
 
-  // Post's full_picture is the original creative image upload (not a thumbnail).
-  if (c.effective_object_story_id) {
-    try {
-      var pr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(c.effective_object_story_id) + "?fields=full_picture&access_token=" + token);
-      if (pr.ok) {
-        var pd = await pr.json();
-        if (pd.full_picture) return pd.full_picture;
-      }
-    } catch (_) {}
-  }
-
   // image_hash → adaccount/adimages returns the original upload URL.
+  // Taking priority over post-based sources because Meta sometimes serves a
+  // downscaled copy on the post feed — adimages returns the source upload.
   if (c.image_hash && accountId) {
     try {
       var hashes = encodeURIComponent(JSON.stringify([c.image_hash]));
@@ -81,10 +71,30 @@ async function resolveMetaAdThumbnail(adId, token) {
 
   var afs = c.asset_feed_spec || {};
   if (afs.images && afs.images.length > 0) {
-    // DCO variants: prefer the first one with a url, url_tags rarely varies.
     for (var i = 0; i < afs.images.length; i++) {
       if (afs.images[i].url) return afs.images[i].url;
     }
+  }
+
+  // Post-based sources. attachments.media.image.src is Meta's largest cached
+  // copy. picture_attachment.image.src is the next best; full_picture and
+  // picture are lower-res fallbacks.
+  if (c.effective_object_story_id) {
+    try {
+      var pr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(c.effective_object_story_id) + "?fields=attachments{media{image},subattachments{media{image}}},picture_attachment{image},full_picture,picture&access_token=" + token);
+      if (pr.ok) {
+        var pd = await pr.json();
+        var att = pd.attachments && pd.attachments.data && pd.attachments.data[0];
+        if (att) {
+          if (att.media && att.media.image && att.media.image.src) return att.media.image.src;
+          var sub = att.subattachments && att.subattachments.data && att.subattachments.data[0];
+          if (sub && sub.media && sub.media.image && sub.media.image.src) return sub.media.image.src;
+        }
+        if (pd.picture_attachment && pd.picture_attachment.image && pd.picture_attachment.image.src) return pd.picture_attachment.image.src;
+        if (pd.full_picture) return pd.full_picture;
+        if (pd.picture) return pd.picture;
+      }
+    } catch (_) {}
   }
 
   if (c.image_url) return c.image_url;
