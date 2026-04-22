@@ -4072,7 +4072,7 @@ export default function MediaOnGas(){
                   // array. TikTok's top-level likes / comments / shares
                   // count here too; TikTok has no love/haha/wow/sad/angry
                   // equivalents so TT likes fold into Like.
-                  var types=["love","like","haha","wow","sad","angry","other","shares","comments"];
+                  var types=["love","like","haha","wow","sad","angry","shares","comments"];
                   var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,other:0,shares:0,comments:0};};
                   var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
                   sel.forEach(function(camp){
@@ -4181,11 +4181,10 @@ export default function MediaOnGas(){
                       <div>
                         <div style={{fontSize:10,fontWeight:800,color:sentColor,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
                         <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
-                        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions{hasUnclassified?". Plus "+fmt(totals.other)+" reactions Meta reported as a total without a per-type breakdown, excluded from the ratio":""}.</div>
+                        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
                         <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
                           <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.sub}}>Positive {fmt(positiveSum)}</span></div>
                           <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.sub}}>Negative {fmt(negativeSum)}</span></div>
-                          {hasUnclassified&&<div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.sub}}></span><span style={{color:P.sub}}>Unclassified {fmt(totals.other)}</span></div>}
                         </div>
                       </div>
                     </div>}
