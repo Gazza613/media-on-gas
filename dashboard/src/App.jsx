@@ -34,6 +34,20 @@ var QUIRKY_SHORT_LOADERS=[
   "Two ticks",
   "Almost there"
 ];
+var QUIRKY_AD_LOADERS=[
+  "Thumbing through the creative archive, the best ones are always buried at the bottom",
+  "Asking Meta for the thumbnails, they want to show us forty sizes first",
+  "Teaching TikTok to stand still for a photo, it won't",
+  "Rifling through the ad inventory, the winners never label themselves",
+  "Polling Google, YouTube, Meta and TikTok, all four have their own pace",
+  "Counting app clicks, lead forms, and every thumbnail that survived compression",
+  "Unwrapping the creatives, some came in DCO bubble wrap",
+  "Sorting by actual performance, not by who shouts loudest",
+  "Your best performers are getting in formation, the laggards are still warming up",
+  "Fetching ad-level truth, each platform has its own version of it",
+  "Dusting off the video posters, they photograph better in good light",
+  "Meta took the long way round, it usually does"
+];
 // Pure helper, pick a random quirky loader. Rotates in components via
 // useEffect + setInterval.
 function pickQuirky(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
@@ -1655,6 +1669,10 @@ export default function MediaOnGas(){
     var iv=setInterval(function(){setLoaderQuip(pickQuirky(QUIRKY_DASHBOARD_LOADERS));},3200);
     return function(){clearInterval(iv);};
   },[loading]);
+  // Creative-tab loader quip: separate rotation because ads.js can
+  // finish after the main campaigns payload. Rotates whenever adsList
+  // is empty so the Top Ads block feels alive instead of static.
+  var alq=useState(QUIRKY_AD_LOADERS[0]),adLoaderQuip=alq[0],setAdLoaderQuip=alq[1];
   var wn=useState([]),dataWarnings=wn[0],setDataWarnings=wn[1];
   var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
@@ -1672,6 +1690,12 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
   var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
+  useEffect(function(){
+    if(adsList&&adsList.length>0)return;
+    setAdLoaderQuip(pickQuirky(QUIRKY_AD_LOADERS));
+    var iv2=setInterval(function(){setAdLoaderQuip(pickQuirky(QUIRKY_AD_LOADERS));},3200);
+    return function(){clearInterval(iv2);};
+  },[adsList&&adsList.length]);
   var ts1=useState(null),timeseries=ts1[0],setTimeseries=ts1[1];
   var ts2=useState("week"),tsGran=ts2[0],setTsGran=ts2[1];
   var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
@@ -2406,9 +2430,12 @@ export default function MediaOnGas(){
                 if(!adsList||adsList.length===0){
                   return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                     {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
-                    <div style={{padding:"40px 20px",textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12,lineHeight:1.8}}>
-                      <div style={{fontSize:14,color:P.sub,marginBottom:6}}>Loading creative performance…</div>
-                      <div>Fetching ad-level thumbnails and metrics from Meta, TikTok and Google. This usually takes 5-15 seconds.</div>
+                    <div style={{padding:"54px 20px",textAlign:"center",color:P.dim,fontFamily:ff,lineHeight:1.8}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
+                        <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.mint,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+                        <style>{"@keyframes spin{to{transform:rotate(360deg)}}@keyframes adLoaderFade{0%,100%{opacity:0}10%,90%{opacity:1}}"}</style>
+                      </div>
+                      <div key={adLoaderQuip} style={{fontSize:14,color:P.sub,fontStyle:"italic",maxWidth:460,margin:"0 auto",animation:"adLoaderFade 3.2s ease-in-out",lineHeight:1.6}}>{adLoaderQuip}<span style={{display:"inline-block",width:18}}>…</span></div>
                     </div>
                   </div>;
                 }
