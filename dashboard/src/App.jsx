@@ -4015,14 +4015,17 @@ export default function MediaOnGas(){
                     var statusLabel=score>=2?"Performing":score>=0?"Monitor":"Action";
                     return{row:r,score:score,status:status,statusColor:statusColor,statusLabel:statusLabel,assessment:a.join(" ")};
                   });
-                  scored.sort(function(a,b){var po=(platOrd3[a.row.platform]||9)-(platOrd3[b.row.platform]||9);if(po!==0)return po;return b.row.result-a.row.result;});
+                  // Sort by status first: green (strong) -> yellow (average)
+                  // -> red (weak), then most results within each band.
+                  var statusOrd={strong:0,average:1,weak:2};
+                  scored.sort(function(a,b){var so=(statusOrd[a.status]!==undefined?statusOrd[a.status]:9)-(statusOrd[b.status]!==undefined?statusOrd[b.status]:9);if(so!==0)return so;return b.row.result-a.row.result;});
 
                   return <div>
                     <table style={{width:"100%",borderCollapse:"collapse",marginBottom:16}}>
                       <thead><tr>{["Status","Adset (Targeting)","Platform","Objective","Spend","Results","Cost Per","CTR %","Assessment"].map(function(h,hi){return <th key={hi} style={{padding:"10px 12px",fontSize:9,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1,textAlign:hi===1?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",fontFamily:fm}}>{h}</th>;})}</tr></thead>
                       <tbody>{scored.map(function(s,si){
                         var r=s.row;var pc4=platCol3[r.platform]||P.ember;
-                        return <tr key={si} style={{background:pc4+"08",borderTop:si>0&&scored[si-1].row.platform!==r.platform?"3px solid "+pc4+"40":"none"}}>
+                        return <tr key={si} style={{background:pc4+"08",borderTop:si>0&&scored[si-1].status!==s.status?"3px solid "+s.statusColor+"40":"none"}}>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:s.statusColor,color:"#fff",fontSize:9,fontWeight:900,padding:"4px 10px",borderRadius:5,textTransform:"uppercase"}}>{s.statusLabel}</span></td>
                           <td title={r.adsetName} style={{padding:"10px 12px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:260,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div></td>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc4,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
