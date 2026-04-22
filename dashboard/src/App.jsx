@@ -4133,7 +4133,12 @@ export default function MediaOnGas(){
                   // 'Other' covers reactions Meta tallied as post_reaction but
                   // didn't break down by type — neutral-weighted in the ratio
                   // so we don't bias the score either way.
-                  var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry+totals.other;
+                  // Sum across the 6 displayed reaction types. 'other' data is
+                  // still collected on perPlat buckets for future use, but
+                  // the Other Reactions row is hidden so it's left out of
+                  // this sum (keeps the sentiment gate from going NaN now
+                  // that 'other' isn't in the types array).
+                  var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry;
                   var positiveSum=totals.love+totals.like+totals.haha+totals.wow;
                   var negativeSum=totals.sad+totals.angry;
                   var classifiedSum=positiveSum+negativeSum;
