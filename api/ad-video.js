@@ -13,33 +13,59 @@ import { checkAuth, isCampaignAllowed } from "./_auth.js";
 var resolveCache = {};
 var RESOLVE_TTL_MS = 10 * 60 * 1000; // Meta CDN signed URLs typically valid ~hour; 10 min keeps us well inside that
 
-async function resolveMetaVideo(videoId, token) {
-  // `source` is the canonical playable MP4 URL. For videos uploaded via a
-  // Page with restricted permissions, or for certain DCO variants, `source`
-  // comes back empty. `format` is an array of alternative renditions (embed
-  // HTMLs at different resolutions) — parse the highest-quality one and
-  // extract the underlying src URL. `embed_html` is a final fallback.
+async function resolveMetaVideo(videoId, token, adId) {
+  // Path 1: direct /video/{id} lookup — canonical for Facebook-native videos.
   var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "?fields=source,format,embed_html,permalink_url,status&access_token=" + token;
   var r = await fetch(url);
-  if (!r.ok) return null;
-  var d = await r.json();
-  if (d.source) return d.source;
-  if (d.format && Array.isArray(d.format) && d.format.length > 0) {
-    var ordered = d.format.slice().sort(function(a, b) {
-      return (parseInt(b.height || 0) * parseInt(b.width || 0)) - (parseInt(a.height || 0) * parseInt(a.width || 0));
-    });
-    for (var i = 0; i < ordered.length; i++) {
-      var html = ordered[i].embed_html || "";
-      var m = /src="([^"]+)"/.exec(html);
-      if (m && m[1] && m[1].indexOf(".mp4") >= 0) return m[1];
+  if (r.ok) {
+    var d = await r.json();
+    if (d.source) return d.source;
+    if (d.format && Array.isArray(d.format) && d.format.length > 0) {
+      var ordered = d.format.slice().sort(function(a, b) {
+        return (parseInt(b.height || 0) * parseInt(b.width || 0)) - (parseInt(a.height || 0) * parseInt(a.width || 0));
+      });
+      for (var i = 0; i < ordered.length; i++) {
+        var html = ordered[i].embed_html || "";
+        var m = /src="([^"]+)"/.exec(html);
+        if (m && m[1] && m[1].indexOf(".mp4") >= 0) return m[1];
+      }
+    }
+    if (d.embed_html) {
+      var m2 = /src="([^"]+)"/.exec(d.embed_html);
+      if (m2 && m2[1] && m2[1].indexOf(".mp4") >= 0) return m2[1];
     }
   }
-  if (d.embed_html) {
-    var m2 = /src="([^"]+)"/.exec(d.embed_html);
-    if (m2 && m2[1] && m2[1].indexOf(".mp4") >= 0) return m2[1];
+
+  // Path 2: Instagram-native videos don't expose `source` via /video/{id}.
+  // Walk through the ad to its post, then pull attachments.media.source
+  // (IG Feed / Reels videos are surfaced this way).
+  if (adId) {
+    try {
+      var adUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=creative{effective_object_story_id,instagram_permalink_url,object_story_spec}&access_token=" + token;
+      var adRes = await fetch(adUrl);
+      if (adRes.ok) {
+        var adData = await adRes.json();
+        var c = adData.creative || {};
+        var storyId = c.effective_object_story_id;
+        if (storyId) {
+          var postUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(storyId) + "?fields=attachments{media,subattachments{media}},source&access_token=" + token;
+          var pRes = await fetch(postUrl);
+          if (pRes.ok) {
+            var pd = await pRes.json();
+            if (pd.source) return pd.source;
+            var att = pd.attachments && pd.attachments.data && pd.attachments.data[0];
+            if (att) {
+              if (att.media && att.media.source) return att.media.source;
+              var sub = att.subattachments && att.subattachments.data && att.subattachments.data[0];
+              if (sub && sub.media && sub.media.source) return sub.media.source;
+            }
+          }
+        }
+      }
+    } catch (pathErr) { console.warn("[ad-video] Meta post-fallback error", pathErr && pathErr.message); }
   }
-  // Final log so we can see what Meta returned for an unresolvable video.
-  console.warn("[ad-video] Meta resolveMetaVideo returned no playable URL", { videoId: videoId, hasSource: !!d.source, hasFormat: !!d.format, hasEmbed: !!d.embed_html, statusPhase: d.status && d.status.video_status, permalink: d.permalink_url });
+
+  console.warn("[ad-video] Meta resolveMetaVideo returned no playable URL", { videoId: videoId, adId: adId });
   return null;
 }
 
@@ -61,6 +87,7 @@ export default async function handler(req, res) {
   var platform = String(req.query.platform || "").toLowerCase();
   var videoId = String(req.query.id || "").trim();
   var campaignId = String(req.query.campaignId || "").trim();
+  var adId = String(req.query.adId || "").trim();
 
   if (!videoId) { res.status(400).json({ error: "id required" }); return; }
   if (platform !== "meta" && platform !== "tiktok") { res.status(400).json({ error: "platform must be meta or tiktok" }); return; }
@@ -87,7 +114,7 @@ export default async function handler(req, res) {
     if (platform === "meta") {
       var metaToken = process.env.META_ACCESS_TOKEN;
       if (!metaToken) { res.status(500).json({ error: "META_ACCESS_TOKEN not configured" }); return; }
-      cdnUrl = await resolveMetaVideo(videoId, metaToken);
+      cdnUrl = await resolveMetaVideo(videoId, metaToken, adId);
     } else if (platform === "tiktok") {
       var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
       var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;

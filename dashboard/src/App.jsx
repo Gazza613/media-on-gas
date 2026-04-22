@@ -269,7 +269,7 @@ function AdPreviewModal(props){
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
     var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
-    var url=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQ+"&resolveOnly=1";
+    var url=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQ+"&resolveOnly=1";
     var cancelled=false;
     // 15 second timeout — if the platform API is slow or the creative was
     // archived we'd rather show an error than leave the user staring at a
