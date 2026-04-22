@@ -14,12 +14,13 @@ var resolveCache = {};
 var RESOLVE_TTL_MS = 10 * 60 * 1000; // Meta CDN signed URLs typically valid ~hour; 10 min keeps us well inside that
 
 async function resolveMetaVideo(videoId, token, adId) {
+  // Returns { url, type: "video" | "iframe" } or null.
   // Path 1: direct /video/{id} lookup — canonical for Facebook-native videos.
   var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "?fields=source,format,embed_html,permalink_url,status&access_token=" + token;
   var r = await fetch(url);
   if (r.ok) {
     var d = await r.json();
-    if (d.source) return d.source;
+    if (d.source) return { url: d.source, type: "video" };
     if (d.format && Array.isArray(d.format) && d.format.length > 0) {
       var ordered = d.format.slice().sort(function(a, b) {
         return (parseInt(b.height || 0) * parseInt(b.width || 0)) - (parseInt(a.height || 0) * parseInt(a.width || 0));
@@ -27,42 +28,58 @@ async function resolveMetaVideo(videoId, token, adId) {
       for (var i = 0; i < ordered.length; i++) {
         var html = ordered[i].embed_html || "";
         var m = /src="([^"]+)"/.exec(html);
-        if (m && m[1] && m[1].indexOf(".mp4") >= 0) return m[1];
+        if (m && m[1] && m[1].indexOf(".mp4") >= 0) return { url: m[1], type: "video" };
       }
     }
     if (d.embed_html) {
       var m2 = /src="([^"]+)"/.exec(d.embed_html);
-      if (m2 && m2[1] && m2[1].indexOf(".mp4") >= 0) return m2[1];
+      if (m2 && m2[1] && m2[1].indexOf(".mp4") >= 0) return { url: m2[1], type: "video" };
     }
   }
 
-  // Path 2: Instagram-native videos don't expose `source` via /video/{id}.
-  // Walk through the ad to its post, then pull attachments.media.source
-  // (IG Feed / Reels videos are surfaced this way).
+  // Paths 2 + 3: inspect the ad's creative for post-based fallbacks.
   if (adId) {
     try {
-      var adUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=creative{effective_object_story_id,instagram_permalink_url,object_story_spec}&access_token=" + token;
+      var adUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=creative{effective_object_story_id,instagram_permalink_url}&access_token=" + token;
       var adRes = await fetch(adUrl);
       if (adRes.ok) {
         var adData = await adRes.json();
         var c = adData.creative || {};
+
+        // Path 2: Post attachments — covers IG Feed / Reels videos when the
+        // token has page access to that ad account's Pages.
         var storyId = c.effective_object_story_id;
         if (storyId) {
-          var postUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(storyId) + "?fields=attachments{media,subattachments{media}},source&access_token=" + token;
-          var pRes = await fetch(postUrl);
-          if (pRes.ok) {
-            var pd = await pRes.json();
-            if (pd.source) return pd.source;
-            var att = pd.attachments && pd.attachments.data && pd.attachments.data[0];
-            if (att) {
-              if (att.media && att.media.source) return att.media.source;
-              var sub = att.subattachments && att.subattachments.data && att.subattachments.data[0];
-              if (sub && sub.media && sub.media.source) return sub.media.source;
+          try {
+            var postUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(storyId) + "?fields=attachments{media,subattachments{media}},source&access_token=" + token;
+            var pRes = await fetch(postUrl);
+            if (pRes.ok) {
+              var pd = await pRes.json();
+              if (pd.source) return { url: pd.source, type: "video" };
+              var att = pd.attachments && pd.attachments.data && pd.attachments.data[0];
+              if (att) {
+                if (att.media && att.media.source) return { url: att.media.source, type: "video" };
+                var sub = att.subattachments && att.subattachments.data && att.subattachments.data[0];
+                if (sub && sub.media && sub.media.source) return { url: sub.media.source, type: "video" };
+              }
             }
+          } catch (postErr) { console.warn("[ad-video] Meta post-fallback error", postErr && postErr.message); }
+        }
+
+        // Path 3: Instagram public embed iframe. Works without auth — the
+        // ad's instagram_permalink_url gives us the public URL, and
+        // Instagram exposes a plain embed iframe at .../embed/captioned/
+        // that renders the post (and plays its video) inline.
+        var igPermalink = c.instagram_permalink_url;
+        if (igPermalink) {
+          var shortMatch = /instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/.exec(igPermalink);
+          if (shortMatch) {
+            var igEmbed = "https://www.instagram.com/" + shortMatch[1] + "/" + shortMatch[2] + "/embed/captioned/";
+            return { url: igEmbed, type: "iframe" };
           }
         }
       }
-    } catch (pathErr) { console.warn("[ad-video] Meta post-fallback error", pathErr && pathErr.message); }
+    } catch (pathErr) { console.warn("[ad-video] Meta fallback-chain error", pathErr && pathErr.message); }
   }
 
   console.warn("[ad-video] Meta resolveMetaVideo returned no playable URL", { videoId: videoId, adId: adId });
@@ -105,21 +122,26 @@ export default async function handler(req, res) {
   var cacheKey = platform + "|" + videoId;
   var cached = resolveCache[cacheKey];
   if (cached && Date.now() - cached.ts < RESOLVE_TTL_MS) {
+    if (req.query.resolveOnly === "1") {
+      res.status(200).json({ url: cached.url, type: cached.type || "video" });
+      return;
+    }
     res.redirect(302, cached.url);
     return;
   }
 
-  var cdnUrl = null;
+  var resolved = null; // { url, type }
   try {
     if (platform === "meta") {
       var metaToken = process.env.META_ACCESS_TOKEN;
       if (!metaToken) { res.status(500).json({ error: "META_ACCESS_TOKEN not configured" }); return; }
-      cdnUrl = await resolveMetaVideo(videoId, metaToken, adId);
+      resolved = await resolveMetaVideo(videoId, metaToken, adId);
     } else if (platform === "tiktok") {
       var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
       var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
       if (!ttToken || !ttAdvId) { res.status(500).json({ error: "TikTok credentials not configured" }); return; }
-      cdnUrl = await resolveTikTokVideo(videoId, ttAdvId, ttToken);
+      var ttUrl = await resolveTikTokVideo(videoId, ttAdvId, ttToken);
+      if (ttUrl) resolved = { url: ttUrl, type: "video" };
     }
   } catch (err) {
     console.error("ad-video resolve error", err);
@@ -127,16 +149,16 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (!cdnUrl) { res.status(404).json({ error: "Video URL not available" }); return; }
+  if (!resolved || !resolved.url) { res.status(404).json({ error: "Video URL not available" }); return; }
 
-  resolveCache[cacheKey] = { url: cdnUrl, ts: Date.now() };
-  // resolveOnly=1 returns the CDN URL as JSON so the client can set it
-  // directly on a <video> src. 302 redirects on video sources break on
-  // Safari + some Chrome builds because byte-range requests don't follow
-  // the redirect reliably, leaving controls visible but playback dead.
+  resolveCache[cacheKey] = { url: resolved.url, type: resolved.type, ts: Date.now() };
+  // resolveOnly=1 returns the URL + type as JSON so the client knows whether
+  // to render a <video src=...> or an iframe (Instagram embed fallback).
+  // 302 redirects on video sources break on Safari + some Chrome builds
+  // because byte-range requests don't follow the redirect reliably.
   if (req.query.resolveOnly === "1") {
-    res.status(200).json({ url: cdnUrl });
+    res.status(200).json({ url: resolved.url, type: resolved.type || "video" });
     return;
   }
-  res.redirect(302, cdnUrl);
+  res.redirect(302, resolved.url);
 }

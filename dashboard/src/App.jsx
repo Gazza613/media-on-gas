@@ -254,6 +254,7 @@ function AdPreviewModal(props){
   // Hooks must be called unconditionally on every render, so keep them
   // ahead of any early return.
   var vs=useState(null),videoSrc=vs[0],setVideoSrc=vs[1];
+  var vt=useState("video"),videoType=vt[0],setVideoType=vt[1];
   var ve=useState(null),videoErr=ve[0],setVideoErr=ve[1];
   var ad=props.ad;
   var format=((ad&&ad.format)||"STATIC").toUpperCase();
@@ -264,6 +265,7 @@ function AdPreviewModal(props){
   var campaignIdParam=String((ad&&ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
   useEffect(function(){
     setVideoSrc(null);
+    setVideoType("video");
     setVideoErr(null);
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
@@ -285,7 +287,7 @@ function AdPreviewModal(props){
       clearTimeout(timer);
       respText=t;
       var parsed=null;try{parsed=t?JSON.parse(t):null;}catch(_){}
-      if(parsed&&parsed.url)setVideoSrc(parsed.url);
+      if(parsed&&parsed.url){setVideoSrc(parsed.url);setVideoType(parsed.type||"video");}
       else{
         var code=httpStatus&&httpStatus!==200?("http_"+httpStatus):"no_url";
         setVideoErr(code);
@@ -334,12 +336,16 @@ function AdPreviewModal(props){
     // directly on the element — serving a 302 redirect via <source> broke
     // playback because the browser's byte-range requests didn't follow the
     // redirect reliably.
-    if(videoSrc){
+    if(videoSrc&&videoType==="iframe"){
+      // Instagram public embed. Sized to a 5:6 portrait aspect which matches
+      // typical IG Feed / Reels creatives.
+      mediaBlock=<iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",maxHeight:"70vh",aspectRatio:"5/6",border:"none",borderRadius:10,background:"#000",display:"block"}}/>;
+    } else if(videoSrc){
       mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} onError={function(e){
         var me=e.target&&e.target.error;
         var code=me?("media_"+(me.code||"unknown")):"playback";
         setVideoErr(code);
-        console.warn("[GAS] Video playback failed",{code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc});
+        console.warn("[GAS] Video playback failed\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
       }} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
     } else if(videoErr){
       var errMsg=videoErr==="timeout"?"Video took too long to load.":videoErr==="network"?"Network error fetching video.":videoErr==="http_404"?"Creative may have been archived on the platform.":videoErr==="http_403"?"Access denied by the platform (permissions or region).":videoErr==="no_url"?"The platform returned no playable URL for this video.":videoErr==="media_4"?"Video URL expired or format unsupported, try closing and reopening.":videoErr==="media_3"?"Video file could not be decoded.":videoErr==="media_2"?"Network interrupted during playback.":"Video could not be loaded.";
