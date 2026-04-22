@@ -14,11 +14,33 @@ var resolveCache = {};
 var RESOLVE_TTL_MS = 10 * 60 * 1000; // Meta CDN signed URLs typically valid ~hour; 10 min keeps us well inside that
 
 async function resolveMetaVideo(videoId, token) {
-  var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "?fields=source,permalink_url&access_token=" + token;
+  // `source` is the canonical playable MP4 URL. For videos uploaded via a
+  // Page with restricted permissions, or for certain DCO variants, `source`
+  // comes back empty. `format` is an array of alternative renditions (embed
+  // HTMLs at different resolutions) — parse the highest-quality one and
+  // extract the underlying src URL. `embed_html` is a final fallback.
+  var url = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "?fields=source,format,embed_html,permalink_url,status&access_token=" + token;
   var r = await fetch(url);
   if (!r.ok) return null;
   var d = await r.json();
-  return d.source || null;
+  if (d.source) return d.source;
+  if (d.format && Array.isArray(d.format) && d.format.length > 0) {
+    var ordered = d.format.slice().sort(function(a, b) {
+      return (parseInt(b.height || 0) * parseInt(b.width || 0)) - (parseInt(a.height || 0) * parseInt(a.width || 0));
+    });
+    for (var i = 0; i < ordered.length; i++) {
+      var html = ordered[i].embed_html || "";
+      var m = /src="([^"]+)"/.exec(html);
+      if (m && m[1] && m[1].indexOf(".mp4") >= 0) return m[1];
+    }
+  }
+  if (d.embed_html) {
+    var m2 = /src="([^"]+)"/.exec(d.embed_html);
+    if (m2 && m2[1] && m2[1].indexOf(".mp4") >= 0) return m2[1];
+  }
+  // Final log so we can see what Meta returned for an unresolvable video.
+  console.warn("[ad-video] Meta resolveMetaVideo returned no playable URL", { videoId: videoId, hasSource: !!d.source, hasFormat: !!d.format, hasEmbed: !!d.embed_html, statusPhase: d.status && d.status.video_status, permalink: d.permalink_url });
+  return null;
 }
 
 async function resolveTikTokVideo(videoId, advId, token) {
