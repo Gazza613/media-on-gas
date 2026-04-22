@@ -2219,7 +2219,15 @@ export default function MediaOnGas(){
               var cCtr=cImps>0?(cClicks/cImps*100):0;
               var cFreq=cReach>0?(cImps/cReach):0;
               compareComputed={totalSpend:cSpend,totalImps:cImps,totalClicks:cClicks,totalReach:cReach,blendedCpm:cCpm,blendedCpc:cCpc,blendedCtr:cCtr,blendedFreq:cFreq,objectives:cObj,earnedTotal:cFbEarned+cIgEarned+cTtEarned,matchedCount:cmpSel.length};
-              try{console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,currentCampaigns:sel.length,priorCampaigns:cmpSel.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks}},null,2));}catch(_){}
+              try{
+                var priorByRaw={};
+                cmpSel.forEach(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");if(!priorByRaw[raw])priorByRaw[raw]={name:c.campaignName,spend:0,clicks:0,imps:0};priorByRaw[raw].spend+=parseFloat(c.spend||0);priorByRaw[raw].clicks+=parseFloat(c.clicks||0);priorByRaw[raw].imps+=parseFloat(c.impressions||0);});
+                var curByRaw={};
+                sel.forEach(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");if(!curByRaw[raw])curByRaw[raw]={name:c.campaignName,spend:0,clicks:0,imps:0};curByRaw[raw].spend+=parseFloat(c.spend||0);curByRaw[raw].clicks+=parseFloat(c.clicks||0);curByRaw[raw].imps+=parseFloat(c.impressions||0);});
+                var perCampaign=Object.keys(curByRaw).map(function(raw){var cur=curByRaw[raw];var prev=priorByRaw[raw]||{spend:0,clicks:0,imps:0};return{campaign:cur.name,current_spend:cur.spend,prior_spend:prev.spend,current_clicks:cur.clicks,prior_clicks:prev.clicks,spendDelta:prev.spend>0?((cur.spend-prev.spend)/prev.spend*100).toFixed(0)+"%":(cur.spend>0?"NEW":"0")};}).sort(function(a,b){return b.current_spend-a.current_spend;});
+                var priorOnlyIds=Object.keys(priorByRaw).filter(function(raw){return !curByRaw[raw];});
+                console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,currentCampaigns:Object.keys(curByRaw).length,priorCampaigns:Object.keys(priorByRaw).length,priorOnlyCampaigns:priorOnlyIds.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks},perCampaign:perCampaign},null,2));
+              }catch(_){}
             }
             // Inline delta chip. Returns a small coloured chip next to a
             // value on Summary KPI tiles when compareMode is on. Higher is
