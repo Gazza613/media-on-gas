@@ -34,6 +34,24 @@ var QUIRKY_SHORT_LOADERS=[
   "Two ticks",
   "Almost there"
 ];
+var QUIRKY_EMAIL_LOADERS=[
+  "Rounding up every number from Meta, TikTok and Google, they scatter the moment a client asks for a summary",
+  "Drafting your email preview, the paragraphs always argue about word order before they settle down",
+  "Laying out the KPI tiles, making sure the percentages line up like good little soldiers",
+  "Polishing the executive summary until it reads like a senior strategist wrote it, not a junior",
+  "The creative performance breakdown is getting its hair done, these things take a minute",
+  "Rendering the charts, colour theory is a slow art and we don't rush good taste",
+  "Cross-checking every cost-per-result before the client sees it, we don't do rough drafts",
+  "Meta and TikTok are comparing notes on who drove more engagement, nobody wants to admit defeat",
+  "Writing the client greeting, sharpening the opening line so it lands",
+  "Warming up the PDF-styled HTML, emails are picky about flex layouts",
+  "Your email is trying on its interview outfit, the tie is nearly straight",
+  "Counting impressions, clicks, and every small victory, the victories take a moment to queue up",
+  "Asking the ads nicely for their best metrics, the top performers know they're on camera",
+  "Stacking the objective highlights in order of impact, the drama is very real",
+  "Checking the numbers twice because the client will",
+  "Almost there, the tea is brewing"
+];
 var QUIRKY_AD_LOADERS=[
   "Thumbing through the creative archive, the best ones are always buried at the bottom",
   "Asking Meta for the thumbnails, they want to show us forty sizes first",
@@ -526,6 +544,16 @@ function ShareModal(props){
   var emailDiagnostic=useState("");
   var previewHtml=useState("");
   var previewLoading=useState(false);
+  // Rotating quirky quip while the email preview is being built
+  // server-side. Keeps the user engaged during the 10-30s render
+  // window without making a time promise we can't keep.
+  var previewQuip=useState(QUIRKY_EMAIL_LOADERS[0]);
+  useEffect(function(){
+    if(!previewLoading[0])return;
+    previewQuip[1](pickQuirky(QUIRKY_EMAIL_LOADERS));
+    var iv=setInterval(function(){previewQuip[1](pickQuirky(QUIRKY_EMAIL_LOADERS));},4500);
+    return function(){clearInterval(iv);};
+  },[previewLoading[0]]);
   var personalMsg=useState("");
   var senderName=useState("");
   var senderTitle=useState("");
@@ -724,10 +752,10 @@ function ShareModal(props){
         </button>
       </div>
       <div style={{flex:1,background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid "+P.rule,minHeight:400,position:"relative",contain:"content"}}>
-        {previewLoading[0]&&!previewHtml[0]&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18,background:P.cosmos,color:P.txt}}>
-          <div style={{width:40,height:40,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
-          <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
-          <div style={{fontSize:13,color:"rgba(255,251,248,0.75)",fontStyle:"italic",fontFamily:ff,letterSpacing:0.3,textAlign:"center",maxWidth:380,lineHeight:1.5}}>Building your email preview, pulling the numbers and laying them out tidy. About 5 to 10 seconds.</div>
+        {previewLoading[0]&&!previewHtml[0]&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:20,background:P.cosmos,color:P.txt,padding:"28px 24px"}}>
+          <div style={{width:44,height:44,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+          <style>{"@keyframes spin{to{transform:rotate(360deg)}}@keyframes emailQuipFade{0%,100%{opacity:0.45}15%,85%{opacity:1}}"}</style>
+          <div key={previewQuip[0]} style={{fontSize:14,color:"rgba(255,251,248,0.78)",fontStyle:"italic",fontFamily:ff,letterSpacing:0.3,textAlign:"center",maxWidth:460,lineHeight:1.6,animation:"emailQuipFade 4.5s ease-in-out"}}>{previewQuip[0]}<span style={{display:"inline-block",width:20}}>…</span></div>
         </div>}
         {previewHtml[0]&&<iframe title="Email preview" srcDoc={previewHtml[0]} loading="lazy" style={{width:"100%",height:"100%",minHeight:"60vh",border:"none",display:"block",background:"#fff"}}/>}
       </div>
