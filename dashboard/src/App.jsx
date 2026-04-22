@@ -71,11 +71,21 @@ function computeComparisonRange(fromStr, toStr, mode) {
     var pf = new Date(pt.getTime() - (rangeDays - 1) * msDay);
     return { from: iso(pf), to: iso(pt) };
   }
-  // mom
+  // MoM: if the selected range IS a full calendar month (1st to last day
+  // of the same month) compare to the WHOLE previous calendar month
+  // (so Apr 1-30 -> Mar 1-31 regardless of month lengths). Otherwise
+  // fall back to same relative dates in the prior month.
+  var sameMonth = f.getFullYear() === t.getFullYear() && f.getMonth() === t.getMonth();
+  var lastOfCur = new Date(f.getFullYear(), f.getMonth() + 1, 0).getDate();
+  var isFullMonth = sameMonth && f.getDate() === 1 && t.getDate() === lastOfCur;
   var pfy = f.getFullYear(), pfm = f.getMonth() - 1;
   if (pfm < 0) { pfm = 11; pfy--; }
   var pty = t.getFullYear(), ptm = t.getMonth() - 1;
   if (ptm < 0) { ptm = 11; pty--; }
+  if (isFullMonth) {
+    var lastOfPrev = new Date(pfy, pfm + 1, 0).getDate();
+    return { from: pfy + "-" + pad(pfm + 1) + "-01", to: pfy + "-" + pad(pfm + 1) + "-" + pad(lastOfPrev) };
+  }
   var lastF = new Date(pfy, pfm + 1, 0).getDate();
   var lastT = new Date(pty, ptm + 1, 0).getDate();
   return {
@@ -2203,7 +2213,11 @@ export default function MediaOnGas(){
                 if(camp.platform==="Facebook")cFbEarned+=parseFloat(camp.pageLikes||0);
                 if(camp.platform==="TikTok")cTtEarned+=parseFloat(camp.follows||0);
               });
-              compareComputed={totalSpend:cSpend,totalImps:cImps,totalClicks:cClicks,totalReach:cReach,objectives:cObj,earnedTotal:cFbEarned+cIgEarned+cTtEarned};
+              var cCpm=cImps>0?(cSpend/cImps*1000):0;
+              var cCpc=cClicks>0?(cSpend/cClicks):0;
+              var cCtr=cImps>0?(cClicks/cImps*100):0;
+              var cFreq=cReach>0?(cImps/cReach):0;
+              compareComputed={totalSpend:cSpend,totalImps:cImps,totalClicks:cClicks,totalReach:cReach,blendedCpm:cCpm,blendedCpc:cCpc,blendedCtr:cCtr,blendedFreq:cFreq,objectives:cObj,earnedTotal:cFbEarned+cIgEarned+cTtEarned};
             }
             // Inline delta chip. Returns a small coloured chip next to a
             // value on Summary KPI tiles when compareMode is on. Higher is
@@ -2378,10 +2392,10 @@ export default function MediaOnGas(){
               <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.cyan,"AWARENESS HIGHLIGHTS",Ic.eye(P.cyan,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-                  <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(computed.totalImps)}</div></Glass>
-                  <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL REACH</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(m.reach+t.reach+computed.gd.reach)}</div></Glass>
-                  <Glass accent={blFreq>4?P.rose:blFreq>3?P.warning:P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED FREQUENCY</div><div style={{fontSize:24,fontWeight:900,color:blFreq>4?P.rose:blFreq>3?P.warning:blFreq>2?P.mint:P.txt,fontFamily:fm}}>{blFreq>0?blFreq.toFixed(2)+"x":"-"}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blFreq>4?P.rose:blFreq>3?P.warning:P.mint}}>{blFreq>4?"FATIGUE":blFreq>3?"MONITOR":blFreq>2?"OPTIMAL":"BUILDING"}</span></div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER 1000 ADS SERVED</div><div style={{fontSize:24,fontWeight:900,color:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.high?P.solar:P.rose,fontFamily:fm}}>{fR(computed.blendedCpm)}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
+                  <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(computed.totalImps)}{deltaChip(computed.totalImps,compareComputed&&compareComputed.totalImps,false)}</div></Glass>
+                  <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL REACH</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(m.reach+t.reach+computed.gd.reach)}{deltaChip(m.reach+t.reach+computed.gd.reach,compareComputed&&compareComputed.totalReach,false)}</div></Glass>
+                  <Glass accent={blFreq>4?P.rose:blFreq>3?P.warning:P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED FREQUENCY</div><div style={{fontSize:24,fontWeight:900,color:blFreq>4?P.rose:blFreq>3?P.warning:blFreq>2?P.mint:P.txt,fontFamily:fm}}>{blFreq>0?blFreq.toFixed(2)+"x":"-"}{deltaChip(blFreq,compareComputed&&compareComputed.blendedFreq,true)}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blFreq>4?P.rose:blFreq>3?P.warning:P.mint}}>{blFreq>4?"FATIGUE":blFreq>3?"MONITOR":blFreq>2?"OPTIMAL":"BUILDING"}</span></div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER 1000 ADS SERVED</div><div style={{fontSize:24,fontWeight:900,color:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.high?P.solar:P.rose,fontFamily:fm}}>{fR(computed.blendedCpm)}{deltaChip(computed.blendedCpm,compareComputed&&compareComputed.blendedCpm,true)}</div><div style={{marginTop:4}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:computed.blendedCpm<=benchmarks.meta.cpm.low?P.mint:computed.blendedCpm<=benchmarks.meta.cpm.mid?P.solar:P.rose}}>{computed.blendedCpm<=benchmarks.meta.cpm.low?"EXCELLENT":computed.blendedCpm<=benchmarks.meta.cpm.mid?"GOOD":computed.blendedCpm<=benchmarks.meta.cpm.high?"AVERAGE":"REVIEW"}</span></div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
@@ -2419,9 +2433,9 @@ export default function MediaOnGas(){
               <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS",Ic.bolt(P.mint,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
-                  <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
-                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
+                  <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}{deltaChip(computed.totalClicks,compareComputed&&compareComputed.totalClicks,false)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
+                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}{deltaChip(blCpc,compareComputed&&compareComputed.blendedCpc,true)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
