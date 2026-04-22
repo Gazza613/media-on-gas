@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v9-reactions-total";
+var CAMPAIGNS_CACHE_VERSION = "v10-sot-aligned-spend";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -159,9 +159,19 @@ export default async function handler(req, res) {
       // the same number as what Ads Manager reports in its default "campaign reach"
       // view. We fetch it once here and apportion it to the merged FB / IG rows below
       // so the dashboard total matches the source of truth.
+      // Authoritative campaign-level totals. Meta's publisher_platform
+      // breakdown sums to slightly different numbers than the unbroken
+      // campaign-level insights (~1-3% drift, documented Meta behaviour),
+      // which made the Ground Truth Audit flag Summary spend as yellow.
+      // Pulling spend / impressions / clicks alongside reach here and
+      // apportioning back to the FB / IG rows guarantees the dashboard
+      // totals match Meta's own campaign-level numbers.
       var reachMap = {};
+      var spendMap = {};
+      var impsMap = {};
+      var clicksMap = {};
       try {
-        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
         var rAll = [];
         var rNext = reachUrl;
         var rGuard = 0;
@@ -173,7 +183,13 @@ export default async function handler(req, res) {
           if (rJson.data) rAll = rAll.concat(rJson.data);
           rNext = rJson.paging && rJson.paging.next ? rJson.paging.next : null;
         }
-        rAll.forEach(function(row) { reachMap[String(row.campaign_id)] = parseInt(row.reach || 0); });
+        rAll.forEach(function(row) {
+          var cid = String(row.campaign_id);
+          reachMap[cid] = parseInt(row.reach || 0);
+          spendMap[cid] = parseFloat(row.spend || 0);
+          impsMap[cid] = parseInt(row.impressions || 0);
+          clicksMap[cid] = parseInt(row.clicks || 0);
+        });
       } catch (_) { /* non-fatal */ }
 
       // Merge publisher rows into one row per (campaign_id, platform family).
@@ -324,33 +340,54 @@ export default async function handler(req, res) {
         });
       } catch (rxnErr) { console.error("Meta action_reactions breakdown error", account.name, rxnErr); }
 
-      // Apportion authoritative campaign reach across merged FB / IG rows by
-      // impression share so the dashboard total matches the authoritative number.
-      // Fallback to the summed publisher reach when authoritative isn't available.
+      // Apportion authoritative campaign-level totals (reach, spend,
+      // impressions, clicks) across merged FB / IG rows by that row's
+      // publisher-split share so the dashboard totals match what Meta
+      // reports at the campaign level. Without this, reconcile flags
+      // ~1-3% yellow deltas on spend because the publisher_platform
+      // breakdown rounds differently than the campaign-level aggregate.
       var campTotalImps = {};
+      var campTotalSpendPub = {};
+      var campTotalClicksPub = {};
       Object.keys(rowMap).forEach(function(k) {
         var r = rowMap[k];
         campTotalImps[r.rawCampaignId] = (campTotalImps[r.rawCampaignId] || 0) + r._sumImpressions;
+        campTotalSpendPub[r.rawCampaignId] = (campTotalSpendPub[r.rawCampaignId] || 0) + r._sumSpend;
+        campTotalClicksPub[r.rawCampaignId] = (campTotalClicksPub[r.rawCampaignId] || 0) + r._sumClicks;
       });
 
       Object.keys(rowMap).forEach(function(k) {
         var r = rowMap[k];
-        var authReach = reachMap[String(r.rawCampaignId)];
+        var cidStr = String(r.rawCampaignId);
+        var authReach = reachMap[cidStr];
+        var authSpend = spendMap[cidStr];
+        var authImps = impsMap[cidStr];
+        var authClicks = clicksMap[cidStr];
         var totalImps = campTotalImps[r.rawCampaignId] || 0;
+        var totalSpendPub = campTotalSpendPub[r.rawCampaignId] || 0;
+        var totalClicksPub = campTotalClicksPub[r.rawCampaignId] || 0;
         var reachForRow;
         if (authReach && totalImps > 0) {
           reachForRow = Math.round(authReach * (r._sumImpressions / totalImps));
         } else {
           reachForRow = r._sumReachPublisher;
         }
-        var impsStr = r._sumImpressions.toString();
-        var spendStr = r._sumSpend.toFixed(2);
-        var clicksStr = r._sumClicks.toString();
+        // Scale spend / imps / clicks to match campaign-level authoritative.
+        // Keep the publisher split proportional to the raw publisher rows.
+        var spendForRow = r._sumSpend;
+        var impsForRow = r._sumImpressions;
+        var clicksForRow = r._sumClicks;
+        if (authSpend && totalSpendPub > 0) spendForRow = authSpend * (r._sumSpend / totalSpendPub);
+        if (authImps && totalImps > 0) impsForRow = Math.round(authImps * (r._sumImpressions / totalImps));
+        if (authClicks && totalClicksPub > 0) clicksForRow = Math.round(authClicks * (r._sumClicks / totalClicksPub));
+        var impsStr = impsForRow.toString();
+        var spendStr = spendForRow.toFixed(2);
+        var clicksStr = clicksForRow.toString();
         var reachStr = reachForRow.toString();
-        var cpm = r._sumImpressions > 0 ? ((r._sumSpend / r._sumImpressions) * 1000).toFixed(2) : "0";
-        var cpc = r._sumClicks > 0 ? (r._sumSpend / r._sumClicks).toFixed(2) : "0";
-        var ctr = r._sumImpressions > 0 ? ((r._sumClicks / r._sumImpressions) * 100).toFixed(2) : "0";
-        var freq = reachForRow > 0 ? (r._sumImpressions / reachForRow).toFixed(2) : "0";
+        var cpm = impsForRow > 0 ? ((spendForRow / impsForRow) * 1000).toFixed(2) : "0";
+        var cpc = clicksForRow > 0 ? (spendForRow / clicksForRow).toFixed(2) : "0";
+        var ctr = impsForRow > 0 ? ((clicksForRow / impsForRow) * 100).toFixed(2) : "0";
+        var freq = reachForRow > 0 ? (impsForRow / reachForRow).toFixed(2) : "0";
         var _info = campaignInfo[r.rawCampaignId] || {};
         allCampaigns.push({
           platform: r.platform,
@@ -374,8 +411,8 @@ export default async function handler(req, res) {
           landingPageViews: r.landingPageViews.toString(),
           pageLikes: r.pageLikes.toString(),
           pageFollows: r.pageFollows.toString(),
-          costPerLead: r.leads > 0 ? (r._sumSpend / r.leads).toFixed(2) : "0",
-          costPerInstall: r.appInstalls > 0 ? (r._sumSpend / r.appInstalls).toFixed(2) : "0",
+          costPerLead: r.leads > 0 ? (spendForRow / r.leads).toFixed(2) : "0",
+          costPerInstall: r.appInstalls > 0 ? (spendForRow / r.appInstalls).toFixed(2) : "0",
           actions: r.actions || [],
           reactionsByType: r.reactionsByType || { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
           reactionsTotal: r.reactionsTotal || 0,
