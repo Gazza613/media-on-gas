@@ -2082,7 +2082,7 @@ export default function MediaOnGas(){
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
-        {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:15,color:P.txt,fontFamily:ff,fontStyle:"italic",textAlign:"center",maxWidth:520,lineHeight:1.6,letterSpacing:0.2,transition:"opacity 0.3s"}}>{loaderQuip}<span style={{display:"inline-block",width:20}}>…</span></div></div>):(<>
+        {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontFamily:ff,fontStyle:"italic",textAlign:"center",maxWidth:520,lineHeight:1.6,letterSpacing:0.2,transition:"opacity 0.3s"}}>{loaderQuip}<span style={{display:"inline-block",width:20}}>…</span></div></div>):(<>
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
@@ -2445,7 +2445,7 @@ export default function MediaOnGas(){
                         <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.mint,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
                         <style>{"@keyframes spin{to{transform:rotate(360deg)}}@keyframes adLoaderFade{0%,100%{opacity:0.4}15%,85%{opacity:1}}"}</style>
                       </div>
-                      <div key={adLoaderQuip} style={{fontSize:15,color:P.txt,fontStyle:"italic",maxWidth:520,margin:"0 auto",animation:"adLoaderFade 5s ease-in-out",lineHeight:1.6,letterSpacing:0.2}}>{adLoaderQuip}<span style={{display:"inline-block",width:18}}>…</span></div>
+                      <div key={adLoaderQuip} style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontStyle:"italic",maxWidth:520,margin:"0 auto",animation:"adLoaderFade 5s ease-in-out",lineHeight:1.6,letterSpacing:0.2}}>{adLoaderQuip}<span style={{display:"inline-block",width:18}}>…</span></div>
                     </div>
                   </div>;
                 }
