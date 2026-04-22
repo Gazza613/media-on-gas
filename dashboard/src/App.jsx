@@ -350,11 +350,7 @@ function AdPreviewModal(props){
     // directly on the element — serving a 302 redirect via <source> broke
     // playback because the browser's byte-range requests didn't follow the
     // redirect reliably.
-    if(videoSrc&&videoType==="iframe"){
-      // Instagram public embed. Sized to a 5:6 portrait aspect which matches
-      // typical IG Feed / Reels creatives.
-      mediaBlock=<iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",maxHeight:"70vh",aspectRatio:"5/6",border:"none",borderRadius:10,background:"#000",display:"block"}}/>;
-    } else if(videoSrc){
+    if(videoSrc){
       mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} onError={function(e){
         var me=e.target&&e.target.error;
         var code=me?("media_"+(me.code||"unknown")):"playback";
@@ -362,8 +358,22 @@ function AdPreviewModal(props){
         console.warn("[GAS] Video playback failed\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
       }} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
     } else if(videoErr){
-      var errMsg=videoErr==="timeout"?"Video took too long to load.":videoErr==="network"?"Network error fetching video.":videoErr==="http_404"?"Creative may have been archived on the platform.":videoErr==="http_403"?"Access denied by the platform (permissions or region).":videoErr==="no_url"?"The platform returned no playable URL for this video.":videoErr==="media_4"?"Video URL expired or format unsupported, try closing and reopening.":videoErr==="media_3"?"Video file could not be decoded.":videoErr==="media_2"?"Network interrupted during playback.":"Video could not be loaded.";
-      mediaBlock=placeholder("VIDEO UNAVAILABLE",errMsg);
+      // Video resolution or playback failed. Meta dark-posts most ad videos
+      // so the platform doesn't expose a playable URL. Fall back to the
+      // high-res poster image (same resolver as static ads use) with a
+      // banner so the client still sees the creative visually.
+      if(imageSrc){
+        mediaBlock=<div style={{position:"relative",width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,overflow:"hidden"}}>
+          <img src={imageSrc} alt={ad.adName||"Ad"} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",display:"block"}}/>
+          <div style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"6px 12px",display:"flex",alignItems:"center",gap:8}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.8)" strokeWidth="2"/><polygon points="10,8 16,12 10,16" fill="rgba(255,255,255,0.8)"/></svg>
+            <span style={{fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.9)",letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Video Ad, Poster Preview</span>
+          </div>
+        </div>;
+      } else {
+        var errMsg=videoErr==="timeout"?"Video took too long to load.":videoErr==="network"?"Network error fetching video.":videoErr==="http_404"?"Creative may have been archived on the platform.":videoErr==="http_403"?"Access denied by the platform (permissions or region).":videoErr==="no_url"?"The platform returned no playable URL for this video.":videoErr==="media_4"?"Video URL expired or format unsupported, try closing and reopening.":videoErr==="media_3"?"Video file could not be decoded.":videoErr==="media_2"?"Network interrupted during playback.":"Video could not be loaded.";
+        mediaBlock=placeholder("VIDEO UNAVAILABLE",errMsg);
+      }
     } else {
       mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:imageSrc?("url("+imageSrc+") center/contain no-repeat #000"):"#000",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontFamily:fm,letterSpacing:2,fontWeight:800}}><div style={{background:"rgba(0,0,0,0.6)",padding:"10px 18px",borderRadius:8,letterSpacing:3}}>LOADING VIDEO…</div></div>;
     }

@@ -66,18 +66,10 @@ async function resolveMetaVideo(videoId, token, adId) {
           } catch (postErr) { console.warn("[ad-video] Meta post-fallback error", postErr && postErr.message); }
         }
 
-        // Path 3: Instagram public embed iframe. Works without auth — the
-        // ad's instagram_permalink_url gives us the public URL, and
-        // Instagram exposes a plain embed iframe at .../embed/captioned/
-        // that renders the post (and plays its video) inline.
-        var igPermalink = c.instagram_permalink_url;
-        if (igPermalink) {
-          var shortMatch = /instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/.exec(igPermalink);
-          if (shortMatch) {
-            var igEmbed = "https://www.instagram.com/" + shortMatch[1] + "/" + shortMatch[2] + "/embed/captioned/";
-            return { url: igEmbed, type: "iframe" };
-          }
-        }
+        // Path 3 (Instagram public embed) was removed: Meta dark-posts
+        // most ad creatives so the permalink URL routes to Instagram's
+        // broken-link page. Better to fall through to a null return so the
+        // modal renders the high-res poster image with an overlay banner.
       }
     } catch (pathErr) { console.warn("[ad-video] Meta fallback-chain error", pathErr && pathErr.message); }
   }
