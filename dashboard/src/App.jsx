@@ -2124,6 +2124,7 @@ export default function MediaOnGas(){
             <div title="Summary-tab compare mode: show deltas vs the prior period" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
               {[{k:"off",l:"OFF"},{k:"wow",l:"WoW"},{k:"mom",l:"MoM"}].map(function(opt){var active=compareMode===opt.k;return <button key={opt.k} onClick={function(){setCompareMode(opt.k);}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 10px",color:active?"#fff":P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2}}>{opt.l}</button>;})}
             </div>
+            {compareMode!=="off"&&(function(){var r=computeComparisonRange(df,dt,compareMode);if(!r)return null;return <div title={"Summary delta chips are comparing to "+r.from+" - "+r.to} style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 10px"}}><span style={{color:P.ember,fontWeight:800,marginRight:4}}>vs</span>{r.from}<span style={{color:P.dim,margin:"0 4px"}}>→</span>{r.to}</div>;})()}
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
             {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Settings, Audit, Reconciliation, Usage, Team" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.solar,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,14)} Settings</button>}
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
@@ -2217,7 +2218,8 @@ export default function MediaOnGas(){
               var cCpc=cClicks>0?(cSpend/cClicks):0;
               var cCtr=cImps>0?(cClicks/cImps*100):0;
               var cFreq=cReach>0?(cImps/cReach):0;
-              compareComputed={totalSpend:cSpend,totalImps:cImps,totalClicks:cClicks,totalReach:cReach,blendedCpm:cCpm,blendedCpc:cCpc,blendedCtr:cCtr,blendedFreq:cFreq,objectives:cObj,earnedTotal:cFbEarned+cIgEarned+cTtEarned};
+              compareComputed={totalSpend:cSpend,totalImps:cImps,totalClicks:cClicks,totalReach:cReach,blendedCpm:cCpm,blendedCpc:cCpc,blendedCtr:cCtr,blendedFreq:cFreq,objectives:cObj,earnedTotal:cFbEarned+cIgEarned+cTtEarned,matchedCount:cmpSel.length};
+              try{console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,currentCampaigns:sel.length,priorCampaigns:cmpSel.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks}},null,2));}catch(_){}
             }
             // Inline delta chip. Returns a small coloured chip next to a
             // value on Summary KPI tiles when compareMode is on. Higher is
