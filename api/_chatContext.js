@@ -72,12 +72,18 @@ async function internalFetch(req, path) {
   return r.json();
 }
 
-// Pulls campaigns + top ads, filters to the principal's allowlist, and returns
-// { text, topAds } where text is the authoritative data block for the AI, and
-// topAds is a structured list we can render as thumbnail cards in the UI when
-// the user asks about best-performing creative.
+// Pulls campaigns + top ads + demographics, filters to the principal's
+// allowlist, and returns { text, topAds, allAds } where text is the
+// authoritative data block for the AI.
 export async function buildChatContext(req, from, to, principal) {
-  var campData = await internalFetch(req, "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to));
+  var fetches = await Promise.all([
+    internalFetch(req, "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to)),
+    internalFetch(req, "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to)),
+    internalFetch(req, "/api/demographics?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to))
+  ]);
+  var campData = fetches[0];
+  var adsData = fetches[1];
+  var demoData = fetches[2];
   if (!campData || !Array.isArray(campData.campaigns)) return null;
 
   var allCamps = campData.campaigns;
@@ -102,7 +108,6 @@ export async function buildChatContext(req, from, to, principal) {
   // with platform on a separate field, reconstruct the suffixed virtual id
   // (raw + "_facebook" / raw + "_instagram") to match the allowlist exactly.
   // For TikTok + Google (no FB/IG split) the virtual id equals the raw id.
-  var adsData = await internalFetch(req, "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to));
   var filteredAds = [];
   if (adsData && Array.isArray(adsData.ads)) {
     if (principal && principal.role === "client") {
@@ -340,6 +345,140 @@ export async function buildChatContext(req, from, to, principal) {
       lines.push("(+ " + (filteredAds.length - compactList.length) + " more ads with lower spend, omitted from this listing)");
     }
     lines.push("");
+  }
+
+  // Demographics — filter to the principal's allowlist and render each
+  // dimension (province, age, gender, device) with impressions, clicks and
+  // CTR per bucket. Lets the bot answer questions like "are people in Free
+  // State engaging?", "which age bracket clicks best?", "is Mobile or
+  // Desktop driving the CTR?" without hallucinating.
+  if (demoData && (demoData.ageGender || demoData.region || demoData.device)) {
+    var rawIdSet = {};
+    (principal && principal.role === "client" ? (principal.allowedCampaignIds || []) : []).forEach(function(id) {
+      var s = String(id);
+      rawIdSet[s] = true;
+      rawIdSet[s.replace(/_facebook$/, "").replace(/_instagram$/, "")] = true;
+    });
+    var inDemo = function(r) {
+      if (principal && principal.role === "client") return rawIdSet[String(r.campaignId || "")] === true;
+      return true;
+    };
+    var regRows = (demoData.region || []).filter(inDemo);
+    var agRowsRaw = (demoData.ageGender || []).filter(inDemo);
+    var devRows = (demoData.device || []).filter(inDemo);
+
+    // Google returns age-only and gender-only rows as separate entries in
+    // ageGender, which double-counts Google impressions when summed flat.
+    // Keep only age-known rows for the age aggregate, gender-known rows
+    // for the gender aggregate — same strategy the dashboard uses.
+    var ageOrder = ["18-24","25-34","35-44","45-54","55-64","65+"];
+    var genderOrder = ["female","male"];
+
+    // Province aggregation
+    var provBuckets = {};
+    regRows.forEach(function(r) {
+      var p = String(r.region || "").trim();
+      if (!p || p.toLowerCase() === "unknown") return;
+      if (!provBuckets[p]) provBuckets[p] = { impressions: 0, clicks: 0 };
+      provBuckets[p].impressions += parseFloat(r.impressions || 0);
+      provBuckets[p].clicks += parseFloat(r.clicks || 0);
+    });
+    var provList = Object.keys(provBuckets).map(function(p) {
+      var b = provBuckets[p];
+      return { name: p, impressions: b.impressions, clicks: b.clicks, ctr: b.impressions > 0 ? (b.clicks / b.impressions * 100) : 0 };
+    }).sort(function(a, b) { return b.impressions - a.impressions; });
+
+    var provTotalImp = provList.reduce(function(s, x) { return s + x.impressions; }, 0);
+    var provTotalClk = provList.reduce(function(s, x) { return s + x.clicks; }, 0);
+    if (provList.length > 0) {
+      lines.push("## Regional engagement by SA province (tagged rows only, Meta + TikTok + Google via geo attribution)");
+      lines.push("Use this to answer questions about any specific province's engagement. Percentages below are the province's share of province-tagged traffic (not total). The subset outside of this list is traffic the ad platforms did not attribute to a specific SA province, common for upper-funnel targeting.");
+      lines.push("Tagged totals: " + fmtNum(provTotalImp) + " impressions, " + fmtNum(provTotalClk) + " clicks, " + (provTotalImp > 0 ? fmtPct(provTotalClk / provTotalImp * 100) : "0%") + " blended CTR.");
+      provList.forEach(function(p) {
+        var share = provTotalImp > 0 ? (p.impressions / provTotalImp * 100).toFixed(1) : "0.0";
+        lines.push("- " + p.name + ": " + fmtNum(p.impressions) + " impressions, " + fmtNum(p.clicks) + " clicks, " + fmtPct(p.ctr) + " CTR, " + share + "% of province-tagged impressions");
+      });
+      lines.push("");
+    }
+
+    // Age aggregation
+    var ageBuckets = {};
+    ageOrder.forEach(function(a) { ageBuckets[a] = { impressions: 0, clicks: 0 }; });
+    agRowsRaw.forEach(function(r) {
+      var a = String(r.age || "").trim();
+      if (!ageBuckets[a]) return;
+      ageBuckets[a].impressions += parseFloat(r.impressions || 0);
+      ageBuckets[a].clicks += parseFloat(r.clicks || 0);
+    });
+    var ageList = ageOrder.map(function(a) {
+      var b = ageBuckets[a];
+      return { name: a, impressions: b.impressions, clicks: b.clicks, ctr: b.impressions > 0 ? (b.clicks / b.impressions * 100) : 0 };
+    }).filter(function(x) { return x.impressions > 0; }).sort(function(a, b) { return b.impressions - a.impressions; });
+    var ageTotalImp = ageList.reduce(function(s, x) { return s + x.impressions; }, 0);
+    if (ageList.length > 0) {
+      lines.push("## Age engagement (tagged rows only)");
+      lines.push("Use this to answer questions about age brackets. Share % is share of age-tagged impressions. Platforms return a significant share of impressions without an age tag (iOS 14.5+ signal loss, logged-out users, teen accounts) and those sit outside this list.");
+      ageList.forEach(function(a) {
+        var share = ageTotalImp > 0 ? (a.impressions / ageTotalImp * 100).toFixed(1) : "0.0";
+        lines.push("- " + a.name + ": " + fmtNum(a.impressions) + " impressions, " + fmtNum(a.clicks) + " clicks, " + fmtPct(a.ctr) + " CTR, " + share + "% of age-tagged impressions");
+      });
+      lines.push("");
+    }
+
+    // Gender aggregation
+    var genBuckets = { female: { impressions: 0, clicks: 0 }, male: { impressions: 0, clicks: 0 } };
+    agRowsRaw.forEach(function(r) {
+      var g = String(r.gender || "").toLowerCase();
+      if (!genBuckets[g]) return;
+      genBuckets[g].impressions += parseFloat(r.impressions || 0);
+      genBuckets[g].clicks += parseFloat(r.clicks || 0);
+    });
+    var genderTotalImp = genBuckets.female.impressions + genBuckets.male.impressions;
+    if (genderTotalImp > 0) {
+      lines.push("## Gender engagement (tagged rows only)");
+      lines.push("Share % is share of gender-tagged impressions only. A meaningful fraction of impressions has no gender tag and sits outside this list.");
+      ["female", "male"].forEach(function(g) {
+        var b = genBuckets[g];
+        if (b.impressions === 0) return;
+        var ctr = b.impressions > 0 ? (b.clicks / b.impressions * 100) : 0;
+        var share = genderTotalImp > 0 ? (b.impressions / genderTotalImp * 100).toFixed(1) : "0.0";
+        var label = g.charAt(0).toUpperCase() + g.slice(1);
+        lines.push("- " + label + ": " + fmtNum(b.impressions) + " impressions, " + fmtNum(b.clicks) + " clicks, " + fmtPct(ctr) + " CTR, " + share + "% of gender-tagged impressions");
+      });
+      lines.push("");
+    }
+
+    // Device aggregation — normalize platform-specific device names.
+    var normDevice = function(d) {
+      var s = String(d || "").toLowerCase();
+      if (s.indexOf("mobile") >= 0 || s.indexOf("android") >= 0 || s.indexOf("ios") >= 0 || s === "iphone") return "Mobile";
+      if (s === "ipad" || s.indexOf("tablet") >= 0) return "Tablet";
+      if (s.indexOf("desktop") >= 0 || s === "web") return "Desktop";
+      if (s.indexOf("ctv") >= 0 || s.indexOf("connected_tv") >= 0) return "Connected TV";
+      return null;
+    };
+    var devBuckets = {};
+    devRows.forEach(function(r) {
+      var d = normDevice(r.device);
+      if (!d) return;
+      if (!devBuckets[d]) devBuckets[d] = { impressions: 0, clicks: 0 };
+      devBuckets[d].impressions += parseFloat(r.impressions || 0);
+      devBuckets[d].clicks += parseFloat(r.clicks || 0);
+    });
+    var devList = Object.keys(devBuckets).map(function(d) {
+      var b = devBuckets[d];
+      return { name: d, impressions: b.impressions, clicks: b.clicks, ctr: b.impressions > 0 ? (b.clicks / b.impressions * 100) : 0 };
+    }).sort(function(a, b) { return b.impressions - a.impressions; });
+    var devTotalImp = devList.reduce(function(s, x) { return s + x.impressions; }, 0);
+    if (devList.length > 0) {
+      lines.push("## Device engagement (tagged rows only)");
+      lines.push("Share % is share of device-tagged impressions only.");
+      devList.forEach(function(d) {
+        var share = devTotalImp > 0 ? (d.impressions / devTotalImp * 100).toFixed(1) : "0.0";
+        lines.push("- " + d.name + ": " + fmtNum(d.impressions) + " impressions, " + fmtNum(d.clicks) + " clicks, " + fmtPct(d.ctr) + " CTR, " + share + "% of device-tagged impressions");
+      });
+      lines.push("");
+    }
   }
 
   lines.push("## Industry paid media benchmarks (for comparison only, use these to say whether something is good/healthy/above-range)");

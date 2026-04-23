@@ -300,8 +300,17 @@ export default async function handler(req, res) {
     });
 
     for await (var event of stream) {
-      if (event.type === "content_block_delta" && event.delta && event.delta.type === "text_delta" && event.delta.text) {
-        writeEvent({ type: "delta", text: event.delta.text });
+      if (event.type === "content_block_delta" && event.delta) {
+        if (event.delta.type === "text_delta" && event.delta.text) {
+          writeEvent({ type: "delta", text: event.delta.text });
+        } else if (event.delta.type === "thinking_delta") {
+          // Heartbeat during adaptive thinking — Sonnet can take tens of
+          // seconds to reason on a wide data block, and without bytes on the
+          // wire the frontend's 75-second idle watchdog fires and aborts the
+          // request. Emitting a heartbeat on every thinking delta keeps the
+          // watchdog reset. Frontend ignores the type, only the bytes matter.
+          writeEvent({ type: "thinking" });
+        }
       }
     }
     var finalMsg = await stream.finalMessage();
