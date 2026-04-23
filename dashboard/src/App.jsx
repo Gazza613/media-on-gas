@@ -2026,7 +2026,12 @@ export default function MediaOnGas(){
   var idleNudgeS=useState(false),showIdleNudge=idleNudgeS[0],setShowIdleNudge=idleNudgeS[1];
   useEffect(function(){
     if(!isClient||!viewToken)return;
-    var IDLE_MS=15*60*1000;
+    // 10 minutes of inactivity on a client share link triggers the refresh
+    // nudge. Purpose is dual: pull fresh platform data AND force the browser
+    // to fetch the latest index.html, so any dashboard optimisations we've
+    // deployed since the client loaded the tab surface on their next view
+    // rather than being served a days-old bundle.
+    var IDLE_MS=10*60*1000;
     var timer=null;
     var trigger=function(){setShowIdleNudge(true);};
     var resetIdle=function(){if(timer)clearTimeout(timer);if(!showIdleNudge)timer=setTimeout(trigger,IDLE_MS);};
@@ -3070,13 +3075,21 @@ export default function MediaOnGas(){
       <div style={{width:420,maxWidth:"94vw",background:"linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%)",border:"1px solid rgba(249,98,3,0.35)",borderRadius:18,padding:"28px 28px 22px",boxShadow:"0 30px 80px rgba(0,0,0,0.65),0 0 60px rgba(249,98,3,0.18)",textAlign:"center",animation:"gasEnter 0.45s cubic-bezier(0.2,0.8,0.2,1) both"}}>
         <div style={{fontSize:38,marginBottom:6}}>{"😴"}</div>
         <div style={{fontSize:11,color:P.ember,letterSpacing:3,fontWeight:800,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Pssst, still there?</div>
-        <div style={{fontSize:15,color:P.txt,fontFamily:ff,lineHeight:1.6,fontWeight:700,marginBottom:8}}>Your dashboard just took a 15 minute coffee break.</div>
-        <div style={{fontSize:12,color:"rgba(255,251,248,0.72)",fontFamily:fm,lineHeight:1.7,marginBottom:20}}>Tap refresh to pull the latest metrics hot off the platforms. Your ads have been busy, we promise.</div>
+        <div style={{fontSize:15,color:P.txt,fontFamily:ff,lineHeight:1.6,fontWeight:700,marginBottom:8}}>Your dashboard just took a 10 minute coffee break.</div>
+        <div style={{fontSize:12,color:"rgba(255,251,248,0.72)",fontFamily:fm,lineHeight:1.7,marginBottom:20}}>Tap refresh to pull the latest metrics and the newest dashboard features. Your ads have been busy, we promise.</div>
         <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-          <button onClick={function(){window.location.reload();}} style={{background:gEmber,border:"none",borderRadius:10,padding:"12px 24px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2,boxShadow:"0 6px 20px rgba(249,98,3,0.35)"}}>Refresh Now</button>
+          <button onClick={function(){
+            // Cache-busting reload, the _r timestamp forces the browser to
+            // refetch index.html so any dashboard updates we have deployed
+            // since the tab was first loaded come through with the new hashed
+            // JS bundle. Preserves the view token + any other existing params.
+            var u=window.location.href.replace(/[?&]_r=\d+/g,"");
+            u+=(u.indexOf("?")>=0?"&":"?")+"_r="+Date.now();
+            window.location.replace(u);
+          }} style={{background:gEmber,border:"none",borderRadius:10,padding:"12px 24px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2,boxShadow:"0 6px 20px rgba(249,98,3,0.35)"}}>Refresh Now</button>
           <button onClick={function(){setShowIdleNudge(false);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>Not yet</button>
         </div>
-        <div style={{marginTop:16,fontSize:10,color:P.dim,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google.</div>
+        <div style={{marginTop:16,fontSize:10,color:P.dim,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
       </div>
     </div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
