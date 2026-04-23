@@ -36,13 +36,24 @@ async function resolveMetaAdThumbnail(adId, token) {
       if (vr.ok) {
         var vd = await vr.json();
         if (vd.thumbnails && vd.thumbnails.data && vd.thumbnails.data.length > 0) {
+          // ALWAYS pick the largest-area thumbnail. Meta's `is_preferred` flag
+          // is often set on a tiny 192x192 auto-chosen frame — preferring it
+          // returned blurry 192-px posters into the preview modal even though
+          // 1080x1080 variants were sitting right next to it. If there's a
+          // tie on area, use is_preferred as the tiebreaker only.
           var best = null;
           var bestArea = 0;
+          var bestIsPreferred = false;
           for (var ti = 0; ti < vd.thumbnails.data.length; ti++) {
             var t = vd.thumbnails.data[ti];
-            if (t.is_preferred && t.uri) { best = t.uri; bestArea = Infinity; break; }
+            if (!t.uri) continue;
             var area = parseInt(t.width || 0) * parseInt(t.height || 0);
-            if (t.uri && area > bestArea) { best = t.uri; bestArea = area; }
+            var isPref = !!t.is_preferred;
+            if (area > bestArea || (area === bestArea && isPref && !bestIsPreferred)) {
+              best = t.uri;
+              bestArea = area;
+              bestIsPreferred = isPref;
+            }
           }
           if (best) return best;
           if (vd.thumbnails.data[0].uri) return vd.thumbnails.data[0].uri;

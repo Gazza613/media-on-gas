@@ -339,6 +339,15 @@ function AdPreviewModal(props){
   var vs=useState(null),videoSrc=vs[0],setVideoSrc=vs[1];
   var vt=useState("video"),videoType=vt[0],setVideoType=vt[1];
   var ve=useState(null),videoErr=ve[0],setVideoErr=ve[1];
+  // Track whether the <video> element has started playing. Errors BEFORE
+  // playback = initial resolve / decode failure, swap to the error screen.
+  // Errors AFTER playback has begun (e.g. a transient byte-range fetch that
+  // fails when the user unmutes and the browser refetches the audio stream
+  // against a Meta-signed CDN URL) are logged only — nuking the playing
+  // video replaced a working preview with a "VIDEO UNAVAILABLE" screen
+  // the moment the client hit unmute. Leaving the <video> element alone
+  // lets the browser recover on its own.
+  var hp=useState(false),hasPlayed=hp[0],setHasPlayed=hp[1];
   var ad=props.ad;
   var format=((ad&&ad.format)||"STATIC").toUpperCase();
   var isVideo=format==="MP4"||format==="VIDEO";
@@ -350,6 +359,7 @@ function AdPreviewModal(props){
     setVideoSrc(null);
     setVideoType("video");
     setVideoErr(null);
+    setHasPlayed(false);
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
@@ -424,9 +434,18 @@ function AdPreviewModal(props){
       // video playback natively without needing a direct MP4 URL.
       mediaBlock=<iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",height:"60vh",border:"none",borderRadius:10,background:"#000",display:"block"}}/>;
     } else if(videoSrc){
-      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc} onError={function(e){
+      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc}
+        onPlaying={function(){setHasPlayed(true);}}
+        onError={function(e){
         var me=e.target&&e.target.error;
         var code=me?("media_"+(me.code||"unknown")):"playback";
+        // If the video has already played, treat this as a transient error
+        // (common when unmuting refetches the audio stream against a
+        // short-lived Meta signed URL) and leave the element alone.
+        if(hasPlayed){
+          console.warn("[GAS] Video mid-playback error, ignoring\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
+          return;
+        }
         setVideoErr(code);
         console.warn("[GAS] Video playback failed\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
       }} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
