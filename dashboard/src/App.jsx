@@ -1808,6 +1808,34 @@ export default function MediaOnGas(){
     return function(){clearInterval(iv2);};
   },[adsList&&adsList.length]);
   var ts1=useState(null),timeseries=ts1[0],setTimeseries=ts1[1];
+  // Lazy-loaded demographics payload. Fetched the first time the user
+  // opens the Demographics tab, then re-fetched when the date range
+  // changes. Keeps Summary load time unaffected (demographic breakdowns
+  // are slow — each Meta breakdown = a separate insights call).
+  var dm1=useState(null),demoData=dm1[0],setDemoData=dm1[1];
+  var dm2=useState(false),demoLoading=dm2[0],setDemoLoading=dm2[1];
+  var dm3=useState(""),demoErr=dm3[0],setDemoErr=dm3[1];
+  var dm4=useState(QUIRKY_AD_LOADERS[0]),demoQuip=dm4[0],setDemoQuip=dm4[1];
+  var dm5=useState("impressions"),demoMetric=dm5[0],setDemoMetric=dm5[1];
+  // Reset cached demo payload when date range changes so the tab fetches
+  // fresh the next time it's opened.
+  useEffect(function(){setDemoData(null);},[df,dt]);
+  useEffect(function(){
+    if(tab!=="demographics"||!isAuthed())return;
+    if(demoData||demoLoading)return;
+    setDemoLoading(true);setDemoErr("");
+    var h=authHeaders();
+    fetch(API+"/api/demographics?from="+df+"&to="+dt,{headers:h})
+      .then(function(r){return r.ok?r.json():{error:"HTTP "+r.status};})
+      .then(function(d){setDemoLoading(false);if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
+      .catch(function(err){setDemoLoading(false);setDemoErr("Connection error");console.error("Demo API error",err);});
+  },[tab,df,dt,session,viewToken,demoData,demoLoading]);
+  useEffect(function(){
+    if(!demoLoading)return;
+    setDemoQuip(pickQuirky(QUIRKY_AD_LOADERS));
+    var iv3=setInterval(function(){setDemoQuip(pickQuirky(QUIRKY_AD_LOADERS));},5000);
+    return function(){clearInterval(iv3);};
+  },[demoLoading]);
   var ts2=useState("week"),tsGran=ts2[0],setTsGran=ts2[1];
   var cf1=useState("all"),crFiltP=cf1[0],setCrFiltP=cf1[1];
   var cf2=useState("all"),crFiltF=cf2[0],setCrFiltF=cf2[1];
@@ -2057,7 +2085,7 @@ export default function MediaOnGas(){
     // tab state from admin mode cannot leak through.
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)}];
   } else {
-    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
   }
   useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
   // Scroll to top whenever the tab changes so each page lands cleanly
@@ -4261,7 +4289,244 @@ export default function MediaOnGas(){
               </div>
             </div>;
           })()}
-        </div>)}        {tab==="community"&&(<div>
+        </div>)}
+
+        {tab==="demographics"&&(<div>
+          <SH icon={Ic.globe(P.cyan,20)} title="Demographics" sub={"Age, gender, location and device for "+df+" to "+dt} accent={P.cyan}/>
+          {demoLoading&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"54px 20px",textAlign:"center",color:P.dim,fontFamily:ff}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
+              <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.cyan,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+              <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+            </div>
+            <div key={demoQuip} style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontStyle:"italic",maxWidth:520,margin:"0 auto",lineHeight:1.6,letterSpacing:0.2}}>{demoQuip}<span style={{display:"inline-block",width:18}}>…</span></div>
+            <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:16,letterSpacing:1}}>Each platform returns demographic slices as separate calls, this can take 15 to 30 seconds first time.</div>
+          </div>}
+          {!demoLoading&&demoErr&&<div style={{background:P.glass,border:"1px solid "+P.rose+"40",borderRadius:18,padding:"30px 24px",color:P.rose,fontFamily:fm,fontSize:13}}>Demographics failed to load: {demoErr}</div>}
+          {!demoLoading&&!demoErr&&demoData&&(function(){
+            var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
+            var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
+            var inSel=function(r){return selSet[String(r.campaignId||"")]||selSet[String(r.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")];};
+            var agRows=(demoData.ageGender||[]).filter(inSel);
+            var regRows=(demoData.region||[]).filter(inSel);
+            var devRows=(demoData.device||[]).filter(inSel);
+            var cityRows=(demoData.googleCity||[]).filter(inSel);
+            if(agRows.length===0&&regRows.length===0&&devRows.length===0&&cityRows.length===0){
+              return <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
+            }
+            /* ═══ METRIC PICKER ═══ */
+            var metricOptions=[
+              {k:"impressions",label:"Ads Served",accent:P.cyan,field:function(r){return r.impressions||0;}},
+              {k:"clicks",label:"Clicks",accent:P.mint,field:function(r){return r.clicks||0;}},
+              {k:"conv",label:"Conversions",accent:P.rose,field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
+            ];
+            var curMetric=demoMetric||"impressions";
+            var metric=metricOptions.filter(function(o){return o.k===curMetric;})[0]||metricOptions[0];
+
+            /* ═══ 1. AGE × GENDER HEATMAP ═══ */
+            var ageOrder=["13-17","18-24","25-34","35-44","45-54","55-64","65+"];
+            var genderOrder=["female","male","unknown"];
+            var genderLabel={female:"Female",male:"Male",unknown:"Unknown"};
+            var agMatrix={};ageOrder.forEach(function(a){agMatrix[a]={};genderOrder.forEach(function(g){agMatrix[a][g]=0;});});
+            var agTotal=0;
+            agRows.forEach(function(r){
+              var age=String(r.age||"unknown");
+              var gen=String(r.gender||"unknown").toLowerCase();
+              if(ageOrder.indexOf(age)<0)return;
+              if(genderOrder.indexOf(gen)<0)gen="unknown";
+              var v=metric.field(r);
+              agMatrix[age][gen]+=v;
+              agTotal+=v;
+            });
+            var agMax=0;ageOrder.forEach(function(a){genderOrder.forEach(function(g){if(agMatrix[a][g]>agMax)agMax=agMatrix[a][g];});});
+            var heatCell=function(val){
+              if(agMax===0)return "rgba(255,255,255,0.03)";
+              var intensity=val/agMax;
+              var alpha=0.08+intensity*0.82;
+              return "rgba(34,211,238,"+alpha.toFixed(3)+")";
+            };
+
+            /* ═══ 2. PROVINCE MAP (SA 9 provinces) ═══ */
+            // Simplified SVG polygons. Intended as a visual anchor, not a
+            // cartographic reference — approximate relative size + position.
+            var provincePaths={
+              "Northern Cape":"M30,110 L220,130 L230,240 L250,300 L180,350 L60,370 L20,280 Z",
+              "Western Cape":"M60,370 L180,350 L220,430 L160,495 L50,495 L15,420 Z",
+              "Eastern Cape":"M220,430 L250,300 L350,320 L420,380 L460,465 L220,495 L180,495 L160,495 Z",
+              "Free State":"M250,300 L350,260 L380,320 L350,320 Z",
+              "Gauteng":"M350,210 L400,210 L400,245 L360,255 L340,240 Z",
+              "North West":"M220,130 L350,130 L370,210 L350,260 L250,300 L230,240 Z",
+              "Limpopo":"M340,40 L520,60 L520,160 L430,170 L340,130 L320,80 Z",
+              "Mpumalanga":"M430,170 L520,160 L530,240 L460,300 L400,290 L400,245 Z",
+              "KwaZulu-Natal":"M400,290 L460,300 L500,380 L460,465 L420,380 L380,340 L380,320 Z"
+            };
+            var provTotals={};Object.keys(provincePaths).forEach(function(p){provTotals[p]={impressions:0,clicks:0,conv:0,spend:0};});
+            var otherProv={impressions:0,clicks:0,conv:0,spend:0,count:0};
+            regRows.forEach(function(r){
+              var pn=String(r.region||"").trim();
+              if(!provTotals[pn]){otherProv.impressions+=r.impressions||0;otherProv.clicks+=r.clicks||0;otherProv.spend+=parseFloat(r.spend||0);var rs=r.results||{};otherProv.conv+=(rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);otherProv.count++;return;}
+              provTotals[pn].impressions+=r.impressions||0;
+              provTotals[pn].clicks+=r.clicks||0;
+              provTotals[pn].spend+=parseFloat(r.spend||0);
+              var rs=r.results||{};
+              provTotals[pn].conv+=(rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);
+            });
+            var provMax=0;Object.keys(provTotals).forEach(function(p){var v=provTotals[p][curMetric]||0;if(v>provMax)provMax=v;});
+            var provFill=function(val){if(provMax===0)return"rgba(34,211,238,0.08)";var i=val/provMax;var alpha=0.15+i*0.78;return"rgba(34,211,238,"+alpha.toFixed(3)+")";};
+            var provStroke=function(val){if(provMax===0)return"rgba(34,211,238,0.25)";return"rgba(34,211,238,0.55)";};
+            var rankedProvinces=Object.keys(provTotals).map(function(p){return{name:p,val:provTotals[p][curMetric]||0,impressions:provTotals[p].impressions,clicks:provTotals[p].clicks,conv:provTotals[p].conv,spend:provTotals[p].spend};}).sort(function(a,b){return b.val-a.val;});
+
+            /* ═══ 3. DEVICE SPLIT ═══ */
+            var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="android_app"||s==="iphone"||s==="ipad")return s==="ipad"?"tablet":"mobile";if(s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
+            var devTotals={mobile:{impressions:0,clicks:0,conv:0,spend:0},desktop:{impressions:0,clicks:0,conv:0,spend:0},tablet:{impressions:0,clicks:0,conv:0,spend:0},ctv:{impressions:0,clicks:0,conv:0,spend:0},other:{impressions:0,clicks:0,conv:0,spend:0}};
+            devRows.forEach(function(r){var d=deviceNorm(r.device);if(!devTotals[d])d="other";devTotals[d].impressions+=r.impressions||0;devTotals[d].clicks+=r.clicks||0;devTotals[d].spend+=parseFloat(r.spend||0);var rs=r.results||{};devTotals[d].conv+=(rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);});
+            var devList=Object.keys(devTotals).filter(function(d){return devTotals[d].impressions>0;}).map(function(d){return{name:d,label:d==="mobile"?"Mobile":d==="desktop"?"Desktop":d==="tablet"?"Tablet":d==="ctv"?"Connected TV":"Other",impressions:devTotals[d].impressions,clicks:devTotals[d].clicks,conv:devTotals[d].conv,spend:devTotals[d].spend,color:d==="mobile"?P.cyan:d==="desktop"?P.orchid:d==="tablet"?P.solar:d==="ctv"?P.fuchsia:P.sub};}).sort(function(a,b){return b.impressions-a.impressions;});
+            var devGrandImps=devList.reduce(function(a,r){return a+r.impressions;},0);
+            var devGrandClicks=devList.reduce(function(a,r){return a+r.clicks;},0);
+            var devGrandConv=devList.reduce(function(a,r){return a+r.conv;},0);
+
+            /* ═══ 4. PLATFORM × AGE OVERLAY ═══ */
+            var platformColor={"Meta":P.fb,"TikTok":P.tt,"Google":P.gd};
+            var platAgeMatrix={};
+            agRows.forEach(function(r){
+              var plat=r.platform;var age=String(r.age||"unknown");
+              if(ageOrder.indexOf(age)<0)return;
+              if(!platAgeMatrix[plat])platAgeMatrix[plat]={};
+              platAgeMatrix[plat][age]=(platAgeMatrix[plat][age]||0)+metric.field(r);
+            });
+            var platAgeData=ageOrder.map(function(a){var o={age:a};Object.keys(platAgeMatrix).forEach(function(p){o[p]=platAgeMatrix[p][a]||0;});return o;});
+
+            /* ═══ 5. GOOGLE-ONLY CITY VIEW ═══ */
+            var cityAgg={};
+            cityRows.forEach(function(r){
+              var c=String(r.city||"").trim();if(!c)return;
+              if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0,conv:0,spend:0};
+              cityAgg[c].impressions+=r.impressions||0;
+              cityAgg[c].clicks+=r.clicks||0;
+              cityAgg[c].spend+=parseFloat(r.spend||0);
+              var rs=r.results||{};
+              cityAgg[c].conv+=(rs.leads||0)+(rs.appInstalls||0);
+            });
+            var topCities=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b[curMetric]-a[curMetric];}).slice(0,15);
+
+            /* ═══ INSIGHT NARRATIVE ═══ */
+            var narrative=(function(){
+              var lines=[];
+              // Standout age/gender
+              var best={v:0,age:"",gen:""};
+              ageOrder.forEach(function(a){genderOrder.forEach(function(g){if(agMatrix[a][g]>best.v){best.v=agMatrix[a][g];best.age=a;best.gen=g;}});});
+              if(best.v>0)lines.push("The audience is leaning "+best.age+" "+genderLabel[best.gen].toLowerCase()+", which drove "+(agTotal>0?(best.v/agTotal*100).toFixed(0):"0")+"% of "+metric.label.toLowerCase()+" across all campaigns.");
+              // Standout province
+              var topProv=rankedProvinces[0];
+              if(topProv&&topProv.val>0){var provTotal=rankedProvinces.reduce(function(s,p){return s+p.val;},0);lines.push(topProv.name+" is the leading province with "+fmt(topProv.val)+" "+metric.label.toLowerCase()+" ("+(provTotal>0?(topProv.val/provTotal*100).toFixed(0):"0")+"% share), followed by "+(rankedProvinces[1]?rankedProvinces[1].name:"nothing")+(rankedProvinces[1]?" at "+fmt(rankedProvinces[1].val):"")+".");}
+              // Device call-out
+              if(devList.length>0){var topDev=devList[0];lines.push(topDev.label+" delivered "+(devGrandImps>0?(topDev.impressions/devGrandImps*100).toFixed(0):"0")+"% of impressions and "+(devGrandConv>0?(topDev.conv/devGrandConv*100).toFixed(0):"0")+"% of conversions, confirming this is where the audience actually converts.");}
+              // Google city standout
+              if(topCities.length>0){lines.push("On Google Ads, "+topCities[0].name+" tops the city view with "+fmt(topCities[0][curMetric])+" "+metric.label.toLowerCase()+(topCities[1]?" ahead of "+topCities[1].name+" and "+(topCities[2]?topCities[2].name:"others"):"")+".");}
+              return lines.join(" ");
+            })();
+
+            return <div>
+              {/* Metric picker */}
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+                <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700,textTransform:"uppercase"}}>View By</span>
+                {metricOptions.map(function(o){var act=curMetric===o.k;return <button key={o.k} onClick={function(){setDemoMetric(o.k);}} style={{background:act?o.accent:"transparent",border:"1px solid "+(act?o.accent:P.rule),borderRadius:10,padding:"7px 14px",color:act?"#fff":P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>{o.label}</button>;})}
+              </div>
+
+              {/* Age × Gender Heatmap */}
+              <div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.users(P.cyan,18)}<span style={{fontSize:13,fontWeight:900,color:P.cyan,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Age × Gender Heatmap</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>Metric: {metric.label} — total {fmt(agTotal)}</span></div>
+                {agTotal===0?<div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No age × gender data available for the selected campaigns on this metric.</div>:<div style={{display:"grid",gridTemplateColumns:"100px repeat(3,1fr)",gap:4}}>
+                  <div></div>
+                  {genderOrder.map(function(g){return <div key={g} style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",textAlign:"center",padding:"8px 0"}}>{genderLabel[g]}</div>;})}
+                  {ageOrder.map(function(a){return [<div key={"l"+a} style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,padding:"14px 8px",textAlign:"right"}}>{a}</div>].concat(genderOrder.map(function(g){var v=agMatrix[a][g];var pct=agTotal>0?(v/agTotal*100):0;return <div key={a+g} title={a+" "+genderLabel[g]+": "+fmt(v)+" ("+pct.toFixed(1)+"%)"} style={{background:heatCell(v),border:"1px solid rgba(255,255,255,0.06)",borderRadius:6,padding:"14px 8px",textAlign:"center",minHeight:56,display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <div style={{fontSize:14,fontWeight:900,color:v>0?P.txt:P.dim,fontFamily:fm,lineHeight:1}}>{v>0?fmt(v):"—"}</div>
+                    {v>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontFamily:fm,marginTop:3}}>{pct.toFixed(1)+"%"}</div>}
+                  </div>;}));})}
+                </div>}
+              </div>
+
+              {/* Province Map */}
+              <div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.globe(P.cyan,18)}<span style={{fontSize:13,fontWeight:900,color:P.cyan,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Province Performance Map</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{metric.label} by province — hover to inspect</span></div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:24,alignItems:"start"}}>
+                  <div>
+                    <svg viewBox="0 0 560 530" width="100%" height="auto" style={{background:"rgba(0,0,0,0.25)",borderRadius:12,display:"block"}}>
+                      {Object.keys(provincePaths).map(function(p){var val=provTotals[p][curMetric]||0;return <path key={p} d={provincePaths[p]} fill={provFill(val)} stroke={provStroke(val)} strokeWidth="1.3" style={{transition:"fill 0.3s"}}><title>{p+": "+fmt(val)+" "+metric.label.toLowerCase()+" | "+fR(provTotals[p].spend)+" spend"}</title></path>;})}
+                      {Object.keys(provincePaths).map(function(p){var bbMatch=/M(\d+),(\d+)/.exec(provincePaths[p]);var cx=200,cy=250;if(p==="Northern Cape"){cx=120;cy=240;}else if(p==="Western Cape"){cx=110;cy=430;}else if(p==="Eastern Cape"){cx=300;cy=430;}else if(p==="Free State"){cx=310;cy=295;}else if(p==="Gauteng"){cx=370;cy=230;}else if(p==="North West"){cx=280;cy=200;}else if(p==="Limpopo"){cx=420;cy=100;}else if(p==="Mpumalanga"){cx=465;cy=220;}else if(p==="KwaZulu-Natal"){cx=435;cy=370;}return <g key={"l"+p} style={{pointerEvents:"none"}}><text x={cx} y={cy} textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:800,fill:"rgba(255,255,255,0.88)",letterSpacing:0.5}}>{p==="KwaZulu-Natal"?"KZN":p==="Northern Cape"?"N. Cape":p==="Western Cape"?"W. Cape":p==="Eastern Cape"?"E. Cape":p==="North West"?"N. West":p}</text><text x={cx} y={cy+12} textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:900,fill:P.cyan}}>{fmt(provTotals[p][curMetric]||0)}</text></g>;})}
+                    </svg>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,fontSize:9,fontFamily:fm,color:P.sub,letterSpacing:1}}>
+                      <span>Low</span>
+                      <div style={{flex:1,height:8,borderRadius:4,background:"linear-gradient(90deg,rgba(34,211,238,0.15),rgba(34,211,238,0.92))"}}></div>
+                      <span>High ({fmt(provMax)})</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Ranked Provinces</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm}}>
+                      <thead><tr><th style={{textAlign:"left",padding:"8px 6px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule}}>Province</th><th style={{textAlign:"right",padding:"8px 6px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule}}>{metric.label}</th><th style={{textAlign:"right",padding:"8px 6px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule}}>Spend</th></tr></thead>
+                      <tbody>{rankedProvinces.map(function(row,i){var share=provMax>0?(row.val/rankedProvinces.reduce(function(s,p){return s+p.val;},0)*100):0;return <tr key={row.name} style={{borderBottom:"1px solid "+P.rule+"60"}}>
+                        <td style={{padding:"8px 6px",color:P.txt,fontWeight:600,whiteSpace:"nowrap"}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:provFill(row.val),marginRight:8,verticalAlign:"middle"}}></span>{row.name}</td>
+                        <td style={{padding:"8px 6px",color:row.val>0?P.cyan:P.dim,fontWeight:800,textAlign:"right",fontFamily:fm}}>{fmt(row.val)}{row.val>0&&<div style={{fontSize:9,color:P.sub,fontWeight:500,marginTop:2}}>{share.toFixed(1)+"%"}</div>}</td>
+                        <td style={{padding:"8px 6px",color:P.sub,textAlign:"right"}}>{fR(row.spend)}</td>
+                      </tr>;})}</tbody>
+                    </table>
+                    {otherProv.count>0&&<div style={{marginTop:10,fontSize:10,color:P.dim,fontFamily:fm,fontStyle:"italic"}}>+ {fmt(otherProv[curMetric])} {metric.label.toLowerCase()} from {otherProv.count} non-SA / unclassified region row{otherProv.count===1?"":"s"}.</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Device Split */}
+              {devList.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.radar(P.orchid,18)}<span style={{fontSize:13,fontWeight:900,color:P.orchid,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Device Split</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.orchid+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>Where the audience actually converts</span></div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat("+devList.length+",1fr)",gap:14}}>
+                  {devList.map(function(d){var impsPct=devGrandImps>0?(d.impressions/devGrandImps*100):0;var clkPct=devGrandClicks>0?(d.clicks/devGrandClicks*100):0;var convPct=devGrandConv>0?(d.conv/devGrandConv*100):0;return <div key={d.name} style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+d.color+"30",borderLeft:"3px solid "+d.color,borderRadius:"0 14px 14px 0",padding:"18px 20px"}}>
+                    <div style={{fontSize:10,fontWeight:800,color:d.color,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>{d.label}</div>
+                    {[{l:"Ads Served",v:d.impressions,pct:impsPct},{l:"Clicks",v:d.clicks,pct:clkPct},{l:"Conversions",v:d.conv,pct:convPct}].map(function(row,i){return <div key={i} style={{marginBottom:10}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginBottom:3}}><span>{row.l}</span><span>{fmt(row.v)} ({row.pct.toFixed(0)}%)</span></div>
+                      <div style={{height:6,background:"rgba(0,0,0,0.4)",borderRadius:3,overflow:"hidden"}}><div style={{width:row.pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"cc,"+d.color+"ff)",transition:"width 0.6s"}}></div></div>
+                    </div>;})}
+                  </div>;})}
+                </div>
+              </div>}
+
+              {/* Platform × Age overlay */}
+              {Object.keys(platAgeMatrix).length>1&&<div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.chart(P.solar,18)}<span style={{fontSize:13,fontWeight:900,color:P.solar,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Platform by Age Group</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>Which platform hits which age hardest</span></div>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={platAgeData} barSize={28} margin={{top:10,right:24,left:0,bottom:10}}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
+                    <XAxis dataKey="age" tick={{fontSize:11,fill:P.txt,fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                    <Legend wrapperStyle={{fontSize:10,fontFamily:fm,paddingTop:8}}/>
+                    {Object.keys(platAgeMatrix).map(function(p){return <Bar key={p} dataKey={p} fill={platformColor[p]||P.ember} radius={[4,4,0,0]}/>;})}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>}
+
+              {/* Google-only city view */}
+              {topCities.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.gd+"30"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.target(P.gd,18)}<span style={{fontSize:13,fontWeight:900,color:P.gd,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Google Ads — City View</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.gd+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>True city granularity, Google Ads only</span></div>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm}}>
+                  <thead><tr>{["City",metric.label,"Clicks","Conversions","Spend"].map(function(h,i){return <th key={i} style={{textAlign:i===0?"left":"right",padding:"10px 12px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule,textTransform:"uppercase"}}>{h}</th>;})}</tr></thead>
+                  <tbody>{topCities.map(function(c,i){return <tr key={c.name} style={{borderBottom:"1px solid "+P.rule+"60",background:i%2===0?"rgba(52,168,83,0.04)":"transparent"}}>
+                    <td style={{padding:"10px 12px",color:P.txt,fontWeight:600,whiteSpace:"nowrap"}}>#{i+1}  {c.name}</td>
+                    <td style={{padding:"10px 12px",textAlign:"right",color:P.cyan,fontWeight:800,fontFamily:fm}}>{fmt(c[curMetric])}</td>
+                    <td style={{padding:"10px 12px",textAlign:"right",color:P.txt,fontFamily:fm}}>{fmt(c.clicks)}</td>
+                    <td style={{padding:"10px 12px",textAlign:"right",color:c.conv>0?P.rose:P.dim,fontFamily:fm,fontWeight:700}}>{fmt(c.conv)}</td>
+                    <td style={{padding:"10px 12px",textAlign:"right",color:P.sub,fontFamily:fm}}>{fR(c.spend)}</td>
+                  </tr>;})}</tbody>
+                </table>
+              </div>}
+
+              {/* Insight Narrative */}
+              {narrative&&<Insight title="Demographic Read" accent={P.cyan} icon={Ic.users(P.cyan,16)}>{narrative}</Insight>}
+            </div>;
+          })()}
+          {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
+        </div>)}
+
+        {tab==="community"&&(<div>
           <SH icon={Ic.users(P.mint,20)} title="Community Growth" sub={df+" to "+dt+" | Followers & Likes by Platform"} accent={P.mint}/>
           <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
             <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TOTAL COMMUNITY & PERIOD GROWTH</div></div>
