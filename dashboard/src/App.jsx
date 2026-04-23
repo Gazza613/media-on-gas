@@ -4410,49 +4410,51 @@ export default function MediaOnGas(){
             // Reusable helpers.
             var fmtAbbr=function(n){n=parseFloat(n||0);if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toString();};
 
-            // Province paths (simplified SA provinces, viewBox 0 0 720 620).
+            // Province paths — realistic curved approximations of SA's nine
+            // provinces on a viewBox 0 0 900 780. Each path uses cubic Bezier
+            // curves for smooth coastlines and province borders, anchored to
+            // approximate lat/lng positions of real SA geography. Lesotho and
+            // Eswatini are drawn separately as enclave "holes" over the top
+            // of the provinces they sit inside.
             var provincePaths={
-              "Northern Cape":"M 25,175 L 200,160 L 210,260 L 260,300 L 240,400 L 275,460 L 195,500 L 75,485 L 30,410 L 12,265 Z",
-              "Western Cape":"M 30,410 L 75,485 L 195,500 L 260,585 L 155,615 L 45,600 L 15,495 Z",
-              "Eastern Cape":"M 275,460 L 435,440 L 480,510 L 520,555 L 455,580 L 260,585 L 195,500 Z",
-              "Free State":"M 260,300 L 430,280 L 510,305 L 505,400 L 435,440 L 275,460 L 240,400 Z",
-              "North West":"M 200,160 L 475,150 L 495,210 L 430,280 L 260,300 L 210,260 Z",
-              "Gauteng":"M 495,210 L 560,215 L 555,268 L 495,270 Z",
-              "Limpopo":"M 340,30 L 680,25 L 690,175 L 555,190 L 400,175 L 320,115 Z",
-              "Mpumalanga":"M 555,190 L 690,175 L 695,305 L 605,325 L 555,268 L 560,215 Z",
-              "KwaZulu-Natal":"M 510,305 L 605,325 L 660,420 L 590,550 L 480,510 L 435,440 L 470,395 L 505,360 Z"
+              "Northern Cape":"M 55 410 C 58 440 68 475 82 505 C 88 525 95 545 105 560 C 170 578 245 586 320 580 C 385 572 440 548 480 510 C 510 470 520 430 512 385 C 500 342 478 310 452 285 C 420 258 385 238 345 230 C 290 225 230 232 180 247 C 130 262 95 290 75 322 C 60 352 55 382 55 410 Z",
+              "Western Cape":"M 105 560 C 98 595 100 628 110 660 C 128 695 155 720 185 735 C 210 745 240 752 275 752 C 318 752 360 745 395 732 C 420 720 435 700 438 680 C 435 660 420 648 400 648 C 375 650 355 668 335 680 C 318 678 305 660 298 638 C 293 618 295 595 305 570 C 275 562 230 562 185 560 C 152 560 125 558 105 560 Z",
+              "Eastern Cape":"M 438 680 C 448 700 470 718 498 725 C 538 732 580 730 618 720 C 650 708 680 688 695 662 C 700 638 685 615 665 600 C 640 590 610 592 585 595 C 568 582 560 560 548 540 C 530 515 505 498 478 495 C 445 498 418 510 395 530 C 372 555 358 585 355 615 C 360 640 375 660 395 675 C 410 680 425 680 438 680 Z",
+              "Free State":"M 510 430 C 530 420 555 418 580 420 L 620 428 L 650 445 C 665 465 670 490 668 515 C 663 540 648 560 628 572 C 600 582 570 585 542 580 C 512 572 488 558 475 538 C 465 515 465 490 475 468 C 482 450 495 438 510 430 Z",
+              "North West":"M 355 230 C 395 225 440 225 480 232 C 510 242 525 258 525 278 C 525 300 520 320 512 335 C 500 348 475 355 445 358 L 395 358 L 345 352 C 308 343 280 325 262 302 C 250 280 248 258 258 240 C 288 232 322 230 355 230 Z",
+              "Gauteng":"M 638 258 C 658 250 688 250 708 260 C 722 272 722 292 710 302 C 690 312 665 312 645 305 C 630 295 628 275 638 258 Z",
+              "Limpopo":"M 480 232 C 520 218 565 202 610 188 C 655 174 700 160 740 148 C 775 142 805 148 828 164 C 842 185 842 215 832 238 C 818 258 798 268 775 272 L 720 275 L 665 272 L 620 268 L 575 262 L 540 258 L 510 250 C 498 245 490 240 480 232 Z",
+              "Mpumalanga":"M 720 275 C 745 278 770 285 788 300 C 798 318 802 342 800 370 C 798 398 792 418 776 432 C 755 442 725 442 700 438 C 680 428 665 410 660 385 L 660 340 L 665 300 C 678 285 698 278 720 275 Z",
+              "KwaZulu-Natal":"M 670 495 C 688 478 708 472 728 478 L 760 492 L 792 510 L 822 535 L 852 570 L 850 602 L 828 628 L 800 645 L 772 655 L 742 652 L 715 638 L 690 612 L 665 580 L 650 540 C 655 520 662 505 670 495 Z"
+            };
+            // Lesotho and Eswatini — drawn as overlays over the provinces, so
+            // they render as visible enclaves like the reference map.
+            var enclavePaths={
+              "Lesotho":"M 600 500 C 620 488 650 484 678 492 C 695 505 700 525 692 545 C 678 560 650 568 622 565 C 602 555 592 535 596 515 C 597 510 598 505 600 500 Z",
+              "Eswatini":"M 785 310 C 798 305 812 310 818 322 C 820 335 812 345 798 347 C 788 346 780 340 780 330 C 780 322 782 315 785 310 Z"
             };
             var provCenters={
-              "Northern Cape":{x:130,y:335,abbr:"N. Cape"},
-              "Western Cape":{x:110,y:545,abbr:"W. Cape"},
-              "Eastern Cape":{x:365,y:520,abbr:"E. Cape"},
-              "Free State":{x:380,y:370,abbr:"Free State"},
-              "North West":{x:335,y:225,abbr:"N. West"},
-              "Gauteng":{x:525,y:242,abbr:"Gauteng"},
-              "Limpopo":{x:510,y:100,abbr:"Limpopo"},
-              "Mpumalanga":{x:620,y:250,abbr:"Mpuma"},
-              "KwaZulu-Natal":{x:555,y:440,abbr:"KZN"}
+              "Northern Cape":{x:260,y:395,abbr:"Northern Cape"},
+              "Western Cape":{x:245,y:695,abbr:"Western Cape"},
+              "Eastern Cape":{x:520,y:640,abbr:"Eastern Cape"},
+              "Free State":{x:560,y:495,abbr:"Free State"},
+              "North West":{x:390,y:295,abbr:"North-West"},
+              "Gauteng":{x:672,y:282,abbr:"Gauteng"},
+              "Limpopo":{x:645,y:210,abbr:"Limpopo"},
+              "Mpumalanga":{x:730,y:355,abbr:"Mpumalanga"},
+              "KwaZulu-Natal":{x:755,y:575,abbr:"KwaZulu-Natal"}
             };
 
             // Major SA cities plotted on the map as a secondary layer of
             // context — anchors the choropleth to recognisable places.
             var majorCities=[
-              {name:"Johannesburg",x:515,y:245},
-              {name:"Pretoria",x:525,y:222},
-              {name:"Cape Town",x:95,y:555},
-              {name:"Durban",x:580,y:425},
-              {name:"Port Elizabeth",x:385,y:560},
-              {name:"Bloemfontein",x:395,y:385}
+              {name:"Johannesburg",x:658,y:292},
+              {name:"Pretoria",x:668,y:268},
+              {name:"Cape Town",x:138,y:712},
+              {name:"Durban",x:795,y:585},
+              {name:"Port Elizabeth",x:512,y:712},
+              {name:"Bloemfontein",x:562,y:485}
             ];
-            // Abstract silhouettes of neighbouring territories — gives the
-            // map geographic context so SA is visibly a country, not floating.
-            var neighbourPaths={
-              "Botswana":"M 155,20 L 400,15 L 340,100 L 320,115 L 200,160 L 150,150 Z",
-              "Namibia":"M 15,40 L 155,20 L 150,150 L 200,160 L 205,260 L 12,265 L 8,110 Z",
-              "Zimbabwe":"M 400,15 L 585,10 L 680,25 L 570,70 L 495,70 L 395,60 Z",
-              "Mozambique":"M 585,10 L 705,5 L 730,100 L 715,235 L 695,305 L 690,175 L 680,25 Z",
-              "Lesotho":"M 430,420 L 495,430 L 500,475 L 440,470 Z"
-            };
             // Bright, high-contrast province choropleth. Uses SOLID fill
             // colours (not opacity-to-transparent), a lighter map canvas,
             // and labels with a heavy stroke halo so values stay readable
@@ -4470,78 +4472,59 @@ export default function MediaOnGas(){
               var fillFor=function(val){if(max===0||val===0)return "#3d2f5a";var i=val/max;if(i>=0.75)return stage.hot;if(i>=0.50)return stage.warm;if(i>=0.25)return stage.cool;return stage.deep;};
               var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
               return <div>
-                <div style={{position:"relative",background:"radial-gradient(ellipse at 30% 30%,#1d2a4a 0%,#12182e 45%,#08061a 100%)",borderRadius:16,padding:"20px 18px 10px",border:"1px solid rgba(100,160,255,0.15)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04),0 12px 40px rgba(0,0,0,0.4)"}}>
-                  <svg viewBox="0 0 720 620" width="100%" height="auto" style={{display:"block"}}>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 40% 35%,#1d2a4a 0%,#12182e 55%,#08061a 100%)",borderRadius:16,padding:"18px 16px 8px",border:"1px solid rgba(100,160,255,0.15)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04),0 12px 40px rgba(0,0,0,0.4)"}}>
+                  <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
                     <defs>
-                      <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                      {/* Ocean texture — soft wave pattern that lives behind everything */}
-                      <pattern id={"ocean_"+stage.key} patternUnits="userSpaceOnUse" width="44" height="44" patternTransform="rotate(8)">
-                        <rect width="44" height="44" fill="#0a1530"/>
-                        <path d="M 0,22 Q 11,16 22,22 T 44,22" fill="none" stroke="rgba(100,160,255,0.08)" strokeWidth="1"/>
-                        <path d="M 0,34 Q 11,28 22,34 T 44,34" fill="none" stroke="rgba(100,160,255,0.05)" strokeWidth="1"/>
-                      </pattern>
+                      <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                       <radialGradient id={"spotlight_"+stage.key} cx="50%" cy="50%" r="50%">
                         <stop offset="0%" stopColor={stage.hot} stopOpacity="0.35"/>
                         <stop offset="60%" stopColor={stage.warm} stopOpacity="0.12"/>
                         <stop offset="100%" stopColor={stage.deep} stopOpacity="0"/>
                       </radialGradient>
-                      {/* Subtle hatch for neighbouring countries — visible but clearly backdrop */}
-                      <pattern id="neighbourHatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
-                        <rect width="6" height="6" fill="#1a1530"/>
-                        <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>
-                      </pattern>
                     </defs>
-                    {/* Ocean background */}
-                    <rect x="0" y="0" width="720" height="620" fill={"url(#ocean_"+stage.key+")"} opacity="0.6"/>
                     {/* Radial spotlight under the top-ranked province */}
-                    {topCenter&&<circle cx={topCenter.x} cy={topCenter.y} r="220" fill={"url(#spotlight_"+stage.key+")"} pointerEvents="none"/>}
-                    {/* Neighbour country silhouettes — context without stealing focus */}
-                    {Object.keys(neighbourPaths).map(function(n){return <g key={"n"+n} style={{pointerEvents:"none"}}>
-                      <path d={neighbourPaths[n]} fill="url(#neighbourHatch)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8" strokeDasharray="3,3"/>
-                    </g>;})}
-                    {/* Neighbour country labels */}
-                    <text x="235" y="80" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>BOTSWANA</text>
-                    <text x="85" y="140" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>NAMIBIA</text>
-                    <text x="530" y="45" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>ZIMBABWE</text>
-                    <text x="710" y="120" textAnchor="end" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>MOZAMBIQUE</text>
-                    <text x="468" y="452" textAnchor="middle" style={{fontSize:8,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.3)",letterSpacing:1}}>LESOTHO</text>
-                    {/* Ocean label (south of SA) */}
-                    <text x="360" y="600" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:600,fill:"rgba(120,170,255,0.28)",letterSpacing:6,fontStyle:"italic"}}>SOUTHERN OCEAN</text>
+                    {topCenter&&<circle cx={topCenter.x} cy={topCenter.y} r="260" fill={"url(#spotlight_"+stage.key+")"} pointerEvents="none"/>}
                     {/* Province fills - SOLID bright colours */}
-                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.65)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.4:1.1} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title></path>;})}
+                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.7)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.4:1.2} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title></path>;})}
+                    {/* Lesotho + Eswatini enclaves drawn over the provinces they sit inside, shown as a soft neutral so they read as "not South Africa" */}
+                    {Object.keys(enclavePaths).map(function(n){return <g key={"encl"+n} style={{pointerEvents:"none"}}>
+                      <path d={enclavePaths[n]} fill="#1a1530" stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeDasharray="2,3"/>
+                    </g>;})}
+                    <text x="645" y="528" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.55)",letterSpacing:1.5,pointerEvents:"none"}}>LESOTHO</text>
+                    <text x="800" y="332" textAnchor="middle" style={{fontSize:7,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.5)",letterSpacing:1,pointerEvents:"none"}}>ESWATINI</text>
                     {/* Pulse ring on the #1 province — draws the eye instantly */}
                     {topCenter&&<g style={{pointerEvents:"none"}}>
-                      <circle cx={topCenter.x} cy={topCenter.y} r="26" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
-                        <animate attributeName="r" values="22;52;22" dur="2.6s" repeatCount="indefinite"/>
+                      <circle cx={topCenter.x} cy={topCenter.y} r="30" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
+                        <animate attributeName="r" values="26;62;26" dur="2.6s" repeatCount="indefinite"/>
                         <animate attributeName="opacity" values="0.9;0;0.9" dur="2.6s" repeatCount="indefinite"/>
                       </circle>
-                      <circle cx={topCenter.x} cy={topCenter.y} r="22" fill="none" stroke={stage.hot} strokeWidth="1.5" opacity="0.6">
-                        <animate attributeName="r" values="18;40;18" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
+                      <circle cx={topCenter.x} cy={topCenter.y} r="26" fill="none" stroke={stage.hot} strokeWidth="1.5" opacity="0.6">
+                        <animate attributeName="r" values="22;50;22" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
                         <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
                       </circle>
                     </g>}
-                    {/* Major city markers (stars with glow) */}
+                    {/* Major city markers (white dot + glow) */}
                     {majorCities.map(function(ct){return <g key={"c"+ct.name} style={{pointerEvents:"none"}}>
-                      <circle cx={ct.x} cy={ct.y} r="4" fill="#FFFBF8" stroke="rgba(0,0,0,0.85)" strokeWidth="1.5"/>
-                      <circle cx={ct.x} cy={ct.y} r="1.8" fill="#0a0618"/>
-                      <text x={ct.x+7} y={ct.y+3} style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
+                      <circle cx={ct.x} cy={ct.y} r="4.5" fill="#FFFBF8" stroke="rgba(0,0,0,0.85)" strokeWidth="1.5"/>
+                      <circle cx={ct.x} cy={ct.y} r="2" fill="#0a0618"/>
+                      <text x={ct.x+8} y={ct.y+3} style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
                     </g>;})}
                     {/* Province labels with heavy stroke halo — percentage of tagged provincial traffic */}
                     {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={c.y-4} textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+18} textAnchor="middle" style={{fontSize:18,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{share.toFixed(1)+"%"}</text>}
-                      {showMedal&&<g transform={"translate("+(c.x+38)+","+(c.y-22)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                      <text x={c.x} y={c.y-6} textAnchor="middle" style={{fontSize:14,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
+                      {val>0&&<text x={c.x} y={c.y+16} textAnchor="middle" style={{fontSize:19,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{share.toFixed(1)+"%"}</text>}
+                      {showMedal&&<g transform={"translate("+(c.x+58)+","+(c.y-22)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
                     </g>;})}
                     {/* Compass rose — top right */}
-                    <g transform="translate(660,60)" style={{pointerEvents:"none"}}>
+                    <g transform="translate(840,70)" style={{pointerEvents:"none"}}>
                       <circle r="22" fill="rgba(10,6,24,0.55)" stroke={stage.warm+"60"} strokeWidth="1"/>
                       <path d="M0,-16 L3,0 L0,16 L-3,0 Z" fill={stage.hot}/>
                       <path d="M-16,0 L0,3 L16,0 L0,-3 Z" fill={stage.warm} opacity="0.75"/>
                       <circle r="2" fill="#ffffff"/>
                       <text x="0" y="-27" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:900,fill:stage.hot,letterSpacing:1.5}}>N</text>
                     </g>
-                    {/* Watermark country name — bottom left, rotated */}
-                    <text x="30" y="585" style={{fontSize:28,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.04)",letterSpacing:8}}>SOUTH AFRICA</text>
+                    {/* Watermark country name — bottom left */}
+                    <text x="40" y="745" style={{fontSize:32,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.04)",letterSpacing:10}}>SOUTH AFRICA</text>
                   </svg>
                   {/* Legend strip: solid discrete swatches matching the ramp */}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,padding:"6px 4px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,255,255,0.7)",letterSpacing:1}}>
