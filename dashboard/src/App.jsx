@@ -4554,7 +4554,7 @@ export default function MediaOnGas(){
                     {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
                       <text x={c.x} y={c.y-8} textAnchor="middle" style={{fontSize:15,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.95)",strokeWidth:"4px",strokeLinejoin:"round",letterSpacing:0.5}}>{c.abbr}</text>
                       {val>0&&<text x={c.x} y={c.y+22} textAnchor="middle" style={{fontSize:24,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.95)",strokeWidth:"4.5px",strokeLinejoin:"round",letterSpacing:-1}}>{share.toFixed(1)+"%"}</text>}
-                      {showMedal&&<g transform={"translate("+(c.x+62)+","+(c.y-26)+")"}><circle r="14" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5" filter={isTop?undefined:"url(#provShadow_"+stage.key+")"}/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:14,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                      {showMedal&&<g transform={"translate("+(c.x+62)+","+(c.y-26)+")"}><circle r="14" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5" filter={rnk===0?undefined:"url(#provShadow_"+stage.key+")"}/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:14,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
                     </g>;})}
                     {/* Watermark country name */}
                     <text x="40" y="755" style={{fontSize:36,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
