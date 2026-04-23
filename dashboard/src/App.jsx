@@ -2331,7 +2331,7 @@ export default function MediaOnGas(){
               var MIN_R=14,MAX_R=92;
               var radiusFor=function(val){if(max===0||val===0)return MIN_R;return MIN_R+(MAX_R-MIN_R)*Math.sqrt(val/max);};
               return <div>
-                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 25%,#23315a 0%,#10182e 45%,#050210 95%)",borderRadius:18,padding:"20px 18px 12px",border:"1px solid rgba(140,170,255,0.22)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),0 18px 60px rgba(0,0,0,0.55)"}}>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 25%,#23315a 0%,#10182e 45%,#050210 95%)",borderRadius:14,padding:"14px 14px 8px",border:"1px solid rgba(140,170,255,0.22)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),0 14px 44px rgba(0,0,0,0.5)"}}>
                   <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
                     <defs>
                       {/* Radial bubble gradient — bright at the top-left for a lit-sphere feel, darker at the bottom-right edge. */}
@@ -2411,23 +2411,23 @@ export default function MediaOnGas(){
                     <text x="40" y="755" style={{fontSize:32,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
                   </svg>
                   {/* Legend strip — explains bubble size encoding */}
-                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:10,padding:"8px 6px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.75)",letterSpacing:1.3}}>
-                    <span style={{fontWeight:800,letterSpacing:2}}>BUBBLE SIZE</span>
-                    <div style={{display:"flex",alignItems:"center",gap:14,flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:"url(#bubbleGrad_"+stage.key+")",border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
-                        <span style={{color:"rgba(255,255,255,0.6)"}}>low share</span>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6,padding:"4px 4px 0",fontSize:9,fontFamily:fm,color:"rgba(255,251,248,0.7)",letterSpacing:1,flexWrap:"wrap"}}>
+                    <span style={{fontWeight:800,letterSpacing:1.5}}>BUBBLE SIZE</span>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:"url(#bubbleGrad_"+stage.key+")",border:"1px solid rgba(255,255,255,0.55)"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.55)"}}>low</span>
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:22,height:22,borderRadius:"50%",background:stage.warm,border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
-                        <span style={{color:"rgba(255,255,255,0.6)"}}>mid share</span>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <div style={{width:14,height:14,borderRadius:"50%",background:stage.warm,border:"1px solid rgba(255,255,255,0.55)"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.55)"}}>mid</span>
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:34,height:34,borderRadius:"50%",background:stage.hot,border:"1.5px solid rgba(255,255,255,0.6)",boxShadow:"0 0 12px "+stage.hot+"77"}}></div>
-                        <span style={{color:"rgba(255,255,255,0.6)"}}>high share</span>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:stage.hot,border:"1px solid rgba(255,255,255,0.55)",boxShadow:"0 0 8px "+stage.hot+"66"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.55)"}}>high</span>
                       </div>
                     </div>
-                    <span style={{color:"rgba(255,255,255,0.5)",fontSize:9,letterSpacing:1}}>area ∝ {stage.label.toLowerCase()}</span>
+                    <span style={{color:"rgba(255,255,255,0.45)",fontSize:8,letterSpacing:0.8}}>area ∝ {stage.label.toLowerCase()}</span>
                   </div>
                 </div>
               </div>;
@@ -2446,10 +2446,10 @@ export default function MediaOnGas(){
               var knownSum=all.reduce(function(s,r){return s+r.val;},0);
               var max=all.length?all[0].val:0;
               var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
-              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"18px 18px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
-                <div style={{marginBottom:14,paddingBottom:10,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-                  <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{stage.label} by Province</div>
-                  <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()} · sums to 100%</div>
+              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
+                <div style={{marginBottom:12,paddingBottom:8,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+                  <div style={{fontSize:10,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:2}}>{stage.label} by Province</div>
+                  <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:0.8,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()}, sums to 100%</div>
                 </div>
                 {/* Column header */}
                 <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
@@ -2684,50 +2684,50 @@ export default function MediaOnGas(){
                 field:function(r){return parseFloat(r.clicks||0);}
               };
               var total=(authPlat&&authPlat.Google&&authPlat.Google.clk)||0;
-              return <div style={{background:"linear-gradient(165deg,"+P.gd+"12 0%,"+P.gd+"05 50%,transparent 100%),#0d1a12",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+P.gd+"35",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+P.gd+"12 inset"}}>
+              return <div style={{background:"linear-gradient(165deg,"+P.gd+"12 0%,"+P.gd+"05 50%,transparent 100%),#0d1a12",borderRadius:18,padding:"20px 22px 18px",marginBottom:20,border:"1px solid "+P.gd+"33",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+P.gd+"10 inset"}}>
                 {/* Stage header — matches renderStageBlock */}
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:16}}>
-                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+P.gd+"50,"+P.gd+"18)",border:"1.5px solid "+P.gd+"75",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+P.gd+"40"}}>{Ic.globe("#fff",28)}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:14,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,"+P.gd+"45,"+P.gd+"18)",border:"1px solid "+P.gd+"60",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+P.gd+"30"}}>{Ic.globe("#fff",18)}</div>
                     <div>
-                      <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads Demographics</div>
-                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{googleStage.subtitle}</div>
+                      <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Google Ads Demographics</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.72)",fontFamily:fm,fontWeight:500,letterSpacing:0.3}}>{googleStage.subtitle}</div>
                     </div>
                   </div>
-                  <div title={"Google Ads — "+fmt(total)+" clicks across the selected campaigns. Splits below are percent-only and sum to 100% of Google click-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
-                    <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Clicks</div>
-                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmt(total)}</div>
+                  <div title={"Google Ads, "+fmt(total)+" clicks across the selected campaigns. Splits below are percent-only and sum to 100% of Google click-tagged traffic per dimension."} style={{textAlign:"right",padding:"6px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"40",borderRadius:10,boxShadow:"0 0 14px "+P.gd+"15"}}>
+                    <div style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800}}>Google Clicks</div>
+                    <div style={{fontSize:20,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-0.5,textShadow:"0 0 12px "+P.gd+"55"}}>{fmt(total)}</div>
                   </div>
                 </div>
 
                 {/* Where — Google province bubble map + ranked provinces */}
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where (Google)</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Where (Google)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(googleStage,googleReg)}</div>
                   <div>{renderProvinceRanks(googleStage,googleReg)}</div>
                 </div>
 
                 {/* Who + How — age + gender + device, Google-filtered rows */}
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How (Google)</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:4}}>
-                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
-                      <div title="Share of age-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Who & How (Google)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:12,marginBottom:4}}>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                      <div title="Share of age-tagged Google traffic (sums to 100%)" style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderAgeBars(googleStage,googleAg)}
                   </div>
-                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
-                      <div title="Share of gender-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                      <div title="Share of gender-tagged Google traffic (sums to 100%)" style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderGenderCards(googleStage,googleAg)}
                   </div>
-                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title="Share of device-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
+                      <div title="Share of device-tagged Google traffic (sums to 100%)" style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderDeviceBars(googleStage,googleDev)}
                   </div>
@@ -2774,52 +2774,52 @@ export default function MediaOnGas(){
             // row, stage narrative. Called once per stage below.
             var renderStageBlock=function(stage){
               var total=stageTotal(stage);
-              return <div style={{background:"linear-gradient(165deg,"+stage.accent+"10 0%,"+stage.accentDeep+"05 50%,transparent 100%),#0d0520",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+stage.accent+"33",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+stage.accent+"10 inset"}}>
+              return <div style={{background:"linear-gradient(165deg,"+stage.accent+"10 0%,"+stage.accentDeep+"05 50%,transparent 100%),#0d0520",borderRadius:18,padding:"20px 22px 18px",marginBottom:20,border:"1px solid "+stage.accent+"33",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+stage.accent+"10 inset"}}>
                 {/* Stage header with big authoritative total */}
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:16}}>
-                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+stage.accent+"45,"+stage.accentDeep+"20)",border:"1.5px solid "+stage.accent+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+stage.accent+"40"}}>{stage.icon("#fff",28)}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:14,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,"+stage.accent+"45,"+stage.accentDeep+"20)",border:"1px solid "+stage.accent+"60",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+stage.accent+"30"}}>{stage.icon("#fff",18)}</div>
                     <div>
-                      <div style={{fontSize:11,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>{stage.title} Demographics</div>
-                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{stage.subtitle}</div>
+                      <div style={{fontSize:11,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>{stage.title} Demographics</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.72)",fontFamily:fm,fontWeight:500,letterSpacing:0.3}}>{stage.subtitle}</div>
                     </div>
                   </div>
-                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns. Every chart below sums to this total; untagged traffic shows as a 'Not Tagged' residual row."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"50",borderRadius:14,boxShadow:"0 0 20px "+stage.accent+"20"}}>
-                    <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>{stage.label}</div>
-                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+stage.accent+"66"}}>{fmt(total)}</div>
+                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns. Every chart below sums to this total; untagged traffic shows as a 'Not Tagged' residual row."} style={{textAlign:"right",padding:"6px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"40",borderRadius:10,boxShadow:"0 0 14px "+stage.accent+"15"}}>
+                    <div style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800}}>{stage.label}</div>
+                    <div style={{fontSize:20,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-0.5,textShadow:"0 0 12px "+stage.accent+"55"}}>{fmt(total)}</div>
                   </div>
                 </div>
 
-                {/* Where — map + ranked provinces. All splits on the page are
-                    percentages of the tagged subset, so every chart sums to
-                    100% of what the ad platforms attributed. */}
-                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
+                {/* Where — map + ranked provinces. Grid split 1:1 so the bubble
+                    map visually ties to the ranked-provinces table on the left
+                    instead of dominating the section. */}
+                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Where</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(stage)}</div>
                   <div>{renderProvinceRanks(stage)}</div>
                 </div>
 
                 {/* Who + How — age + gender + device */}
-                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:18}}>
-                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
-                      <div title="Share of age-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Who & How</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:12,marginBottom:12}}>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                      <div title="Share of age-tagged traffic (sums to 100%)" style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderAgeBars(stage)}
                   </div>
-                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
-                      <div title="Share of gender-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                      <div title="Share of gender-tagged traffic (sums to 100%)" style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderGenderCards(stage)}
                   </div>
-                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title="Share of device-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
+                      <div title="Share of device-tagged traffic (sums to 100%)" style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderDeviceBars(stage)}
                   </div>
