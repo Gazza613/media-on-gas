@@ -357,6 +357,12 @@ function AdPreviewModal(props){
   // the error screen. A ref reads the current value on every call, no
   // re-render needed, no stale closure.
   var hasPlayedRef=useRef(false);
+  // Retry counter for mid-playback refetches. When a video errors after it
+  // has already played (e.g. unmute triggers a byte-range refetch against
+  // an expired Meta CDN URL), we re-hit /api/ad-video?bust=1 to get a fresh
+  // signed URL and update videoSrc so the <video> element remounts. Capped
+  // at 2 to avoid a refetch loop on permanently-broken creatives.
+  var retryCountRef=useRef(0);
   var ad=props.ad;
   var format=((ad&&ad.format)||"STATIC").toUpperCase();
   var isVideo=format==="MP4"||format==="VIDEO";
@@ -369,6 +375,7 @@ function AdPreviewModal(props){
     setVideoType("video");
     setVideoErr(null);
     hasPlayedRef.current=false;
+    retryCountRef.current=0;
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
@@ -448,13 +455,29 @@ function AdPreviewModal(props){
         onError={function(e){
         var me=e.target&&e.target.error;
         var code=me?("media_"+(me.code||"unknown")):"playback";
-        // If the video has already played, treat this as a transient error
-        // (common when unmuting refetches the audio stream against a
-        // short-lived Meta signed URL) and leave the element alone. Ref is
-        // read live, so a race between onPlaying and onError can't leave
-        // us stuck on the initial false value.
+        // Mid-playback error (most often the Meta CDN signed URL expiring
+        // while the video was paused or muted, so the byte-range refetch
+        // on unmute fails with MEDIA_ERR_NETWORK or MEDIA_ERR_SRC_NOT_SUPPORTED).
+        // Refetch a fresh signed URL from /api/ad-video?bust=1 instead of
+        // leaving the element in a broken state. Hard-capped at 2 retries
+        // so a permanently-archived creative falls through to the poster
+        // fallback instead of spinning forever.
         if(hasPlayedRef.current){
-          console.warn("[GAS] Video mid-playback error, ignoring\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
+          if(retryCountRef.current>=2){
+            setVideoErr(code);
+            console.warn("[GAS] Video mid-playback retries exhausted, falling back to poster\n"+JSON.stringify({code:code,retries:retryCountRef.current,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
+            return;
+          }
+          retryCountRef.current+=1;
+          hasPlayedRef.current=false;
+          console.warn("[GAS] Video mid-playback error, refetching fresh URL\n"+JSON.stringify({code:code,retry:retryCountRef.current,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
+          var rAuthQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+          var rUrl=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+rAuthQ+"&resolveOnly=1&bust=1&t="+Date.now();
+          fetch(rUrl).then(function(r){return r.text();}).then(function(t){
+            var parsed=null;try{parsed=t?JSON.parse(t):null;}catch(_){}
+            if(parsed&&parsed.url){setVideoSrc(parsed.url);setVideoType(parsed.type||"video");}
+            else{setVideoErr(code);}
+          }).catch(function(){setVideoErr(code);});
           return;
         }
         setVideoErr(code);

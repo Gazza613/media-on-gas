@@ -131,7 +131,14 @@ export default async function handler(req, res) {
 
   var cacheKey = platform + "|" + videoId;
   var cached = resolveCache[cacheKey];
-  if (cached && Date.now() - cached.ts < RESOLVE_TTL_MS) {
+  // bust=1 skips the 10-min resolve cache. The client sends this after a
+  // mid-playback error (typically the Meta signed CDN URL expired while the
+  // video was paused or muted, so the byte-range refetch on unmute fails).
+  // Dropping the cache forces a fresh /video/{id}?source=... lookup so the
+  // retry gets a brand-new signed URL with a fresh expiry window.
+  var bust = req.query.bust === "1";
+  if (bust) delete resolveCache[cacheKey];
+  if (!bust && cached && Date.now() - cached.ts < RESOLVE_TTL_MS) {
     if (req.query.resolveOnly === "1") {
       res.status(200).json({ url: cached.url, type: cached.type || "video" });
       return;
