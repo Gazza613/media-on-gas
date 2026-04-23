@@ -4521,24 +4521,30 @@ export default function MediaOnGas(){
               var sumAll=withVal.reduce(function(s,r){return s+r.val;},0);
               var max=withVal.length?withVal[0].val:0;
               var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
-              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"20px 20px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Top Provinces</div>
-                  <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmtAbbr(sumAll)} total</div>
+              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"18px 18px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
+                <div style={{marginBottom:14,paddingBottom:10,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+                  <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{stage.label} by Province</div>
+                  <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>{fmt(sumAll)} total {stage.label.toLowerCase()} across {withVal.length} of 9 provinces</div>
                 </div>
-                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=sumAll>0?(r.val/sumAll*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+fmt(r.val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+share.toFixed(1)+"% share)":"");return <div key={r.name} title={tip} style={{marginBottom:9,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:18,height:18,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:hasVal?"#0a0618":"#8b7fa3"}}>{i+1}</div>
-                      <span style={{color:hasVal?"#fff":"#8b7fa3",fontWeight:700}}>{r.name}</span>
-                    </div>
-                    <div><span style={{color:hasVal?col:"#5c4f72",fontWeight:900}}>{fmtAbbr(r.val)}</span> <span style={{color:P.sub,fontWeight:600}}>· {hasVal?share.toFixed(1)+"%":"0%"}</span></div>
+                {/* Column header */}
+                <div style={{display:"grid",gridTemplateColumns:"28px 1fr auto 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
+                  <div>#</div>
+                  <div>Province</div>
+                  <div style={{textAlign:"right"}}>{stage.label}</div>
+                  <div style={{textAlign:"right"}}>Share</div>
+                </div>
+                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=sumAll>0?(r.val/sumAll*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+fmt(r.val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+share.toFixed(1)+"% share)":"");return <div key={r.name} title={tip} style={{marginBottom:8,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr auto 60px",gap:10,alignItems:"center",marginBottom:4,fontSize:11,fontFamily:fm}}>
+                    <div style={{width:22,height:22,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:hasVal?"#0a0618":"#8b7fa3"}}>{i+1}</div>
+                    <span style={{color:hasVal?"#fff":"#8b7fa3",fontWeight:700}}>{r.name}</span>
+                    <span style={{color:hasVal?col:"#5c4f72",fontWeight:900,fontSize:13,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{fmt(r.val)}</span>
+                    <span style={{color:hasVal?"rgba(255,255,255,0.7)":"#5c4f72",fontWeight:700,fontSize:11,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{hasVal?share.toFixed(1)+"%":"0%"}</span>
                   </div>
-                  <div style={{height:8,background:"rgba(255,255,255,0.04)",borderRadius:4,overflow:"hidden"}}>
-                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:4,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
+                  <div style={{height:6,marginLeft:38,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
-                {sumAll===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded by province for this stage. Try switching to another stage above.</div>}
+                {sumAll===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns. Meta supplies province-level data for most accounts; Google Ads does not expose SA provinces via the API.</div>}
               </div>;
             };
 
