@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 var _v="2.0";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend, LabelList } from "recharts";
 
@@ -347,7 +347,15 @@ function AdPreviewModal(props){
   // video replaced a working preview with a "VIDEO UNAVAILABLE" screen
   // the moment the client hit unmute. Leaving the <video> element alone
   // lets the browser recover on its own.
-  var hp=useState(false),hasPlayed=hp[0],setHasPlayed=hp[1];
+  // useRef (not useState) so the onError handler reads the LIVE value.
+  // Setting hasPlayed via useState created a stale closure: the onError
+  // registered on the <video> element captured hasPlayed=false at render
+  // time; by the time onPlaying set it to true and scheduled a re-render,
+  // the unmute-triggered error fired faster than React could re-run the
+  // render, so the onError still saw false and flipped the preview into
+  // the error screen. A ref reads the current value on every call, no
+  // re-render needed, no stale closure.
+  var hasPlayedRef=useRef(false);
   var ad=props.ad;
   var format=((ad&&ad.format)||"STATIC").toUpperCase();
   var isVideo=format==="MP4"||format==="VIDEO";
@@ -359,7 +367,7 @@ function AdPreviewModal(props){
     setVideoSrc(null);
     setVideoType("video");
     setVideoErr(null);
-    setHasPlayed(false);
+    hasPlayedRef.current=false;
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
@@ -435,14 +443,16 @@ function AdPreviewModal(props){
       mediaBlock=<iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",height:"60vh",border:"none",borderRadius:10,background:"#000",display:"block"}}/>;
     } else if(videoSrc){
       mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc}
-        onPlaying={function(){setHasPlayed(true);}}
+        onPlaying={function(){hasPlayedRef.current=true;}}
         onError={function(e){
         var me=e.target&&e.target.error;
         var code=me?("media_"+(me.code||"unknown")):"playback";
         // If the video has already played, treat this as a transient error
         // (common when unmuting refetches the audio stream against a
-        // short-lived Meta signed URL) and leave the element alone.
-        if(hasPlayed){
+        // short-lived Meta signed URL) and leave the element alone. Ref is
+        // read live, so a race between onPlaying and onError can't leave
+        // us stuck on the initial false value.
+        if(hasPlayedRef.current){
           console.warn("[GAS] Video mid-playback error, ignoring\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
           return;
         }
@@ -456,7 +466,16 @@ function AdPreviewModal(props){
       // banner so the client still sees the creative visually.
       if(imageSrc){
         mediaBlock=<div style={{position:"relative",width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,overflow:"hidden"}}>
-          <img src={imageSrc} alt={ad.adName||"Ad"} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",display:"block"}}/>
+          <img src={imageSrc} alt={ad.adName||"Ad"} onError={function(e){
+            // Poster image also failed (common for archived creatives where both the
+            // video URL and the thumbnail resolver turn up nothing). Swap the broken-
+            // image icon that browsers render by default for a branded placeholder so
+            // the modal doesn't look broken.
+            var fallback=document.createElement("div");
+            fallback.style.cssText="width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;letter-spacing:2px;font-weight:800;font-family:"+fm+";text-align:center;padding:24px;";
+            fallback.textContent="PREVIEW UNAVAILABLE — creative may have been archived by the platform";
+            if(e.target&&e.target.parentNode)e.target.parentNode.replaceChild(fallback,e.target);
+          }} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",display:"block"}}/>
           <div style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"6px 12px",display:"flex",alignItems:"center",gap:8}}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.8)" strokeWidth="2"/><polygon points="10,8 16,12 10,16" fill="rgba(255,255,255,0.8)"/></svg>
             <span style={{fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.9)",letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Video Ad, Poster Preview</span>

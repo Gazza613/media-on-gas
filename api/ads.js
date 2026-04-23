@@ -397,18 +397,32 @@ export default async function handler(req, res) {
       var videoIdsToFetch = [];
       videoIds.forEach(function(vid) {
         var cached = cacheGet(videoThumbCache, vid);
-        if (cached) videoThumbs[vid] = cached;
-        else videoIdsToFetch.push(vid);
-      });
-      // Extract a thumbnail URL from a single video payload (shared between batch and fallback)
-      var pickThumbFromVideo = function(v) {
-        if (!v || v.error) return "";
-        var best = "";
-        if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
-          var largest = v.thumbnails.data.slice().sort(function(a, b) { return (b.width || 0) - (a.width || 0); })[0];
-          best = largest.uri || "";
+        if (cached) {
+          // Backwards-compat: warm-start cache entries may be plain strings
+          // from before the {url,width,height} upgrade. Normalise so
+          // downstream readers can trust the object shape.
+          videoThumbs[vid] = (typeof cached === "string") ? { url: cached, width: 0, height: 0 } : cached;
+        } else {
+          videoIdsToFetch.push(vid);
         }
-        return best || v.picture || "";
+      });
+      // Extract the best thumbnail from a video payload. Returns the URL plus
+      // the pixel dimensions so downstream code can decide whether it's big
+      // enough to use directly or whether to fall back to a higher-res source
+      // (hashThumb / asset_feed_spec / post attachments). Sorts by AREA so
+      // portrait-format thumbnails (Reels, 1080x1920) aren't disadvantaged
+      // versus landscape variants.
+      var pickThumbFromVideo = function(v) {
+        if (!v || v.error) return { url: "", width: 0, height: 0 };
+        if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
+          var largest = v.thumbnails.data.slice().sort(function(a, b) {
+            var aw = parseInt(a.width || 0, 10), ah = parseInt(a.height || 0, 10);
+            var bw = parseInt(b.width || 0, 10), bh = parseInt(b.height || 0, 10);
+            return (bw * bh) - (aw * ah);
+          })[0];
+          return { url: largest.uri || "", width: parseInt(largest.width || 0, 10), height: parseInt(largest.height || 0, 10) };
+        }
+        return { url: v.picture || "", width: 0, height: 0 };
       };
       // Batch via ?ids= counts as 1 API call per batch, staying well under Meta's app rate limit.
       // If the batch itself returns an error (e.g. one bad id poisons the response), fall back
@@ -417,8 +431,8 @@ export default async function handler(req, res) {
         try {
           var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
           var v = await r.json();
-          var url = pickThumbFromVideo(v);
-          if (url) { videoThumbs[vid] = url; cacheSet(videoThumbCache, vid, url); }
+          var info = pickThumbFromVideo(v);
+          if (info.url) { videoThumbs[vid] = info; cacheSet(videoThumbCache, vid, info); }
         } catch (_) {}
       };
       for (var vb = 0; vb < videoIdsToFetch.length; vb += 50) {
@@ -431,8 +445,8 @@ export default async function handler(req, res) {
             vBatch.forEach(function(vid) {
               var v = bData[vid];
               if (v) {
-                var url = pickThumbFromVideo(v);
-                if (url) { videoThumbs[vid] = url; cacheSet(videoThumbCache, vid, url); }
+                var info = pickThumbFromVideo(v);
+                if (info.url) { videoThumbs[vid] = info; cacheSet(videoThumbCache, vid, info); }
               }
             });
           } else {
@@ -570,13 +584,23 @@ export default async function handler(req, res) {
         // Walk every variant (DCO ads often have multiple) until we find one that resolves.
         // This covers cases where the first variant's hash isn't in this account's /adimages.
         var afs = cr.asset_feed_spec || {};
-        // Walk every variant video id until one resolves, same as the proven-good version.
-        var vidThumb = "";
+        // Walk every variant video id until one resolves. Split the result into
+        // "bigVidThumb" (>= 500px on the long side, sharp enough to use as
+        // primary) and "smallVidThumb" (<500px, Meta's auto-picked thumbnail
+        // that often upscales into a blurry card). Small thumbs move to the
+        // bottom of the fallback chain below, so we reach for hashThumb /
+        // asset_feed_spec / post attachments first when those exist.
+        var bigVidThumb = "";
+        var smallVidThumb = "";
         var candidateVids = [];
         if (cr.video_id) candidateVids.push(cr.video_id);
         if (afs.videos) afs.videos.forEach(function(v) { if (v.video_id) candidateVids.push(v.video_id); });
-        for (var cvi = 0; cvi < candidateVids.length && !vidThumb; cvi++) {
-          vidThumb = videoThumbs[candidateVids[cvi]] || "";
+        for (var cvi = 0; cvi < candidateVids.length && !bigVidThumb && !smallVidThumb; cvi++) {
+          var info = videoThumbs[candidateVids[cvi]];
+          if (!info || !info.url) continue;
+          var longSide = Math.max(info.width || 0, info.height || 0);
+          if (longSide >= 500) bigVidThumb = info.url;
+          else smallVidThumb = info.url;
         }
         var hashThumb = "";
         var candidateHashes = [];
@@ -595,13 +619,16 @@ export default async function handler(req, res) {
         var sid = cr.effective_object_story_id;
         var postHiThumb = sid ? storyToPicHi[sid] : "";
         var postThumb = sid ? storyToPic[sid] : "";
-        // Priority: video thumbnail > /adimages permalink (full upload) > post attachments hi-res > post full_picture > image_url > thumbnail_url
-        // Priority: video cover -> uploaded original -> direct asset_feed url -> post hi-res -> post pic -> image_url
-        // thumbnail_url is the absolute last resort because Meta bakes a 64x64 stp= modifier into it
-        // Proven priority from commit a1a260b where thumbnails were confirmed sharp:
-        // video cover, uploaded-asset hash, direct asset_feed url, post hi-res,
-        // post full_picture, creative image_url, creative thumbnail_url as last resort.
-        var thumb = upsizeFb(vidThumb || hashThumb || afsDirectUrl || postHiThumb || postThumb || cr.image_url || cr.thumbnail_url || "");
+        // Priority:
+        // 1. bigVidThumb         — video frame >=500px (sharp on cards)
+        // 2. hashThumb           — /adimages permalink, the uploaded-original asset
+        // 3. afsDirectUrl        — direct asset_feed_spec image URL (DCO ads)
+        // 4. postHiThumb         — post attachment hi-res image
+        // 5. postThumb           — post full_picture
+        // 6. cr.image_url        — creative image URL
+        // 7. smallVidThumb       — video frame <500px, only if nothing better
+        // 8. cr.thumbnail_url    — absolute last resort (Meta bakes an stp= modifier that forces 64-192px)
+        var thumb = upsizeFb(bigVidThumb || hashThumb || afsDirectUrl || postHiThumb || postThumb || cr.image_url || smallVidThumb || cr.thumbnail_url || "");
         var preview = "";
         if (pub === "instagram" && cr.instagram_permalink_url) {
           preview = cr.instagram_permalink_url;
