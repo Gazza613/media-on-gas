@@ -2836,7 +2836,7 @@ export default function MediaOnGas(){
                 </div>
 
                 {/* Stage narrative */}
-                <Insight title={stage.title+" Read"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{stageNarrative(stage)}</Insight>
+                <Insight title={stage.title+" Demographic Insights"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{stageNarrative(stage)}</Insight>
               </div>;
             };
 
@@ -3316,7 +3316,7 @@ export default function MediaOnGas(){
                   if(topPlatByImps&&platBreak[topPlatByImps].imps>0)lines.push(topPlatByImps+" carried the heaviest delivery with "+fmt(platBreak[topPlatByImps].imps)+" ads served.");
                   if(bestCpmP&&bestCpmVal>0)lines.push(bestCpmP+" delivered the cheapest cost per 1000 ads served at "+fR(bestCpmVal)+".");
                   if(computed.blendedCpm>0)lines.push("Blended CPM sits at "+fR(computed.blendedCpm)+", "+cpmLbl+".");
-                  return <Insight title="Awareness Read" accent={P.cyan} icon={Ic.eye(P.cyan,16)}>{lines.join(" ")}</Insight>;
+                  return <Insight title="Awareness Insights" accent={P.cyan} icon={Ic.eye(P.cyan,16)}>{lines.join(" ")}</Insight>;
                 })()}
                 {demoBlocks&&demoBlocks.awarenessBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.awarenessBlock}</div>}
               </div>
@@ -3367,7 +3367,7 @@ export default function MediaOnGas(){
                   if(bestCtrP&&bestCtrVal>0)lines.push(bestCtrP+" converted impressions to clicks at the highest rate of "+bestCtrVal.toFixed(2)+"%.");
                   if(bestCpcP&&bestCpcVal>0)lines.push(bestCpcP+" delivered the cheapest click at "+fR(bestCpcVal)+".");
                   if(mostClicksP&&platBreak[mostClicksP].clicks>0)lines.push(mostClicksP+" drove the largest click volume with "+fmt(platBreak[mostClicksP].clicks)+" clicks.");
-                  return <Insight title="Engagement Read" accent={P.mint} icon={Ic.bolt(P.mint,16)}>{lines.join(" ")}</Insight>;
+                  return <Insight title="Engagement Insights" accent={P.mint} icon={Ic.bolt(P.mint,16)}>{lines.join(" ")}</Insight>;
                 })()}
                 {demoBlocks&&demoBlocks.engagementBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.engagementBlock}</div>}
               </div>
@@ -3408,7 +3408,7 @@ export default function MediaOnGas(){
                   if(topVol)lines.push(topVol+" led volume with "+fmt(objectives4[topVol].results)+" results.");
                   if(bestEff&&bestEffCost>0)lines.push(bestEff+" achieved the strongest efficiency at "+fR(bestEffCost)+" per result.");
                   if(active.length>1&&topVol!==bestEff)lines.push("Volume and efficiency leaders differ, a signal to weigh budget shift toward "+bestEff+" if efficiency is the priority, or hold "+topVol+" to protect scale.");
-                  return <Insight title="Objective Read" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
+                  return <Insight title="Objective Insights" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
                 })()}
                 {demoBlocks&&demoBlocks.objectiveBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.objectiveBlock}</div>}
               </div>}
