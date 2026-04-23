@@ -2187,6 +2187,13 @@ export default function MediaOnGas(){
   // ready. When data is empty, demoFallback holds the "no data" placeholder.
   var demoBlocks = null;
   var demoFallback = null;
+  // Lightweight audience snapshot used by the Executive Summary at the bottom
+  // of the page. Populated by the demoBlocks IIFE (same scope where the stage
+  // helpers like topSegmentFor / topProvFor / genderSharesFor are defined) so
+  // the exec summary doesn't have to re-derive them. Stays null when the
+  // demographics endpoint is still loading / errored — the exec summary
+  // gracefully skips the audience paragraph in that case.
+  var demoSummary = null;
 
   // Populate shared demoBlocks / demoFallback once per render so Summary and
   // Demographics tabs can read individual stage blocks. Runs regardless of
@@ -2905,6 +2912,32 @@ export default function MediaOnGas(){
                 <span style={{color:"#fff",fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",fontSize:10,marginRight:10}}>How the splits are computed</span>
                 All percentages on this page are calculated against the subset of traffic the ad platforms attributed to a specific demographic dimension (age, gender, device, province, city). Each chart sums to 100% of that tagged subset, so every split is a true share of what we can confidently measure. Absolute totals appear only in the stage header, where they come from the same campaign-level data Summary uses.
               </div>)
+            };
+
+            // Audience snapshot for the Executive Summary narrative at the
+            // page bottom. Mobile-share uses the Mobile + Desktop + Tablet
+            // denominator that matches the Device Mix chart (Connected TV
+            // and Other are excluded from the visualisation).
+            var mobileShareFor=function(s){
+              var b={mobile:0,desktop:0,tablet:0};
+              devRows.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)b[k]+=s.field(r);});
+              var sum=b.mobile+b.desktop+b.tablet;return sum>0?(b.mobile/sum*100):0;
+            };
+            var topAgeShareFor=function(s){
+              var t=stageTotal(s);var ta=topAgeFor(s);
+              return{age:ta.age,share:t>0&&ta.val>0?(ta.val/t*100):0};
+            };
+            var topProvShareFor=function(s){
+              var t={};regRows.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;t[p]=(t[p]||0)+s.field(r);});
+              var sum=0;Object.keys(t).forEach(function(k){sum+=t[k];});
+              var best=null;var bestVal=0;Object.keys(t).forEach(function(k){if(t[k]>bestVal){bestVal=t[k];best=k;}});
+              return{prov:best,share:sum>0?(bestVal/sum*100):0};
+            };
+            demoSummary = {
+              awareness:{topAge:topAgeShareFor(stageDef.awareness),topProv:topProvShareFor(stageDef.awareness),gender:genderSharesFor(stageDef.awareness),mobile:mobileShareFor(stageDef.awareness)},
+              engagement:{topAge:topAgeShareFor(stageDef.engagement),topProv:topProvShareFor(stageDef.engagement),gender:genderSharesFor(stageDef.engagement),mobile:mobileShareFor(stageDef.engagement)},
+              objective:{topAge:topAgeShareFor(stageDef.objective),topProv:topProvShareFor(stageDef.objective),gender:genderSharesFor(stageDef.objective),mobile:mobileShareFor(stageDef.objective),topSegment:topSegmentFor(stageDef.objective)},
+              authObj:authObj
             };
             return null;
   })();
@@ -3913,6 +3946,42 @@ export default function MediaOnGas(){
                   return parts.join(" ");
                 })();
 
+                var audienceRead=(function(){
+                  if(!demoSummary)return "Audience profile data is still loading, the budget-weighting view will populate here once demographics resolve for the selected campaigns.";
+                  var d=demoSummary;
+                  var convSeg=d.objective&&d.objective.topSegment;
+                  var convAge=(convSeg&&convSeg.age)||(d.objective&&d.objective.topAge&&d.objective.topAge.age)||"";
+                  var convGen=convSeg&&convSeg.gen?(convSeg.gen==="female"?"female":"male"):"";
+                  var convProv=(d.objective&&d.objective.topProv&&d.objective.topProv.prov)||"";
+                  var convProvShare=(d.objective&&d.objective.topProv&&d.objective.topProv.share)||0;
+                  var clickProv=(d.engagement&&d.engagement.topProv&&d.engagement.topProv.prov)||"";
+                  var impProv=(d.awareness&&d.awareness.topProv&&d.awareness.topProv.prov)||"";
+                  var mobileConv=(d.objective&&d.objective.mobile)||0;
+                  var convTotal=d.authObj||0;
+                  var convSegShare=(convSeg&&convSeg.val>0&&convTotal>0)?(convSeg.val/convTotal*100):0;
+                  var lines=[];
+                  lines.push("Layering the demographic signal over performance gives the clearest read on who to weight budget toward next cycle. The aim is not to narrow the audience, it is to sharpen where each rand works hardest.");
+                  if(convAge&&convGen&&convSegShare>0){
+                    lines.push("The "+convAge+" "+convGen+" audience is emerging as the highest-propensity segment, capturing "+convSegShare.toFixed(1)+"% of conversions on its own, the strongest economic return per impression in the mix.");
+                  } else if(convAge){
+                    lines.push("The "+convAge+" bracket is the highest-converting age group across the selected campaigns, the most responsive end of the audience spectrum.");
+                  }
+                  if(convProv&&convProvShare>0){
+                    var geoLine=convProv+" is producing a disproportionate "+convProvShare.toFixed(1)+"% share of conversions";
+                    if(clickProv&&clickProv!==convProv)geoLine+=", with "+clickProv+" leading engagement";
+                    if(impProv&&impProv!==convProv&&impProv!==clickProv)geoLine+=" and "+impProv+" leading ad delivery";
+                    geoLine+=". That bottom-of-funnel concentration is the signal to lean into, it shows where the message converts fastest.";
+                    lines.push(geoLine);
+                  }
+                  var skewTarget=(convAge&&convGen?convAge+" "+convGen+" audiences in ":"")+(convProv||"the top-converting regions")+(clickProv&&clickProv!==convProv?" and "+clickProv:"");
+                  lines.push("The recommendation for the next cycle is a budget weighting that tilts a larger share toward "+skewTarget+", stacked on top of the broader audience that is already running. This compounds efficiency on the segment most likely to convert while maintaining the reach platforms that keep the top of funnel warm and ensure the high-propensity segment has a steady supply of first-touch impressions.");
+                  if(mobileConv>0){
+                    lines.push("Mobile carries "+Math.round(mobileConv)+"% of conversions, so mobile-first creative and mobile-optimised landing pages stay the baseline standard for everything that follows.");
+                  }
+                  lines.push("This is a weighting shift, not an exclusion. The broader audience is what makes the high-propensity segment possible by keeping the funnel fed, and the goal is to sharpen the back end where the return is clearest without starving the top of the brand-building layer that creates the demand in the first place.");
+                  return lines.join(" ");
+                })();
+
                 var communityRead=grandT2===0?"Community data is not linked to the selected campaigns, connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(parseFloat(m.pageLikes||0)>0?" (with "+fmt(parseFloat(m.pageLikes||0))+" earned in this period)":"")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" new followers this period)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member adds to a warm, retargetable audience pool. Organic posts typically reach only 1 to 3 percent of followers on their own, so a modest boost budget is still needed to reach the full community, but paid delivery to this warm audience runs at noticeably lower CPMs and higher engagement than cold prospecting.":"");
 
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
@@ -3923,6 +3992,7 @@ export default function MediaOnGas(){
                   {subSec(P.rose,Ic.target(P.rose,16),"Objective Performance",objectiveRead)}
                   {subSec(P.blaze,Ic.fire(P.blaze,16),"Creative Performance",creativeRead)}
                   {subSec(P.solar,Ic.radar(P.solar,16),"Audience Targeting",targetingRead)}
+                  {subSec(P.orchid,Ic.users(P.orchid,16),"Target Audience Positioning",audienceRead)}
                   {subSec(P.tt,Ic.users(P.tt,16),"Community Growth",communityRead)}
                 </div>;
               })()}
