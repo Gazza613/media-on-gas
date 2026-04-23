@@ -2586,9 +2586,13 @@ export default function MediaOnGas(){
               var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
               var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
               devData.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
-              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
-              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
-              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
+              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet"};
+              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24"};
+              // Connected TV and Other are intentionally excluded from the
+              // device-mix visualisation per client preference. Shares below
+              // are computed against Mobile + Desktop + Tablet only so the
+              // chart continues to sum to 100% of the visible categories.
+              var data=["mobile","desktop","tablet"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
               var knownSum=data.reduce(function(s,d){return s+d.value;},0);
               var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
               if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
@@ -2728,7 +2732,7 @@ export default function MediaOnGas(){
                   <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                       <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title="Share of device-tagged Google traffic (sums to 100%)" style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                      <div title="Share of Mobile + Desktop + Tablet Google traffic (sums to 100%). Connected TV and Other are excluded." style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderDeviceBars(googleStage,googleDev)}
                   </div>
@@ -2820,7 +2824,7 @@ export default function MediaOnGas(){
                   <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                       <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title="Share of device-tagged traffic (sums to 100%)" style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                      <div title="Share of Mobile + Desktop + Tablet traffic (sums to 100%). Connected TV and Other are excluded." style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
                     {renderDeviceBars(stage)}
                   </div>
