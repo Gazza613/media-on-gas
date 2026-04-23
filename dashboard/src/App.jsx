@@ -4999,8 +4999,8 @@ export default function MediaOnGas(){
 
               {renderCitiesBlock()}
 
-              <div style={{marginTop:20,padding:"14px 18px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.7,letterSpacing:0.3}}>
-                <span style={{color:"#fff",fontWeight:800,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:8}}>How the splits are computed</span>
+              <div style={{marginTop:20,padding:"16px 20px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,fontSize:11.5,color:"rgba(255,251,248,0.88)",fontFamily:fm,lineHeight:1.75,letterSpacing:0.3}}>
+                <span style={{color:"#fff",fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",fontSize:10,marginRight:10}}>How the splits are computed</span>
                 All percentages on this page are calculated against the subset of traffic the ad platforms attributed to a specific demographic dimension (age, gender, device, province, city). Each chart sums to 100% of that tagged subset, so every split is a true share of what we can confidently measure. Absolute totals appear only in the stage header, where they come from the same campaign-level data Summary uses.
               </div>
             </div>;
