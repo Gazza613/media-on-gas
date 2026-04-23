@@ -4335,14 +4335,52 @@ export default function MediaOnGas(){
               return <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
             }
 
-            // Metric fields per funnel stage. Each stage carries a 4-step
-            // solid colour ramp (deep -> cool -> warm -> hot) used by the map
-            // choropleth, so fills stay visible against a dark UI rather than
-            // blending to black the way radial-gradient-to-transparent does.
+            // Objective classifier — mirrors Summary's logic exactly so the
+            // Demographics "Objective" total reconciles. Returns "Leads",
+            // "Followers" or "Traffic". Traffic is the measured-by-clicks
+            // bucket and absorbs LandingPage / AppInstall / PaidSearch / etc.
+            var classifyObjective=function(camp){
+              var canon=String(camp.objective||"").toLowerCase();
+              if(canon==="leads")return "Leads";
+              if(canon==="followers")return "Followers";
+              if(canon==="appinstall"||canon==="landingpage")return "Traffic";
+              var n=String(camp.campaignName||"").toLowerCase();
+              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
+              if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
+              if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
+              return "Traffic";
+            };
+            // Per-campaign objective value — matches Summary's per-objective
+            // result computation: Leads -> camp.leads, Followers -> follows+pageLikes,
+            // everything else -> camp.clicks.
+            var objectiveValueFor=function(camp){
+              var type=classifyObjective(camp);
+              if(type==="Leads")return parseFloat(camp.leads||0);
+              if(type==="Followers")return parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+              return parseFloat(camp.clicks||0);
+            };
+            // Lookup: row.campaignId -> objective type, for scoring demographic
+            // breakdown rows (Meta strips the _facebook / _instagram suffix on
+            // its own rows so we register both forms).
+            var campaignObjType={};
+            sel.forEach(function(c){
+              var type=classifyObjective(c);
+              var rawId=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+              campaignObjType[String(c.campaignId||"")]=type;
+              if(rawId)campaignObjType[rawId]=type;
+            });
+            var rowObjectiveType=function(r){
+              var cid=String(r.campaignId||"");
+              return campaignObjType[cid]||campaignObjType[cid.replace(/_facebook$/,"").replace(/_instagram$/,"")]||"Traffic";
+            };
+
+            // Metric fields per funnel stage. The objective stage picks the
+            // right metric per row based on its campaign's classified objective,
+            // so the totals reconcile with the Summary Objective tile.
             var stageDef={
               awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",deep:"#155e75",cool:"#0891b2",warm:"#22d3ee",hot:"#67e8f9",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
               engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",deep:"#92400e",cool:"#d97706",warm:"#f59e0b",hot:"#fbbf24",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
-              objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel, who actually converted",field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
+              objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel, who actually converted",field:function(r){var type=rowObjectiveType(r);var rs=r.results||{};if(type==="Leads")return rs.leads||0;if(type==="Followers")return (rs.follows||0)+(rs.pageLikes||0);return r.clicks||0;}}
             };
 
             // AUTHORITATIVE TOTALS — computed from the same selected-campaign
@@ -4357,7 +4395,7 @@ export default function MediaOnGas(){
               var imp=parseFloat(c.impressions||0);
               var clk=parseFloat(c.clicks||0);
               var spd=parseFloat(c.spend||0);
-              var obj=parseFloat(c.leads||0)+parseFloat(c.appInstalls||0)+parseFloat(c.follows||0)+parseFloat(c.pageLikes||0);
+              var obj=objectiveValueFor(c);
               authImps+=imp;authClicks+=clk;authSpend+=spd;authObj+=obj;
               var k=mapPlatform(c.platform);
               if(authPlat[k]){authPlat[k].imp+=imp;authPlat[k].clk+=clk;authPlat[k].spend+=spd;authPlat[k].obj+=obj;}
