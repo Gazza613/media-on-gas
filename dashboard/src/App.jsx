@@ -1840,7 +1840,10 @@ export default function MediaOnGas(){
   // fresh the next time it's opened.
   useEffect(function(){setDemoData(null);},[df,dt]);
   useEffect(function(){
-    if(tab!=="demographics"||!isAuthed())return;
+    // Summary tab also renders per-stage demographic blocks under each
+    // HIGHLIGHTS section, so fetch demoData whenever the user is on Summary
+    // or Demographics. Other tabs skip to keep load time low.
+    if((tab!=="demographics"&&tab!=="summary")||!isAuthed())return;
     if(demoData||demoLoading)return;
     setDemoLoading(true);setDemoErr("");
     var h=authHeaders();
@@ -2134,6 +2137,710 @@ export default function MediaOnGas(){
   if(window.location.pathname.indexOf("/signup")===0)return(<SignupScreen/>);
   if(!session&&!viewToken)return(<LoginScreen onLogin={handleLogin}/>);
 
+  // Shared demographic blocks. Populated by the IIFE rendered near the top of
+  // the main content area (before any tab conditional JSX) so both the
+  // Demographics tab AND the Summary tab can consume individual blocks.
+  // Reset to null on every render; the IIFE re-populates when demoData is
+  // ready. When data is empty, demoFallback holds the "no data" placeholder.
+  var demoBlocks = null;
+  var demoFallback = null;
+
+  // Populate shared demoBlocks / demoFallback once per render so Summary and
+  // Demographics tabs can read individual stage blocks. Runs regardless of
+  // active tab because it lives at the component body, not inside tab JSX.
+  if(demoData&&!demoErr&&!demoLoading)(function(){
+            var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
+            var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
+            var inSel=function(r){return selSet[String(r.campaignId||"")]||selSet[String(r.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")];};
+            var agRowsRaw=(demoData.ageGender||[]).filter(inSel);
+            var regRows=(demoData.region||[]).filter(inSel);
+            var devRows=(demoData.device||[]).filter(inSel);
+            var cityRows=(demoData.googleCity||[]).filter(inSel);
+
+            // Strip Unknown age / gender rows — they pollute the
+            // visualisation without adding signal (Meta sometimes returns
+            // 'unknown' for users with a blocked profile).
+            var ageOrder=["18-24","25-34","35-44","45-54","55-64","65+"];
+            var genderOrder=["female","male"];
+            var genderLabel={female:"Female",male:"Male"};
+            var agRows=agRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
+
+            if(agRows.length===0&&regRows.length===0&&devRows.length===0&&cityRows.length===0){
+              demoFallback = <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
+              return null;
+            }
+
+            // Objective classifier — mirrors Summary's logic exactly so the
+            // Demographics "Objective" total reconciles. Returns "Leads",
+            // "Followers" or "Traffic". Traffic is the measured-by-clicks
+            // bucket and absorbs LandingPage / AppInstall / PaidSearch / etc.
+            var classifyObjective=function(camp){
+              var canon=String(camp.objective||"").toLowerCase();
+              if(canon==="leads")return "Leads";
+              if(canon==="followers")return "Followers";
+              if(canon==="appinstall"||canon==="landingpage")return "Traffic";
+              var n=String(camp.campaignName||"").toLowerCase();
+              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
+              if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
+              if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
+              return "Traffic";
+            };
+            // Per-campaign objective value — matches Summary's per-objective
+            // result computation: Leads -> camp.leads, Followers -> follows+pageLikes,
+            // everything else -> camp.clicks.
+            var objectiveValueFor=function(camp){
+              var type=classifyObjective(camp);
+              if(type==="Leads")return parseFloat(camp.leads||0);
+              if(type==="Followers")return parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+              return parseFloat(camp.clicks||0);
+            };
+            // Lookup: row.campaignId -> objective type, for scoring demographic
+            // breakdown rows (Meta strips the _facebook / _instagram suffix on
+            // its own rows so we register both forms).
+            var campaignObjType={};
+            sel.forEach(function(c){
+              var type=classifyObjective(c);
+              var rawId=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+              campaignObjType[String(c.campaignId||"")]=type;
+              if(rawId)campaignObjType[rawId]=type;
+            });
+            var rowObjectiveType=function(r){
+              var cid=String(r.campaignId||"");
+              return campaignObjType[cid]||campaignObjType[cid.replace(/_facebook$/,"").replace(/_instagram$/,"")]||"Traffic";
+            };
+
+            // Metric fields per funnel stage. The objective stage picks the
+            // right metric per row based on its campaign's classified objective,
+            // so the totals reconcile with the Summary Objective tile.
+            var stageDef={
+              awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",deep:"#155e75",cool:"#0891b2",warm:"#22d3ee",hot:"#67e8f9",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
+              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",deep:"#92400e",cool:"#d97706",warm:"#f59e0b",hot:"#fbbf24",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
+              objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel, who actually converted",field:function(r){var type=rowObjectiveType(r);var rs=r.results||{};if(type==="Leads")return rs.leads||0;if(type==="Followers")return (rs.follows||0)+(rs.pageLikes||0);return r.clicks||0;}}
+            };
+
+            // AUTHORITATIVE TOTALS — computed from the same selected-campaign
+            // objects Summary uses, so the headline numbers on this tab match
+            // Summary exactly. Breakdown data (agRows / regRows / devRows) is
+            // still used for distribution (which age, which province, which
+            // device) but the displayed "total X" values come from sel.
+            var authImps=0,authClicks=0,authObj=0,authSpend=0;
+            var authPlat={Facebook:{imp:0,clk:0,spend:0,obj:0},Instagram:{imp:0,clk:0,spend:0,obj:0},TikTok:{imp:0,clk:0,spend:0,obj:0},Google:{imp:0,clk:0,spend:0,obj:0}};
+            var mapPlatform=function(p){if(p==="Google Display"||p==="YouTube"||p==="Google Search"||p==="Google Ads")return "Google";if(p==="Meta")return "Facebook";return p;};
+            sel.forEach(function(c){
+              var imp=parseFloat(c.impressions||0);
+              var clk=parseFloat(c.clicks||0);
+              var spd=parseFloat(c.spend||0);
+              var obj=objectiveValueFor(c);
+              authImps+=imp;authClicks+=clk;authSpend+=spd;authObj+=obj;
+              var k=mapPlatform(c.platform);
+              if(authPlat[k]){authPlat[k].imp+=imp;authPlat[k].clk+=clk;authPlat[k].spend+=spd;authPlat[k].obj+=obj;}
+            });
+            // stageTotal / stageSpend now return AUTHORITATIVE values, so every
+            // section header and the KPI strip reconcile with Summary. Chart
+            // cell values still come from breakdown sums (see agRows etc).
+            var stageTotal=function(stage){if(stage.key==="impressions")return authImps;if(stage.key==="clicks")return authClicks;return authObj;};
+            var stageSpend=function(){return authSpend;};
+            var totImps=authImps,totClicks=authClicks,totConv=authObj,totSpend=authSpend;
+
+            // Reusable helpers.
+            var fmtAbbr=function(n){n=parseFloat(n||0);if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toString();};
+
+            // Province paths — realistic curved approximations of SA's nine
+            // provinces on a viewBox 0 0 900 780. Each path uses cubic Bezier
+            // curves for smooth coastlines and province borders, anchored to
+            // approximate lat/lng positions of real SA geography. Lesotho and
+            // Eswatini are drawn separately as enclave "holes" over the top
+            // of the provinces they sit inside.
+            var provincePaths={
+              "Northern Cape":"M 55 410 C 58 440 68 475 82 505 C 88 525 95 545 105 560 C 170 578 245 586 320 580 C 385 572 440 548 480 510 C 510 470 520 430 512 385 C 500 342 478 310 452 285 C 420 258 385 238 345 230 C 290 225 230 232 180 247 C 130 262 95 290 75 322 C 60 352 55 382 55 410 Z",
+              "Western Cape":"M 105 560 C 98 595 100 628 110 660 C 128 695 155 720 185 735 C 210 745 240 752 275 752 C 318 752 360 745 395 732 C 420 720 435 700 438 680 C 435 660 420 648 400 648 C 375 650 355 668 335 680 C 318 678 305 660 298 638 C 293 618 295 595 305 570 C 275 562 230 562 185 560 C 152 560 125 558 105 560 Z",
+              "Eastern Cape":"M 438 680 C 448 700 470 718 498 725 C 538 732 580 730 618 720 C 650 708 680 688 695 662 C 700 638 685 615 665 600 C 640 590 610 592 585 595 C 568 582 560 560 548 540 C 530 515 505 498 478 495 C 445 498 418 510 395 530 C 372 555 358 585 355 615 C 360 640 375 660 395 675 C 410 680 425 680 438 680 Z",
+              "Free State":"M 510 430 C 530 420 555 418 580 420 L 620 428 L 650 445 C 665 465 670 490 668 515 C 663 540 648 560 628 572 C 600 582 570 585 542 580 C 512 572 488 558 475 538 C 465 515 465 490 475 468 C 482 450 495 438 510 430 Z",
+              "North West":"M 355 230 C 395 225 440 225 480 232 C 510 242 525 258 525 278 C 525 300 520 320 512 335 C 500 348 475 355 445 358 L 395 358 L 345 352 C 308 343 280 325 262 302 C 250 280 248 258 258 240 C 288 232 322 230 355 230 Z",
+              "Gauteng":"M 638 258 C 658 250 688 250 708 260 C 722 272 722 292 710 302 C 690 312 665 312 645 305 C 630 295 628 275 638 258 Z",
+              "Limpopo":"M 480 232 C 520 218 565 202 610 188 C 655 174 700 160 740 148 C 775 142 805 148 828 164 C 842 185 842 215 832 238 C 818 258 798 268 775 272 L 720 275 L 665 272 L 620 268 L 575 262 L 540 258 L 510 250 C 498 245 490 240 480 232 Z",
+              "Mpumalanga":"M 720 275 C 745 278 770 285 788 300 C 798 318 802 342 800 370 C 798 398 792 418 776 432 C 755 442 725 442 700 438 C 680 428 665 410 660 385 L 660 340 L 665 300 C 678 285 698 278 720 275 Z",
+              "KwaZulu-Natal":"M 670 495 C 688 478 708 472 728 478 L 760 492 L 792 510 L 822 535 L 852 570 L 850 602 L 828 628 L 800 645 L 772 655 L 742 652 L 715 638 L 690 612 L 665 580 L 650 540 C 655 520 662 505 670 495 Z"
+            };
+            // Lesotho and Eswatini — drawn as overlays over the provinces, so
+            // they render as visible enclaves like the reference map.
+            var enclavePaths={
+              "Lesotho":"M 600 500 C 620 488 650 484 678 492 C 695 505 700 525 692 545 C 678 560 650 568 622 565 C 602 555 592 535 596 515 C 597 510 598 505 600 500 Z",
+              "Eswatini":"M 785 310 C 798 305 812 310 818 322 C 820 335 812 345 798 347 C 788 346 780 340 780 330 C 780 322 782 315 785 310 Z"
+            };
+            var provCenters={
+              "Northern Cape":{x:260,y:395,abbr:"Northern Cape"},
+              "Western Cape":{x:245,y:695,abbr:"Western Cape"},
+              "Eastern Cape":{x:520,y:640,abbr:"Eastern Cape"},
+              "Free State":{x:560,y:495,abbr:"Free State"},
+              "North West":{x:390,y:295,abbr:"North-West"},
+              "Gauteng":{x:672,y:282,abbr:"Gauteng"},
+              "Limpopo":{x:645,y:210,abbr:"Limpopo"},
+              "Mpumalanga":{x:730,y:355,abbr:"Mpumalanga"},
+              "KwaZulu-Natal":{x:755,y:575,abbr:"KwaZulu-Natal"}
+            };
+
+            // Major SA cities plotted on the map as a secondary layer of
+            // context — anchors the choropleth to recognisable places.
+            var majorCities=[
+              {name:"Johannesburg",x:658,y:292},
+              {name:"Pretoria",x:668,y:268},
+              {name:"Cape Town",x:138,y:712},
+              {name:"Durban",x:795,y:585},
+              {name:"Port Elizabeth",x:512,y:712},
+              {name:"Bloemfontein",x:562,y:485}
+            ];
+            // Proportional-symbol (bubble) map of SA provinces. Each bubble is
+            // sized to sqrt(value / max) so bubble AREA is proportional to the
+            // metric, which is the perceptually correct encoding. The faint
+            // country silhouette behind gives geographic context without
+            // requiring pixel-accurate province polygons. Top 3 bubbles get
+            // a medal badge and an outward pulse ring for visual emphasis.
+            var renderProvinceMap=function(stage,rowOverride){
+              var regData=rowOverride||regRows;
+              var totals={};Object.keys(provCenters).forEach(function(p){totals[p]=0;});
+              regData.forEach(function(r){var pn=String(r.region||"").trim();if(totals[pn]===undefined)return;totals[pn]+=stage.field(r);});
+              var max=0;Object.keys(totals).forEach(function(p){if(totals[p]>max)max=totals[p];});
+              var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
+              var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
+              var rankMap={};ranked.forEach(function(r,i){rankMap[r.name]=i;});
+              var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
+              // Bubble sizing — sqrt so area ∝ value (perceptually accurate).
+              // Clamp minimum so zero-value provinces still render a visible
+              // ghost bubble for geographic context. Cap maximum so the biggest
+              // bubble doesn't swallow neighbouring provinces.
+              var MIN_R=14,MAX_R=92;
+              var radiusFor=function(val){if(max===0||val===0)return MIN_R;return MIN_R+(MAX_R-MIN_R)*Math.sqrt(val/max);};
+              return <div>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 25%,#23315a 0%,#10182e 45%,#050210 95%)",borderRadius:18,padding:"20px 18px 12px",border:"1px solid rgba(140,170,255,0.22)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),0 18px 60px rgba(0,0,0,0.55)"}}>
+                  <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
+                    <defs>
+                      {/* Radial bubble gradient — bright at the top-left for a lit-sphere feel, darker at the bottom-right edge. */}
+                      <radialGradient id={"bubbleGrad_"+stage.key} cx="35%" cy="30%" r="70%">
+                        <stop offset="0%" stopColor={stage.hot} stopOpacity="1"/>
+                        <stop offset="55%" stopColor={stage.warm} stopOpacity="0.95"/>
+                        <stop offset="100%" stopColor={stage.deep} stopOpacity="1"/>
+                      </radialGradient>
+                      <radialGradient id={"bubbleGhost_"+stage.key} cx="35%" cy="30%" r="70%">
+                        <stop offset="0%" stopColor="#3d4b70" stopOpacity="0.55"/>
+                        <stop offset="100%" stopColor="#1e2a44" stopOpacity="0.85"/>
+                      </radialGradient>
+                      {/* Bubble outer glow — bright, short radius, adds a halo around each circle */}
+                      <filter id={"bubbleGlow_"+stage.key} x="-40%" y="-40%" width="180%" height="180%">
+                        <feGaussianBlur stdDeviation="5" result="blur"/>
+                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                      </filter>
+                      {/* Dot grid — subtle premium texture */}
+                      <pattern id={"dotGrid_"+stage.key} patternUnits="userSpaceOnUse" width="22" height="22">
+                        <circle cx="11" cy="11" r="0.9" fill="rgba(180,200,255,0.08)"/>
+                      </pattern>
+                      {/* Vignette — darker edges to focus eyes on the centre */}
+                      <radialGradient id={"vignette_"+stage.key} cx="50%" cy="50%" r="70%">
+                        <stop offset="60%" stopColor="#000" stopOpacity="0"/>
+                        <stop offset="100%" stopColor="#000" stopOpacity="0.55"/>
+                      </radialGradient>
+                      {/* Silhouette stroke — faint accent colour for SA outline */}
+                      <filter id={"silhouetteBlur_"+stage.key} x="-5%" y="-5%" width="110%" height="110%">
+                        <feGaussianBlur stdDeviation="1.5"/>
+                      </filter>
+                    </defs>
+                    {/* Background layers: gradient base + dot grid + vignette */}
+                    <rect x="0" y="0" width="900" height="780" fill={"url(#dotGrid_"+stage.key+")"}/>
+                    {/* Faint SA country silhouette drawn as one combined stroke (low opacity, no fill) for geographic anchor. */}
+                    <g opacity="0.55" style={{pointerEvents:"none"}} filter={"url(#silhouetteBlur_"+stage.key+")"}>
+                      {Object.keys(provincePaths).map(function(p){return <path key={"sil"+p} d={provincePaths[p]} fill="rgba(180,200,255,0.025)" stroke="rgba(180,200,255,0.28)" strokeWidth="1.1"/>;})}
+                    </g>
+                    {/* Enclave outlines (Lesotho / Eswatini) for extra context */}
+                    {Object.keys(enclavePaths).map(function(n){return <path key={"encl"+n} d={enclavePaths[n]} fill="none" stroke="rgba(200,220,255,0.38)" strokeWidth="1" strokeDasharray="3,3" style={{pointerEvents:"none"}}/>;})}
+                    <text x="645" y="510" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.45)",letterSpacing:1.5,pointerEvents:"none"}}>LESOTHO</text>
+                    {/* Major city dots — tiny white, as geographic anchors */}
+                    {majorCities.map(function(ct){return <g key={"c"+ct.name} style={{pointerEvents:"none"}}>
+                      <circle cx={ct.x} cy={ct.y} r="2.5" fill="rgba(255,251,248,0.7)" stroke="rgba(0,0,0,0.6)" strokeWidth="0.8"/>
+                      <text x={ct.x+6} y={ct.y+2} style={{fontSize:8.5,fontFamily:fm,fontWeight:600,fill:"rgba(255,255,255,0.55)",letterSpacing:0.3,paintOrder:"stroke",stroke:"rgba(0,0,0,0.75)",strokeWidth:"2px",strokeLinejoin:"round"}}>{ct.name}</text>
+                    </g>;})}
+                    {/* Pulse rings on top 3 — expanding outward from bubble edge */}
+                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);if(typeof rnk!=="number"||rnk>=3||val===0)return null;var delay=(rnk*0.5).toFixed(2);return <g key={"pulse"+p} style={{pointerEvents:"none"}}>
+                      <circle cx={c.x} cy={c.y} r={r+6} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="2.5" opacity="0.85">
+                        <animate attributeName="r" values={(r)+";"+(r+38)+";"+(r)} dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.85;0;0.85" dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
+                      </circle>
+                      <circle cx={c.x} cy={c.y} r={r+4} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="1.5" opacity="0.55">
+                        <animate attributeName="r" values={(r)+";"+(r+30)+";"+(r)} dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
+                      </circle>
+                    </g>;})}
+                    {/* Bubbles — sized by sqrt of share. Sorted ascending so the largest bubble renders last and sits on top when two provinces overlap. */}
+                    {Object.keys(provCenters).slice().sort(function(a,b){return (totals[a]||0)-(totals[b]||0);}).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var gradId=hasVal?"bubbleGrad_"+stage.key:"bubbleGhost_"+stage.key;return <g key={"b"+p}>
+                      <circle cx={c.x} cy={c.y} r={r} fill={"url(#"+gradId+")"} stroke="rgba(255,255,255,0.75)" strokeWidth={hasVal?2:1} filter={hasVal&&typeof rnk==="number"&&rnk<3?"url(#bubbleGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}>
+                        <title>{p+" — "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title>
+                      </circle>
+                      {/* Glossy highlight — small white ellipse top-left of bubble */}
+                      {hasVal&&r>22&&<ellipse cx={c.x-r*0.35} cy={c.y-r*0.4} rx={r*0.32} ry={r*0.18} fill="rgba(255,255,255,0.3)" pointerEvents="none"/>}
+                    </g>;})}
+                    {/* Labels — placed INSIDE the bubble when it is large enough, OUTSIDE (below) when small so small bubbles don't get cramped overlay text. */}
+                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var showMedal=typeof rnk==="number"&&rnk<3&&hasVal;var inside=r>=32;var ny=inside?c.y-4:c.y+r+16;var vy=inside?c.y+18:c.y+r+32;return <g key={"l"+p} style={{pointerEvents:"none"}}>
+                      <text x={c.x} y={ny} textAnchor="middle" style={{fontSize:inside&&r>=50?15:12,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round",letterSpacing:0.3}}>{c.abbr}</text>
+                      {hasVal&&<text x={c.x} y={vy} textAnchor="middle" style={{fontSize:inside&&r>=50?22:14,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"4px",strokeLinejoin:"round",letterSpacing:-0.5}}>{share.toFixed(1)+"%"}</text>}
+                      {showMedal&&<g transform={"translate("+(c.x+r*0.78)+","+(c.y-r*0.78)+")"}>
+                        <circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/>
+                        <text x="0" y="4" textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text>
+                      </g>}
+                    </g>;})}
+                    {/* Vignette overlay last so edges darken subtly */}
+                    <rect x="0" y="0" width="900" height="780" fill={"url(#vignette_"+stage.key+")"} pointerEvents="none"/>
+                    {/* Watermark */}
+                    <text x="40" y="755" style={{fontSize:32,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
+                  </svg>
+                  {/* Legend strip — explains bubble size encoding */}
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:10,padding:"8px 6px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.75)",letterSpacing:1.3}}>
+                    <span style={{fontWeight:800,letterSpacing:2}}>BUBBLE SIZE</span>
+                    <div style={{display:"flex",alignItems:"center",gap:14,flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:"url(#bubbleGrad_"+stage.key+")",border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.6)"}}>low share</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:stage.warm,border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.6)"}}>mid share</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:34,height:34,borderRadius:"50%",background:stage.hot,border:"1.5px solid rgba(255,255,255,0.6)",boxShadow:"0 0 12px "+stage.hot+"77"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.6)"}}>high share</span>
+                      </div>
+                    </div>
+                    <span style={{color:"rgba(255,255,255,0.5)",fontSize:9,letterSpacing:1}}>area ∝ {stage.label.toLowerCase()}</span>
+                  </div>
+                </div>
+              </div>;
+            };
+
+            // Top-provinces ranked bars. Sits next to the map as a second
+            // visual read, each row is a saturated horizontal bar with the
+            // province name, the metric value, and % share.
+            var renderProvinceRanks=function(stage,rowOverride){
+              var regData=rowOverride||regRows;
+              var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
+              regData.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
+              // Rank all nine provinces; shares are computed against the tagged
+              // total so the column always sums to 100% of known data.
+              var all=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).sort(function(a,b){return b.val-a.val;});
+              var knownSum=all.reduce(function(s,r){return s+r.val;},0);
+              var max=all.length?all[0].val:0;
+              var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
+              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"18px 18px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
+                <div style={{marginBottom:14,paddingBottom:10,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+                  <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{stage.label} by Province</div>
+                  <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()} · sums to 100%</div>
+                </div>
+                {/* Column header */}
+                <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
+                  <div>#</div>
+                  <div>Province</div>
+                  <div style={{textAlign:"right"}}>Share</div>
+                </div>
+                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=knownSum>0?(r.val/knownSum*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+share.toFixed(1)+"% share of tagged provincial "+stage.label.toLowerCase();return <div key={r.name} title={tip} style={{marginBottom:8,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",marginBottom:4,fontSize:11,fontFamily:fm}}>
+                    <div style={{width:22,height:22,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:hasVal?"#0a0618":"#8b7fa3"}}>{i+1}</div>
+                    <span style={{color:hasVal?"#fff":"#8b7fa3",fontWeight:700}}>{r.name}</span>
+                    <span style={{color:hasVal?col:"#5c4f72",fontWeight:900,fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{hasVal?share.toFixed(1)+"%":"0%"}</span>
+                  </div>
+                  <div style={{height:6,marginLeft:38,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
+                  </div>
+                </div>;})}
+                {knownSum===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
+              </div>;
+            };
+
+            // Horizontal bar renderer — shares computed against the tagged
+            // subset so the column always sums to 100% of known-age data.
+            var renderAgeBars=function(stage,rowOverride){
+              var agData=rowOverride||agRows;
+              var sums={};ageOrder.forEach(function(a){sums[a]=0;});
+              agData.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
+              var knownSum=ageOrder.reduce(function(s,a){return s+sums[a];},0);
+              var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
+              return <div style={{padding:"6px 0"}}>
+                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=knownSum>0?(v/knownSum*100):0;var tip=a+" — "+share.toFixed(1)+"% share of tagged "+stage.label.toLowerCase();return <div key={a} title={tip} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                  <div style={{width:60,fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,textAlign:"right"}}>{a}</div>
+                  <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",transition:"width 0.8s ease"}}></div>
+                    {v>0&&<div style={{position:"absolute",top:0,right:10,height:"100%",display:"flex",alignItems:"center",fontSize:11,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.85)"}}>{share.toFixed(1)+"%"}</div>}
+                  </div>
+                </div>;})}
+                {knownSum===0&&<div style={{marginTop:10,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No age-tagged {stage.label.toLowerCase()} for this period.</div>}
+              </div>;
+            };
+
+            // Gender donut (no Unknown). Uses Recharts PieChart.
+            var renderGenderDonut=function(stage){
+              var byGen={female:0,male:0};
+              agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(byGen[g]===undefined)return;byGen[g]+=stage.field(r);});
+              var total=byGen.female+byGen.male;
+              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No gender data</div>;
+              var data=[{name:"Female",value:byGen.female,color:"#ec4899"},{name:"Male",value:byGen.male,color:"#3b82f6"}];
+              return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                <ResponsiveContainer width="100%" height={210}>
+                  <PieChart>
+                    <defs>
+                      <radialGradient id={"dg_f_"+stage.key} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#f9a8d4"/><stop offset="100%" stopColor="#be185d"/></radialGradient>
+                      <radialGradient id={"dg_m_"+stage.key} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#1e40af"/></radialGradient>
+                    </defs>
+                    <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={4} dataKey="value" stroke="rgba(0,0,0,0.35)" strokeWidth={2}>
+                      <Cell fill={"url(#dg_f_"+stage.key+")"}/>
+                      <Cell fill={"url(#dg_m_"+stage.key+")"}/>
+                    </Pie>
+                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{display:"flex",gap:18,marginTop:-14,fontSize:11,fontFamily:fm}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#ec4899",boxShadow:"0 0 8px #ec489980"}}></span><span style={{color:P.txt,fontWeight:700}}>F</span><span style={{color:P.sub}}>{fmtAbbr(byGen.female)}</span><span style={{color:P.dim}}>{"("+(byGen.female/total*100).toFixed(0)+"%)"}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 8px #3b82f680"}}></span><span style={{color:P.txt,fontWeight:700}}>M</span><span style={{color:P.sub}}>{fmtAbbr(byGen.male)}</span><span style={{color:P.dim}}>{"("+(byGen.male/total*100).toFixed(0)+"%)"}</span></div>
+                </div>
+              </div>;
+            };
+
+            // Device donut with gradient slices.
+            var renderDeviceDonut=function(stage){
+              var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
+              var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
+              devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
+              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
+              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
+              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{name:labels[k],key:k,value:bucket[k],color:colors[k]};});
+              var total=data.reduce(function(s,d){return s+d.value;},0);
+              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No device data</div>;
+              return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                <ResponsiveContainer width="100%" height={210}>
+                  <PieChart>
+                    <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" stroke="rgba(0,0,0,0.35)" strokeWidth={2}>{data.map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Pie>
+                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{display:"flex",gap:10,marginTop:-14,fontSize:10,fontFamily:fm,flexWrap:"wrap",justifyContent:"center"}}>{data.map(function(d){return <div key={d.name} style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:d.color}}></span><span style={{color:P.txt,fontWeight:700}}>{d.name}</span><span style={{color:P.dim}}>{(d.value/total*100).toFixed(0)+"%"}</span></div>;})}</div>
+              </div>;
+            };
+
+            // Top-age/top-gender helpers reused in insights and tiles.
+            var topAgeFor=function(stage){var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});agRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});var t=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];return{age:t,val:ageSums[t]||0};};
+            var genderSharesFor=function(stage){var s={female:0,male:0};agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(s[g]===undefined)return;s[g]+=stage.field(r);});return s;};
+            var topProvFor=function(stage){var t={};regRows.forEach(function(r){var pn=String(r.region||"");if(!provincePaths[pn])return;if(!t[pn])t[pn]=0;t[pn]+=stage.field(r);});var ks=Object.keys(t).sort(function(a,b){return t[b]-t[a];});return ks[0]||"";};
+            var topSegmentFor=function(stage){var best={val:0,age:"",gen:""};agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});return best;};
+
+            // Platform tiles — share of total impressions per channel (FB / IG / TikTok / Google),
+            // always on, not stage-scoped. Uses authoritative per-platform
+            // totals (authPlat) so the numbers match Summary exactly.
+            var renderPlatformMix=function(){
+              var agg=authPlat;
+              var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
+              var totalClk=agg.Facebook.clk+agg.Instagram.clk+agg.TikTok.clk+agg.Google.clk;
+              var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
+              return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Share of Clicks</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
+                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var tip=m.k+" — "+clkShare.toFixed(1)+"% share of clicks, "+impShare.toFixed(1)+"% share of ads served across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                      <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
+                      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{m.k}</div>
+                    </div>
+                    {/* Primary headline now clicks share — clients care about engagement, not ad serving. */}
+                    <div style={{fontSize:32,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-1,marginBottom:6}}>{clkShare.toFixed(1)+"%"}</div>
+                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of clicks</div>
+                    <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:clkShare+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10,letterSpacing:0.5}}>
+                      <span>{impShare.toFixed(1)+"% of ads served"}</span>
+                    </div>
+                  </div>;})}
+                </div>
+              </div>;
+            };
+
+            // Horizontal device bars — clearer than a donut at this scale.
+            // Device bars — percent-only, using tagged-device subset as the
+            // denominator so rows always sum to 100% of known-device data.
+            var renderDeviceBars=function(stage,rowOverride){
+              var devData=rowOverride||devRows;
+              var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
+              var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
+              devData.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
+              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
+              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
+              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
+              var knownSum=data.reduce(function(s,d){return s+d.value;},0);
+              var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
+              if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
+              return <div>
+                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=knownSum>0?(d.value/knownSum*100):0;var tip=d.name+" — "+share.toFixed(1)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{width:10,height:10,borderRadius:"50%",background:d.color,boxShadow:"0 0 10px "+d.color+"88"}}></span>
+                      <span style={{color:"#fff",fontWeight:700}}>{d.name}</span>
+                    </div>
+                    <div style={{color:d.color,fontWeight:900,fontSize:16,fontVariantNumeric:"tabular-nums"}}>{share.toFixed(1)+"%"}</div>
+                  </div>
+                  <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
+                  </div>
+                </div>;})}
+              </div>;
+            };
+
+            // Narrative copy per stage — reused in the 3-block insight grid.
+            var stageNarrative=function(stage){
+              var total=stageTotal(stage);
+              var ta=topAgeFor(stage);var gs=genderSharesFor(stage);var genTotal=gs.female+gs.male;var femaleShare=genTotal>0?(gs.female/genTotal*100):0;
+              var tp=topProvFor(stage);var champ=topSegmentFor(stage);
+              var devNormLine=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0)return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";return "other";};
+              var devTL={mobile:0,desktop:0,tablet:0};devRows.forEach(function(r){var d=devNormLine(r.device);if(devTL[d]===undefined)return;devTL[d]+=stage.field(r);});
+              var devSum=devTL.mobile+devTL.desktop+devTL.tablet;var mobileShare=devSum>0?(devTL.mobile/devSum*100):0;
+              // Share formatter — a value like 99.7 was being rounded to "100%"
+              // which then read as factually wrong next to the chart showing
+              // 99.7%. Keep a decimal whenever integer rounding would flip a
+              // sub-100 value up to 100. Also used for female / male / top-age
+              // shares so every share percentage in the narrative matches the
+              // underlying chart's precision, never over-stating.
+              var pctLabel=function(v){
+                if(v>=100)return "100%";
+                if(Math.round(v)>=100)return (Math.floor(v*10)/10).toFixed(1)+"%";
+                return Math.round(v)+"%";
+              };
+              var lines=[];
+              if(stage.key==="impressions"){
+                if(total>0)lines.push(fmt(total)+" ads were served across the selected campaigns, establishing the reach baseline for everything that follows.");
+                if(ta.age&&ta.val>0){var ageShareRaw=total>0?(ta.val/total*100):0;lines.push("The "+ta.age+" age group absorbed "+pctLabel(ageShareRaw)+" of those impressions, the single largest audience slice exposed this period.");}
+                if(genTotal>0)lines.push("Gender split is "+pctLabel(femaleShare)+" female, "+pctLabel(100-femaleShare)+" male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad targeting":femaleShare>55?", skewing female":femaleShare<45?", skewing male":"")+".");
+                if(tp)lines.push(tp+" leads geographic reach, consistent with metro-corridor weighting.");
+                if(mobileShare>0)lines.push("Mobile accounts for "+pctLabel(mobileShare)+" of ads served"+(mobileShare>70?", a near-monopoly, creative must be mobile-first":mobileShare>50?", meeting the audience where they are":", leaving room to push further into mobile")+".");
+              }else if(stage.key==="clicks"){
+                if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push(fmt(total)+" click actions recorded at a blended "+ctrBlended+"% CTR, the engagement signal the creative is earning.");}
+                if(ta.age&&ta.val>0)lines.push("The "+ta.age+" bracket generated the highest click volume, the obvious scaling lever.");
+                if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"drive a disproportionate share")+".");
+                if(tp)lines.push(tp+" also leads click engagement, a healthy see-then-respond pattern.");
+                if(mobileShare>0)lines.push("Mobile carries "+pctLabel(mobileShare)+" of click volume, thumb-stop creative is doing its job in feed.");
+              }else{
+                if(total>0){var cpa=total>0?totSpend/total:0;lines.push(fmt(total)+" conversions delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines return.");}
+                if(champ.val>0&&champ.age)lines.push("Top converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+" with "+fmt(champ.val)+" conversions, prime audience to scale and protect budget for.");
+                if(tp)lines.push(tp+" produced the most conversions, pointing to where media weight should sit next cycle.");
+                if(mobileShare>0)lines.push("Mobile drives "+pctLabel(mobileShare)+" of conversions, a continuous mobile journey pays compound returns.");
+                if(total===0)lines.push("No conversions recorded for the selected period, expected for early-flight awareness campaigns or missing tracking.");
+              }
+              return lines.join(" ");
+            };
+
+            // Google city view — visual leaderboard instead of table.
+            // Google Ads full demographics block. Shows age, gender, device,
+            // province and top-cities splits from Google-only rows so clients
+            // can see the Google audience profile on its own (otherwise Google
+            // gets blended into the main stage splits alongside Meta + TikTok).
+            // Google-only demographics block — mirrors the renderStageBlock shape
+            // (Where row with bubble map + ranked provinces, Who & How row with
+            // age / gender / device) so the tab reads as one consistent page.
+            // Uses the same shared render helpers via the row-override param so
+            // there's no duplicated chart rendering. Province view only; the
+            // city leaderboard was dropped per user preference.
+            var renderCitiesBlock=function(){
+              var googleAg=agRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
+              var googleDev=devRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
+              var googleReg=regRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
+              if(googleAg.length===0&&googleDev.length===0&&googleReg.length===0)return null;
+              var googleStage={
+                key:"google",
+                label:"Clicks",
+                accent:P.gd,
+                accentDeep:"#166534",
+                deep:"#14532d",
+                cool:"#15803d",
+                warm:"#22c55e",
+                hot:"#4ade80",
+                icon:Ic.globe,
+                title:"Google Ads",
+                // Clicks, not ads served — clients want the engagement read
+                // ("who is actually clicking"), not the delivery read ("who
+                // saw the ad"). This is symmetric with the Engagement stage
+                // above and stays focused on the signal that matters.
+                subtitle:"Google-only engagement view, share of Google clicks",
+                field:function(r){return parseFloat(r.clicks||0);}
+              };
+              var total=(authPlat&&authPlat.Google&&authPlat.Google.clk)||0;
+              return <div style={{background:"linear-gradient(165deg,"+P.gd+"12 0%,"+P.gd+"05 50%,transparent 100%),#0d1a12",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+P.gd+"35",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+P.gd+"12 inset"}}>
+                {/* Stage header — matches renderStageBlock */}
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:16}}>
+                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+P.gd+"50,"+P.gd+"18)",border:"1.5px solid "+P.gd+"75",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+P.gd+"40"}}>{Ic.globe("#fff",28)}</div>
+                    <div>
+                      <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads Demographics</div>
+                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{googleStage.subtitle}</div>
+                    </div>
+                  </div>
+                  <div title={"Google Ads — "+fmt(total)+" clicks across the selected campaigns. Splits below are percent-only and sum to 100% of Google click-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
+                    <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Clicks</div>
+                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmtAbbr(total)}</div>
+                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
+                  </div>
+                </div>
+
+                {/* Where — Google province bubble map + ranked provinces */}
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where (Google)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
+                  <div>{renderProvinceMap(googleStage,googleReg)}</div>
+                  <div>{renderProvinceRanks(googleStage,googleReg)}</div>
+                </div>
+
+                {/* Who + How — age + gender + device, Google-filtered rows */}
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How (Google)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:4}}>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                      <div title="Share of age-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderAgeBars(googleStage,googleAg)}
+                  </div>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                      <div title="Share of gender-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderGenderCards(googleStage,googleAg)}
+                  </div>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
+                      <div title="Share of device-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderDeviceBars(googleStage,googleDev)}
+                  </div>
+                </div>
+              </div>;
+            };
+
+            // Gender split cards — bigger, simpler than a donut at a glance.
+            // Gender cards — percent-only, using tagged subset as the
+            // denominator so Female + Male always sum to 100%.
+            var renderGenderCards=function(stage,rowOverride){
+              var gs;
+              if(rowOverride){
+                gs={female:0,male:0};
+                rowOverride.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]===undefined)return;gs[g]+=stage.field(r);});
+              }else{
+                gs=genderSharesFor(stage);
+              }
+              var knownSum=gs.female+gs.male;
+              if(knownSum===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender-tagged data for this stage</div>;
+              var fShare=gs.female/knownSum*100;
+              var mShare=gs.male/knownSum*100;
+              var row=function(name,share,col){var tip=name+" — "+share.toFixed(1)+"% share of gender-tagged "+stage.label.toLowerCase();return <div title={tip} style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                <div style={{position:"absolute",top:0,right:0,width:90,height:90,background:"radial-gradient(circle at 70% 30%,"+col+"22,transparent 70%)",pointerEvents:"none"}}></div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:34,height:34,borderRadius:17,background:col+"25",border:"1px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:col,fontFamily:fm}}>{name.charAt(0)}</div>
+                    <span style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{name}</span>
+                  </div>
+                  <div style={{fontSize:32,fontWeight:900,color:col,fontFamily:fm,lineHeight:1,letterSpacing:-1}}>{share.toFixed(1)+"%"}</div>
+                </div>
+                <div style={{height:10,background:"rgba(255,255,255,0.04)",borderRadius:5,overflow:"hidden"}}>
+                  <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:5,boxShadow:"0 0 10px "+col+"55"}}></div>
+                </div>
+              </div>;};
+              return <div>
+                {row("Female",fShare,"#ec4899")}
+                {row("Male",mShare,"#3b82f6")}
+              </div>;
+            };
+
+            // Render a complete per-stage demographics block: stage header with
+            // authoritative total, map + province ranks row, age / gender / device
+            // row, stage narrative. Called once per stage below.
+            var renderStageBlock=function(stage){
+              var total=stageTotal(stage);
+              return <div style={{background:"linear-gradient(165deg,"+stage.accent+"10 0%,"+stage.accentDeep+"05 50%,transparent 100%),#0d0520",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+stage.accent+"33",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+stage.accent+"10 inset"}}>
+                {/* Stage header with big authoritative total */}
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:16}}>
+                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+stage.accent+"45,"+stage.accentDeep+"20)",border:"1.5px solid "+stage.accent+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+stage.accent+"40"}}>{stage.icon("#fff",28)}</div>
+                    <div>
+                      <div style={{fontSize:11,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>{stage.title} Demographics</div>
+                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{stage.subtitle}</div>
+                    </div>
+                  </div>
+                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns (matches Summary). Every chart below sums to this total; untagged traffic shows as a 'Not Tagged' residual row."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"50",borderRadius:14,boxShadow:"0 0 20px "+stage.accent+"20"}}>
+                    <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>{stage.label}</div>
+                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+stage.accent+"66"}}>{fmtAbbr(total)}</div>
+                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
+                  </div>
+                </div>
+
+                {/* Where — map + ranked provinces. All splits on the page are
+                    percentages of the tagged subset, so every chart sums to
+                    100% of what the ad platforms attributed. */}
+                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
+                  <div>{renderProvinceMap(stage)}</div>
+                  <div>{renderProvinceRanks(stage)}</div>
+                </div>
+
+                {/* Who + How — age + gender + device */}
+                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:18}}>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                      <div title="Share of age-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderAgeBars(stage)}
+                  </div>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                      <div title="Share of gender-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderGenderCards(stage)}
+                  </div>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
+                      <div title="Share of device-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderDeviceBars(stage)}
+                  </div>
+                </div>
+
+                {/* Stage narrative */}
+                <Insight title={stage.title+" Read"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{stageNarrative(stage)}</Insight>
+              </div>;
+            };
+
+            // Populate the shared demoBlocks object so both Demographics and
+            // Summary tabs can render individual stage blocks. The IIFE itself
+            // returns null — the JSX slot where this runs is not used directly;
+            // consumers read demoBlocks.awarenessBlock etc.
+            demoBlocks = {
+              kpiStrip: (<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:22}}>
+                {[stageDef.awareness,stageDef.engagement,stageDef.objective].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.objective:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}var tip=s.title+" — "+fmt(v)+" "+s.label.toLowerCase()+(nextStage&&v>0?" · "+dropRate.toFixed(2)+"% progress to "+nextStage.title.toLowerCase():"");return <div key={s.key} title={tip} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 10px 30px "+s.accent+"25";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <div style={{width:32,height:32,borderRadius:10,background:s.accent+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(s.accent,16)}</div>
+                    <div style={{fontSize:10,color:s.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>{s.title}</div>
+                  </div>
+                  <div style={{fontSize:28,fontWeight:900,color:s.accent,fontFamily:fm,lineHeight:1,marginBottom:4,textShadow:"0 0 12px "+s.accent+"33"}}>{fmtAbbr(v)}</div>
+                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</div>
+                  {nextStage&&v>0&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.dim,fontFamily:fm}}>→ {dropRate.toFixed(2)+"%"} progress to {nextStage.title.toLowerCase()}</div>}
+                </div>;})}
+              </div>),
+              platformMix: renderPlatformMix(),
+              awarenessBlock: renderStageBlock(stageDef.awareness),
+              engagementBlock: renderStageBlock(stageDef.engagement),
+              objectiveBlock: renderStageBlock(stageDef.objective),
+              googleBlock: renderCitiesBlock(),
+              footnote: (<div style={{marginTop:20,padding:"16px 20px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,fontSize:11.5,color:"rgba(255,251,248,0.88)",fontFamily:fm,lineHeight:1.75,letterSpacing:0.3}}>
+                <span style={{color:"#fff",fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",fontSize:10,marginRight:10}}>How the splits are computed</span>
+                All percentages on this page are calculated against the subset of traffic the ad platforms attributed to a specific demographic dimension (age, gender, device, province, city). Each chart sums to 100% of that tagged subset, so every split is a true share of what we can confidently measure. Absolute totals appear only in the stage header, where they come from the same campaign-level data Summary uses.
+              </div>)
+            };
+            return null;
+  })();
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Mobile responsive: attribute selectors match inline React styles so no component refactor needed */
@@ -2570,6 +3277,7 @@ export default function MediaOnGas(){
                 </div>
                 {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST COST PER 1000 ADS SERVED",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
                 <div style={{fontSize:10,color:"rgba(255,255,255,0.9)",fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,textAlign:"center",fontStyle:"italic",padding:"14px 8px 2px"}}>* Google Ads does not expose unique-user reach in standard reporting, so Google Display and YouTube reach is estimated using an industry-standard 2x frequency assumption (reach = impressions / 2). This keeps blended reach and frequency representative of the full media mix. Meta and TikTok reach figures remain true unique-user counts from the platform APIs.</div>
+                {demoBlocks&&demoBlocks.awarenessBlock}
               </div>
 
               {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
@@ -2604,6 +3312,7 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var bestCpcP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].clicks)-(platBreak[b].spend/platBreak[b].clicks);})[0];var bestCtrP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[b].clicks/platBreak[b].imps)-(platBreak[a].clicks/platBreak[a].imps);})[0];var mostClicksP=sortedPlats.slice().sort(function(a,b){return platBreak[b].clicks-platBreak[a].clicks;})[0];return standRow([bestCpcP?stand("BEST COST PER CLICK",bestCpcP+", "+fR(platBreak[bestCpcP].spend/platBreak[bestCpcP].clicks),platCol4[bestCpcP]||P.mint):null,bestCtrP?stand("HIGHEST CLICK THROUGH RATE %",bestCtrP+", "+(platBreak[bestCtrP].clicks/platBreak[bestCtrP].imps*100).toFixed(2)+"%",platCol4[bestCtrP]||P.solar):null,mostClicksP?stand("MOST CLICKS",mostClicksP+", "+fmt(platBreak[mostClicksP].clicks),platCol4[mostClicksP]||P.cyan):null]);})()}
+                {demoBlocks&&demoBlocks.engagementBlock}
               </div>
 
               {/* ═══ 5. OBJECTIVE HIGHLIGHTS ═══ */}
@@ -2630,6 +3339,7 @@ export default function MediaOnGas(){
                 </div>
                 {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></div>;})()}
                 {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;active.forEach(function(k){totalResults+=objectives4[k].results;});return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);})()}
+                {demoBlocks&&demoBlocks.objectiveBlock}
               </div>}
 
               {/* Targeting Standouts block removed from Summary, lives on
@@ -4335,698 +5045,15 @@ export default function MediaOnGas(){
             <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:16,letterSpacing:1}}>Each platform returns demographic slices as separate calls, this can take 15 to 30 seconds first time.</div>
           </div>}
           {!demoLoading&&demoErr&&<div style={{background:P.glass,border:"1px solid "+P.rose+"40",borderRadius:18,padding:"30px 24px",color:P.rose,fontFamily:fm,fontSize:13}}>Demographics failed to load: {demoErr}</div>}
-          {!demoLoading&&!demoErr&&demoData&&(function(){
-            var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
-            var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
-            var inSel=function(r){return selSet[String(r.campaignId||"")]||selSet[String(r.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")];};
-            var agRowsRaw=(demoData.ageGender||[]).filter(inSel);
-            var regRows=(demoData.region||[]).filter(inSel);
-            var devRows=(demoData.device||[]).filter(inSel);
-            var cityRows=(demoData.googleCity||[]).filter(inSel);
-
-            // Strip Unknown age / gender rows — they pollute the
-            // visualisation without adding signal (Meta sometimes returns
-            // 'unknown' for users with a blocked profile).
-            var ageOrder=["18-24","25-34","35-44","45-54","55-64","65+"];
-            var genderOrder=["female","male"];
-            var genderLabel={female:"Female",male:"Male"};
-            var agRows=agRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
-
-            if(agRows.length===0&&regRows.length===0&&devRows.length===0&&cityRows.length===0){
-              return <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
-            }
-
-            // Objective classifier — mirrors Summary's logic exactly so the
-            // Demographics "Objective" total reconciles. Returns "Leads",
-            // "Followers" or "Traffic". Traffic is the measured-by-clicks
-            // bucket and absorbs LandingPage / AppInstall / PaidSearch / etc.
-            var classifyObjective=function(camp){
-              var canon=String(camp.objective||"").toLowerCase();
-              if(canon==="leads")return "Leads";
-              if(canon==="followers")return "Followers";
-              if(canon==="appinstall"||canon==="landingpage")return "Traffic";
-              var n=String(camp.campaignName||"").toLowerCase();
-              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
-              if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
-              if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
-              return "Traffic";
-            };
-            // Per-campaign objective value — matches Summary's per-objective
-            // result computation: Leads -> camp.leads, Followers -> follows+pageLikes,
-            // everything else -> camp.clicks.
-            var objectiveValueFor=function(camp){
-              var type=classifyObjective(camp);
-              if(type==="Leads")return parseFloat(camp.leads||0);
-              if(type==="Followers")return parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
-              return parseFloat(camp.clicks||0);
-            };
-            // Lookup: row.campaignId -> objective type, for scoring demographic
-            // breakdown rows (Meta strips the _facebook / _instagram suffix on
-            // its own rows so we register both forms).
-            var campaignObjType={};
-            sel.forEach(function(c){
-              var type=classifyObjective(c);
-              var rawId=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
-              campaignObjType[String(c.campaignId||"")]=type;
-              if(rawId)campaignObjType[rawId]=type;
-            });
-            var rowObjectiveType=function(r){
-              var cid=String(r.campaignId||"");
-              return campaignObjType[cid]||campaignObjType[cid.replace(/_facebook$/,"").replace(/_instagram$/,"")]||"Traffic";
-            };
-
-            // Metric fields per funnel stage. The objective stage picks the
-            // right metric per row based on its campaign's classified objective,
-            // so the totals reconcile with the Summary Objective tile.
-            var stageDef={
-              awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",deep:"#155e75",cool:"#0891b2",warm:"#22d3ee",hot:"#67e8f9",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
-              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",deep:"#92400e",cool:"#d97706",warm:"#f59e0b",hot:"#fbbf24",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
-              objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel, who actually converted",field:function(r){var type=rowObjectiveType(r);var rs=r.results||{};if(type==="Leads")return rs.leads||0;if(type==="Followers")return (rs.follows||0)+(rs.pageLikes||0);return r.clicks||0;}}
-            };
-
-            // AUTHORITATIVE TOTALS — computed from the same selected-campaign
-            // objects Summary uses, so the headline numbers on this tab match
-            // Summary exactly. Breakdown data (agRows / regRows / devRows) is
-            // still used for distribution (which age, which province, which
-            // device) but the displayed "total X" values come from sel.
-            var authImps=0,authClicks=0,authObj=0,authSpend=0;
-            var authPlat={Facebook:{imp:0,clk:0,spend:0,obj:0},Instagram:{imp:0,clk:0,spend:0,obj:0},TikTok:{imp:0,clk:0,spend:0,obj:0},Google:{imp:0,clk:0,spend:0,obj:0}};
-            var mapPlatform=function(p){if(p==="Google Display"||p==="YouTube"||p==="Google Search"||p==="Google Ads")return "Google";if(p==="Meta")return "Facebook";return p;};
-            sel.forEach(function(c){
-              var imp=parseFloat(c.impressions||0);
-              var clk=parseFloat(c.clicks||0);
-              var spd=parseFloat(c.spend||0);
-              var obj=objectiveValueFor(c);
-              authImps+=imp;authClicks+=clk;authSpend+=spd;authObj+=obj;
-              var k=mapPlatform(c.platform);
-              if(authPlat[k]){authPlat[k].imp+=imp;authPlat[k].clk+=clk;authPlat[k].spend+=spd;authPlat[k].obj+=obj;}
-            });
-            // stageTotal / stageSpend now return AUTHORITATIVE values, so every
-            // section header and the KPI strip reconcile with Summary. Chart
-            // cell values still come from breakdown sums (see agRows etc).
-            var stageTotal=function(stage){if(stage.key==="impressions")return authImps;if(stage.key==="clicks")return authClicks;return authObj;};
-            var stageSpend=function(){return authSpend;};
-            var totImps=authImps,totClicks=authClicks,totConv=authObj,totSpend=authSpend;
-
-            // Reusable helpers.
-            var fmtAbbr=function(n){n=parseFloat(n||0);if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toString();};
-
-            // Province paths — realistic curved approximations of SA's nine
-            // provinces on a viewBox 0 0 900 780. Each path uses cubic Bezier
-            // curves for smooth coastlines and province borders, anchored to
-            // approximate lat/lng positions of real SA geography. Lesotho and
-            // Eswatini are drawn separately as enclave "holes" over the top
-            // of the provinces they sit inside.
-            var provincePaths={
-              "Northern Cape":"M 55 410 C 58 440 68 475 82 505 C 88 525 95 545 105 560 C 170 578 245 586 320 580 C 385 572 440 548 480 510 C 510 470 520 430 512 385 C 500 342 478 310 452 285 C 420 258 385 238 345 230 C 290 225 230 232 180 247 C 130 262 95 290 75 322 C 60 352 55 382 55 410 Z",
-              "Western Cape":"M 105 560 C 98 595 100 628 110 660 C 128 695 155 720 185 735 C 210 745 240 752 275 752 C 318 752 360 745 395 732 C 420 720 435 700 438 680 C 435 660 420 648 400 648 C 375 650 355 668 335 680 C 318 678 305 660 298 638 C 293 618 295 595 305 570 C 275 562 230 562 185 560 C 152 560 125 558 105 560 Z",
-              "Eastern Cape":"M 438 680 C 448 700 470 718 498 725 C 538 732 580 730 618 720 C 650 708 680 688 695 662 C 700 638 685 615 665 600 C 640 590 610 592 585 595 C 568 582 560 560 548 540 C 530 515 505 498 478 495 C 445 498 418 510 395 530 C 372 555 358 585 355 615 C 360 640 375 660 395 675 C 410 680 425 680 438 680 Z",
-              "Free State":"M 510 430 C 530 420 555 418 580 420 L 620 428 L 650 445 C 665 465 670 490 668 515 C 663 540 648 560 628 572 C 600 582 570 585 542 580 C 512 572 488 558 475 538 C 465 515 465 490 475 468 C 482 450 495 438 510 430 Z",
-              "North West":"M 355 230 C 395 225 440 225 480 232 C 510 242 525 258 525 278 C 525 300 520 320 512 335 C 500 348 475 355 445 358 L 395 358 L 345 352 C 308 343 280 325 262 302 C 250 280 248 258 258 240 C 288 232 322 230 355 230 Z",
-              "Gauteng":"M 638 258 C 658 250 688 250 708 260 C 722 272 722 292 710 302 C 690 312 665 312 645 305 C 630 295 628 275 638 258 Z",
-              "Limpopo":"M 480 232 C 520 218 565 202 610 188 C 655 174 700 160 740 148 C 775 142 805 148 828 164 C 842 185 842 215 832 238 C 818 258 798 268 775 272 L 720 275 L 665 272 L 620 268 L 575 262 L 540 258 L 510 250 C 498 245 490 240 480 232 Z",
-              "Mpumalanga":"M 720 275 C 745 278 770 285 788 300 C 798 318 802 342 800 370 C 798 398 792 418 776 432 C 755 442 725 442 700 438 C 680 428 665 410 660 385 L 660 340 L 665 300 C 678 285 698 278 720 275 Z",
-              "KwaZulu-Natal":"M 670 495 C 688 478 708 472 728 478 L 760 492 L 792 510 L 822 535 L 852 570 L 850 602 L 828 628 L 800 645 L 772 655 L 742 652 L 715 638 L 690 612 L 665 580 L 650 540 C 655 520 662 505 670 495 Z"
-            };
-            // Lesotho and Eswatini — drawn as overlays over the provinces, so
-            // they render as visible enclaves like the reference map.
-            var enclavePaths={
-              "Lesotho":"M 600 500 C 620 488 650 484 678 492 C 695 505 700 525 692 545 C 678 560 650 568 622 565 C 602 555 592 535 596 515 C 597 510 598 505 600 500 Z",
-              "Eswatini":"M 785 310 C 798 305 812 310 818 322 C 820 335 812 345 798 347 C 788 346 780 340 780 330 C 780 322 782 315 785 310 Z"
-            };
-            var provCenters={
-              "Northern Cape":{x:260,y:395,abbr:"Northern Cape"},
-              "Western Cape":{x:245,y:695,abbr:"Western Cape"},
-              "Eastern Cape":{x:520,y:640,abbr:"Eastern Cape"},
-              "Free State":{x:560,y:495,abbr:"Free State"},
-              "North West":{x:390,y:295,abbr:"North-West"},
-              "Gauteng":{x:672,y:282,abbr:"Gauteng"},
-              "Limpopo":{x:645,y:210,abbr:"Limpopo"},
-              "Mpumalanga":{x:730,y:355,abbr:"Mpumalanga"},
-              "KwaZulu-Natal":{x:755,y:575,abbr:"KwaZulu-Natal"}
-            };
-
-            // Major SA cities plotted on the map as a secondary layer of
-            // context — anchors the choropleth to recognisable places.
-            var majorCities=[
-              {name:"Johannesburg",x:658,y:292},
-              {name:"Pretoria",x:668,y:268},
-              {name:"Cape Town",x:138,y:712},
-              {name:"Durban",x:795,y:585},
-              {name:"Port Elizabeth",x:512,y:712},
-              {name:"Bloemfontein",x:562,y:485}
-            ];
-            // Proportional-symbol (bubble) map of SA provinces. Each bubble is
-            // sized to sqrt(value / max) so bubble AREA is proportional to the
-            // metric, which is the perceptually correct encoding. The faint
-            // country silhouette behind gives geographic context without
-            // requiring pixel-accurate province polygons. Top 3 bubbles get
-            // a medal badge and an outward pulse ring for visual emphasis.
-            var renderProvinceMap=function(stage,rowOverride){
-              var regData=rowOverride||regRows;
-              var totals={};Object.keys(provCenters).forEach(function(p){totals[p]=0;});
-              regData.forEach(function(r){var pn=String(r.region||"").trim();if(totals[pn]===undefined)return;totals[pn]+=stage.field(r);});
-              var max=0;Object.keys(totals).forEach(function(p){if(totals[p]>max)max=totals[p];});
-              var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
-              var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
-              var rankMap={};ranked.forEach(function(r,i){rankMap[r.name]=i;});
-              var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
-              // Bubble sizing — sqrt so area ∝ value (perceptually accurate).
-              // Clamp minimum so zero-value provinces still render a visible
-              // ghost bubble for geographic context. Cap maximum so the biggest
-              // bubble doesn't swallow neighbouring provinces.
-              var MIN_R=14,MAX_R=92;
-              var radiusFor=function(val){if(max===0||val===0)return MIN_R;return MIN_R+(MAX_R-MIN_R)*Math.sqrt(val/max);};
-              return <div>
-                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 25%,#23315a 0%,#10182e 45%,#050210 95%)",borderRadius:18,padding:"20px 18px 12px",border:"1px solid rgba(140,170,255,0.22)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),0 18px 60px rgba(0,0,0,0.55)"}}>
-                  <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
-                    <defs>
-                      {/* Radial bubble gradient — bright at the top-left for a lit-sphere feel, darker at the bottom-right edge. */}
-                      <radialGradient id={"bubbleGrad_"+stage.key} cx="35%" cy="30%" r="70%">
-                        <stop offset="0%" stopColor={stage.hot} stopOpacity="1"/>
-                        <stop offset="55%" stopColor={stage.warm} stopOpacity="0.95"/>
-                        <stop offset="100%" stopColor={stage.deep} stopOpacity="1"/>
-                      </radialGradient>
-                      <radialGradient id={"bubbleGhost_"+stage.key} cx="35%" cy="30%" r="70%">
-                        <stop offset="0%" stopColor="#3d4b70" stopOpacity="0.55"/>
-                        <stop offset="100%" stopColor="#1e2a44" stopOpacity="0.85"/>
-                      </radialGradient>
-                      {/* Bubble outer glow — bright, short radius, adds a halo around each circle */}
-                      <filter id={"bubbleGlow_"+stage.key} x="-40%" y="-40%" width="180%" height="180%">
-                        <feGaussianBlur stdDeviation="5" result="blur"/>
-                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                      </filter>
-                      {/* Dot grid — subtle premium texture */}
-                      <pattern id={"dotGrid_"+stage.key} patternUnits="userSpaceOnUse" width="22" height="22">
-                        <circle cx="11" cy="11" r="0.9" fill="rgba(180,200,255,0.08)"/>
-                      </pattern>
-                      {/* Vignette — darker edges to focus eyes on the centre */}
-                      <radialGradient id={"vignette_"+stage.key} cx="50%" cy="50%" r="70%">
-                        <stop offset="60%" stopColor="#000" stopOpacity="0"/>
-                        <stop offset="100%" stopColor="#000" stopOpacity="0.55"/>
-                      </radialGradient>
-                      {/* Silhouette stroke — faint accent colour for SA outline */}
-                      <filter id={"silhouetteBlur_"+stage.key} x="-5%" y="-5%" width="110%" height="110%">
-                        <feGaussianBlur stdDeviation="1.5"/>
-                      </filter>
-                    </defs>
-                    {/* Background layers: gradient base + dot grid + vignette */}
-                    <rect x="0" y="0" width="900" height="780" fill={"url(#dotGrid_"+stage.key+")"}/>
-                    {/* Faint SA country silhouette drawn as one combined stroke (low opacity, no fill) for geographic anchor. */}
-                    <g opacity="0.55" style={{pointerEvents:"none"}} filter={"url(#silhouetteBlur_"+stage.key+")"}>
-                      {Object.keys(provincePaths).map(function(p){return <path key={"sil"+p} d={provincePaths[p]} fill="rgba(180,200,255,0.025)" stroke="rgba(180,200,255,0.28)" strokeWidth="1.1"/>;})}
-                    </g>
-                    {/* Enclave outlines (Lesotho / Eswatini) for extra context */}
-                    {Object.keys(enclavePaths).map(function(n){return <path key={"encl"+n} d={enclavePaths[n]} fill="none" stroke="rgba(200,220,255,0.38)" strokeWidth="1" strokeDasharray="3,3" style={{pointerEvents:"none"}}/>;})}
-                    <text x="645" y="510" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.45)",letterSpacing:1.5,pointerEvents:"none"}}>LESOTHO</text>
-                    {/* Major city dots — tiny white, as geographic anchors */}
-                    {majorCities.map(function(ct){return <g key={"c"+ct.name} style={{pointerEvents:"none"}}>
-                      <circle cx={ct.x} cy={ct.y} r="2.5" fill="rgba(255,251,248,0.7)" stroke="rgba(0,0,0,0.6)" strokeWidth="0.8"/>
-                      <text x={ct.x+6} y={ct.y+2} style={{fontSize:8.5,fontFamily:fm,fontWeight:600,fill:"rgba(255,255,255,0.55)",letterSpacing:0.3,paintOrder:"stroke",stroke:"rgba(0,0,0,0.75)",strokeWidth:"2px",strokeLinejoin:"round"}}>{ct.name}</text>
-                    </g>;})}
-                    {/* Pulse rings on top 3 — expanding outward from bubble edge */}
-                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);if(typeof rnk!=="number"||rnk>=3||val===0)return null;var delay=(rnk*0.5).toFixed(2);return <g key={"pulse"+p} style={{pointerEvents:"none"}}>
-                      <circle cx={c.x} cy={c.y} r={r+6} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="2.5" opacity="0.85">
-                        <animate attributeName="r" values={(r)+";"+(r+38)+";"+(r)} dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.85;0;0.85" dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
-                      </circle>
-                      <circle cx={c.x} cy={c.y} r={r+4} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="1.5" opacity="0.55">
-                        <animate attributeName="r" values={(r)+";"+(r+30)+";"+(r)} dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
-                      </circle>
-                    </g>;})}
-                    {/* Bubbles — sized by sqrt of share. Sorted ascending so the largest bubble renders last and sits on top when two provinces overlap. */}
-                    {Object.keys(provCenters).slice().sort(function(a,b){return (totals[a]||0)-(totals[b]||0);}).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var gradId=hasVal?"bubbleGrad_"+stage.key:"bubbleGhost_"+stage.key;return <g key={"b"+p}>
-                      <circle cx={c.x} cy={c.y} r={r} fill={"url(#"+gradId+")"} stroke="rgba(255,255,255,0.75)" strokeWidth={hasVal?2:1} filter={hasVal&&typeof rnk==="number"&&rnk<3?"url(#bubbleGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}>
-                        <title>{p+" — "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title>
-                      </circle>
-                      {/* Glossy highlight — small white ellipse top-left of bubble */}
-                      {hasVal&&r>22&&<ellipse cx={c.x-r*0.35} cy={c.y-r*0.4} rx={r*0.32} ry={r*0.18} fill="rgba(255,255,255,0.3)" pointerEvents="none"/>}
-                    </g>;})}
-                    {/* Labels — placed INSIDE the bubble when it is large enough, OUTSIDE (below) when small so small bubbles don't get cramped overlay text. */}
-                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var showMedal=typeof rnk==="number"&&rnk<3&&hasVal;var inside=r>=32;var ny=inside?c.y-4:c.y+r+16;var vy=inside?c.y+18:c.y+r+32;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={ny} textAnchor="middle" style={{fontSize:inside&&r>=50?15:12,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round",letterSpacing:0.3}}>{c.abbr}</text>
-                      {hasVal&&<text x={c.x} y={vy} textAnchor="middle" style={{fontSize:inside&&r>=50?22:14,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"4px",strokeLinejoin:"round",letterSpacing:-0.5}}>{share.toFixed(1)+"%"}</text>}
-                      {showMedal&&<g transform={"translate("+(c.x+r*0.78)+","+(c.y-r*0.78)+")"}>
-                        <circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/>
-                        <text x="0" y="4" textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text>
-                      </g>}
-                    </g>;})}
-                    {/* Vignette overlay last so edges darken subtly */}
-                    <rect x="0" y="0" width="900" height="780" fill={"url(#vignette_"+stage.key+")"} pointerEvents="none"/>
-                    {/* Watermark */}
-                    <text x="40" y="755" style={{fontSize:32,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
-                  </svg>
-                  {/* Legend strip — explains bubble size encoding */}
-                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:10,padding:"8px 6px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.75)",letterSpacing:1.3}}>
-                    <span style={{fontWeight:800,letterSpacing:2}}>BUBBLE SIZE</span>
-                    <div style={{display:"flex",alignItems:"center",gap:14,flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:"url(#bubbleGrad_"+stage.key+")",border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
-                        <span style={{color:"rgba(255,255,255,0.6)"}}>low share</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:22,height:22,borderRadius:"50%",background:stage.warm,border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
-                        <span style={{color:"rgba(255,255,255,0.6)"}}>mid share</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <div style={{width:34,height:34,borderRadius:"50%",background:stage.hot,border:"1.5px solid rgba(255,255,255,0.6)",boxShadow:"0 0 12px "+stage.hot+"77"}}></div>
-                        <span style={{color:"rgba(255,255,255,0.6)"}}>high share</span>
-                      </div>
-                    </div>
-                    <span style={{color:"rgba(255,255,255,0.5)",fontSize:9,letterSpacing:1}}>area ∝ {stage.label.toLowerCase()}</span>
-                  </div>
-                </div>
-              </div>;
-            };
-
-            // Top-provinces ranked bars. Sits next to the map as a second
-            // visual read, each row is a saturated horizontal bar with the
-            // province name, the metric value, and % share.
-            var renderProvinceRanks=function(stage,rowOverride){
-              var regData=rowOverride||regRows;
-              var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
-              regData.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
-              // Rank all nine provinces; shares are computed against the tagged
-              // total so the column always sums to 100% of known data.
-              var all=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).sort(function(a,b){return b.val-a.val;});
-              var knownSum=all.reduce(function(s,r){return s+r.val;},0);
-              var max=all.length?all[0].val:0;
-              var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
-              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"18px 18px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
-                <div style={{marginBottom:14,paddingBottom:10,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-                  <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{stage.label} by Province</div>
-                  <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()} · sums to 100%</div>
-                </div>
-                {/* Column header */}
-                <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
-                  <div>#</div>
-                  <div>Province</div>
-                  <div style={{textAlign:"right"}}>Share</div>
-                </div>
-                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=knownSum>0?(r.val/knownSum*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+share.toFixed(1)+"% share of tagged provincial "+stage.label.toLowerCase();return <div key={r.name} title={tip} style={{marginBottom:8,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",marginBottom:4,fontSize:11,fontFamily:fm}}>
-                    <div style={{width:22,height:22,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:hasVal?"#0a0618":"#8b7fa3"}}>{i+1}</div>
-                    <span style={{color:hasVal?"#fff":"#8b7fa3",fontWeight:700}}>{r.name}</span>
-                    <span style={{color:hasVal?col:"#5c4f72",fontWeight:900,fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{hasVal?share.toFixed(1)+"%":"0%"}</span>
-                  </div>
-                  <div style={{height:6,marginLeft:38,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
-                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
-                  </div>
-                </div>;})}
-                {knownSum===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
-              </div>;
-            };
-
-            // Horizontal bar renderer — shares computed against the tagged
-            // subset so the column always sums to 100% of known-age data.
-            var renderAgeBars=function(stage,rowOverride){
-              var agData=rowOverride||agRows;
-              var sums={};ageOrder.forEach(function(a){sums[a]=0;});
-              agData.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
-              var knownSum=ageOrder.reduce(function(s,a){return s+sums[a];},0);
-              var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
-              return <div style={{padding:"6px 0"}}>
-                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=knownSum>0?(v/knownSum*100):0;var tip=a+" — "+share.toFixed(1)+"% share of tagged "+stage.label.toLowerCase();return <div key={a} title={tip} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                  <div style={{width:60,fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,textAlign:"right"}}>{a}</div>
-                  <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",transition:"width 0.8s ease"}}></div>
-                    {v>0&&<div style={{position:"absolute",top:0,right:10,height:"100%",display:"flex",alignItems:"center",fontSize:11,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.85)"}}>{share.toFixed(1)+"%"}</div>}
-                  </div>
-                </div>;})}
-                {knownSum===0&&<div style={{marginTop:10,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No age-tagged {stage.label.toLowerCase()} for this period.</div>}
-              </div>;
-            };
-
-            // Gender donut (no Unknown). Uses Recharts PieChart.
-            var renderGenderDonut=function(stage){
-              var byGen={female:0,male:0};
-              agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(byGen[g]===undefined)return;byGen[g]+=stage.field(r);});
-              var total=byGen.female+byGen.male;
-              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No gender data</div>;
-              var data=[{name:"Female",value:byGen.female,color:"#ec4899"},{name:"Male",value:byGen.male,color:"#3b82f6"}];
-              return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                <ResponsiveContainer width="100%" height={210}>
-                  <PieChart>
-                    <defs>
-                      <radialGradient id={"dg_f_"+stage.key} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#f9a8d4"/><stop offset="100%" stopColor="#be185d"/></radialGradient>
-                      <radialGradient id={"dg_m_"+stage.key} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#1e40af"/></radialGradient>
-                    </defs>
-                    <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={4} dataKey="value" stroke="rgba(0,0,0,0.35)" strokeWidth={2}>
-                      <Cell fill={"url(#dg_f_"+stage.key+")"}/>
-                      <Cell fill={"url(#dg_m_"+stage.key+")"}/>
-                    </Pie>
-                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div style={{display:"flex",gap:18,marginTop:-14,fontSize:11,fontFamily:fm}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#ec4899",boxShadow:"0 0 8px #ec489980"}}></span><span style={{color:P.txt,fontWeight:700}}>F</span><span style={{color:P.sub}}>{fmtAbbr(byGen.female)}</span><span style={{color:P.dim}}>{"("+(byGen.female/total*100).toFixed(0)+"%)"}</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 8px #3b82f680"}}></span><span style={{color:P.txt,fontWeight:700}}>M</span><span style={{color:P.sub}}>{fmtAbbr(byGen.male)}</span><span style={{color:P.dim}}>{"("+(byGen.male/total*100).toFixed(0)+"%)"}</span></div>
-                </div>
-              </div>;
-            };
-
-            // Device donut with gradient slices.
-            var renderDeviceDonut=function(stage){
-              var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
-              var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
-              devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
-              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
-              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
-              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{name:labels[k],key:k,value:bucket[k],color:colors[k]};});
-              var total=data.reduce(function(s,d){return s+d.value;},0);
-              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No device data</div>;
-              return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                <ResponsiveContainer width="100%" height={210}>
-                  <PieChart>
-                    <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" stroke="rgba(0,0,0,0.35)" strokeWidth={2}>{data.map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Pie>
-                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div style={{display:"flex",gap:10,marginTop:-14,fontSize:10,fontFamily:fm,flexWrap:"wrap",justifyContent:"center"}}>{data.map(function(d){return <div key={d.name} style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:d.color}}></span><span style={{color:P.txt,fontWeight:700}}>{d.name}</span><span style={{color:P.dim}}>{(d.value/total*100).toFixed(0)+"%"}</span></div>;})}</div>
-              </div>;
-            };
-
-            // Top-age/top-gender helpers reused in insights and tiles.
-            var topAgeFor=function(stage){var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});agRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});var t=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];return{age:t,val:ageSums[t]||0};};
-            var genderSharesFor=function(stage){var s={female:0,male:0};agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(s[g]===undefined)return;s[g]+=stage.field(r);});return s;};
-            var topProvFor=function(stage){var t={};regRows.forEach(function(r){var pn=String(r.region||"");if(!provincePaths[pn])return;if(!t[pn])t[pn]=0;t[pn]+=stage.field(r);});var ks=Object.keys(t).sort(function(a,b){return t[b]-t[a];});return ks[0]||"";};
-            var topSegmentFor=function(stage){var best={val:0,age:"",gen:""};agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});return best;};
-
-            // Platform tiles — share of total impressions per channel (FB / IG / TikTok / Google),
-            // always on, not stage-scoped. Uses authoritative per-platform
-            // totals (authPlat) so the numbers match Summary exactly.
-            var renderPlatformMix=function(){
-              var agg=authPlat;
-              var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
-              var totalClk=agg.Facebook.clk+agg.Instagram.clk+agg.TikTok.clk+agg.Google.clk;
-              var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
-              return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Share of Clicks</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var tip=m.k+" — "+clkShare.toFixed(1)+"% share of clicks, "+impShare.toFixed(1)+"% share of ads served across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
-                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                      <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
-                      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{m.k}</div>
-                    </div>
-                    {/* Primary headline now clicks share — clients care about engagement, not ad serving. */}
-                    <div style={{fontSize:32,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-1,marginBottom:6}}>{clkShare.toFixed(1)+"%"}</div>
-                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of clicks</div>
-                    <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{width:clkShare+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10,letterSpacing:0.5}}>
-                      <span>{impShare.toFixed(1)+"% of ads served"}</span>
-                    </div>
-                  </div>;})}
-                </div>
-              </div>;
-            };
-
-            // Horizontal device bars — clearer than a donut at this scale.
-            // Device bars — percent-only, using tagged-device subset as the
-            // denominator so rows always sum to 100% of known-device data.
-            var renderDeviceBars=function(stage,rowOverride){
-              var devData=rowOverride||devRows;
-              var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
-              var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
-              devData.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
-              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
-              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
-              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
-              var knownSum=data.reduce(function(s,d){return s+d.value;},0);
-              var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
-              if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
-              return <div>
-                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=knownSum>0?(d.value/knownSum*100):0;var tip=d.name+" — "+share.toFixed(1)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{width:10,height:10,borderRadius:"50%",background:d.color,boxShadow:"0 0 10px "+d.color+"88"}}></span>
-                      <span style={{color:"#fff",fontWeight:700}}>{d.name}</span>
-                    </div>
-                    <div style={{color:d.color,fontWeight:900,fontSize:16,fontVariantNumeric:"tabular-nums"}}>{share.toFixed(1)+"%"}</div>
-                  </div>
-                  <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
-                  </div>
-                </div>;})}
-              </div>;
-            };
-
-            // Narrative copy per stage — reused in the 3-block insight grid.
-            var stageNarrative=function(stage){
-              var total=stageTotal(stage);
-              var ta=topAgeFor(stage);var gs=genderSharesFor(stage);var genTotal=gs.female+gs.male;var femaleShare=genTotal>0?(gs.female/genTotal*100):0;
-              var tp=topProvFor(stage);var champ=topSegmentFor(stage);
-              var devNormLine=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0)return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";return "other";};
-              var devTL={mobile:0,desktop:0,tablet:0};devRows.forEach(function(r){var d=devNormLine(r.device);if(devTL[d]===undefined)return;devTL[d]+=stage.field(r);});
-              var devSum=devTL.mobile+devTL.desktop+devTL.tablet;var mobileShare=devSum>0?(devTL.mobile/devSum*100):0;
-              // Share formatter — a value like 99.7 was being rounded to "100%"
-              // which then read as factually wrong next to the chart showing
-              // 99.7%. Keep a decimal whenever integer rounding would flip a
-              // sub-100 value up to 100. Also used for female / male / top-age
-              // shares so every share percentage in the narrative matches the
-              // underlying chart's precision, never over-stating.
-              var pctLabel=function(v){
-                if(v>=100)return "100%";
-                if(Math.round(v)>=100)return (Math.floor(v*10)/10).toFixed(1)+"%";
-                return Math.round(v)+"%";
-              };
-              var lines=[];
-              if(stage.key==="impressions"){
-                if(total>0)lines.push(fmt(total)+" ads were served across the selected campaigns, establishing the reach baseline for everything that follows.");
-                if(ta.age&&ta.val>0){var ageShareRaw=total>0?(ta.val/total*100):0;lines.push("The "+ta.age+" age group absorbed "+pctLabel(ageShareRaw)+" of those impressions, the single largest audience slice exposed this period.");}
-                if(genTotal>0)lines.push("Gender split is "+pctLabel(femaleShare)+" female, "+pctLabel(100-femaleShare)+" male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad targeting":femaleShare>55?", skewing female":femaleShare<45?", skewing male":"")+".");
-                if(tp)lines.push(tp+" leads geographic reach, consistent with metro-corridor weighting.");
-                if(mobileShare>0)lines.push("Mobile accounts for "+pctLabel(mobileShare)+" of ads served"+(mobileShare>70?", a near-monopoly, creative must be mobile-first":mobileShare>50?", meeting the audience where they are":", leaving room to push further into mobile")+".");
-              }else if(stage.key==="clicks"){
-                if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push(fmt(total)+" click actions recorded at a blended "+ctrBlended+"% CTR, the engagement signal the creative is earning.");}
-                if(ta.age&&ta.val>0)lines.push("The "+ta.age+" bracket generated the highest click volume, the obvious scaling lever.");
-                if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"drive a disproportionate share")+".");
-                if(tp)lines.push(tp+" also leads click engagement, a healthy see-then-respond pattern.");
-                if(mobileShare>0)lines.push("Mobile carries "+pctLabel(mobileShare)+" of click volume, thumb-stop creative is doing its job in feed.");
-              }else{
-                if(total>0){var cpa=total>0?totSpend/total:0;lines.push(fmt(total)+" conversions delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines return.");}
-                if(champ.val>0&&champ.age)lines.push("Top converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+" with "+fmt(champ.val)+" conversions, prime audience to scale and protect budget for.");
-                if(tp)lines.push(tp+" produced the most conversions, pointing to where media weight should sit next cycle.");
-                if(mobileShare>0)lines.push("Mobile drives "+pctLabel(mobileShare)+" of conversions, a continuous mobile journey pays compound returns.");
-                if(total===0)lines.push("No conversions recorded for the selected period, expected for early-flight awareness campaigns or missing tracking.");
-              }
-              return lines.join(" ");
-            };
-
-            // Google city view — visual leaderboard instead of table.
-            // Google Ads full demographics block. Shows age, gender, device,
-            // province and top-cities splits from Google-only rows so clients
-            // can see the Google audience profile on its own (otherwise Google
-            // gets blended into the main stage splits alongside Meta + TikTok).
-            // Google-only demographics block — mirrors the renderStageBlock shape
-            // (Where row with bubble map + ranked provinces, Who & How row with
-            // age / gender / device) so the tab reads as one consistent page.
-            // Uses the same shared render helpers via the row-override param so
-            // there's no duplicated chart rendering. Province view only; the
-            // city leaderboard was dropped per user preference.
-            var renderCitiesBlock=function(){
-              var googleAg=agRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
-              var googleDev=devRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
-              var googleReg=regRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
-              if(googleAg.length===0&&googleDev.length===0&&googleReg.length===0)return null;
-              var googleStage={
-                key:"google",
-                label:"Clicks",
-                accent:P.gd,
-                accentDeep:"#166534",
-                deep:"#14532d",
-                cool:"#15803d",
-                warm:"#22c55e",
-                hot:"#4ade80",
-                icon:Ic.globe,
-                title:"Google Ads",
-                // Clicks, not ads served — clients want the engagement read
-                // ("who is actually clicking"), not the delivery read ("who
-                // saw the ad"). This is symmetric with the Engagement stage
-                // above and stays focused on the signal that matters.
-                subtitle:"Google-only engagement view, share of Google clicks",
-                field:function(r){return parseFloat(r.clicks||0);}
-              };
-              var total=(authPlat&&authPlat.Google&&authPlat.Google.clk)||0;
-              return <div style={{background:"linear-gradient(165deg,"+P.gd+"12 0%,"+P.gd+"05 50%,transparent 100%),#0d1a12",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+P.gd+"35",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+P.gd+"12 inset"}}>
-                {/* Stage header — matches renderStageBlock */}
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:16}}>
-                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+P.gd+"50,"+P.gd+"18)",border:"1.5px solid "+P.gd+"75",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+P.gd+"40"}}>{Ic.globe("#fff",28)}</div>
-                    <div>
-                      <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads Demographics</div>
-                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{googleStage.subtitle}</div>
-                    </div>
-                  </div>
-                  <div title={"Google Ads — "+fmt(total)+" clicks across the selected campaigns. Splits below are percent-only and sum to 100% of Google click-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
-                    <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Clicks</div>
-                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmtAbbr(total)}</div>
-                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
-                  </div>
-                </div>
-
-                {/* Where — Google province bubble map + ranked provinces */}
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where (Google)</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
-                  <div>{renderProvinceMap(googleStage,googleReg)}</div>
-                  <div>{renderProvinceRanks(googleStage,googleReg)}</div>
-                </div>
-
-                {/* Who + How — age + gender + device, Google-filtered rows */}
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How (Google)</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:4}}>
-                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
-                      <div title="Share of age-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
-                    </div>
-                    {renderAgeBars(googleStage,googleAg)}
-                  </div>
-                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
-                      <div title="Share of gender-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
-                    </div>
-                    {renderGenderCards(googleStage,googleAg)}
-                  </div>
-                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title="Share of device-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
-                    </div>
-                    {renderDeviceBars(googleStage,googleDev)}
-                  </div>
-                </div>
-              </div>;
-            };
-
-            // Gender split cards — bigger, simpler than a donut at a glance.
-            // Gender cards — percent-only, using tagged subset as the
-            // denominator so Female + Male always sum to 100%.
-            var renderGenderCards=function(stage,rowOverride){
-              var gs;
-              if(rowOverride){
-                gs={female:0,male:0};
-                rowOverride.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]===undefined)return;gs[g]+=stage.field(r);});
-              }else{
-                gs=genderSharesFor(stage);
-              }
-              var knownSum=gs.female+gs.male;
-              if(knownSum===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender-tagged data for this stage</div>;
-              var fShare=gs.female/knownSum*100;
-              var mShare=gs.male/knownSum*100;
-              var row=function(name,share,col){var tip=name+" — "+share.toFixed(1)+"% share of gender-tagged "+stage.label.toLowerCase();return <div title={tip} style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                <div style={{position:"absolute",top:0,right:0,width:90,height:90,background:"radial-gradient(circle at 70% 30%,"+col+"22,transparent 70%)",pointerEvents:"none"}}></div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:34,height:34,borderRadius:17,background:col+"25",border:"1px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:col,fontFamily:fm}}>{name.charAt(0)}</div>
-                    <span style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{name}</span>
-                  </div>
-                  <div style={{fontSize:32,fontWeight:900,color:col,fontFamily:fm,lineHeight:1,letterSpacing:-1}}>{share.toFixed(1)+"%"}</div>
-                </div>
-                <div style={{height:10,background:"rgba(255,255,255,0.04)",borderRadius:5,overflow:"hidden"}}>
-                  <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:5,boxShadow:"0 0 10px "+col+"55"}}></div>
-                </div>
-              </div>;};
-              return <div>
-                {row("Female",fShare,"#ec4899")}
-                {row("Male",mShare,"#3b82f6")}
-              </div>;
-            };
-
-            // Render a complete per-stage demographics block: stage header with
-            // authoritative total, map + province ranks row, age / gender / device
-            // row, stage narrative. Called once per stage below.
-            var renderStageBlock=function(stage){
-              var total=stageTotal(stage);
-              return <div style={{background:"linear-gradient(165deg,"+stage.accent+"10 0%,"+stage.accentDeep+"05 50%,transparent 100%),#0d0520",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+stage.accent+"33",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+stage.accent+"10 inset"}}>
-                {/* Stage header with big authoritative total */}
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:16}}>
-                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+stage.accent+"45,"+stage.accentDeep+"20)",border:"1.5px solid "+stage.accent+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+stage.accent+"40"}}>{stage.icon("#fff",28)}</div>
-                    <div>
-                      <div style={{fontSize:11,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>{stage.title} Demographics</div>
-                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{stage.subtitle}</div>
-                    </div>
-                  </div>
-                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns (matches Summary). Every chart below sums to this total; untagged traffic shows as a 'Not Tagged' residual row."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"50",borderRadius:14,boxShadow:"0 0 20px "+stage.accent+"20"}}>
-                    <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>{stage.label}</div>
-                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+stage.accent+"66"}}>{fmtAbbr(total)}</div>
-                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
-                  </div>
-                </div>
-
-                {/* Where — map + ranked provinces. All splits on the page are
-                    percentages of the tagged subset, so every chart sums to
-                    100% of what the ad platforms attributed. */}
-                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
-                  <div>{renderProvinceMap(stage)}</div>
-                  <div>{renderProvinceRanks(stage)}</div>
-                </div>
-
-                {/* Who + How — age + gender + device */}
-                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How</div>
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:18}}>
-                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
-                      <div title="Share of age-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
-                    </div>
-                    {renderAgeBars(stage)}
-                  </div>
-                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
-                      <div title="Share of gender-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
-                    </div>
-                    {renderGenderCards(stage)}
-                  </div>
-                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title="Share of device-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
-                    </div>
-                    {renderDeviceBars(stage)}
-                  </div>
-                </div>
-
-                {/* Stage narrative */}
-                <Insight title={stage.title+" Read"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{stageNarrative(stage)}</Insight>
-              </div>;
-            };
-
-            return <div>
-              {/* Funnel overview strip — 3 stage totals from authoritative source */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:22}}>
-                {[stageDef.awareness,stageDef.engagement,stageDef.objective].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.objective:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}var tip=s.title+" — "+fmt(v)+" "+s.label.toLowerCase()+(nextStage&&v>0?" · "+dropRate.toFixed(2)+"% progress to "+nextStage.title.toLowerCase():"");return <div key={s.key} title={tip} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 10px 30px "+s.accent+"25";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                    <div style={{width:32,height:32,borderRadius:10,background:s.accent+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(s.accent,16)}</div>
-                    <div style={{fontSize:10,color:s.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>{s.title}</div>
-                  </div>
-                  <div style={{fontSize:28,fontWeight:900,color:s.accent,fontFamily:fm,lineHeight:1,marginBottom:4,textShadow:"0 0 12px "+s.accent+"33"}}>{fmtAbbr(v)}</div>
-                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</div>
-                  {nextStage&&v>0&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.dim,fontFamily:fm}}>→ {dropRate.toFixed(2)+"%"} progress to {nextStage.title.toLowerCase()}</div>}
-                </div>;})}
-              </div>
-
-              {renderPlatformMix()}
-
-              {renderStageBlock(stageDef.awareness)}
-              {renderStageBlock(stageDef.engagement)}
-              {renderStageBlock(stageDef.objective)}
-
-              {renderCitiesBlock()}
-
-              <div style={{marginTop:20,padding:"16px 20px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,fontSize:11.5,color:"rgba(255,251,248,0.88)",fontFamily:fm,lineHeight:1.75,letterSpacing:0.3}}>
-                <span style={{color:"#fff",fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",fontSize:10,marginRight:10}}>How the splits are computed</span>
-                All percentages on this page are calculated against the subset of traffic the ad platforms attributed to a specific demographic dimension (age, gender, device, province, city). Each chart sums to 100% of that tagged subset, so every split is a true share of what we can confidently measure. Absolute totals appear only in the stage header, where they come from the same campaign-level data Summary uses.
-              </div>
-            </div>;
-          })()}
+          {!demoLoading&&!demoErr&&demoData&&(demoFallback||(demoBlocks&&<div>
+            {demoBlocks.kpiStrip}
+            {demoBlocks.platformMix}
+            {demoBlocks.awarenessBlock}
+            {demoBlocks.engagementBlock}
+            {demoBlocks.objectiveBlock}
+            {demoBlocks.googleBlock}
+            {demoBlocks.footnote}
+          </div>))}
           {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
         </div>)}
 
