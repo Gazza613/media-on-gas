@@ -4334,9 +4334,23 @@ export default function MediaOnGas(){
             };
             var activeStage=stageDef[demoMetric==="impressions"?"awareness":demoMetric==="clicks"?"engagement":"conversion"]||stageDef.awareness;
 
-            // Pre-compute per-stage totals across all demographic rows.
-            var stageTotal=function(stage){var s=0;agRows.forEach(function(r){s+=stage.field(r);});return s;};
-            var stageSpend=function(){var s=0;agRows.forEach(function(r){s+=parseFloat(r.spend||0);});return s;};
+            // Dedupe for platform / stage totals. Google Ads API returns
+            // age and gender as separate GAQL queries (age_range_view +
+            // gender_view), so our /api/demographics pushes *two* rows per
+            // Google campaign into ageGender — one age-only, one gender-only.
+            // Summing naively double-counts Google impressions/clicks/spend.
+            // For totals we keep Google age-known rows only (one copy per
+            // campaign-age cell) and keep every Meta/TikTok row (genuinely
+            // distinct age×gender bins). The per-gender chart separately
+            // sums gender-known rows so it still picks up Google gender data.
+            var agRowsForTotals=agRows.filter(function(r){
+              if(String(r.platform||"").toLowerCase()==="google"){
+                return ageOrder.indexOf(String(r.age||""))>=0;
+              }
+              return true;
+            });
+            var stageTotal=function(stage){var s=0;agRowsForTotals.forEach(function(r){s+=stage.field(r);});return s;};
+            var stageSpend=function(){var s=0;agRowsForTotals.forEach(function(r){s+=parseFloat(r.spend||0);});return s;};
             var totImps=stageTotal(stageDef.awareness);
             var totClicks=stageTotal(stageDef.engagement);
             var totConv=stageTotal(stageDef.conversion);
@@ -4369,10 +4383,30 @@ export default function MediaOnGas(){
               "KwaZulu-Natal":{x:555,y:440,abbr:"KZN"}
             };
 
+            // Major SA cities plotted on the map as a secondary layer of
+            // context — anchors the choropleth to recognisable places.
+            var majorCities=[
+              {name:"Johannesburg",x:515,y:245},
+              {name:"Pretoria",x:525,y:222},
+              {name:"Cape Town",x:95,y:555},
+              {name:"Durban",x:580,y:425},
+              {name:"Port Elizabeth",x:385,y:560},
+              {name:"Bloemfontein",x:395,y:385}
+            ];
+            // Abstract silhouettes of neighbouring territories — gives the
+            // map geographic context so SA is visibly a country, not floating.
+            var neighbourPaths={
+              "Botswana":"M 155,20 L 400,15 L 340,100 L 320,115 L 200,160 L 150,150 Z",
+              "Namibia":"M 15,40 L 155,20 L 150,150 L 200,160 L 205,260 L 12,265 L 8,110 Z",
+              "Zimbabwe":"M 400,15 L 585,10 L 680,25 L 570,70 L 495,70 L 395,60 Z",
+              "Mozambique":"M 585,10 L 705,5 L 730,100 L 715,235 L 695,305 L 690,175 L 680,25 Z",
+              "Lesotho":"M 430,420 L 495,430 L 500,475 L 440,470 Z"
+            };
             // Bright, high-contrast province choropleth. Uses SOLID fill
             // colours (not opacity-to-transparent), a lighter map canvas,
             // and labels with a heavy stroke halo so values stay readable
-            // at a glance. Top 3 provinces get a medal badge.
+            // at a glance. Top 3 provinces get a medal badge, #1 gets a
+            // pulsing ring.
             var renderProvinceMap=function(stage){
               var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
               regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
@@ -4380,22 +4414,83 @@ export default function MediaOnGas(){
               var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
               var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
               var rankMap={};ranked.forEach(function(r,i){rankMap[r.name]=i;});
+              var top=ranked[0];
+              var topCenter=top?provCenters[top.name]:null;
               var fillFor=function(val){if(max===0||val===0)return "#3d2f5a";var i=val/max;if(i>=0.75)return stage.hot;if(i>=0.50)return stage.warm;if(i>=0.25)return stage.cool;return stage.deep;};
               var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
               return <div>
-                <div style={{position:"relative",background:"linear-gradient(145deg,#2a1e40 0%,#1a1028 55%,#120a1f 100%)",borderRadius:16,padding:"20px 18px 10px",border:"1px solid rgba(255,255,255,0.08)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 30% 30%,#1d2a4a 0%,#12182e 45%,#08061a 100%)",borderRadius:16,padding:"20px 18px 10px",border:"1px solid rgba(100,160,255,0.15)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04),0 12px 40px rgba(0,0,0,0.4)"}}>
                   <svg viewBox="0 0 720 620" width="100%" height="auto" style={{display:"block"}}>
                     <defs>
                       <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                      {/* Ocean texture — soft wave pattern that lives behind everything */}
+                      <pattern id={"ocean_"+stage.key} patternUnits="userSpaceOnUse" width="44" height="44" patternTransform="rotate(8)">
+                        <rect width="44" height="44" fill="#0a1530"/>
+                        <path d="M 0,22 Q 11,16 22,22 T 44,22" fill="none" stroke="rgba(100,160,255,0.08)" strokeWidth="1"/>
+                        <path d="M 0,34 Q 11,28 22,34 T 44,34" fill="none" stroke="rgba(100,160,255,0.05)" strokeWidth="1"/>
+                      </pattern>
+                      <radialGradient id={"spotlight_"+stage.key} cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor={stage.hot} stopOpacity="0.35"/>
+                        <stop offset="60%" stopColor={stage.warm} stopOpacity="0.12"/>
+                        <stop offset="100%" stopColor={stage.deep} stopOpacity="0"/>
+                      </radialGradient>
+                      {/* Subtle hatch for neighbouring countries — visible but clearly backdrop */}
+                      <pattern id="neighbourHatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+                        <rect width="6" height="6" fill="#1a1530"/>
+                        <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>
+                      </pattern>
                     </defs>
-                    {/* Province fills - SOLID bright colours */}
-                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.55)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.2:1} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
-                    {/* Labels with heavy stroke halo for readability */}
-                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={c.y-3} textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.88)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+17} textAnchor="middle" style={{fontSize:17,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.88)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{fmtAbbr(val)}</text>}
-                      {showMedal&&<g transform={"translate("+(c.x+34)+","+(c.y-20)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                    {/* Ocean background */}
+                    <rect x="0" y="0" width="720" height="620" fill={"url(#ocean_"+stage.key+")"} opacity="0.6"/>
+                    {/* Radial spotlight under the top-ranked province */}
+                    {topCenter&&<circle cx={topCenter.x} cy={topCenter.y} r="220" fill={"url(#spotlight_"+stage.key+")"} pointerEvents="none"/>}
+                    {/* Neighbour country silhouettes — context without stealing focus */}
+                    {Object.keys(neighbourPaths).map(function(n){return <g key={"n"+n} style={{pointerEvents:"none"}}>
+                      <path d={neighbourPaths[n]} fill="url(#neighbourHatch)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8" strokeDasharray="3,3"/>
                     </g>;})}
+                    {/* Neighbour country labels */}
+                    <text x="235" y="80" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>BOTSWANA</text>
+                    <text x="85" y="140" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>NAMIBIA</text>
+                    <text x="530" y="45" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>ZIMBABWE</text>
+                    <text x="710" y="120" textAnchor="end" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.22)",letterSpacing:2}}>MOZAMBIQUE</text>
+                    <text x="468" y="452" textAnchor="middle" style={{fontSize:8,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.3)",letterSpacing:1}}>LESOTHO</text>
+                    {/* Ocean label (south of SA) */}
+                    <text x="360" y="600" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:600,fill:"rgba(120,170,255,0.28)",letterSpacing:6,fontStyle:"italic"}}>SOUTHERN OCEAN</text>
+                    {/* Province fills - SOLID bright colours */}
+                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.65)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.4:1.1} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
+                    {/* Pulse ring on the #1 province — draws the eye instantly */}
+                    {topCenter&&<g style={{pointerEvents:"none"}}>
+                      <circle cx={topCenter.x} cy={topCenter.y} r="26" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
+                        <animate attributeName="r" values="22;52;22" dur="2.6s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.9;0;0.9" dur="2.6s" repeatCount="indefinite"/>
+                      </circle>
+                      <circle cx={topCenter.x} cy={topCenter.y} r="22" fill="none" stroke={stage.hot} strokeWidth="1.5" opacity="0.6">
+                        <animate attributeName="r" values="18;40;18" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
+                      </circle>
+                    </g>}
+                    {/* Major city markers (stars with glow) */}
+                    {majorCities.map(function(ct){return <g key={"c"+ct.name} style={{pointerEvents:"none"}}>
+                      <circle cx={ct.x} cy={ct.y} r="4" fill="#FFFBF8" stroke="rgba(0,0,0,0.85)" strokeWidth="1.5"/>
+                      <circle cx={ct.x} cy={ct.y} r="1.8" fill="#0a0618"/>
+                      <text x={ct.x+7} y={ct.y+3} style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
+                    </g>;})}
+                    {/* Province labels with heavy stroke halo */}
+                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
+                      <text x={c.x} y={c.y-4} textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
+                      {val>0&&<text x={c.x} y={c.y+18} textAnchor="middle" style={{fontSize:18,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{fmtAbbr(val)}</text>}
+                      {showMedal&&<g transform={"translate("+(c.x+38)+","+(c.y-22)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                    </g>;})}
+                    {/* Compass rose — top right */}
+                    <g transform="translate(660,60)" style={{pointerEvents:"none"}}>
+                      <circle r="22" fill="rgba(10,6,24,0.55)" stroke={stage.warm+"60"} strokeWidth="1"/>
+                      <path d="M0,-16 L3,0 L0,16 L-3,0 Z" fill={stage.hot}/>
+                      <path d="M-16,0 L0,3 L16,0 L0,-3 Z" fill={stage.warm} opacity="0.75"/>
+                      <circle r="2" fill="#ffffff"/>
+                      <text x="0" y="-27" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:900,fill:stage.hot,letterSpacing:1.5}}>N</text>
+                    </g>
+                    {/* Watermark country name — bottom left, rotated */}
+                    <text x="30" y="585" style={{fontSize:28,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.04)",letterSpacing:8}}>SOUTH AFRICA</text>
                   </svg>
                   {/* Legend strip: solid discrete swatches matching the ramp */}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,padding:"6px 4px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,255,255,0.7)",letterSpacing:1}}>
@@ -4524,7 +4619,8 @@ export default function MediaOnGas(){
             var renderPlatformMix=function(){
               var platNorm=function(p){var s=String(p||"").toLowerCase();if(s==="facebook"||s==="fb")return "Facebook";if(s==="instagram"||s==="ig")return "Instagram";if(s==="tiktok"||s==="tt")return "TikTok";if(s==="google"||s==="google_ads"||s==="gd")return "Google";if(s==="meta")return "Facebook";return p||"Other";};
               var agg={Facebook:{imp:0,clk:0,spend:0},Instagram:{imp:0,clk:0,spend:0},TikTok:{imp:0,clk:0,spend:0},Google:{imp:0,clk:0,spend:0}};
-              agRows.forEach(function(r){var k=platNorm(r.platform);if(!agg[k])return;agg[k].imp+=r.impressions||0;agg[k].clk+=r.clicks||0;agg[k].spend+=parseFloat(r.spend||0);});
+              // Use deduped rows so Google isn't double-counted (see note on agRowsForTotals).
+              agRowsForTotals.forEach(function(r){var k=platNorm(r.platform);if(!agg[k])return;agg[k].imp+=r.impressions||0;agg[k].clk+=r.clicks||0;agg[k].spend+=parseFloat(r.spend||0);});
               var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
               var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
               return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
@@ -4643,21 +4739,37 @@ export default function MediaOnGas(){
               </div>;
             };
 
-            var sectionBox=function(title,body,accent){return <div style={{background:"linear-gradient(145deg,"+accent+"0c 0%,transparent 60%),#0f071c",borderRadius:20,padding:"22px 24px 24px",marginBottom:22,border:"1px solid "+accent+"22"}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
-                <div style={{width:4,height:24,borderRadius:2,background:accent,boxShadow:"0 0 12px "+accent+"88"}}></div>
-                <div style={{fontSize:16,color:"#fff",fontFamily:ff,fontWeight:800,letterSpacing:1}}>{title}</div>
+            var sectionBox=function(title,body,accent,stageValue){return <div style={{background:"linear-gradient(145deg,"+accent+"0c 0%,transparent 60%),#0f071c",borderRadius:20,padding:"22px 24px 24px",marginBottom:22,border:"1px solid "+accent+"22"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,gap:18,flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:4,height:24,borderRadius:2,background:accent,boxShadow:"0 0 12px "+accent+"88"}}></div>
+                  <div style={{fontSize:16,color:"#fff",fontFamily:ff,fontWeight:800,letterSpacing:1}}>{title}</div>
+                </div>
+                {stageValue!==undefined&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 14px",background:accent+"15",border:"1px solid "+accent+"45",borderRadius:20}}>
+                  <div style={{fontSize:9,color:accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>Showing</div>
+                  <div style={{fontSize:13,color:"#fff",fontFamily:fm,fontWeight:900}}>{fmtAbbr(stageValue)}</div>
+                </div>}
               </div>
               {body}
             </div>;};
 
-            // Stage toggle pills at the top of the page — a single control
-            // that drives the hero map + age + gender + device visuals below.
-            var togglePills=<div style={{display:"flex",gap:8,marginBottom:22,flexWrap:"wrap"}}>
-              {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var active=s.key===activeStage.key;return <button key={s.key} onClick={function(){setDemoMetric(s.key);}} style={{background:active?"linear-gradient(135deg,"+s.accent+"40,"+s.accentDeep+"20)":"rgba(255,255,255,0.03)",border:"1px solid "+(active?s.accent+"90":"rgba(255,255,255,0.08)"),color:active?"#fff":P.sub,fontFamily:fm,fontSize:12,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",padding:"10px 18px",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"all 0.2s ease",boxShadow:active?"0 0 20px "+s.accent+"55":"none"}}>
-                {s.icon(active?"#fff":s.accent,14)}
-                <span>{s.title}</span>
-                <span style={{fontSize:10,color:active?"#fff":P.dim,fontWeight:700,letterSpacing:0.5}}>· {fmtAbbr(stageTotal(s))}</span>
+            // Stage toggle pills — big, obvious segmented control that drives
+            // every hero section below. Each pill shows its total so clients
+            // see exactly what value the charts will fill with.
+            var togglePills=<div style={{display:"flex",gap:10,marginBottom:22,background:"linear-gradient(145deg,#14091f,#0a041a)",padding:10,borderRadius:14,border:"1px solid rgba(255,255,255,0.06)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)"}}>
+              {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s,idx){var active=s.key===activeStage.key;var total=stageTotal(s);return <button key={s.key} onClick={function(){setDemoMetric(s.key);}} style={{flex:1,background:active?"linear-gradient(135deg,"+s.accent+"55,"+s.accentDeep+"25)":"rgba(255,255,255,0.02)",border:"1.5px solid "+(active?s.accent:"rgba(255,255,255,0.06)"),color:active?"#fff":P.sub,fontFamily:fm,padding:"14px 20px",borderRadius:10,cursor:"pointer",transition:"all 0.25s ease",boxShadow:active?"0 0 28px "+s.accent+"60,inset 0 1px 0 rgba(255,255,255,0.1)":"none",textAlign:"left",position:"relative",overflow:"hidden"}} onMouseEnter={function(e){if(!active)e.currentTarget.style.background="rgba(255,255,255,0.04)";}} onMouseLeave={function(e){if(!active)e.currentTarget.style.background="rgba(255,255,255,0.02)";}}>
+                {active&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,"+s.accent+","+s.accentDeep+")",boxShadow:"0 0 12px "+s.accent}}></div>}
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                  <div style={{width:26,height:26,borderRadius:8,background:active?s.accent+"33":s.accent+"18",border:"1px solid "+s.accent+(active?"90":"30"),display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(active?"#fff":s.accent,14)}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:active?"#fff":s.accent,lineHeight:1}}>{s.title}</div>
+                    <div style={{fontSize:9,color:active?"rgba(255,255,255,0.7)":P.dim,fontFamily:fm,marginTop:3,letterSpacing:0.5}}>{s.subtitle}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",alignItems:"baseline",gap:6,marginTop:4}}>
+                  <span style={{fontSize:22,fontWeight:900,color:active?"#fff":s.accent,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmtAbbr(total)}</span>
+                  <span style={{fontSize:9,color:active?"rgba(255,255,255,0.55)":P.dim,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>{s.label}</span>
+                </div>
               </button>;})}
             </div>;
 
@@ -4703,29 +4815,29 @@ export default function MediaOnGas(){
               {/* Stage toggle — controls the 3 hero sections below */}
               {togglePills}
 
-              {sectionBox("Where your audience is · "+activeStage.label,
+              {sectionBox("Where your audience is · "+activeStage.title,
                 <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:16,alignItems:"stretch"}}>
                   <div>{renderProvinceMap(activeStage)}</div>
                   <div>{renderProvinceRanks(activeStage)}</div>
                 </div>,
-                activeStage.accent)}
+                activeStage.accent,stageTotal(activeStage))}
 
-              {sectionBox("Who they are · "+activeStage.label,
+              {sectionBox("Who they are · "+activeStage.title,
                 <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:16}}>
                   <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:14,padding:"20px 22px",border:"1px solid rgba(255,255,255,0.06)"}}>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>By Age Group</div>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>By Age Group · {activeStage.label}</div>
                     {renderAgeBars(activeStage)}
                   </div>
                   <div>{renderGenderCards(activeStage)}</div>
                 </div>,
-                activeStage.accent)}
+                activeStage.accent,stageTotal(activeStage))}
 
-              {sectionBox("How they're seeing you · "+activeStage.label,
+              {sectionBox("How they're seeing you · "+activeStage.title,
                 <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:14,padding:"22px 24px",border:"1px solid rgba(255,255,255,0.06)"}}>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Device Mix</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Device Mix · {activeStage.label}</div>
                   {renderDeviceBars(activeStage)}
                 </div>,
-                activeStage.accent)}
+                activeStage.accent,stageTotal(activeStage))}
 
               {renderCitiesBlock()}
 
