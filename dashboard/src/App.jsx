@@ -4457,121 +4457,124 @@ export default function MediaOnGas(){
               {name:"Port Elizabeth",x:512,y:712},
               {name:"Bloemfontein",x:562,y:485}
             ];
-            // Bright, high-contrast province choropleth. Uses SOLID fill
-            // colours (not opacity-to-transparent), a lighter map canvas,
-            // and labels with a heavy stroke halo so values stay readable
-            // at a glance. Top 3 provinces get a medal badge, #1 gets a
-            // pulsing ring.
+            // Proportional-symbol (bubble) map of SA provinces. Each bubble is
+            // sized to sqrt(value / max) so bubble AREA is proportional to the
+            // metric, which is the perceptually correct encoding. The faint
+            // country silhouette behind gives geographic context without
+            // requiring pixel-accurate province polygons. Top 3 bubbles get
+            // a medal badge and an outward pulse ring for visual emphasis.
             var renderProvinceMap=function(stage){
-              var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
-              regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
+              var totals={};Object.keys(provCenters).forEach(function(p){totals[p]=0;});
+              regRows.forEach(function(r){var pn=String(r.region||"").trim();if(totals[pn]===undefined)return;totals[pn]+=stage.field(r);});
               var max=0;Object.keys(totals).forEach(function(p){if(totals[p]>max)max=totals[p];});
               var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
               var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
               var rankMap={};ranked.forEach(function(r,i){rankMap[r.name]=i;});
-              var top=ranked[0];
-              var topCenter=top?provCenters[top.name]:null;
-              var fillFor=function(val){if(max===0||val===0)return "#3d2f5a";var i=val/max;if(i>=0.75)return stage.hot;if(i>=0.50)return stage.warm;if(i>=0.25)return stage.cool;return stage.deep;};
               var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
-              // Lighter top highlight and darker bottom shadow shades per fill —
-              // the per-province linearGradient uses these to create a glossy
-              // 3D feel. Top edge stays lighter than the fill, bottom edge
-              // slightly darker so each province reads as an extruded panel.
-              var lighten=function(hex){var n=parseInt(hex.replace("#",""),16);var r=Math.min(255,((n>>16)&255)+40);var g=Math.min(255,((n>>8)&255)+40);var b=Math.min(255,(n&255)+40);return "rgb("+r+","+g+","+b+")";};
-              var darken=function(hex){var n=parseInt(hex.replace("#",""),16);var r=Math.max(0,((n>>16)&255)-30);var g=Math.max(0,((n>>8)&255)-30);var b=Math.max(0,(n&255)-30);return "rgb("+r+","+g+","+b+")";};
+              // Bubble sizing — sqrt so area ∝ value (perceptually accurate).
+              // Clamp minimum so zero-value provinces still render a visible
+              // ghost bubble for geographic context. Cap maximum so the biggest
+              // bubble doesn't swallow neighbouring provinces.
+              var MIN_R=14,MAX_R=92;
+              var radiusFor=function(val){if(max===0||val===0)return MIN_R;return MIN_R+(MAX_R-MIN_R)*Math.sqrt(val/max);};
               return <div>
-                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 30%,#1b2547 0%,#0f1528 50%,#050310 100%)",borderRadius:18,padding:"20px 18px 10px",border:"1px solid rgba(140,170,255,0.2)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.06),0 18px 60px rgba(0,0,0,0.5)"}}>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 25%,#23315a 0%,#10182e 45%,#050210 95%)",borderRadius:18,padding:"20px 18px 12px",border:"1px solid rgba(140,170,255,0.22)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),0 18px 60px rgba(0,0,0,0.55)"}}>
                   <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
                     <defs>
-                      {/* Per-province gloss gradient — each province renders with this gradient so its top edge is brighter and bottom edge darker, giving a subtle 3D extrusion feel. */}
-                      {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var base=fillFor(val);return <linearGradient key={"gr"+p} id={"grad_"+stage.key+"_"+p.replace(/\s+/g,"_")} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={val===0?base:lighten(base)} stopOpacity={val===0?"1":"0.98"}/>
-                        <stop offset="55%" stopColor={base} stopOpacity="1"/>
-                        <stop offset="100%" stopColor={val===0?base:darken(base)} stopOpacity="1"/>
-                      </linearGradient>;})}
-                      {/* Drop shadow filter — gives each province a lifted, card-like appearance */}
-                      <filter id={"provShadow_"+stage.key} x="-10%" y="-10%" width="120%" height="120%">
-                        <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
-                        <feOffset dx="2" dy="5" result="offsetblur"/>
-                        <feComponentTransfer><feFuncA type="linear" slope="0.6"/></feComponentTransfer>
-                        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-                      </filter>
-                      {/* Glow filter for the top-ranked province */}
-                      <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%">
-                        <feGaussianBlur stdDeviation="8" result="blur"/>
+                      {/* Radial bubble gradient — bright at the top-left for a lit-sphere feel, darker at the bottom-right edge. */}
+                      <radialGradient id={"bubbleGrad_"+stage.key} cx="35%" cy="30%" r="70%">
+                        <stop offset="0%" stopColor={stage.hot} stopOpacity="1"/>
+                        <stop offset="55%" stopColor={stage.warm} stopOpacity="0.95"/>
+                        <stop offset="100%" stopColor={stage.deep} stopOpacity="1"/>
+                      </radialGradient>
+                      <radialGradient id={"bubbleGhost_"+stage.key} cx="35%" cy="30%" r="70%">
+                        <stop offset="0%" stopColor="#3d4b70" stopOpacity="0.55"/>
+                        <stop offset="100%" stopColor="#1e2a44" stopOpacity="0.85"/>
+                      </radialGradient>
+                      {/* Bubble outer glow — bright, short radius, adds a halo around each circle */}
+                      <filter id={"bubbleGlow_"+stage.key} x="-40%" y="-40%" width="180%" height="180%">
+                        <feGaussianBlur stdDeviation="5" result="blur"/>
                         <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
                       </filter>
-                      {/* Subtle geodesic grid — a light hex pattern in the background for a premium cartographic feel */}
-                      <pattern id={"hexGrid_"+stage.key} patternUnits="userSpaceOnUse" width="28" height="48" patternTransform="scale(0.9)">
-                        <path d="M 14,0 L 28,8 L 28,24 L 14,32 L 0,24 L 0,8 Z" fill="none" stroke="rgba(140,170,255,0.06)" strokeWidth="0.6"/>
+                      {/* Dot grid — subtle premium texture */}
+                      <pattern id={"dotGrid_"+stage.key} patternUnits="userSpaceOnUse" width="22" height="22">
+                        <circle cx="11" cy="11" r="0.9" fill="rgba(180,200,255,0.08)"/>
                       </pattern>
-                      <radialGradient id={"spotlight_"+stage.key} cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor={stage.hot} stopOpacity="0.45"/>
-                        <stop offset="55%" stopColor={stage.warm} stopOpacity="0.15"/>
-                        <stop offset="100%" stopColor={stage.deep} stopOpacity="0"/>
+                      {/* Vignette — darker edges to focus eyes on the centre */}
+                      <radialGradient id={"vignette_"+stage.key} cx="50%" cy="50%" r="70%">
+                        <stop offset="60%" stopColor="#000" stopOpacity="0"/>
+                        <stop offset="100%" stopColor="#000" stopOpacity="0.55"/>
                       </radialGradient>
-                      {/* Country halo — a soft glow around the whole SA silhouette */}
-                      <filter id={"countryHalo_"+stage.key} x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="14" result="blur"/>
-                        <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
-                        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+                      {/* Silhouette stroke — faint accent colour for SA outline */}
+                      <filter id={"silhouetteBlur_"+stage.key} x="-5%" y="-5%" width="110%" height="110%">
+                        <feGaussianBlur stdDeviation="1.5"/>
                       </filter>
                     </defs>
-                    {/* Hex grid backdrop */}
-                    <rect x="0" y="0" width="900" height="780" fill={"url(#hexGrid_"+stage.key+")"}/>
-                    {/* Radial spotlight under the top-ranked province */}
-                    {topCenter&&<circle cx={topCenter.x} cy={topCenter.y} r="280" fill={"url(#spotlight_"+stage.key+")"} pointerEvents="none"/>}
-                    {/* Country halo — render every province path as a single softly blurred silhouette layer for a subtle border glow around SA. */}
-                    <g opacity="0.55" filter={"url(#countryHalo_"+stage.key+")"} pointerEvents="none">
-                      {Object.keys(provincePaths).map(function(p){return <path key={"halo"+p} d={provincePaths[p]} fill={stage.hot} stroke="none"/>;})}
+                    {/* Background layers: gradient base + dot grid + vignette */}
+                    <rect x="0" y="0" width="900" height="780" fill={"url(#dotGrid_"+stage.key+")"}/>
+                    {/* Faint SA country silhouette drawn as one combined stroke (low opacity, no fill) for geographic anchor. */}
+                    <g opacity="0.55" style={{pointerEvents:"none"}} filter={"url(#silhouetteBlur_"+stage.key+")"}>
+                      {Object.keys(provincePaths).map(function(p){return <path key={"sil"+p} d={provincePaths[p]} fill="rgba(180,200,255,0.025)" stroke="rgba(180,200,255,0.28)" strokeWidth="1.1"/>;})}
                     </g>
-                    {/* Province fills with gloss gradient + drop shadow */}
-                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <path key={p} d={provincePaths[p]} fill={"url(#grad_"+stage.key+"_"+p.replace(/\s+/g,"_")+")"} stroke="rgba(255,255,255,0.65)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.6:1.3} filter={isTop?"url(#mapGlow_"+stage.key+")":"url(#provShadow_"+stage.key+")"} style={{transition:"all 0.4s ease"}}><title>{p+" · "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title></path>;})}
-                    {/* Glossy top-edge highlight per province — clipped thin slice that simulates reflected light */}
-                    {Object.keys(provincePaths).map(function(p){return <path key={"hi"+p} d={provincePaths[p]} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" style={{pointerEvents:"none",mixBlendMode:"overlay"}}/>;})}
-                    {/* Lesotho + Eswatini enclaves drawn over the provinces they sit inside */}
-                    {Object.keys(enclavePaths).map(function(n){return <g key={"encl"+n} style={{pointerEvents:"none"}}>
-                      <path d={enclavePaths[n]} fill="#10152a" stroke="rgba(200,220,255,0.4)" strokeWidth="1.2" strokeDasharray="3,3"/>
-                    </g>;})}
-                    <text x="645" y="528" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.6)",letterSpacing:1.8,pointerEvents:"none"}}>LESOTHO</text>
-                    <text x="800" y="332" textAnchor="middle" style={{fontSize:8,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.55)",letterSpacing:1,pointerEvents:"none"}}>ESWATINI</text>
-                    {/* Pulse ring on the #1 province */}
-                    {topCenter&&<g style={{pointerEvents:"none"}}>
-                      <circle cx={topCenter.x} cy={topCenter.y} r="32" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
-                        <animate attributeName="r" values="28;72;28" dur="2.8s" repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.95;0;0.95" dur="2.8s" repeatCount="indefinite"/>
-                      </circle>
-                      <circle cx={topCenter.x} cy={topCenter.y} r="28" fill="none" stroke={stage.hot} strokeWidth="1.5" opacity="0.6">
-                        <animate attributeName="r" values="24;56;24" dur="2.8s" begin="0.9s" repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.75;0;0.75" dur="2.8s" begin="0.9s" repeatCount="indefinite"/>
-                      </circle>
-                    </g>}
-                    {/* Major city markers */}
+                    {/* Enclave outlines (Lesotho / Eswatini) for extra context */}
+                    {Object.keys(enclavePaths).map(function(n){return <path key={"encl"+n} d={enclavePaths[n]} fill="none" stroke="rgba(200,220,255,0.38)" strokeWidth="1" strokeDasharray="3,3" style={{pointerEvents:"none"}}/>;})}
+                    <text x="645" y="510" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.45)",letterSpacing:1.5,pointerEvents:"none"}}>LESOTHO</text>
+                    {/* Major city dots — tiny white, as geographic anchors */}
                     {majorCities.map(function(ct){return <g key={"c"+ct.name} style={{pointerEvents:"none"}}>
-                      <circle cx={ct.x} cy={ct.y} r="5" fill="#FFFBF8" stroke="rgba(0,0,0,0.85)" strokeWidth="1.5"/>
-                      <circle cx={ct.x} cy={ct.y} r="2" fill="#0a0618"/>
-                      <text x={ct.x+9} y={ct.y+3} style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
+                      <circle cx={ct.x} cy={ct.y} r="2.5" fill="rgba(255,251,248,0.7)" stroke="rgba(0,0,0,0.6)" strokeWidth="0.8"/>
+                      <text x={ct.x+6} y={ct.y+2} style={{fontSize:8.5,fontFamily:fm,fontWeight:600,fill:"rgba(255,255,255,0.55)",letterSpacing:0.3,paintOrder:"stroke",stroke:"rgba(0,0,0,0.75)",strokeWidth:"2px",strokeLinejoin:"round"}}>{ct.name}</text>
                     </g>;})}
-                    {/* Province labels — bigger, bolder, more dramatic typography */}
-                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={c.y-8} textAnchor="middle" style={{fontSize:15,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.95)",strokeWidth:"4px",strokeLinejoin:"round",letterSpacing:0.5}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+22} textAnchor="middle" style={{fontSize:24,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.95)",strokeWidth:"4.5px",strokeLinejoin:"round",letterSpacing:-1}}>{share.toFixed(1)+"%"}</text>}
-                      {showMedal&&<g transform={"translate("+(c.x+62)+","+(c.y-26)+")"}><circle r="14" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5" filter={rnk===0?undefined:"url(#provShadow_"+stage.key+")"}/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:14,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                    {/* Pulse rings on top 3 — expanding outward from bubble edge */}
+                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);if(typeof rnk!=="number"||rnk>=3||val===0)return null;var delay=(rnk*0.5).toFixed(2);return <g key={"pulse"+p} style={{pointerEvents:"none"}}>
+                      <circle cx={c.x} cy={c.y} r={r+6} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="2.5" opacity="0.85">
+                        <animate attributeName="r" values={(r)+";"+(r+38)+";"+(r)} dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.85;0;0.85" dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
+                      </circle>
+                      <circle cx={c.x} cy={c.y} r={r+4} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="1.5" opacity="0.55">
+                        <animate attributeName="r" values={(r)+";"+(r+30)+";"+(r)} dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
+                      </circle>
                     </g>;})}
-                    {/* Watermark country name */}
-                    <text x="40" y="755" style={{fontSize:36,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
+                    {/* Bubbles — sized by sqrt of share. Sorted ascending so the largest bubble renders last and sits on top when two provinces overlap. */}
+                    {Object.keys(provCenters).slice().sort(function(a,b){return (totals[a]||0)-(totals[b]||0);}).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var gradId=hasVal?"bubbleGrad_"+stage.key:"bubbleGhost_"+stage.key;return <g key={"b"+p}>
+                      <circle cx={c.x} cy={c.y} r={r} fill={"url(#"+gradId+")"} stroke="rgba(255,255,255,0.75)" strokeWidth={hasVal?2:1} filter={hasVal&&typeof rnk==="number"&&rnk<3?"url(#bubbleGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}>
+                        <title>{p+" — "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title>
+                      </circle>
+                      {/* Glossy highlight — small white ellipse top-left of bubble */}
+                      {hasVal&&r>22&&<ellipse cx={c.x-r*0.35} cy={c.y-r*0.4} rx={r*0.32} ry={r*0.18} fill="rgba(255,255,255,0.3)" pointerEvents="none"/>}
+                    </g>;})}
+                    {/* Labels — placed INSIDE the bubble when it is large enough, OUTSIDE (below) when small so small bubbles don't get cramped overlay text. */}
+                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var showMedal=typeof rnk==="number"&&rnk<3&&hasVal;var inside=r>=32;var ny=inside?c.y-4:c.y+r+16;var vy=inside?c.y+18:c.y+r+32;return <g key={"l"+p} style={{pointerEvents:"none"}}>
+                      <text x={c.x} y={ny} textAnchor="middle" style={{fontSize:inside&&r>=50?15:12,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round",letterSpacing:0.3}}>{c.abbr}</text>
+                      {hasVal&&<text x={c.x} y={vy} textAnchor="middle" style={{fontSize:inside&&r>=50?22:14,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"4px",strokeLinejoin:"round",letterSpacing:-0.5}}>{share.toFixed(1)+"%"}</text>}
+                      {showMedal&&<g transform={"translate("+(c.x+r*0.78)+","+(c.y-r*0.78)+")"}>
+                        <circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/>
+                        <text x="0" y="4" textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text>
+                      </g>}
+                    </g>;})}
+                    {/* Vignette overlay last so edges darken subtly */}
+                    <rect x="0" y="0" width="900" height="780" fill={"url(#vignette_"+stage.key+")"} pointerEvents="none"/>
+                    {/* Watermark */}
+                    <text x="40" y="755" style={{fontSize:32,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
                   </svg>
-                  {/* Legend strip */}
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8,padding:"8px 4px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,255,255,0.75)",letterSpacing:1.5}}>
-                    <span style={{fontWeight:800}}>LOW</span>
-                    <div style={{display:"flex",flex:1,height:12,borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),inset 0 -1px 0 rgba(0,0,0,0.3)"}}>
-                      <div style={{flex:1,background:"#3d2f5a"}}></div>
-                      <div style={{flex:1,background:stage.deep}}></div>
-                      <div style={{flex:1,background:stage.cool}}></div>
-                      <div style={{flex:1,background:stage.warm}}></div>
-                      <div style={{flex:1,background:stage.hot}}></div>
+                  {/* Legend strip — explains bubble size encoding */}
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:10,padding:"8px 6px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.75)",letterSpacing:1.3}}>
+                    <span style={{fontWeight:800,letterSpacing:2}}>BUBBLE SIZE</span>
+                    <div style={{display:"flex",alignItems:"center",gap:14,flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:"url(#bubbleGrad_"+stage.key+")",border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.6)"}}>low share</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:stage.warm,border:"1.5px solid rgba(255,255,255,0.6)"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.6)"}}>mid share</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:34,height:34,borderRadius:"50%",background:stage.hot,border:"1.5px solid rgba(255,255,255,0.6)",boxShadow:"0 0 12px "+stage.hot+"77"}}></div>
+                        <span style={{color:"rgba(255,255,255,0.6)"}}>high share</span>
+                      </div>
                     </div>
-                    <span style={{fontWeight:800}}>HIGH</span>
+                    <span style={{color:"rgba(255,255,255,0.5)",fontSize:9,letterSpacing:1}}>area ∝ {stage.label.toLowerCase()}</span>
                   </div>
                 </div>
               </div>;
@@ -4789,51 +4792,65 @@ export default function MediaOnGas(){
               var googleDev=devRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
               var googleReg=regRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
 
-              // Age aggregation (age-known Google rows only)
-              var ageBuckets={};ageOrder.forEach(function(a){ageBuckets[a]=0;});
-              googleAg.forEach(function(r){var a=String(r.age||"");if(ageBuckets[a]===undefined)return;ageBuckets[a]+=parseFloat(r.impressions||0);});
-              var ageTotal=ageOrder.reduce(function(s,a){return s+ageBuckets[a];},0);
+              // Age aggregation — track BOTH impressions and clicks so we can
+              // show ads-served share AND clicks share per row. Makes the metric
+              // unambiguous (previously a big "%" label read as maybe clicks).
+              var ageBuckets={};ageOrder.forEach(function(a){ageBuckets[a]={imp:0,clk:0};});
+              googleAg.forEach(function(r){var a=String(r.age||"");if(!ageBuckets[a])return;ageBuckets[a].imp+=parseFloat(r.impressions||0);ageBuckets[a].clk+=parseFloat(r.clicks||0);});
+              var ageTotalImp=ageOrder.reduce(function(s,a){return s+ageBuckets[a].imp;},0);
+              var ageTotalClk=ageOrder.reduce(function(s,a){return s+ageBuckets[a].clk;},0);
 
-              // Gender aggregation (gender-known Google rows only)
-              var genBuckets={female:0,male:0};
-              googleAg.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(genBuckets[g]===undefined)return;genBuckets[g]+=parseFloat(r.impressions||0);});
-              var genTotal=genBuckets.female+genBuckets.male;
+              // Gender aggregation — impressions + clicks
+              var genBuckets={female:{imp:0,clk:0},male:{imp:0,clk:0}};
+              googleAg.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(!genBuckets[g])return;genBuckets[g].imp+=parseFloat(r.impressions||0);genBuckets[g].clk+=parseFloat(r.clicks||0);});
+              var genTotalImp=genBuckets.female.imp+genBuckets.male.imp;
+              var genTotalClk=genBuckets.female.clk+genBuckets.male.clk;
 
-              // Device aggregation
+              // Device aggregation — impressions + clicks
               var devNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "Mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "Tablet";if(s.indexOf("desktop")>=0||s==="web")return "Desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "Connected TV";return null;};
               var devBuckets={};
-              googleDev.forEach(function(r){var d=devNorm(r.device);if(!d)return;if(!devBuckets[d])devBuckets[d]=0;devBuckets[d]+=parseFloat(r.impressions||0);});
-              var devList=Object.keys(devBuckets).map(function(k){return{name:k,val:devBuckets[k]};}).sort(function(a,b){return b.val-a.val;});
-              var devTotal=devList.reduce(function(s,x){return s+x.val;},0);
+              googleDev.forEach(function(r){var d=devNorm(r.device);if(!d)return;if(!devBuckets[d])devBuckets[d]={imp:0,clk:0};devBuckets[d].imp+=parseFloat(r.impressions||0);devBuckets[d].clk+=parseFloat(r.clicks||0);});
+              var devList=Object.keys(devBuckets).map(function(k){return{name:k,imp:devBuckets[k].imp,clk:devBuckets[k].clk};}).sort(function(a,b){return b.imp-a.imp;});
+              var devTotalImp=devList.reduce(function(s,x){return s+x.imp;},0);
+              var devTotalClk=devList.reduce(function(s,x){return s+x.clk;},0);
 
-              // Province aggregation (Google-only, city-folded-to-province rows)
+              // Province aggregation — impressions + clicks
               var provBuckets={};
-              googleReg.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;if(!provBuckets[p])provBuckets[p]=0;provBuckets[p]+=parseFloat(r.impressions||0);});
-              var provList=Object.keys(provBuckets).map(function(k){return{name:k,val:provBuckets[k]};}).sort(function(a,b){return b.val-a.val;});
-              var provTotal=provList.reduce(function(s,x){return s+x.val;},0);
+              googleReg.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;if(!provBuckets[p])provBuckets[p]={imp:0,clk:0};provBuckets[p].imp+=parseFloat(r.impressions||0);provBuckets[p].clk+=parseFloat(r.clicks||0);});
+              var provList=Object.keys(provBuckets).map(function(k){return{name:k,imp:provBuckets[k].imp,clk:provBuckets[k].clk};}).sort(function(a,b){return b.imp-a.imp;});
+              var provTotalImp=provList.reduce(function(s,x){return s+x.imp;},0);
+              var provTotalClk=provList.reduce(function(s,x){return s+x.clk;},0);
 
               // Cities aggregation (top 8)
               var cityAgg={};
               cityRows.forEach(function(r){var c=String(r.city||"").trim();if(!c)return;if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0};cityAgg[c].impressions+=parseFloat(r.impressions||0);cityAgg[c].clicks+=parseFloat(r.clicks||0);});
               var topCities=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b.impressions-a.impressions;}).slice(0,8);
-              var cityTotal=topCities.reduce(function(s,c){return s+c.impressions;},0);
+              var cityTotalImp=topCities.reduce(function(s,c){return s+c.impressions;},0);
+              var cityTotalClk=topCities.reduce(function(s,c){return s+c.clicks;},0);
               var maxCityImps=topCities.length?topCities[0].impressions:0;
 
               // Bail if there's nothing to show
-              if(ageTotal===0&&genTotal===0&&devTotal===0&&provTotal===0&&topCities.length===0)return null;
+              if(ageTotalImp===0&&genTotalImp===0&&devTotalImp===0&&provTotalImp===0&&topCities.length===0)return null;
 
-              var bar=function(label,pct,col){return <div style={{marginBottom:9,cursor:"default"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm}}>
-                  <span style={{color:"#fff",fontWeight:700}}>{label}</span>
-                  <span style={{color:col,fontWeight:900,fontSize:14,fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(1)+"%"}</span>
+              // Bar row showing BOTH impressions share and clicks share so the
+              // metric ambiguity is gone. Big primary % = ads served, smaller
+              // secondary = clicks. The bar width follows ads served.
+              var bar=function(label,impPct,clkPct,col){return <div style={{marginBottom:11,cursor:"default"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm,gap:8}}>
+                  <span style={{color:"#fff",fontWeight:700,flex:1}}>{label}</span>
+                  <span style={{color:col,fontWeight:900,fontSize:14,fontVariantNumeric:"tabular-nums"}}>{impPct.toFixed(1)+"%"}</span>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,fontVariantNumeric:"tabular-nums",letterSpacing:0.3,whiteSpace:"nowrap"}}>{"· "+clkPct.toFixed(1)+"% clicks"}</span>
                 </div>
                 <div style={{height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden",border:"1px solid rgba(255,255,255,0.04)"}}>
-                  <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 8px "+col+"55",transition:"width 0.6s ease"}}></div>
+                  <div style={{width:impPct+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 8px "+col+"55",transition:"width 0.6s ease"}}></div>
                 </div>
               </div>;};
 
               var panel=function(title,body){return <div style={{background:"linear-gradient(145deg,#0f1828,#060a14)",borderRadius:14,padding:"16px 18px",border:"1px solid "+P.gd+"26",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)"}}>
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>{title}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                  <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>{title}</div>
+                  <div style={{fontSize:8,color:"rgba(255,255,255,0.45)",fontFamily:fm,fontWeight:700,letterSpacing:1}}>% ADS SERVED · % CLICKS</div>
+                </div>
                 {body}
               </div>;};
 
@@ -4842,46 +4859,49 @@ export default function MediaOnGas(){
                   <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,"+P.gd+"55,"+P.gd+"20)",border:"1.5px solid "+P.gd+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 28px "+P.gd+"40"}}>{Ic.globe("#fff",22)}</div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads — Full Demographics</div>
-                    <div style={{fontSize:13,color:"#fff",fontFamily:ff,fontWeight:600,letterSpacing:0.3}}>Google-only splits across age, gender, device, province and city</div>
+                    <div style={{fontSize:13,color:"#fff",fontFamily:ff,fontWeight:600,letterSpacing:0.3}}>Google-only splits. Primary % = share of ads served, secondary % = share of clicks.</div>
                   </div>
                 </div>
 
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
                   {/* Age */}
-                  {ageTotal>0&&panel("Age Groups",
-                    <div>{ageOrder.slice().filter(function(a){return ageBuckets[a]>0;}).sort(function(a,b){return ageBuckets[b]-ageBuckets[a];}).map(function(a){var pct=ageBuckets[a]/ageTotal*100;return <div key={a} title={a+" — "+pct.toFixed(1)+"% of Google age-tagged impressions"}>{bar(a,pct,P.gd)}</div>;})}</div>
+                  {ageTotalImp>0&&panel("Age Groups",
+                    <div>{ageOrder.slice().filter(function(a){return ageBuckets[a].imp>0;}).sort(function(a,b){return ageBuckets[b].imp-ageBuckets[a].imp;}).map(function(a){var impPct=ageBuckets[a].imp/ageTotalImp*100;var clkPct=ageTotalClk>0?(ageBuckets[a].clk/ageTotalClk*100):0;return <div key={a} title={a+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(a,impPct,clkPct,P.gd)}</div>;})}</div>
                   )}
                   {/* Gender */}
-                  {genTotal>0&&panel("Gender Split",
+                  {genTotalImp>0&&panel("Gender Split",
                     <div>
-                      {[{k:"female",label:"Female",color:"#ec4899"},{k:"male",label:"Male",color:"#3b82f6"}].map(function(g){var v=genBuckets[g.k];if(v===0)return null;var pct=v/genTotal*100;return <div key={g.k} title={g.label+" — "+pct.toFixed(1)+"% of Google gender-tagged impressions"}>{bar(g.label,pct,g.color)}</div>;})}
+                      {[{k:"female",label:"Female",color:"#ec4899"},{k:"male",label:"Male",color:"#3b82f6"}].map(function(g){var b=genBuckets[g.k];if(b.imp===0)return null;var impPct=b.imp/genTotalImp*100;var clkPct=genTotalClk>0?(b.clk/genTotalClk*100):0;return <div key={g.k} title={g.label+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(g.label,impPct,clkPct,g.color)}</div>;})}
                     </div>
                   )}
                   {/* Device */}
-                  {devTotal>0&&panel("Device Mix",
-                    <div>{devList.map(function(d){var pct=d.val/devTotal*100;var col=d.name==="Mobile"?"#22d3ee":d.name==="Desktop"?"#a855f7":d.name==="Tablet"?"#fbbf24":d.name==="Connected TV"?"#d946ef":"#8b7fa3";return <div key={d.name} title={d.name+" — "+pct.toFixed(1)+"% of Google device-tagged impressions"}>{bar(d.name,pct,col)}</div>;})}</div>
+                  {devTotalImp>0&&panel("Device Mix",
+                    <div>{devList.map(function(d){var impPct=d.imp/devTotalImp*100;var clkPct=devTotalClk>0?(d.clk/devTotalClk*100):0;var col=d.name==="Mobile"?"#22d3ee":d.name==="Desktop"?"#a855f7":d.name==="Tablet"?"#fbbf24":d.name==="Connected TV"?"#d946ef":"#8b7fa3";return <div key={d.name} title={d.name+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(d.name,impPct,clkPct,col)}</div>;})}</div>
                   )}
                   {/* Province */}
-                  {provTotal>0&&panel("By Province",
-                    <div>{provList.slice(0,9).map(function(p){var pct=p.val/provTotal*100;return <div key={p.name} title={p.name+" — "+pct.toFixed(1)+"% of Google province-tagged impressions"}>{bar(p.name,pct,P.gd)}</div>;})}</div>
+                  {provTotalImp>0&&panel("By Province",
+                    <div>{provList.slice(0,9).map(function(p){var impPct=p.imp/provTotalImp*100;var clkPct=provTotalClk>0?(p.clk/provTotalClk*100):0;return <div key={p.name} title={p.name+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(p.name,impPct,clkPct,P.gd)}</div>;})}</div>
                   )}
                 </div>
 
-                {/* Cities */}
+                {/* Cities — keeps the same dual-% surface as the panels above */}
                 {topCities.length>0&&<div style={{background:"linear-gradient(145deg,#0f1828,#060a14)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.gd+"26"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                     <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Top Cities</div>
-                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>SHARE OF GOOGLE CITY-TAGGED</div>
+                    <div style={{fontSize:8,color:"rgba(255,255,255,0.45)",fontFamily:fm,fontWeight:700,letterSpacing:1}}>% ADS SERVED · % CLICKS</div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
-                    {topCities.map(function(c,i){var pct=maxCityImps>0?(c.impressions/maxCityImps)*100:0;var impShare=cityTotal>0?(c.impressions/cityTotal*100):0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var tip=c.name+" — "+impShare.toFixed(1)+"% share of Google city-tagged ads served";return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"2a",borderLeft:"3px solid "+medal,borderRadius:"0 10px 10px 0",padding:"12px 14px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                    {topCities.map(function(c,i){var pct=maxCityImps>0?(c.impressions/maxCityImps)*100:0;var impShare=cityTotalImp>0?(c.impressions/cityTotalImp*100):0;var clkShare=cityTotalClk>0?(c.clicks/cityTotalClk*100):0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var tip=c.name+" — "+impShare.toFixed(1)+"% of ads served, "+clkShare.toFixed(1)+"% of clicks";return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"2a",borderLeft:"3px solid "+medal,borderRadius:"0 10px 10px 0",padding:"12px 14px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                       <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"14,transparent 80%)",pointerEvents:"none"}}></div>
-                      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{width:20,height:20,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div>
-                          <span style={{fontSize:12,color:"#fff",fontWeight:700,fontFamily:ff}}>{c.name}</span>
+                      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                          <div style={{width:20,height:20,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618",fontFamily:fm,flexShrink:0}}>{i+1}</div>
+                          <span style={{fontSize:12,color:"#fff",fontWeight:700,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
                         </div>
-                        <span style={{fontSize:17,fontWeight:900,color:P.gd,fontFamily:fm,letterSpacing:-0.5}}>{impShare.toFixed(1)+"%"}</span>
+                        <div style={{display:"flex",alignItems:"baseline",gap:6,flexShrink:0}}>
+                          <span style={{fontSize:17,fontWeight:900,color:P.gd,fontFamily:fm,letterSpacing:-0.5}}>{impShare.toFixed(1)+"%"}</span>
+                          <span style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{"· "+clkShare.toFixed(1)+"% clicks"}</span>
+                        </div>
                       </div>
                     </div>;})}
                   </div>
