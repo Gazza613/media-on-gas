@@ -3340,7 +3340,7 @@ export default function MediaOnGas(){
 
               {/* ═══ 2. AWARENESS HIGHLIGHTS ═══ */}
               <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                {secHead(P.cyan,"AWARENESS HIGHLIGHTS",Ic.eye(P.cyan,18))}
+                {secHead(P.cyan,"AWARENESS HIGHLIGHTS (TOP OF THE FUNNEL)",Ic.eye(P.cyan,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL IMPRESSIONS</div><div style={{fontSize:24,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(computed.totalImps)}{deltaChip(computed.totalImps,compareComputed&&compareComputed.totalImps,false)}</div></Glass>
                   <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL REACH</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(m.reach+t.reach+computed.gd.reach)}{deltaChip(m.reach+t.reach+computed.gd.reach,compareComputed&&compareComputed.totalReach,false)}</div></Glass>
@@ -3396,7 +3396,7 @@ export default function MediaOnGas(){
 
               {/* ═══ 4. ENGAGEMENT HIGHLIGHTS ═══ */}
               <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS",Ic.bolt(P.mint,18))}
+                {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS (MIDDLE OF THE FUNNEL)",Ic.bolt(P.mint,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}{deltaChip(computed.totalClicks,compareComputed&&compareComputed.totalClicks,false)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
                   <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
@@ -3447,7 +3447,7 @@ export default function MediaOnGas(){
 
               {/* ═══ 5. OBJECTIVE HIGHLIGHTS ═══ */}
               {objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
-                {secHead(P.rose,"OBJECTIVE HIGHLIGHTS",Ic.target(P.rose,18))}
+                {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14,marginBottom:20}}>
                   {objKeys.filter(function(k){return objectives4[k];}).map(function(objName){
                     var od=objectives4[objName];var oc=objCol4[objName]||P.ember;var costPer=od.results>0?od.spend/od.results:0;
