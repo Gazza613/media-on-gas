@@ -2333,7 +2333,7 @@ export default function MediaOnGas(){
               var radiusFor=function(val){if(max===0||val===0)return MIN_R;return MIN_R+(MAX_R-MIN_R)*Math.sqrt(val/max);};
               return <div>
                 <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 25%,#23315a 0%,#10182e 45%,#050210 95%)",borderRadius:14,padding:"14px 14px 8px",border:"1px solid rgba(140,170,255,0.22)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),0 14px 44px rgba(0,0,0,0.5)"}}>
-                  <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
+                  <svg viewBox="0 0 900 780" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style={{display:"block",maxHeight:360}}>
                     <defs>
                       {/* Radial bubble gradient — bright at the top-left for a lit-sphere feel, darker at the bottom-right edge. */}
                       <radialGradient id={"bubbleGrad_"+stage.key} cx="35%" cy="30%" r="70%">
@@ -2447,7 +2447,7 @@ export default function MediaOnGas(){
               var knownSum=all.reduce(function(s,r){return s+r.val;},0);
               var max=all.length?all[0].val:0;
               var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
-              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
+              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.08)"}}>
                 <div style={{marginBottom:12,paddingBottom:8,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
                   <div style={{fontSize:10,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:2}}>{stage.label} by Province</div>
                   <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:0.8,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()}, sums to 100%</div>
@@ -2703,7 +2703,7 @@ export default function MediaOnGas(){
 
                 {/* Where — Google province bubble map + ranked provinces */}
                 <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Where (Google)</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14,alignItems:"start"}}>
                   <div>{renderProvinceMap(googleStage,googleReg)}</div>
                   <div>{renderProvinceRanks(googleStage,googleReg)}</div>
                 </div>
@@ -2795,7 +2795,7 @@ export default function MediaOnGas(){
                     map visually ties to the ranked-provinces table on the left
                     instead of dominating the section. */}
                 <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Where</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14,alignItems:"start"}}>
                   <div>{renderProvinceMap(stage)}</div>
                   <div>{renderProvinceRanks(stage)}</div>
                 </div>
