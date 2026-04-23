@@ -4341,28 +4341,28 @@ export default function MediaOnGas(){
             // Reusable helpers.
             var fmtAbbr=function(n){n=parseFloat(n||0);if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toString();};
 
-            // Province paths (simplified SA provinces, viewBox 0 0 580 550).
+            // Province paths (simplified SA provinces, viewBox 0 0 720 620).
             var provincePaths={
-              "Northern Cape":"M30,120 L230,140 L240,260 L260,320 L190,370 L70,385 L25,285 L18,180 Z",
-              "Western Cape":"M70,385 L190,370 L230,450 L170,510 L55,510 L18,430 Z",
-              "Eastern Cape":"M230,450 L260,320 L360,340 L430,400 L470,480 L230,510 L170,510 Z",
-              "Free State":"M260,320 L360,270 L390,335 L360,345 Z",
-              "Gauteng":"M360,220 L410,220 L408,258 L368,268 L350,250 Z",
-              "North West":"M230,140 L360,140 L380,220 L360,270 L260,320 L240,260 Z",
-              "Limpopo":"M350,50 L530,70 L530,170 L440,180 L350,140 L330,90 Z",
-              "Mpumalanga":"M440,180 L530,170 L540,255 L470,315 L410,300 L408,258 Z",
-              "KwaZulu-Natal":"M410,300 L470,315 L510,395 L470,480 L430,400 L390,345 L390,335 Z"
+              "Northern Cape":"M 25,175 L 200,160 L 210,260 L 260,300 L 240,400 L 275,460 L 195,500 L 75,485 L 30,410 L 12,265 Z",
+              "Western Cape":"M 30,410 L 75,485 L 195,500 L 260,585 L 155,615 L 45,600 L 15,495 Z",
+              "Eastern Cape":"M 275,460 L 435,440 L 480,510 L 520,555 L 455,580 L 260,585 L 195,500 Z",
+              "Free State":"M 260,300 L 430,280 L 510,305 L 505,400 L 435,440 L 275,460 L 240,400 Z",
+              "North West":"M 200,160 L 475,150 L 495,210 L 430,280 L 260,300 L 210,260 Z",
+              "Gauteng":"M 495,210 L 560,215 L 555,268 L 495,270 Z",
+              "Limpopo":"M 340,30 L 680,25 L 690,175 L 555,190 L 400,175 L 320,115 Z",
+              "Mpumalanga":"M 555,190 L 690,175 L 695,305 L 605,325 L 555,268 L 560,215 Z",
+              "KwaZulu-Natal":"M 510,305 L 605,325 L 660,420 L 590,550 L 480,510 L 435,440 L 470,395 L 505,360 Z"
             };
             var provCenters={
-              "Northern Cape":{x:130,y:240,abbr:"N. Cape"},
-              "Western Cape":{x:115,y:445,abbr:"W. Cape"},
-              "Eastern Cape":{x:315,y:440,abbr:"E. Cape"},
-              "Free State":{x:315,y:305,abbr:"Free State"},
-              "Gauteng":{x:378,y:242,abbr:"Gauteng"},
-              "North West":{x:290,y:210,abbr:"N. West"},
-              "Limpopo":{x:430,y:110,abbr:"Limpopo"},
-              "Mpumalanga":{x:475,y:235,abbr:"Mpuma"},
-              "KwaZulu-Natal":{x:445,y:390,abbr:"KZN"}
+              "Northern Cape":{x:130,y:335,abbr:"N. Cape"},
+              "Western Cape":{x:110,y:545,abbr:"W. Cape"},
+              "Eastern Cape":{x:365,y:520,abbr:"E. Cape"},
+              "Free State":{x:380,y:370,abbr:"Free State"},
+              "North West":{x:335,y:225,abbr:"N. West"},
+              "Gauteng":{x:525,y:242,abbr:"Gauteng"},
+              "Limpopo":{x:510,y:100,abbr:"Limpopo"},
+              "Mpumalanga":{x:620,y:250,abbr:"Mpuma"},
+              "KwaZulu-Natal":{x:555,y:440,abbr:"KZN"}
             };
 
             // Shared province map render. Called once per funnel stage,
@@ -4379,7 +4379,7 @@ export default function MediaOnGas(){
               var rankColor=function(r){return r===0?"#FFD700":r===1?"#C0C0C0":r===2?"#CD7F32":stage.accent;};
               return <div>
                 <div style={{position:"relative",background:"radial-gradient(ellipse at 30% 20%,"+stage.accent+"14,transparent 60%),radial-gradient(ellipse at 70% 80%,"+stage.accentDeep+"20,transparent 55%),#06020e",borderRadius:14,padding:"14px",border:"1px solid "+stage.accent+"22",overflow:"hidden"}}>
-                  <svg viewBox="0 0 580 550" width="100%" height="auto" style={{display:"block",filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.5))"}}>
+                  <svg viewBox="0 0 720 620" width="100%" height="auto" style={{display:"block",filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.5))"}}>
                     <defs>
                       <radialGradient id={"provGrad_"+stage.key+"_light"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.95"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.6"/></radialGradient>
                       <radialGradient id={"provGrad_"+stage.key+"_med"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.55"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.3"/></radialGradient>
@@ -4387,17 +4387,17 @@ export default function MediaOnGas(){
                       <filter id={"glow_"+stage.key} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                       <pattern id={"dots_"+stage.key} patternUnits="userSpaceOnUse" width="8" height="8"><circle cx="1" cy="1" r="0.6" fill={stage.accent+"30"}/></pattern>
                     </defs>
-                    <rect x="0" y="0" width="580" height="550" fill={"url(#dots_"+stage.key+")"}/>
+                    <rect x="0" y="0" width="720" height="620" fill={"url(#dots_"+stage.key+")"}/>
                     {/* Province paths */}
                     {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var i=max>0?val/max:0;var gradKey=i>0.66?"_light":i>0.33?"_med":"_dim";return <path key={p} d={provincePaths[p]} fill={val===0?"#1a0f2a":"url(#provGrad_"+stage.key+gradKey+")"} stroke={val>0?stage.accent:"rgba(255,255,255,0.08)"} strokeWidth={val>0?1.5:0.8} opacity={val===0?0.35:1} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
                     {/* Labels */}
                     {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var isTop3=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={c.y-4} textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:800,fill:"rgba(255,255,255,0.92)",letterSpacing:0.8}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+12} textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:isTop3?rankColor(rnk):stage.accent,filter:"drop-shadow(0 1px 3px rgba(0,0,0,0.8))"}}>{fmtAbbr(val)}</text>}
-                      {isTop3&&<g transform={"translate("+(c.x+24)+","+(c.y-16)+")"}><circle cx="0" cy="0" r="9" fill={rankColor(rnk)} stroke="rgba(0,0,0,0.4)" strokeWidth="1"/><text x="0" y="3" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                      <text x={c.x} y={c.y-5} textAnchor="middle" style={{fontSize:11,fontFamily:fm,fontWeight:800,fill:"rgba(255,255,255,0.92)",letterSpacing:0.8}}>{c.abbr}</text>
+                      {val>0&&<text x={c.x} y={c.y+14} textAnchor="middle" style={{fontSize:15,fontFamily:fm,fontWeight:900,fill:isTop3?rankColor(rnk):stage.accent,filter:"drop-shadow(0 1px 3px rgba(0,0,0,0.8))"}}>{fmtAbbr(val)}</text>}
+                      {isTop3&&<g transform={"translate("+(c.x+28)+","+(c.y-18)+")"}><circle cx="0" cy="0" r="11" fill={rankColor(rnk)} stroke="rgba(0,0,0,0.4)" strokeWidth="1"/><text x="0" y="4" textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
                     </g>;})}
                     {/* Compass rose */}
-                    <g transform="translate(520,40)" style={{pointerEvents:"none"}}>
+                    <g transform="translate(665,55)" style={{pointerEvents:"none"}}>
                       <circle r="22" fill="rgba(0,0,0,0.4)" stroke={stage.accent+"60"} strokeWidth="1"/>
                       <path d="M0,-16 L3,0 L0,16 L-3,0 Z" fill={stage.accent} opacity="0.85"/>
                       <path d="M-16,0 L0,3 L16,0 L0,-3 Z" fill={stage.accent+"70"}/>
