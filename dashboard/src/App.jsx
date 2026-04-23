@@ -2696,8 +2696,7 @@ export default function MediaOnGas(){
                   </div>
                   <div title={"Google Ads — "+fmt(total)+" clicks across the selected campaigns. Splits below are percent-only and sum to 100% of Google click-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
                     <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Clicks</div>
-                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmtAbbr(total)}</div>
-                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
+                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmt(total)}</div>
                   </div>
                 </div>
 
@@ -2785,10 +2784,9 @@ export default function MediaOnGas(){
                       <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{stage.subtitle}</div>
                     </div>
                   </div>
-                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns (matches Summary). Every chart below sums to this total; untagged traffic shows as a 'Not Tagged' residual row."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"50",borderRadius:14,boxShadow:"0 0 20px "+stage.accent+"20"}}>
+                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns. Every chart below sums to this total; untagged traffic shows as a 'Not Tagged' residual row."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"50",borderRadius:14,boxShadow:"0 0 20px "+stage.accent+"20"}}>
                     <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>{stage.label}</div>
-                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+stage.accent+"66"}}>{fmtAbbr(total)}</div>
-                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
+                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+stage.accent+"66"}}>{fmt(total)}</div>
                   </div>
                 </div>
 
