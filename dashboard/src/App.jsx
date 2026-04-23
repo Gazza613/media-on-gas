@@ -4323,12 +4323,16 @@ export default function MediaOnGas(){
               return <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
             }
 
-            // Metric fields per funnel stage.
+            // Metric fields per funnel stage. Each stage carries a 4-step
+            // solid colour ramp (deep -> cool -> warm -> hot) used by the map
+            // choropleth, so fills stay visible against a dark UI rather than
+            // blending to black the way radial-gradient-to-transparent does.
             var stageDef={
-              awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
-              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
-              conversion:{key:"conv",label:"Conversions",costLabel:"Cost Per Conversion",accent:P.rose,accentDeep:"#be123c",icon:Ic.target,title:"Conversion",subtitle:"Bottom of funnel, who actually converted",field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
+              awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",deep:"#155e75",cool:"#0891b2",warm:"#22d3ee",hot:"#67e8f9",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
+              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",deep:"#92400e",cool:"#d97706",warm:"#f59e0b",hot:"#fbbf24",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
+              conversion:{key:"conv",label:"Conversions",costLabel:"Cost Per Conversion",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Conversion",subtitle:"Bottom of funnel, who actually converted",field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
             };
+            var activeStage=stageDef[demoMetric==="impressions"?"awareness":demoMetric==="clicks"?"engagement":"conversion"]||stageDef.awareness;
 
             // Pre-compute per-stage totals across all demographic rows.
             var stageTotal=function(stage){var s=0;agRows.forEach(function(r){s+=stage.field(r);});return s;};
@@ -4365,8 +4369,10 @@ export default function MediaOnGas(){
               "KwaZulu-Natal":{x:555,y:440,abbr:"KZN"}
             };
 
-            // Shared province map render. Called once per funnel stage,
-            // coloured in that stage's accent.
+            // Bright, high-contrast province choropleth. Uses SOLID fill
+            // colours (not opacity-to-transparent), a lighter map canvas,
+            // and labels with a heavy stroke halo so values stay readable
+            // at a glance. Top 3 provinces get a medal badge.
             var renderProvinceMap=function(stage){
               var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
               regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
@@ -4374,51 +4380,64 @@ export default function MediaOnGas(){
               var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
               var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
               var rankMap={};ranked.forEach(function(r,i){rankMap[r.name]=i;});
-              var fillFor=function(val){if(max===0)return stage.accent+"12";var i=val/max;return "url(#provGrad_"+stage.key+"_"+Math.round(i*100)+")";};
-              var intensityAlpha=function(val){if(max===0)return 0.08;return 0.2+(val/max)*0.75;};
-              var rankColor=function(r){return r===0?"#FFD700":r===1?"#C0C0C0":r===2?"#CD7F32":stage.accent;};
+              var fillFor=function(val){if(max===0||val===0)return "#3d2f5a";var i=val/max;if(i>=0.75)return stage.hot;if(i>=0.50)return stage.warm;if(i>=0.25)return stage.cool;return stage.deep;};
+              var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
               return <div>
-                <div style={{position:"relative",background:"radial-gradient(ellipse at 30% 20%,"+stage.accent+"14,transparent 60%),radial-gradient(ellipse at 70% 80%,"+stage.accentDeep+"20,transparent 55%),#06020e",borderRadius:14,padding:"14px",border:"1px solid "+stage.accent+"22",overflow:"hidden"}}>
-                  <svg viewBox="0 0 720 620" width="100%" height="auto" style={{display:"block",filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.5))"}}>
+                <div style={{position:"relative",background:"linear-gradient(145deg,#2a1e40 0%,#1a1028 55%,#120a1f 100%)",borderRadius:16,padding:"20px 18px 10px",border:"1px solid rgba(255,255,255,0.08)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
+                  <svg viewBox="0 0 720 620" width="100%" height="auto" style={{display:"block"}}>
                     <defs>
-                      <radialGradient id={"provGrad_"+stage.key+"_light"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.95"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.6"/></radialGradient>
-                      <radialGradient id={"provGrad_"+stage.key+"_med"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.55"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.3"/></radialGradient>
-                      <radialGradient id={"provGrad_"+stage.key+"_dim"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.2"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.08"/></radialGradient>
-                      <filter id={"glow_"+stage.key} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                      <pattern id={"dots_"+stage.key} patternUnits="userSpaceOnUse" width="8" height="8"><circle cx="1" cy="1" r="0.6" fill={stage.accent+"30"}/></pattern>
+                      <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
                     </defs>
-                    <rect x="0" y="0" width="720" height="620" fill={"url(#dots_"+stage.key+")"}/>
-                    {/* Province paths */}
-                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var i=max>0?val/max:0;var gradKey=i>0.66?"_light":i>0.33?"_med":"_dim";return <path key={p} d={provincePaths[p]} fill={val===0?"#1a0f2a":"url(#provGrad_"+stage.key+gradKey+")"} stroke={val>0?stage.accent:"rgba(255,255,255,0.08)"} strokeWidth={val>0?1.5:0.8} opacity={val===0?0.35:1} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
-                    {/* Labels */}
-                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var isTop3=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={c.y-5} textAnchor="middle" style={{fontSize:11,fontFamily:fm,fontWeight:800,fill:"rgba(255,255,255,0.92)",letterSpacing:0.8}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+14} textAnchor="middle" style={{fontSize:15,fontFamily:fm,fontWeight:900,fill:isTop3?rankColor(rnk):stage.accent,filter:"drop-shadow(0 1px 3px rgba(0,0,0,0.8))"}}>{fmtAbbr(val)}</text>}
-                      {isTop3&&<g transform={"translate("+(c.x+28)+","+(c.y-18)+")"}><circle cx="0" cy="0" r="11" fill={rankColor(rnk)} stroke="rgba(0,0,0,0.4)" strokeWidth="1"/><text x="0" y="4" textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                    {/* Province fills - SOLID bright colours */}
+                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.55)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.2:1} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
+                    {/* Labels with heavy stroke halo for readability */}
+                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
+                      <text x={c.x} y={c.y-3} textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.88)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
+                      {val>0&&<text x={c.x} y={c.y+17} textAnchor="middle" style={{fontSize:17,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.88)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{fmtAbbr(val)}</text>}
+                      {showMedal&&<g transform={"translate("+(c.x+34)+","+(c.y-20)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
                     </g>;})}
-                    {/* Compass rose */}
-                    <g transform="translate(665,55)" style={{pointerEvents:"none"}}>
-                      <circle r="22" fill="rgba(0,0,0,0.4)" stroke={stage.accent+"60"} strokeWidth="1"/>
-                      <path d="M0,-16 L3,0 L0,16 L-3,0 Z" fill={stage.accent} opacity="0.85"/>
-                      <path d="M-16,0 L0,3 L16,0 L0,-3 Z" fill={stage.accent+"70"}/>
-                      <text x="0" y="-25" textAnchor="middle" style={{fontSize:8,fontFamily:fm,fontWeight:800,fill:stage.accent,letterSpacing:1}}>N</text>
-                    </g>
                   </svg>
-                  {/* Legend strip under the map */}
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"0 6px",fontSize:9,fontFamily:fm,color:"rgba(255,255,255,0.6)",letterSpacing:1}}>
-                    <span>LOW</span>
-                    <div style={{flex:1,height:6,borderRadius:3,background:"linear-gradient(90deg,"+stage.accentDeep+"20,"+stage.accent+"ee)"}}></div>
-                    <span>HIGH{max>0?" · "+fmtAbbr(max):""}</span>
+                  {/* Legend strip: solid discrete swatches matching the ramp */}
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,padding:"6px 4px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,255,255,0.7)",letterSpacing:1}}>
+                    <span style={{fontWeight:700}}>LOW</span>
+                    <div style={{display:"flex",flex:1,height:10,borderRadius:5,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
+                      <div style={{flex:1,background:"#3d2f5a"}}></div>
+                      <div style={{flex:1,background:stage.deep}}></div>
+                      <div style={{flex:1,background:stage.cool}}></div>
+                      <div style={{flex:1,background:stage.warm}}></div>
+                      <div style={{flex:1,background:stage.hot}}></div>
+                    </div>
+                    <span style={{fontWeight:700}}>HIGH{max>0?" · "+fmtAbbr(max):""}</span>
                   </div>
                 </div>
-                {/* Top 3 mini-card strip */}
-                {ranked.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(3,ranked.length)+",1fr)",gap:10,marginTop:12}}>
-                  {ranked.slice(0,3).map(function(r,i){var share=sumAll>0?(r.val/sumAll*100):0;var medal=rankColor(i);return <div key={r.name} style={{background:"linear-gradient(135deg,"+medal+"12,transparent 80%)",border:"1px solid "+medal+"45",borderLeft:"3px solid "+medal,borderRadius:"0 10px 10px 0",padding:"10px 12px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><div style={{width:18,height:18,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div><div style={{fontSize:10,color:medal,fontFamily:fm,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{r.name}</div></div>
-                    <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fmtAbbr(r.val)}</div>
-                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:3}}>{share.toFixed(1)+"% share"}</div>
-                  </div>;})}
-                </div>}
+              </div>;
+            };
+
+            // Top-provinces ranked bars. Sits next to the map as a second
+            // visual read, each row is a saturated horizontal bar with the
+            // province name, the metric value, and % share.
+            var renderProvinceRanks=function(stage){
+              var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
+              regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
+              var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
+              var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
+              var max=ranked.length?ranked[0].val:0;
+              if(ranked.length===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No regional data</div>;
+              var medal=function(i){return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
+              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"20px 20px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Top Provinces</div>
+                {ranked.slice(0,9).map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=sumAll>0?(r.val/sumAll*100):0;var col=medal(i);return <div key={r.name} style={{marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:18,height:18,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618"}}>{i+1}</div>
+                      <span style={{color:"#fff",fontWeight:700}}>{r.name}</span>
+                    </div>
+                    <div><span style={{color:col,fontWeight:900}}>{fmtAbbr(r.val)}</span> <span style={{color:P.sub,fontWeight:600}}>· {share.toFixed(1)}%</span></div>
+                  </div>
+                  <div style={{height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)",borderRadius:4,boxShadow:"0 0 8px "+col+"55"}}></div>
+                  </div>
+                </div>;})}
               </div>;
             };
 
@@ -4489,101 +4508,99 @@ export default function MediaOnGas(){
               </div>;
             };
 
-            // Single reusable funnel stage block.
-            var renderStage=function(stage,extra){
-              var total=stageTotal(stage);
-              var topCard=function(){
-                var best={val:0,age:"",gen:""};
-                agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});
-                return best;
-              };
-              var champ=topCard();
-              return <div style={{background:"linear-gradient(160deg,"+stage.accent+"14,"+stage.accentDeep+"08 60%,transparent)",borderRadius:22,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+stage.accent+"35",boxShadow:"0 12px 40px rgba(0,0,0,0.35),0 0 60px "+stage.accent+"12 inset"}}>
-                {/* Stage header */}
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:14}}>
-                    <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,"+stage.accent+"30,"+stage.accentDeep+"18)",border:"1px solid "+stage.accent+"45",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 24px "+stage.accent+"30"}}>{stage.icon(stage.accent,22)}</div>
-                    <div>
-                      <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>{stage.title}</div>
-                      <div style={{fontSize:13,color:P.txt,fontFamily:ff,fontWeight:600,letterSpacing:0.3}}>{stage.subtitle}</div>
+            // Top-age/top-gender helpers reused in insights and tiles.
+            var topAgeFor=function(stage){var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});agRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});var t=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];return{age:t,val:ageSums[t]||0};};
+            var genderSharesFor=function(stage){var s={female:0,male:0};agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(s[g]===undefined)return;s[g]+=stage.field(r);});return s;};
+            var topProvFor=function(stage){var t={};regRows.forEach(function(r){var pn=String(r.region||"");if(!provincePaths[pn])return;if(!t[pn])t[pn]=0;t[pn]+=stage.field(r);});var ks=Object.keys(t).sort(function(a,b){return t[b]-t[a];});return ks[0]||"";};
+            var topSegmentFor=function(stage){var best={val:0,age:"",gen:""};agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});return best;};
+
+            // Platform tiles — share of total impressions per channel (FB / IG / TikTok / Google),
+            // always on, not stage-scoped. Big numbers, brand colours, proportion bar.
+            var renderPlatformMix=function(){
+              var platNorm=function(p){var s=String(p||"").toLowerCase();if(s==="facebook"||s==="fb")return "Facebook";if(s==="instagram"||s==="ig")return "Instagram";if(s==="tiktok"||s==="tt")return "TikTok";if(s==="google"||s==="google_ads"||s==="gd")return "Google";if(s==="meta")return "Facebook";return p||"Other";};
+              var agg={Facebook:{imp:0,clk:0,spend:0},Instagram:{imp:0,clk:0,spend:0},TikTok:{imp:0,clk:0,spend:0},Google:{imp:0,clk:0,spend:0}};
+              agRows.forEach(function(r){var k=platNorm(r.platform);if(!agg[k])return;agg[k].imp+=r.impressions||0;agg[k].clk+=r.clicks||0;agg[k].spend+=parseFloat(r.spend||0);});
+              var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
+              var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
+              return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Ads Served</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
+                  {meta.map(function(m){var d=agg[m.k];var share=totalImp>0?(d.imp/totalImp*100):0;return <div key={m.k} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"16px 16px",position:"relative",overflow:"hidden"}}>
+                    <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
+                      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{m.k}</div>
                     </div>
-                  </div>
-                  <div style={{display:"flex",gap:14,alignItems:"center"}}>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>{stage.label}</div>
-                      <div style={{fontSize:30,fontWeight:900,color:stage.accent,fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 16px "+stage.accent+"44"}}>{fmtAbbr(total)}</div>
+                    <div style={{fontSize:24,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5,marginBottom:4}}>{fmtAbbr(d.imp)}</div>
+                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>{share.toFixed(1)+"% of ads served"}</div>
+                    <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
                     </div>
-                    {champ.val>0&&<div style={{padding:"10px 14px",borderRadius:12,background:"rgba(0,0,0,0.3)",border:"1px solid "+stage.accent+"40"}}>
-                      <div style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Top Segment</div>
-                      <div style={{fontSize:13,color:P.txt,fontFamily:fm,fontWeight:900}}>{champ.age} · {genderLabel[champ.gen]}</div>
-                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmtAbbr(champ.val)+" "+stage.label.toLowerCase()}</div>
-                    </div>}
-                  </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10}}>
+                      <span>{fmtAbbr(d.clk)} clicks</span>
+                      <span>{fR(d.spend)}</span>
+                    </div>
+                  </div>;})}
                 </div>
-
-                {/* Main grid: 2 columns, Age bars + Gender donut in row 1, Map + Device donut in row 2 */}
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:18,marginBottom:16}}>
-                  <div style={{background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.rule}}>
-                    <div style={{fontSize:10,color:P.sub,letterSpacing:2,fontFamily:fm,fontWeight:800,textTransform:"uppercase",marginBottom:12}}>{stage.label} by Age Group</div>
-                    {renderAgeBars(stage)}
-                  </div>
-                  <div style={{background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.rule}}>
-                    <div style={{fontSize:10,color:P.sub,letterSpacing:2,fontFamily:fm,fontWeight:800,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Gender Split</div>
-                    {renderGenderDonut(stage)}
-                  </div>
-                </div>
-
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:18,marginBottom:16}}>
-                  <div>{renderProvinceMap(stage)}</div>
-                  <div style={{background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.rule,display:"flex",flexDirection:"column"}}>
-                    <div style={{fontSize:10,color:P.sub,letterSpacing:2,fontFamily:fm,fontWeight:800,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Device Mix</div>
-                    {renderDeviceDonut(stage)}
-                  </div>
-                </div>
-
-                {extra}
-
-                {/* Per-stage narrative */}
-                <Insight title={stage.title+" Read"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{(function(){
-                  var lines=[];
-                  var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});
-                  agRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});
-                  var topAge=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];
-                  var topAgeVal=ageSums[topAge]||0;
-                  var genSum={female:0,male:0};
-                  agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(genSum[g]===undefined)return;genSum[g]+=stage.field(r);});
-                  var genTotal=genSum.female+genSum.male;
-                  var femaleShare=genTotal>0?(genSum.female/genTotal*100):0;
-                  var provTotals={};regRows.forEach(function(r){var pn=String(r.region||"");if(!provincePaths[pn])return;if(!provTotals[pn])provTotals[pn]=0;provTotals[pn]+=stage.field(r);});
-                  var topProv=Object.keys(provTotals).sort(function(a,b){return provTotals[b]-provTotals[a];})[0];
-                  var devTotalsLine={mobile:0,desktop:0,tablet:0};
-                  var devNormLine=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0)return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";return "other";};
-                  devRows.forEach(function(r){var d=devNormLine(r.device);if(devTotalsLine[d]===undefined)return;devTotalsLine[d]+=stage.field(r);});
-                  var devSum=devTotalsLine.mobile+devTotalsLine.desktop+devTotalsLine.tablet;
-                  var mobileShare=devSum>0?(devTotalsLine.mobile/devSum*100):0;
-
-                  if(stage.key==="impressions"){
-                    if(total>0)lines.push(fmt(total)+" ads were served to the audience across the selected campaigns, establishing the reach baseline for everything that follows.");
-                    if(topAge&&topAgeVal>0){var ageShare=total>0?(topAgeVal/total*100).toFixed(0):"0";lines.push("The "+topAge+" age group absorbed "+ageShare+"% of those impressions, the single largest audience slice exposed to the brand this period.");}
-                    if(genTotal>0)lines.push("Gender split is "+femaleShare.toFixed(0)+"% female, "+(100-femaleShare).toFixed(0)+"% male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad audience targeting":femaleShare>55?", skewing female, worth checking whether this is intentional for the category":femaleShare<45?", skewing male, worth checking whether this is intentional for the category":"")+".");
-                    if(topProv)lines.push(topProv+" leads geographic reach, followed by the usual metro corridor, which is typical for a brand campaign in this market.");
-                    if(mobileShare>0)lines.push("Mobile accounts for "+mobileShare.toFixed(0)+"% of ads served"+(mobileShare>70?", a near-monopoly that means creative must be designed mobile-first, no exceptions":mobileShare>50?", confirming the campaign is meeting the audience where they actually are":", leaving room to lean further into mobile placements if efficiency supports it")+".");
-                  }else if(stage.key==="clicks"){
-                    if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push(fmt(total)+" click actions were recorded at a blended "+ctrBlended+"% click-through rate, the engagement signal the creative is earning.");}
-                    if(topAge&&topAgeVal>0){lines.push("The "+topAge+" bracket generated the highest click volume, the creative is landing hardest with this age, and reallocating spend here is the obvious scaling lever.");}
-                    if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"are driving a disproportionate share of clicks")+", which points to where the creative hook is resonating most.");
-                    if(topProv)lines.push(topProv+" also leads click engagement, which is a healthy pattern, the audience that sees the brand is the audience that responds.");
-                    if(mobileShare>0)lines.push("Mobile carries "+mobileShare.toFixed(0)+"% of click volume, meaning the thumb-stop creative is doing its job in feed.");
-                  }else{
-                    if(total>0){var cpa=total>0?totSpend/total:0;lines.push(fmt(total)+" conversions were delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines campaign return.");}
-                    if(champ.val>0&&champ.age){lines.push("The highest converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+" with "+fmt(champ.val)+" conversions, prime audience to scale, expand lookalikes from, and protect budget for.");}
-                    if(topProv)lines.push(topProv+" produced the most conversions by province, confirming geographic efficiency concentration and pointing to where media weight should sit next cycle.");
-                    if(mobileShare>0)lines.push("Mobile drives "+mobileShare.toFixed(0)+"% of conversions, the audience sees, engages, and converts all on the same device, continuous mobile journey optimisation pays compound returns.");
-                    if(total===0)lines.push("No conversions were recorded for the selected period yet, this can be expected for early-flight awareness campaigns or when the tracking pixel is not wired yet.");
-                  }
-                  return lines.join(" ");
-                })()}</Insight>
               </div>;
+            };
+
+            // Horizontal device bars — clearer than a donut at this scale.
+            var renderDeviceBars=function(stage){
+              var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
+              var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
+              devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
+              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
+              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
+              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
+              var total=data.reduce(function(s,d){return s+d.value;},0);
+              var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
+              if(total===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device data</div>;
+              return <div>
+                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=total>0?(d.value/total*100):0;return <div key={d.key} style={{marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{width:10,height:10,borderRadius:"50%",background:d.color,boxShadow:"0 0 10px "+d.color+"88"}}></span>
+                      <span style={{color:"#fff",fontWeight:700}}>{d.name}</span>
+                    </div>
+                    <div><span style={{color:d.color,fontWeight:900,fontSize:14}}>{fmtAbbr(d.value)}</span> <span style={{color:P.sub,fontWeight:600,fontSize:11}}>· {share.toFixed(0)}%</span></div>
+                  </div>
+                  <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55"}}></div>
+                  </div>
+                </div>;})}
+              </div>;
+            };
+
+            // Narrative copy per stage — reused in the 3-block insight grid.
+            var stageNarrative=function(stage){
+              var total=stageTotal(stage);
+              var ta=topAgeFor(stage);var gs=genderSharesFor(stage);var genTotal=gs.female+gs.male;var femaleShare=genTotal>0?(gs.female/genTotal*100):0;
+              var tp=topProvFor(stage);var champ=topSegmentFor(stage);
+              var devNormLine=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0)return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";return "other";};
+              var devTL={mobile:0,desktop:0,tablet:0};devRows.forEach(function(r){var d=devNormLine(r.device);if(devTL[d]===undefined)return;devTL[d]+=stage.field(r);});
+              var devSum=devTL.mobile+devTL.desktop+devTL.tablet;var mobileShare=devSum>0?(devTL.mobile/devSum*100):0;
+              var lines=[];
+              if(stage.key==="impressions"){
+                if(total>0)lines.push(fmt(total)+" ads were served across the selected campaigns, establishing the reach baseline for everything that follows.");
+                if(ta.age&&ta.val>0){var ageShare=total>0?(ta.val/total*100).toFixed(0):"0";lines.push("The "+ta.age+" age group absorbed "+ageShare+"% of those impressions, the single largest audience slice exposed this period.");}
+                if(genTotal>0)lines.push("Gender split is "+femaleShare.toFixed(0)+"% female, "+(100-femaleShare).toFixed(0)+"% male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad targeting":femaleShare>55?", skewing female":femaleShare<45?", skewing male":"")+".");
+                if(tp)lines.push(tp+" leads geographic reach, consistent with metro-corridor weighting.");
+                if(mobileShare>0)lines.push("Mobile accounts for "+mobileShare.toFixed(0)+"% of ads served"+(mobileShare>70?", a near-monopoly, creative must be mobile-first":mobileShare>50?", meeting the audience where they are":", leaving room to push further into mobile")+".");
+              }else if(stage.key==="clicks"){
+                if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push(fmt(total)+" click actions recorded at a blended "+ctrBlended+"% CTR, the engagement signal the creative is earning.");}
+                if(ta.age&&ta.val>0)lines.push("The "+ta.age+" bracket generated the highest click volume, the obvious scaling lever.");
+                if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"drive a disproportionate share")+".");
+                if(tp)lines.push(tp+" also leads click engagement, a healthy see-then-respond pattern.");
+                if(mobileShare>0)lines.push("Mobile carries "+mobileShare.toFixed(0)+"% of click volume, thumb-stop creative is doing its job in feed.");
+              }else{
+                if(total>0){var cpa=total>0?totSpend/total:0;lines.push(fmt(total)+" conversions delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines return.");}
+                if(champ.val>0&&champ.age)lines.push("Top converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+" with "+fmt(champ.val)+" conversions, prime audience to scale and protect budget for.");
+                if(tp)lines.push(tp+" produced the most conversions, pointing to where media weight should sit next cycle.");
+                if(mobileShare>0)lines.push("Mobile drives "+mobileShare.toFixed(0)+"% of conversions, a continuous mobile journey pays compound returns.");
+                if(total===0)lines.push("No conversions recorded for the selected period, expected for early-flight awareness campaigns or missing tracking.");
+              }
+              return lines.join(" ");
             };
 
             // Google city view — visual leaderboard instead of table.
@@ -4621,9 +4638,50 @@ export default function MediaOnGas(){
               </div>;
             };
 
+            var sectionBox=function(title,body,accent){return <div style={{background:"linear-gradient(145deg,"+accent+"0c 0%,transparent 60%),#0f071c",borderRadius:20,padding:"22px 24px 24px",marginBottom:22,border:"1px solid "+accent+"22"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
+                <div style={{width:4,height:24,borderRadius:2,background:accent,boxShadow:"0 0 12px "+accent+"88"}}></div>
+                <div style={{fontSize:16,color:"#fff",fontFamily:ff,fontWeight:800,letterSpacing:1}}>{title}</div>
+              </div>
+              {body}
+            </div>;};
+
+            // Stage toggle pills at the top of the page — a single control
+            // that drives the hero map + age + gender + device visuals below.
+            var togglePills=<div style={{display:"flex",gap:8,marginBottom:22,flexWrap:"wrap"}}>
+              {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var active=s.key===activeStage.key;return <button key={s.key} onClick={function(){setDemoMetric(s.key);}} style={{background:active?"linear-gradient(135deg,"+s.accent+"40,"+s.accentDeep+"20)":"rgba(255,255,255,0.03)",border:"1px solid "+(active?s.accent+"90":"rgba(255,255,255,0.08)"),color:active?"#fff":P.sub,fontFamily:fm,fontSize:12,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",padding:"10px 18px",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8,transition:"all 0.2s ease",boxShadow:active?"0 0 20px "+s.accent+"55":"none"}}>
+                {s.icon(active?"#fff":s.accent,14)}
+                <span>{s.title}</span>
+                <span style={{fontSize:10,color:active?"#fff":P.dim,fontWeight:700,letterSpacing:0.5}}>· {fmtAbbr(stageTotal(s))}</span>
+              </button>;})}
+            </div>;
+
+            // Gender split cards — bigger, simpler than a donut at a glance.
+            var renderGenderCards=function(stage){
+              var gs=genderSharesFor(stage);
+              var total=gs.female+gs.male;
+              if(total===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender data for this stage</div>;
+              var fShare=gs.female/total*100;var mShare=gs.male/total*100;
+              var row=function(name,val,share,col,bg){return <div style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",top:0,right:0,width:84,height:84,background:"radial-gradient(circle at 70% 30%,"+col+"22,transparent 70%)",pointerEvents:"none"}}></div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:32,height:32,borderRadius:16,background:col+"25",border:"1px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:900,color:col,fontFamily:fm}}>{name.charAt(0)}</div>
+                    <span style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{name}</span>
+                  </div>
+                  <div style={{fontSize:26,fontWeight:900,color:col,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{share.toFixed(0)+"%"}</div>
+                </div>
+                <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:8}}>{fmtAbbr(val)+" "+stage.label.toLowerCase()}</div>
+                <div style={{height:8,background:"rgba(255,255,255,0.04)",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 10px "+col+"55"}}></div>
+                </div>
+              </div>;};
+              return <div>{row("Female",gs.female,fShare,"#ec4899")}{row("Male",gs.male,mShare,"#3b82f6")}</div>;
+            };
+
             return <div>
               {/* Funnel overview strip — 3 stage totals at a glance */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:22}}>
                 {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.conversion:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}return <div key={s.key} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                     <div style={{width:32,height:32,borderRadius:10,background:s.accent+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(s.accent,16)}</div>
@@ -4635,9 +4693,47 @@ export default function MediaOnGas(){
                 </div>;})}
               </div>
 
-              {renderStage(stageDef.awareness)}
-              {renderStage(stageDef.engagement)}
-              {renderStage(stageDef.conversion,renderCitiesBlock())}
+              {renderPlatformMix()}
+
+              {/* Stage toggle — controls the 3 hero sections below */}
+              {togglePills}
+
+              {sectionBox("Where your audience is · "+activeStage.label,
+                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:16,alignItems:"stretch"}}>
+                  <div>{renderProvinceMap(activeStage)}</div>
+                  <div>{renderProvinceRanks(activeStage)}</div>
+                </div>,
+                activeStage.accent)}
+
+              {sectionBox("Who they are · "+activeStage.label,
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:16}}>
+                  <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:14,padding:"20px 22px",border:"1px solid rgba(255,255,255,0.06)"}}>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>By Age Group</div>
+                    {renderAgeBars(activeStage)}
+                  </div>
+                  <div>{renderGenderCards(activeStage)}</div>
+                </div>,
+                activeStage.accent)}
+
+              {sectionBox("How they're seeing you · "+activeStage.label,
+                <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:14,padding:"22px 24px",border:"1px solid rgba(255,255,255,0.06)"}}>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Device Mix</div>
+                  {renderDeviceBars(activeStage)}
+                </div>,
+                activeStage.accent)}
+
+              {renderCitiesBlock()}
+
+              {/* 3-stage narrative insight grid — always shows all three reads in parallel */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginTop:10}}>
+                {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){return <div key={"n"+s.key} style={{background:"linear-gradient(145deg,"+s.accent+"08,transparent 70%),#0f071c",border:"1px solid "+s.accent+"30",borderLeft:"4px solid "+s.accent,borderRadius:"0 14px 14px 0",padding:"18px 20px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                    {s.icon(s.accent,16)}
+                    <span style={{fontSize:10,color:s.accent,fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase"}}>{s.title} Read</span>
+                  </div>
+                  <div style={{fontSize:12.5,color:P.txt,fontFamily:ff,lineHeight:1.85,letterSpacing:0.2}}>{stageNarrative(s)}</div>
+                </div>;})}
+              </div>
             </div>;
           })()}
           {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
