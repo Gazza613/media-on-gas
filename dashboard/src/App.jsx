@@ -4306,7 +4306,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {tab==="demographics"&&(<div>
-          <SH icon={Ic.globe(P.cyan,20)} title="Demographic Funnel" sub={"Who saw, who engaged, who converted  ·  "+df+" to "+dt} accent={P.cyan}/>
+          <SH icon={Ic.globe(P.cyan,20)} title="Demographic Insights" sub={"Who saw, who engaged, who converted  ·  "+df+" to "+dt} accent={P.cyan}/>
           {demoLoading&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"54px 20px",textAlign:"center",color:P.dim,fontFamily:ff}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
               <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.cyan,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
