@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v3-region-device-fallback";
+var DEMO_CACHE_VERSION = "v4-google-city-to-province";
 
 function extractResults(actions) {
   var map = {};
@@ -430,6 +430,40 @@ async function fetchGoogleDemo(from, to) {
         });
       } catch (_) {}
     }
+    // Province parser — Google's geo_target_constant canonical_name for a
+    // ZA city is "City,Province,South Africa". The province token lets us
+    // fold Google city-level data into province-level rows (Google Ads
+    // does not expose SA provinces as a first-class breakdown, so without
+    // this mapping Google clicks/impressions are absent from the region
+    // aggregate and the Top Provinces table understates by the Google
+    // share — often the bulk of paid-search + display spend).
+    var PROVINCE_ALIASES = {
+      "gauteng": "Gauteng",
+      "western cape": "Western Cape",
+      "eastern cape": "Eastern Cape",
+      "kwazulu-natal": "KwaZulu-Natal",
+      "kwazulu natal": "KwaZulu-Natal",
+      "kwa-zulu natal": "KwaZulu-Natal",
+      "free state": "Free State",
+      "northern cape": "Northern Cape",
+      "north west": "North West",
+      "north-west": "North West",
+      "mpumalanga": "Mpumalanga",
+      "limpopo": "Limpopo"
+    };
+    var provinceFromCanonical = function(canon) {
+      if (!canon) return null;
+      var parts = String(canon).split(",").map(function(s) { return s.trim(); });
+      // Drop trailing country token, take the next token as the province candidate.
+      if (parts.length < 2) return null;
+      var raw = parts[parts.length - 2] || "";
+      raw = raw.replace(/^Province of /i, "").replace(/ Province$/i, "").trim().toLowerCase();
+      return PROVINCE_ALIASES[raw] || null;
+    };
+
+    // Aggregate Google city rows into province totals, then push as region
+    // rows so the Top Provinces view includes Google clicks/impressions.
+    var googleProvinceAgg = {};
     locRows.forEach(function(row) {
       var c = row.campaign || {}, m = row.metrics || {}, s = row.segments || {};
       var gtc = s.geoTargetCity || s.geo_target_city;
@@ -448,6 +482,41 @@ async function fetchGoogleDemo(from, to) {
         clicks: parseInt(m.clicks || 0, 10),
         spend: parseFloat(m.costMicros || 0) / 1e6,
         results: { leads: Math.round(parseFloat(m.conversions || 0)), appInstalls: 0, pageLikes: 0, postReactions: 0, landingPageViews: 0, follows: 0 }
+      });
+      var prov = provinceFromCanonical(cn.canonical);
+      if (!prov) return;
+      var key = String(c.id || "") + "|" + prov;
+      if (!googleProvinceAgg[key]) {
+        googleProvinceAgg[key] = {
+          platform: "Google",
+          account: "Google Ads",
+          campaignId: String(c.id || ""),
+          campaignName: c.name || "",
+          region: prov,
+          impressions: 0,
+          clicks: 0,
+          spend: 0,
+          leads: 0
+        };
+      }
+      var agg = googleProvinceAgg[key];
+      agg.impressions += parseInt(m.impressions || 0, 10);
+      agg.clicks += parseInt(m.clicks || 0, 10);
+      agg.spend += parseFloat(m.costMicros || 0) / 1e6;
+      agg.leads += Math.round(parseFloat(m.conversions || 0));
+    });
+    Object.keys(googleProvinceAgg).forEach(function(k) {
+      var a = googleProvinceAgg[k];
+      out.region.push({
+        platform: a.platform,
+        account: a.account,
+        campaignId: a.campaignId,
+        campaignName: a.campaignName,
+        region: a.region,
+        impressions: a.impressions,
+        clicks: a.clicks,
+        spend: a.spend,
+        results: { leads: a.leads, appInstalls: 0, pageLikes: 0, postReactions: 0, landingPageViews: 0, follows: 0 }
       });
     });
   } catch (e) {

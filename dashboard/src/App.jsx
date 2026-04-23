@@ -4544,7 +4544,7 @@ export default function MediaOnGas(){
                     <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
-                {sumAll===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns. Meta supplies province-level data for most accounts; Google Ads does not expose SA provinces via the API.</div>}
+                {sumAll===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
               </div>;
             };
 
