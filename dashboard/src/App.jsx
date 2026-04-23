@@ -4330,31 +4330,32 @@ export default function MediaOnGas(){
             var stageDef={
               awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",deep:"#155e75",cool:"#0891b2",warm:"#22d3ee",hot:"#67e8f9",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
               engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",deep:"#92400e",cool:"#d97706",warm:"#f59e0b",hot:"#fbbf24",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
-              conversion:{key:"conv",label:"Conversions",costLabel:"Cost Per Conversion",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Conversion",subtitle:"Bottom of funnel, who actually converted",field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
+              objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel, who actually converted",field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
             };
-            var activeStage=stageDef[demoMetric==="impressions"?"awareness":demoMetric==="clicks"?"engagement":"conversion"]||stageDef.awareness;
 
-            // Dedupe for platform / stage totals. Google Ads API returns
-            // age and gender as separate GAQL queries (age_range_view +
-            // gender_view), so our /api/demographics pushes *two* rows per
-            // Google campaign into ageGender — one age-only, one gender-only.
-            // Summing naively double-counts Google impressions/clicks/spend.
-            // For totals we keep Google age-known rows only (one copy per
-            // campaign-age cell) and keep every Meta/TikTok row (genuinely
-            // distinct age×gender bins). The per-gender chart separately
-            // sums gender-known rows so it still picks up Google gender data.
-            var agRowsForTotals=agRows.filter(function(r){
-              if(String(r.platform||"").toLowerCase()==="google"){
-                return ageOrder.indexOf(String(r.age||""))>=0;
-              }
-              return true;
+            // AUTHORITATIVE TOTALS — computed from the same selected-campaign
+            // objects Summary uses, so the headline numbers on this tab match
+            // Summary exactly. Breakdown data (agRows / regRows / devRows) is
+            // still used for distribution (which age, which province, which
+            // device) but the displayed "total X" values come from sel.
+            var authImps=0,authClicks=0,authObj=0,authSpend=0;
+            var authPlat={Facebook:{imp:0,clk:0,spend:0,obj:0},Instagram:{imp:0,clk:0,spend:0,obj:0},TikTok:{imp:0,clk:0,spend:0,obj:0},Google:{imp:0,clk:0,spend:0,obj:0}};
+            var mapPlatform=function(p){if(p==="Google Display"||p==="YouTube"||p==="Google Search"||p==="Google Ads")return "Google";if(p==="Meta")return "Facebook";return p;};
+            sel.forEach(function(c){
+              var imp=parseFloat(c.impressions||0);
+              var clk=parseFloat(c.clicks||0);
+              var spd=parseFloat(c.spend||0);
+              var obj=parseFloat(c.leads||0)+parseFloat(c.appInstalls||0)+parseFloat(c.follows||0)+parseFloat(c.pageLikes||0);
+              authImps+=imp;authClicks+=clk;authSpend+=spd;authObj+=obj;
+              var k=mapPlatform(c.platform);
+              if(authPlat[k]){authPlat[k].imp+=imp;authPlat[k].clk+=clk;authPlat[k].spend+=spd;authPlat[k].obj+=obj;}
             });
-            var stageTotal=function(stage){var s=0;agRowsForTotals.forEach(function(r){s+=stage.field(r);});return s;};
-            var stageSpend=function(){var s=0;agRowsForTotals.forEach(function(r){s+=parseFloat(r.spend||0);});return s;};
-            var totImps=stageTotal(stageDef.awareness);
-            var totClicks=stageTotal(stageDef.engagement);
-            var totConv=stageTotal(stageDef.conversion);
-            var totSpend=stageSpend();
+            // stageTotal / stageSpend now return AUTHORITATIVE values, so every
+            // section header and the KPI strip reconcile with Summary. Chart
+            // cell values still come from breakdown sums (see agRows etc).
+            var stageTotal=function(stage){if(stage.key==="impressions")return authImps;if(stage.key==="clicks")return authClicks;return authObj;};
+            var stageSpend=function(){return authSpend;};
+            var totImps=authImps,totClicks=authClicks,totConv=authObj,totSpend=authSpend;
 
             // Reusable helpers.
             var fmtAbbr=function(n){n=parseFloat(n||0);if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toString();};
@@ -4615,12 +4616,10 @@ export default function MediaOnGas(){
             var topSegmentFor=function(stage){var best={val:0,age:"",gen:""};agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});return best;};
 
             // Platform tiles — share of total impressions per channel (FB / IG / TikTok / Google),
-            // always on, not stage-scoped. Big numbers, brand colours, proportion bar.
+            // always on, not stage-scoped. Uses authoritative per-platform
+            // totals (authPlat) so the numbers match Summary exactly.
             var renderPlatformMix=function(){
-              var platNorm=function(p){var s=String(p||"").toLowerCase();if(s==="facebook"||s==="fb")return "Facebook";if(s==="instagram"||s==="ig")return "Instagram";if(s==="tiktok"||s==="tt")return "TikTok";if(s==="google"||s==="google_ads"||s==="gd")return "Google";if(s==="meta")return "Facebook";return p||"Other";};
-              var agg={Facebook:{imp:0,clk:0,spend:0},Instagram:{imp:0,clk:0,spend:0},TikTok:{imp:0,clk:0,spend:0},Google:{imp:0,clk:0,spend:0}};
-              // Use deduped rows so Google isn't double-counted (see note on agRowsForTotals).
-              agRowsForTotals.forEach(function(r){var k=platNorm(r.platform);if(!agg[k])return;agg[k].imp+=r.impressions||0;agg[k].clk+=r.clicks||0;agg[k].spend+=parseFloat(r.spend||0);});
+              var agg=authPlat;
               var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
               var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
               return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
@@ -4739,40 +4738,6 @@ export default function MediaOnGas(){
               </div>;
             };
 
-            var sectionBox=function(title,body,accent,stageValue){return <div style={{background:"linear-gradient(145deg,"+accent+"0c 0%,transparent 60%),#0f071c",borderRadius:20,padding:"22px 24px 24px",marginBottom:22,border:"1px solid "+accent+"22"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,gap:18,flexWrap:"wrap"}}>
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:4,height:24,borderRadius:2,background:accent,boxShadow:"0 0 12px "+accent+"88"}}></div>
-                  <div style={{fontSize:16,color:"#fff",fontFamily:ff,fontWeight:800,letterSpacing:1}}>{title}</div>
-                </div>
-                {stageValue!==undefined&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 14px",background:accent+"15",border:"1px solid "+accent+"45",borderRadius:20}}>
-                  <div style={{fontSize:9,color:accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>Showing</div>
-                  <div style={{fontSize:13,color:"#fff",fontFamily:fm,fontWeight:900}}>{fmtAbbr(stageValue)}</div>
-                </div>}
-              </div>
-              {body}
-            </div>;};
-
-            // Stage toggle pills — big, obvious segmented control that drives
-            // every hero section below. Each pill shows its total so clients
-            // see exactly what value the charts will fill with.
-            var togglePills=<div style={{display:"flex",gap:10,marginBottom:22,background:"linear-gradient(145deg,#14091f,#0a041a)",padding:10,borderRadius:14,border:"1px solid rgba(255,255,255,0.06)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)"}}>
-              {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s,idx){var active=s.key===activeStage.key;var total=stageTotal(s);return <button key={s.key} onClick={function(){setDemoMetric(s.key);}} style={{flex:1,background:active?"linear-gradient(135deg,"+s.accent+"55,"+s.accentDeep+"25)":"rgba(255,255,255,0.02)",border:"1.5px solid "+(active?s.accent:"rgba(255,255,255,0.06)"),color:active?"#fff":P.sub,fontFamily:fm,padding:"14px 20px",borderRadius:10,cursor:"pointer",transition:"all 0.25s ease",boxShadow:active?"0 0 28px "+s.accent+"60,inset 0 1px 0 rgba(255,255,255,0.1)":"none",textAlign:"left",position:"relative",overflow:"hidden"}} onMouseEnter={function(e){if(!active)e.currentTarget.style.background="rgba(255,255,255,0.04)";}} onMouseLeave={function(e){if(!active)e.currentTarget.style.background="rgba(255,255,255,0.02)";}}>
-                {active&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,"+s.accent+","+s.accentDeep+")",boxShadow:"0 0 12px "+s.accent}}></div>}
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
-                  <div style={{width:26,height:26,borderRadius:8,background:active?s.accent+"33":s.accent+"18",border:"1px solid "+s.accent+(active?"90":"30"),display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(active?"#fff":s.accent,14)}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:active?"#fff":s.accent,lineHeight:1}}>{s.title}</div>
-                    <div style={{fontSize:9,color:active?"rgba(255,255,255,0.7)":P.dim,fontFamily:fm,marginTop:3,letterSpacing:0.5}}>{s.subtitle}</div>
-                  </div>
-                </div>
-                <div style={{display:"flex",alignItems:"baseline",gap:6,marginTop:4}}>
-                  <span style={{fontSize:22,fontWeight:900,color:active?"#fff":s.accent,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmtAbbr(total)}</span>
-                  <span style={{fontSize:9,color:active?"rgba(255,255,255,0.55)":P.dim,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>{s.label}</span>
-                </div>
-              </button>;})}
-            </div>;
-
             // Gender split cards — bigger, simpler than a donut at a glance.
             var renderGenderCards=function(stage){
               var gs=genderSharesFor(stage);
@@ -4796,10 +4761,73 @@ export default function MediaOnGas(){
               return <div>{row("Female",gs.female,fShare,"#ec4899")}{row("Male",gs.male,mShare,"#3b82f6")}</div>;
             };
 
+            // Render a complete per-stage demographics block: stage header with
+            // authoritative total, map + province ranks row, age / gender / device
+            // row, stage narrative. Called once per stage below.
+            var renderStageBlock=function(stage){
+              var total=stageTotal(stage);
+              var ageTotalForStage=(function(){var s=0;ageOrder.forEach(function(a){s+=0;});agRows.forEach(function(r){var a=String(r.age||"");if(ageOrder.indexOf(a)<0)return;s+=stage.field(r);});return s;})();
+              var genTotalForStage=(function(){var s=0;agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(genderOrder.indexOf(g)<0)return;s+=stage.field(r);});return s;})();
+              var devTotalForStage=(function(){var s=0;devRows.forEach(function(r){s+=stage.field(r);});return s;})();
+              return <div style={{background:"linear-gradient(165deg,"+stage.accent+"10 0%,"+stage.accentDeep+"05 50%,transparent 100%),#0d0520",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+stage.accent+"33",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+stage.accent+"10 inset"}}>
+                {/* Stage header with big authoritative total */}
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:16}}>
+                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+stage.accent+"45,"+stage.accentDeep+"20)",border:"1.5px solid "+stage.accent+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+stage.accent+"40"}}>{stage.icon("#fff",28)}</div>
+                    <div>
+                      <div style={{fontSize:11,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>{stage.title} Demographics</div>
+                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{stage.subtitle}</div>
+                    </div>
+                  </div>
+                  <div title={stage.title+" — "+fmt(total)+" "+stage.label.toLowerCase()+" across the selected campaigns (matches Summary)"} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+stage.accent+"50",borderRadius:14,boxShadow:"0 0 20px "+stage.accent+"20"}}>
+                    <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>{stage.label}</div>
+                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+stage.accent+"66"}}>{fmtAbbr(total)}</div>
+                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
+                  </div>
+                </div>
+
+                {/* Where — map + ranked provinces */}
+                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
+                  <div>{renderProvinceMap(stage)}</div>
+                  <div>{renderProvinceRanks(stage)}</div>
+                </div>
+
+                {/* Who + How — age + gender + device */}
+                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:18}}>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                      <div title={"Breakdown total: "+fmt(ageTotalForStage)+" (known-age rows only)"} style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmtAbbr(ageTotalForStage)}</div>
+                    </div>
+                    {renderAgeBars(stage)}
+                  </div>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                      <div title={"Breakdown total: "+fmt(genTotalForStage)+" (known-gender rows only)"} style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmtAbbr(genTotalForStage)}</div>
+                    </div>
+                    {renderGenderCards(stage)}
+                  </div>
+                  <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
+                      <div title={"Breakdown total: "+fmt(devTotalForStage)} style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmtAbbr(devTotalForStage)}</div>
+                    </div>
+                    {renderDeviceBars(stage)}
+                  </div>
+                </div>
+
+                {/* Stage narrative */}
+                <Insight title={stage.title+" Read"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{stageNarrative(stage)}</Insight>
+              </div>;
+            };
+
             return <div>
-              {/* Funnel overview strip — 3 stage totals at a glance */}
+              {/* Funnel overview strip — 3 stage totals from authoritative source */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:22}}>
-                {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.conversion:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}var tip=s.title+" — "+fmt(v)+" "+s.label.toLowerCase()+(nextStage&&v>0?" · "+dropRate.toFixed(2)+"% progress to "+nextStage.title.toLowerCase():"")+". Click the toggle below to drill into this stage.";return <div key={s.key} title={tip} onClick={function(){setDemoMetric(s.key);}} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px",cursor:"pointer",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 10px 30px "+s.accent+"25";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                {[stageDef.awareness,stageDef.engagement,stageDef.objective].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.objective:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}var tip=s.title+" — "+fmt(v)+" "+s.label.toLowerCase()+(nextStage&&v>0?" · "+dropRate.toFixed(2)+"% progress to "+nextStage.title.toLowerCase():"");return <div key={s.key} title={tip} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 10px 30px "+s.accent+"25";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                     <div style={{width:32,height:32,borderRadius:10,background:s.accent+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(s.accent,16)}</div>
                     <div style={{fontSize:10,color:s.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>{s.title}</div>
@@ -4812,45 +4840,11 @@ export default function MediaOnGas(){
 
               {renderPlatformMix()}
 
-              {/* Stage toggle — controls the 3 hero sections below */}
-              {togglePills}
-
-              {sectionBox("Where your audience is · "+activeStage.title,
-                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:16,alignItems:"stretch"}}>
-                  <div>{renderProvinceMap(activeStage)}</div>
-                  <div>{renderProvinceRanks(activeStage)}</div>
-                </div>,
-                activeStage.accent,stageTotal(activeStage))}
-
-              {sectionBox("Who they are · "+activeStage.title,
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:16}}>
-                  <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:14,padding:"20px 22px",border:"1px solid rgba(255,255,255,0.06)"}}>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>By Age Group · {activeStage.label}</div>
-                    {renderAgeBars(activeStage)}
-                  </div>
-                  <div>{renderGenderCards(activeStage)}</div>
-                </div>,
-                activeStage.accent,stageTotal(activeStage))}
-
-              {sectionBox("How they're seeing you · "+activeStage.title,
-                <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:14,padding:"22px 24px",border:"1px solid rgba(255,255,255,0.06)"}}>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Device Mix · {activeStage.label}</div>
-                  {renderDeviceBars(activeStage)}
-                </div>,
-                activeStage.accent,stageTotal(activeStage))}
+              {renderStageBlock(stageDef.awareness)}
+              {renderStageBlock(stageDef.engagement)}
+              {renderStageBlock(stageDef.objective)}
 
               {renderCitiesBlock()}
-
-              {/* 3-stage narrative insight grid — always shows all three reads in parallel */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginTop:10}}>
-                {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){return <div key={"n"+s.key} style={{background:"linear-gradient(145deg,"+s.accent+"08,transparent 70%),#0f071c",border:"1px solid "+s.accent+"30",borderLeft:"4px solid "+s.accent,borderRadius:"0 14px 14px 0",padding:"18px 20px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                    {s.icon(s.accent,16)}
-                    <span style={{fontSize:10,color:s.accent,fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase"}}>{s.title} Read</span>
-                  </div>
-                  <div style={{fontSize:12.5,color:P.txt,fontFamily:ff,lineHeight:1.85,letterSpacing:0.2}}>{stageNarrative(s)}</div>
-                </div>;})}
-              </div>
             </div>;
           })()}
           {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
