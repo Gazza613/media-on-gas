@@ -37,17 +37,55 @@ async function resolveMetaVideo(videoId, token, adId) {
     }
   }
 
-  // Paths 2 + 3: inspect the ad's creative for post-based fallbacks.
+  // Helper that re-queries a specific video_id for its direct source URL.
+  // We use this in the creative-spec path below to walk every video_id we
+  // can surface from the ad's creative spec and try each until Meta gives
+  // us an MP4 source, before giving up to the iframe fallback.
+  async function resolveVideoIdToSource(vid) {
+    if (!vid) return null;
+    try {
+      var u = "https://graph.facebook.com/v25.0/" + encodeURIComponent(vid) + "?fields=source,format,embed_html&access_token=" + token;
+      var r = await fetch(u);
+      if (!r.ok) return null;
+      var d = await r.json();
+      if (d.source) return d.source;
+      if (d.format && Array.isArray(d.format) && d.format.length > 0) {
+        var ordered = d.format.slice().sort(function(a, b) {
+          return (parseInt(b.height || 0) * parseInt(b.width || 0)) - (parseInt(a.height || 0) * parseInt(a.width || 0));
+        });
+        for (var i = 0; i < ordered.length; i++) {
+          var h = ordered[i].embed_html || "";
+          var m = /src="([^"]+)"/.exec(h);
+          if (m && m[1] && m[1].indexOf(".mp4") >= 0) return m[1];
+        }
+      }
+      if (d.embed_html) {
+        var m2 = /src="([^"]+)"/.exec(d.embed_html);
+        if (m2 && m2[1] && m2[1].indexOf(".mp4") >= 0) return m2[1];
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Paths 2 / 2.5 / 3: inspect the ad's creative. We fetch everything
+  // useful in one Graph call, then work through each source path in order
+  // of reliability, so we only ever fall back to the iframe widget when
+  // no direct MP4 can be resolved.
   if (adId) {
     try {
-      var adUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=creative{effective_object_story_id,instagram_permalink_url}&access_token=" + token;
+      // Expanded field set:
+      //   effective_object_story_id  — Path 2 (Page-post attachments)
+      //   object_story_spec.video_data.video_id — Path 2.5 (dark-post creative spec)
+      //   asset_feed_spec.videos[].video_id — Path 2.5 (DCO video variants)
+      //   video_id — Path 2.5 (simple video creatives)
+      var adUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=creative{effective_object_story_id,instagram_permalink_url,video_id,object_story_spec{video_data{video_id}},asset_feed_spec{videos{video_id}}}&access_token=" + token;
       var adRes = await fetch(adUrl);
       if (adRes.ok) {
         var adData = await adRes.json();
         var c = adData.creative || {};
 
         // Path 2: Post attachments — covers IG Feed / Reels videos when the
-        // token has page access to that ad account's Pages.
+        // token has Page access to that ad account's Pages.
         var storyId = c.effective_object_story_id;
         if (storyId) {
           try {
@@ -66,13 +104,32 @@ async function resolveMetaVideo(videoId, token, adId) {
           } catch (postErr) { console.warn("[ad-video] Meta post-fallback error", postErr && postErr.message); }
         }
 
+        // Path 2.5: Creative-spec video_id walk. For dark-posted Instagram
+        // ads the Page-post path (2) fails because the story was never
+        // published as a Page post, but the creative's object_story_spec
+        // and asset_feed_spec still carry one or more video_ids that /video
+        // /{id} CAN resolve a source for. Walk every candidate id and
+        // return the first one that yields an MP4, skipping the original
+        // videoId we already tried at the top of this function.
+        var candidateIds = [];
+        if (c.video_id && c.video_id !== videoId) candidateIds.push(c.video_id);
+        if (c.object_story_spec && c.object_story_spec.video_data && c.object_story_spec.video_data.video_id && c.object_story_spec.video_data.video_id !== videoId) {
+          candidateIds.push(c.object_story_spec.video_data.video_id);
+        }
+        var afsVids = c.asset_feed_spec && c.asset_feed_spec.videos;
+        if (Array.isArray(afsVids)) {
+          afsVids.forEach(function (v) { if (v && v.video_id && v.video_id !== videoId && candidateIds.indexOf(v.video_id) < 0) candidateIds.push(v.video_id); });
+        }
+        for (var ci = 0; ci < candidateIds.length; ci++) {
+          var src = await resolveVideoIdToSource(candidateIds[ci]);
+          if (src) return { url: src, type: "video" };
+        }
+
         // Path 3: Meta Ad Preview API — returns a Facebook-hosted iframe
         // that plays the ad creative natively (same player clients see
-        // in Ads Manager previews). Works for dark-posted Instagram
-        // creatives where /video/{id} and post attachments both fail.
-        // Try multiple formats — Meta accepts DESKTOP_FEED_STANDARD for
-        // most feed ads, MOBILE_FEED_STANDARD as fallback, Instagram
-        // formats for IG-only placements.
+        // in Ads Manager previews). Last resort, the iframe widget can
+        // misbehave on unmute in embedded contexts so we only hit this
+        // when every direct-MP4 path above has failed.
         var prevFormats = ["DESKTOP_FEED_STANDARD", "MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD"];
         for (var pf = 0; pf < prevFormats.length; pf++) {
           try {
