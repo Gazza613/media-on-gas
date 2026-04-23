@@ -2649,22 +2649,26 @@ export default function MediaOnGas(){
                 if(Math.round(v)>=100)return (Math.floor(v*10)/10).toFixed(1)+"%";
                 return Math.round(v)+"%";
               };
+              // Narrative defaults to percentage-based comments rather than
+              // absolute counts — the big glass box above the block already
+              // shows the authoritative total, so the read sits on top of
+              // that with audience mix commentary only.
               var lines=[];
               if(stage.key==="impressions"){
-                if(total>0)lines.push(fmt(total)+" ads were served across the selected campaigns, establishing the reach baseline for everything that follows.");
+                if(total>0)lines.push("Ads were delivered across the selected campaigns, establishing the reach baseline for everything that follows.");
                 if(ta.age&&ta.val>0){var ageShareRaw=total>0?(ta.val/total*100):0;lines.push("The "+ta.age+" age group absorbed "+pctLabel(ageShareRaw)+" of those impressions, the single largest audience slice exposed this period.");}
                 if(genTotal>0)lines.push("Gender split is "+pctLabel(femaleShare)+" female, "+pctLabel(100-femaleShare)+" male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad targeting":femaleShare>55?", skewing female":femaleShare<45?", skewing male":"")+".");
                 if(tp)lines.push(tp+" leads geographic reach, consistent with metro-corridor weighting.");
                 if(mobileShare>0)lines.push("Mobile accounts for "+pctLabel(mobileShare)+" of ads served"+(mobileShare>70?", a near-monopoly, creative must be mobile-first":mobileShare>50?", meeting the audience where they are":", leaving room to push further into mobile")+".");
               }else if(stage.key==="clicks"){
-                if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push(fmt(total)+" click actions recorded at a blended "+ctrBlended+"% CTR, the engagement signal the creative is earning.");}
-                if(ta.age&&ta.val>0)lines.push("The "+ta.age+" bracket generated the highest click volume, the obvious scaling lever.");
+                if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push("Clicks were recorded at a blended "+ctrBlended+"% CTR, the engagement signal the creative is earning.");}
+                if(ta.age&&ta.val>0){var ageClickShare=total>0?(ta.val/total*100):0;lines.push("The "+ta.age+" bracket generated "+pctLabel(ageClickShare)+" of clicks, the obvious scaling lever.");}
                 if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"drive a disproportionate share")+".");
                 if(tp)lines.push(tp+" also leads click engagement, a healthy see-then-respond pattern.");
                 if(mobileShare>0)lines.push("Mobile carries "+pctLabel(mobileShare)+" of click volume, thumb-stop creative is doing its job in feed.");
               }else{
-                if(total>0){var cpa=total>0?totSpend/total:0;lines.push(fmt(total)+" conversions delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines return.");}
-                if(champ.val>0&&champ.age)lines.push("Top converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+" with "+fmt(champ.val)+" conversions, prime audience to scale and protect budget for.");
+                if(total>0){var cpa=total>0?totSpend/total:0;lines.push("Conversions delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines return.");}
+                if(champ.val>0&&champ.age){var champShare=total>0?(champ.val/total*100):0;lines.push("Top converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+", capturing "+pctLabel(champShare)+" of conversions, prime audience to scale and protect budget for.");}
                 if(tp)lines.push(tp+" produced the most conversions, pointing to where media weight should sit next cycle.");
                 if(mobileShare>0)lines.push("Mobile drives "+pctLabel(mobileShare)+" of conversions, a continuous mobile journey pays compound returns.");
                 if(total===0)lines.push("No conversions recorded for the selected period, expected for early-flight awareness campaigns or missing tracking.");
