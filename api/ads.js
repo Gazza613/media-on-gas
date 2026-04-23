@@ -88,9 +88,11 @@ export default async function handler(req, res) {
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
       var cIds = (pCached.allowedCampaignIds || []).map(String);
-      var cNames = pCached.allowedCampaignNames || [];
-      // Normalise to a set that accepts raw, suffix-stripped, and _facebook/_instagram-suffixed
-      // variants. Tokens issued from the dashboard carry all three; ads payload carries raw.
+      // Strict ID-only match. The campaignName fallback used to accept any
+      // ad whose name matched a name in the token's allowedCampaignNames list,
+      // which could cross-match same-named campaigns across different clients'
+      // ad accounts. Tokens carry the full suffixed + raw-variant expansion so
+      // an ID-only match is lossless for legitimate access.
       var allowed = {};
       cIds.forEach(function(x) {
         var s = String(x);
@@ -100,9 +102,7 @@ export default async function handler(req, res) {
       var cFiltered = (cached.data.ads || []).filter(function(a) {
         var cid = String(a.campaignId || "");
         var rawCid = cid.replace(/_(facebook|instagram)$/, "");
-        if (allowed[cid] || allowed[rawCid]) return true;
-        if (a.campaignName && cNames.indexOf(a.campaignName) >= 0) return true;
-        return false;
+        return allowed[cid] === true || allowed[rawCid] === true;
       });
       res.status(200).json({ ads: cFiltered, total: cFiltered.length });
     } else {
@@ -1268,7 +1268,8 @@ export default async function handler(req, res) {
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
     var ids = (principal.allowedCampaignIds || []).map(String);
-    var names = principal.allowedCampaignNames || [];
+    // Strict ID-only match, no campaignName fallback, which used to cross-match
+    // same-named campaigns across different clients' ad accounts.
     var allowedSet = {};
     ids.forEach(function(x) {
       allowedSet[x] = true;
@@ -1277,9 +1278,7 @@ export default async function handler(req, res) {
     var filtered = allAds.filter(function(a) {
       var cid = String(a.campaignId || "");
       var rawCid = cid.replace(/_(facebook|instagram)$/, "");
-      if (allowedSet[cid] || allowedSet[rawCid]) return true;
-      if (a.campaignName && names.indexOf(a.campaignName) >= 0) return true;
-      return false;
+      return allowedSet[cid] === true || allowedSet[rawCid] === true;
     });
     res.status(200).json({ ads: filtered, total: filtered.length });
     return;

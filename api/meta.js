@@ -5,6 +5,14 @@ export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
   if (!validateDates(req, res)) return;
+  // Admin-only, raw /insights proxy that accepts any allowed account id.
+  // Clients must go through /api/campaigns + /api/ads which enforce a
+  // per-token campaign-scope filter.
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role !== "admin") {
+    res.status(403).json({ error: "Admin-only endpoint" });
+    return;
+  }
   var token = process.env.META_ACCESS_TOKEN;
   var account = req.query.account || "act_8159212987434597";
   if (ALLOWED_META_ACCOUNTS.indexOf(account) < 0) { res.status(403).json({ error: "Invalid account" }); return; }

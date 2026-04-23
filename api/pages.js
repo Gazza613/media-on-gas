@@ -5,6 +5,14 @@ export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
   if (!validateDates(req, res)) return;
+  // Admin-only, this endpoint enumerates every Meta page + IG business account
+  // attached to the admin token across all configured ad accounts. Clients
+  // have no legitimate reason to hit it and should not see other clients' pages.
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role !== "admin") {
+    res.status(403).json({ error: "Admin-only endpoint" });
+    return;
+  }
   var token = process.env.META_ACCESS_TOKEN;
   var from = req.query.from || "";
   var to = req.query.to || "";

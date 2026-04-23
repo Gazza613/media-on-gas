@@ -279,13 +279,20 @@ export default async function handler(req, res) {
 
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
-    var ids = principal.allowedCampaignIds || [];
-    var names = principal.allowedCampaignNames || [];
+    // Strict ID-only match. Expand the token's suffixed allow list to include
+    // the raw (no-publisher-suffix) variant so adsets carrying either form
+    // still match. No campaignName fallback, that used to cross-match
+    // same-named campaigns across different clients' ad accounts.
+    var allowed = {};
+    (principal.allowedCampaignIds || []).forEach(function(x) {
+      var s = String(x);
+      allowed[s] = true;
+      allowed[s.replace(/_(facebook|instagram)$/, "")] = true;
+    });
     allAdsets = allAdsets.filter(function(a) {
       var cid = String(a.campaignId || "");
-      if (ids.indexOf(cid) >= 0) return true;
-      if (names.indexOf(a.campaignName || "") >= 0) return true;
-      return false;
+      var rawCid = cid.replace(/_(facebook|instagram)$/, "");
+      return allowed[cid] === true || allowed[rawCid] === true;
     });
   }
   res.json({ adsets: allAdsets, total: allAdsets.length });

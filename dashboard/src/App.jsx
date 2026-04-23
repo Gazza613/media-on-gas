@@ -363,6 +363,11 @@ function AdPreviewModal(props){
   // signed URL and update videoSrc so the <video> element remounts. Capped
   // at 2 to avoid a refetch loop on permanently-broken creatives.
   var retryCountRef=useRef(0);
+  // Generation counter. Each useEffect run (new ad or modal open) bumps
+  // the generation; onError retries capture the generation and drop the
+  // setVideoSrc call if the modal has since closed or switched to another
+  // ad, so a late refetch never leaks state into the next preview.
+  var adGenRef=useRef(0);
   var ad=props.ad;
   var format=((ad&&ad.format)||"STATIC").toUpperCase();
   var isVideo=format==="MP4"||format==="VIDEO";
@@ -376,6 +381,8 @@ function AdPreviewModal(props){
     setVideoErr(null);
     hasPlayedRef.current=false;
     retryCountRef.current=0;
+    adGenRef.current=adGenRef.current+1;
+    var myGen=adGenRef.current;
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
@@ -473,11 +480,20 @@ function AdPreviewModal(props){
           console.warn("[GAS] Video mid-playback error, refetching fresh URL\n"+JSON.stringify({code:code,retry:retryCountRef.current,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
           var rAuthQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
           var rUrl=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+rAuthQ+"&resolveOnly=1&bust=1&t="+Date.now();
+          // Capture the generation at fire time. If the modal closes or the
+          // user opens a different ad before this fetch resolves, adGenRef
+          // will have moved and we skip the setState rather than leak a stale
+          // URL into the next preview.
+          var firedGen=adGenRef.current;
           fetch(rUrl).then(function(r){return r.text();}).then(function(t){
+            if(firedGen!==adGenRef.current)return;
             var parsed=null;try{parsed=t?JSON.parse(t):null;}catch(_){}
             if(parsed&&parsed.url){setVideoSrc(parsed.url);setVideoType(parsed.type||"video");}
             else{setVideoErr(code);}
-          }).catch(function(){setVideoErr(code);});
+          }).catch(function(){
+            if(firedGen!==adGenRef.current)return;
+            setVideoErr(code);
+          });
           return;
         }
         setVideoErr(code);
@@ -2680,7 +2696,7 @@ export default function MediaOnGas(){
               // up to "100.00%" so the narrative never over-states.
               var pctLabel=function(v){
                 if(v>=100)return "100.00%";
-                if(v>99.995)return "99.99%";
+                if(v>99.99)return "99.99%";
                 return v.toFixed(2)+"%";
               };
               // Narrative defaults to percentage-based comments rather than
@@ -3977,7 +3993,15 @@ export default function MediaOnGas(){
                     geoLine+=". That bottom-of-funnel concentration is the signal to lean into, it shows where the message converts fastest.";
                     lines.push(geoLine);
                   }
-                  var skewTarget=(convAge&&convGen?convAge+" "+convGen+" audiences in ":"")+(convProv||"the top-converting regions")+(clickProv&&clickProv!==convProv?" and "+clickProv:"");
+                  // Sentence built in three parts so the grammar stays clean
+                  // whether we have the (age+gender), province, both, or
+                  // neither. The segment qualifier ("25-34 female audiences")
+                  // falls back to "the top-converting audience" when the
+                  // age/gender pair is missing, so the sentence never reads
+                  // as a bare province list.
+                  var segSubject=(convAge&&convGen)?convAge+" "+convGen+" audiences":"the top-converting audience";
+                  var geoQualifier=convProv?" in "+convProv+(clickProv&&clickProv!==convProv?" and "+clickProv:""):(clickProv?" in "+clickProv:"");
+                  var skewTarget=segSubject+geoQualifier;
                   lines.push("The recommendation for the next cycle is a budget weighting that tilts a larger share toward "+skewTarget+", stacked on top of the broader audience that is already running. This compounds efficiency on the segment most likely to convert while maintaining the reach platforms that keep the top of funnel warm and ensure the high-propensity segment has a steady supply of first-touch impressions.");
                   if(mobileConv>0){
                     lines.push("Mobile carries "+mobileConv.toFixed(2)+"% of conversions, so mobile-first creative and mobile-optimised landing pages stay the baseline standard for everything that follows.");

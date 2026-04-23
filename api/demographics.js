@@ -551,7 +551,14 @@ export default async function handler(req, res) {
   }
 
   var principal = req.authPrincipal || { role: "admin" };
-  var cacheKey = DEMO_CACHE_VERSION + "|" + from + "|" + to + "|" + (principal.role || "admin");
+  // Cache key must include the client's specific campaign allowlist, not just
+  // the role tag, otherwise two different clients both hitting role==="client"
+  // would share a cache slot and see each other's filtered data. Admin tokens
+  // get a shared slot since the unfiltered payload is identical for all admins.
+  var scopeKey = principal.role === "client"
+    ? (principal.allowedCampaignIds || []).map(String).sort().join(",")
+    : "admin";
+  var cacheKey = DEMO_CACHE_VERSION + "|" + from + "|" + to + "|" + (principal.role || "admin") + "|" + scopeKey;
   var cached = demoCache[cacheKey];
   if (cached && Date.now() - cached.ts < DEMO_CACHE_TTL_MS) {
     return res.status(200).json(cached.data);

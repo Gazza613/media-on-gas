@@ -9,6 +9,14 @@ export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
   if (!validateDates(req, res)) return;
+  // Admin-only, raw TikTok Business API proxy with no per-campaign scope
+  // filter. Clients go through /api/campaigns + /api/ads which apply their
+  // token's campaign allowlist.
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role !== "admin") {
+    res.status(403).json({ error: "Admin-only endpoint" });
+    return;
+  }
   const token = process.env.TIKTOK_ACCESS_TOKEN;
   const clientSlug = req.query.client || "mtn-momo";
   if (ALLOWED_CLIENTS.indexOf(clientSlug) < 0) { res.status(400).json({ error: "Invalid client" }); return; }
