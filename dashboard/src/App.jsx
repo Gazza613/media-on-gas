@@ -4419,25 +4419,30 @@ export default function MediaOnGas(){
             var renderProvinceRanks=function(stage){
               var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
               regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
-              var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
-              var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
-              var max=ranked.length?ranked[0].val:0;
-              if(ranked.length===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No regional data</div>;
-              var medal=function(i){return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
+              // Show ALL 9 provinces ranked by value — never an empty state so long as the map is showing.
+              var all=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).sort(function(a,b){return b.val-a.val;});
+              var withVal=all.filter(function(x){return x.val>0;});
+              var sumAll=withVal.reduce(function(s,r){return s+r.val;},0);
+              var max=withVal.length?withVal[0].val:0;
+              var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
               return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"20px 20px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Top Provinces</div>
-                {ranked.slice(0,9).map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=sumAll>0?(r.val/sumAll*100):0;var col=medal(i);return <div key={r.name} style={{marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Top Provinces</div>
+                  <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmtAbbr(sumAll)} total</div>
+                </div>
+                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=sumAll>0?(r.val/sumAll*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+fmt(r.val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+share.toFixed(1)+"% share)":"");return <div key={r.name} title={tip} style={{marginBottom:9,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:18,height:18,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618"}}>{i+1}</div>
-                      <span style={{color:"#fff",fontWeight:700}}>{r.name}</span>
+                      <div style={{width:18,height:18,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:hasVal?"#0a0618":"#8b7fa3"}}>{i+1}</div>
+                      <span style={{color:hasVal?"#fff":"#8b7fa3",fontWeight:700}}>{r.name}</span>
                     </div>
-                    <div><span style={{color:col,fontWeight:900}}>{fmtAbbr(r.val)}</span> <span style={{color:P.sub,fontWeight:600}}>· {share.toFixed(1)}%</span></div>
+                    <div><span style={{color:hasVal?col:"#5c4f72",fontWeight:900}}>{fmtAbbr(r.val)}</span> <span style={{color:P.sub,fontWeight:600}}>· {hasVal?share.toFixed(1)+"%":"0%"}</span></div>
                   </div>
-                  <div style={{height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)",borderRadius:4,boxShadow:"0 0 8px "+col+"55"}}></div>
+                  <div style={{height:8,background:"rgba(255,255,255,0.04)",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:4,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
+                {sumAll===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded by province for this stage. Try switching to another stage above.</div>}
               </div>;
             };
 
@@ -4448,7 +4453,7 @@ export default function MediaOnGas(){
               var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
               var total=ageOrder.reduce(function(s,a){return s+sums[a];},0);
               return <div style={{padding:"6px 0"}}>
-                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=total>0?(v/total*100):0;return <div key={a} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=total>0?(v/total*100):0;var tip=a+" — "+fmt(v)+" "+stage.label.toLowerCase()+(total>0?" ("+share.toFixed(1)+"% share)":"");return <div key={a} title={tip} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{width:60,fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,textAlign:"right"}}>{a}</div>
                   <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
                     <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",transition:"width 0.8s ease"}}></div>
@@ -4525,7 +4530,7 @@ export default function MediaOnGas(){
               return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
                 <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Ads Served</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-                  {meta.map(function(m){var d=agg[m.k];var share=totalImp>0?(d.imp/totalImp*100):0;return <div key={m.k} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"16px 16px",position:"relative",overflow:"hidden"}}>
+                  {meta.map(function(m){var d=agg[m.k];var share=totalImp>0?(d.imp/totalImp*100):0;var cpm=d.imp>0?(d.spend/d.imp*1000):0;var cpc=d.clk>0?(d.spend/d.clk):0;var tip=m.k+" — "+fmt(d.imp)+" ads served ("+share.toFixed(1)+"% share) · "+fmt(d.clk)+" clicks · "+fR(d.spend)+" spend"+(cpm>0?" · "+fR(cpm)+" CPM":"")+(cpc>0?" · "+fR(cpc)+" CPC":"");return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"16px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                     <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                       <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
@@ -4557,7 +4562,7 @@ export default function MediaOnGas(){
               var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
               if(total===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device data</div>;
               return <div>
-                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=total>0?(d.value/total*100):0;return <div key={d.key} style={{marginBottom:12}}>
+                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=total>0?(d.value/total*100):0;var tip=d.name+" — "+fmt(d.value)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share)";return <div key={d.key} title={tip} style={{marginBottom:12,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{width:10,height:10,borderRadius:"50%",background:d.color,boxShadow:"0 0 10px "+d.color+"88"}}></span>
@@ -4566,7 +4571,7 @@ export default function MediaOnGas(){
                     <div><span style={{color:d.color,fontWeight:900,fontSize:14}}>{fmtAbbr(d.value)}</span> <span style={{color:P.sub,fontWeight:600,fontSize:11}}>· {share.toFixed(0)}%</span></div>
                   </div>
                   <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55"}}></div>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
               </div>;
@@ -4619,7 +4624,7 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12}}>
-                  {top.map(function(c,i){var pct=maxImps>0?(c.impressions/maxImps)*100:0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;return <div key={c.name} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"30",borderLeft:"3px solid "+medal,borderRadius:"0 12px 12px 0",padding:"14px 16px",position:"relative",overflow:"hidden"}}>
+                  {top.map(function(c,i){var pct=maxImps>0?(c.impressions/maxImps)*100:0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var ctr=c.impressions>0?(c.clicks/c.impressions*100):0;var cpm=c.impressions>0?(c.spend/c.impressions*1000):0;var tip=c.name+" — "+fmt(c.impressions)+" ads served · "+fmt(c.clicks)+" clicks ("+ctr.toFixed(2)+"% CTR) · "+fmt(c.conv)+" conv · "+fR(c.spend)+" spend"+(cpm>0?" · "+fR(cpm)+" CPM":"");return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"30",borderLeft:"3px solid "+medal,borderRadius:"0 12px 12px 0",padding:"14px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+P.gd+"30";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                     <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"18,transparent 80%)",pointerEvents:"none"}}></div>
                     <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -4662,7 +4667,7 @@ export default function MediaOnGas(){
               var total=gs.female+gs.male;
               if(total===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender data for this stage</div>;
               var fShare=gs.female/total*100;var mShare=gs.male/total*100;
-              var row=function(name,val,share,col,bg){return <div style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden"}}>
+              var row=function(name,val,share,col,bg){var tip=name+" — "+fmt(val)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share)";return <div title={tip} style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                 <div style={{position:"absolute",top:0,right:0,width:84,height:84,background:"radial-gradient(circle at 70% 30%,"+col+"22,transparent 70%)",pointerEvents:"none"}}></div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -4682,7 +4687,7 @@ export default function MediaOnGas(){
             return <div>
               {/* Funnel overview strip — 3 stage totals at a glance */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:22}}>
-                {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.conversion:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}return <div key={s.key} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px"}}>
+                {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.conversion:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}var tip=s.title+" — "+fmt(v)+" "+s.label.toLowerCase()+(nextStage&&v>0?" · "+dropRate.toFixed(2)+"% progress to "+nextStage.title.toLowerCase():"")+". Click the toggle below to drill into this stage.";return <div key={s.key} title={tip} onClick={function(){setDemoMetric(s.key);}} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px",cursor:"pointer",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 10px 30px "+s.accent+"25";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                     <div style={{width:32,height:32,borderRadius:10,background:s.accent+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(s.accent,16)}</div>
                     <div style={{fontSize:10,color:s.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>{s.title}</div>
