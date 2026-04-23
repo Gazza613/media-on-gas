@@ -4292,7 +4292,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {tab==="demographics"&&(<div>
-          <SH icon={Ic.globe(P.cyan,20)} title="Demographics" sub={"Age, gender, location and device for "+df+" to "+dt} accent={P.cyan}/>
+          <SH icon={Ic.globe(P.cyan,20)} title="Demographic Funnel" sub={"Who saw, who engaged, who converted  ·  "+df+" to "+dt} accent={P.cyan}/>
           {demoLoading&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"54px 20px",textAlign:"center",color:P.dim,fontFamily:ff}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
               <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.cyan,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
@@ -4306,221 +4306,338 @@ export default function MediaOnGas(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
             var inSel=function(r){return selSet[String(r.campaignId||"")]||selSet[String(r.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")];};
-            var agRows=(demoData.ageGender||[]).filter(inSel);
+            var agRowsRaw=(demoData.ageGender||[]).filter(inSel);
             var regRows=(demoData.region||[]).filter(inSel);
             var devRows=(demoData.device||[]).filter(inSel);
             var cityRows=(demoData.googleCity||[]).filter(inSel);
+
+            // Strip Unknown age / gender rows — they pollute the
+            // visualisation without adding signal (Meta sometimes returns
+            // 'unknown' for users with a blocked profile).
+            var ageOrder=["18-24","25-34","35-44","45-54","55-64","65+"];
+            var genderOrder=["female","male"];
+            var genderLabel={female:"Female",male:"Male"};
+            var agRows=agRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
+
             if(agRows.length===0&&regRows.length===0&&devRows.length===0&&cityRows.length===0){
               return <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
             }
-            /* ═══ METRIC PICKER ═══ */
-            var metricOptions=[
-              {k:"impressions",label:"Ads Served",accent:P.cyan,field:function(r){return r.impressions||0;}},
-              {k:"clicks",label:"Clicks",accent:P.mint,field:function(r){return r.clicks||0;}},
-              {k:"conv",label:"Conversions",accent:P.rose,field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
-            ];
-            var curMetric=demoMetric||"impressions";
-            var metric=metricOptions.filter(function(o){return o.k===curMetric;})[0]||metricOptions[0];
 
-            /* ═══ 1. AGE × GENDER HEATMAP ═══ */
-            var ageOrder=["13-17","18-24","25-34","35-44","45-54","55-64","65+"];
-            var genderOrder=["female","male","unknown"];
-            var genderLabel={female:"Female",male:"Male",unknown:"Unknown"};
-            var agMatrix={};ageOrder.forEach(function(a){agMatrix[a]={};genderOrder.forEach(function(g){agMatrix[a][g]=0;});});
-            var agTotal=0;
-            agRows.forEach(function(r){
-              var age=String(r.age||"unknown");
-              var gen=String(r.gender||"unknown").toLowerCase();
-              if(ageOrder.indexOf(age)<0)return;
-              if(genderOrder.indexOf(gen)<0)gen="unknown";
-              var v=metric.field(r);
-              agMatrix[age][gen]+=v;
-              agTotal+=v;
-            });
-            var agMax=0;ageOrder.forEach(function(a){genderOrder.forEach(function(g){if(agMatrix[a][g]>agMax)agMax=agMatrix[a][g];});});
-            var heatCell=function(val){
-              if(agMax===0)return "rgba(255,255,255,0.03)";
-              var intensity=val/agMax;
-              var alpha=0.08+intensity*0.82;
-              return "rgba(34,211,238,"+alpha.toFixed(3)+")";
+            // Metric fields per funnel stage.
+            var stageDef={
+              awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel, who saw your ads",field:function(r){return r.impressions||0;}},
+              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel, who responded",field:function(r){return r.clicks||0;}},
+              conversion:{key:"conv",label:"Conversions",costLabel:"Cost Per Conversion",accent:P.rose,accentDeep:"#be123c",icon:Ic.target,title:"Conversion",subtitle:"Bottom of funnel, who actually converted",field:function(r){var rs=r.results||{};return (rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);}}
             };
 
-            /* ═══ 2. PROVINCE MAP (SA 9 provinces) ═══ */
-            // Simplified SVG polygons. Intended as a visual anchor, not a
-            // cartographic reference — approximate relative size + position.
+            // Pre-compute per-stage totals across all demographic rows.
+            var stageTotal=function(stage){var s=0;agRows.forEach(function(r){s+=stage.field(r);});return s;};
+            var stageSpend=function(){var s=0;agRows.forEach(function(r){s+=parseFloat(r.spend||0);});return s;};
+            var totImps=stageTotal(stageDef.awareness);
+            var totClicks=stageTotal(stageDef.engagement);
+            var totConv=stageTotal(stageDef.conversion);
+            var totSpend=stageSpend();
+
+            // Reusable helpers.
+            var fmtAbbr=function(n){n=parseFloat(n||0);if(n>=1e6)return (n/1e6).toFixed(1)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toString();};
+
+            // Province paths (simplified SA provinces, viewBox 0 0 580 550).
             var provincePaths={
-              "Northern Cape":"M30,110 L220,130 L230,240 L250,300 L180,350 L60,370 L20,280 Z",
-              "Western Cape":"M60,370 L180,350 L220,430 L160,495 L50,495 L15,420 Z",
-              "Eastern Cape":"M220,430 L250,300 L350,320 L420,380 L460,465 L220,495 L180,495 L160,495 Z",
-              "Free State":"M250,300 L350,260 L380,320 L350,320 Z",
-              "Gauteng":"M350,210 L400,210 L400,245 L360,255 L340,240 Z",
-              "North West":"M220,130 L350,130 L370,210 L350,260 L250,300 L230,240 Z",
-              "Limpopo":"M340,40 L520,60 L520,160 L430,170 L340,130 L320,80 Z",
-              "Mpumalanga":"M430,170 L520,160 L530,240 L460,300 L400,290 L400,245 Z",
-              "KwaZulu-Natal":"M400,290 L460,300 L500,380 L460,465 L420,380 L380,340 L380,320 Z"
+              "Northern Cape":"M30,120 L230,140 L240,260 L260,320 L190,370 L70,385 L25,285 L18,180 Z",
+              "Western Cape":"M70,385 L190,370 L230,450 L170,510 L55,510 L18,430 Z",
+              "Eastern Cape":"M230,450 L260,320 L360,340 L430,400 L470,480 L230,510 L170,510 Z",
+              "Free State":"M260,320 L360,270 L390,335 L360,345 Z",
+              "Gauteng":"M360,220 L410,220 L408,258 L368,268 L350,250 Z",
+              "North West":"M230,140 L360,140 L380,220 L360,270 L260,320 L240,260 Z",
+              "Limpopo":"M350,50 L530,70 L530,170 L440,180 L350,140 L330,90 Z",
+              "Mpumalanga":"M440,180 L530,170 L540,255 L470,315 L410,300 L408,258 Z",
+              "KwaZulu-Natal":"M410,300 L470,315 L510,395 L470,480 L430,400 L390,345 L390,335 Z"
             };
-            var provTotals={};Object.keys(provincePaths).forEach(function(p){provTotals[p]={impressions:0,clicks:0,conv:0,spend:0};});
-            var otherProv={impressions:0,clicks:0,conv:0,spend:0,count:0};
-            regRows.forEach(function(r){
-              var pn=String(r.region||"").trim();
-              if(!provTotals[pn]){otherProv.impressions+=r.impressions||0;otherProv.clicks+=r.clicks||0;otherProv.spend+=parseFloat(r.spend||0);var rs=r.results||{};otherProv.conv+=(rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);otherProv.count++;return;}
-              provTotals[pn].impressions+=r.impressions||0;
-              provTotals[pn].clicks+=r.clicks||0;
-              provTotals[pn].spend+=parseFloat(r.spend||0);
-              var rs=r.results||{};
-              provTotals[pn].conv+=(rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);
-            });
-            var provMax=0;Object.keys(provTotals).forEach(function(p){var v=provTotals[p][curMetric]||0;if(v>provMax)provMax=v;});
-            var provFill=function(val){if(provMax===0)return"rgba(34,211,238,0.08)";var i=val/provMax;var alpha=0.15+i*0.78;return"rgba(34,211,238,"+alpha.toFixed(3)+")";};
-            var provStroke=function(val){if(provMax===0)return"rgba(34,211,238,0.25)";return"rgba(34,211,238,0.55)";};
-            var rankedProvinces=Object.keys(provTotals).map(function(p){return{name:p,val:provTotals[p][curMetric]||0,impressions:provTotals[p].impressions,clicks:provTotals[p].clicks,conv:provTotals[p].conv,spend:provTotals[p].spend};}).sort(function(a,b){return b.val-a.val;});
+            var provCenters={
+              "Northern Cape":{x:130,y:240,abbr:"N. Cape"},
+              "Western Cape":{x:115,y:445,abbr:"W. Cape"},
+              "Eastern Cape":{x:315,y:440,abbr:"E. Cape"},
+              "Free State":{x:315,y:305,abbr:"Free State"},
+              "Gauteng":{x:378,y:242,abbr:"Gauteng"},
+              "North West":{x:290,y:210,abbr:"N. West"},
+              "Limpopo":{x:430,y:110,abbr:"Limpopo"},
+              "Mpumalanga":{x:475,y:235,abbr:"Mpuma"},
+              "KwaZulu-Natal":{x:445,y:390,abbr:"KZN"}
+            };
 
-            /* ═══ 3. DEVICE SPLIT ═══ */
-            var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="android_app"||s==="iphone"||s==="ipad")return s==="ipad"?"tablet":"mobile";if(s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
-            var devTotals={mobile:{impressions:0,clicks:0,conv:0,spend:0},desktop:{impressions:0,clicks:0,conv:0,spend:0},tablet:{impressions:0,clicks:0,conv:0,spend:0},ctv:{impressions:0,clicks:0,conv:0,spend:0},other:{impressions:0,clicks:0,conv:0,spend:0}};
-            devRows.forEach(function(r){var d=deviceNorm(r.device);if(!devTotals[d])d="other";devTotals[d].impressions+=r.impressions||0;devTotals[d].clicks+=r.clicks||0;devTotals[d].spend+=parseFloat(r.spend||0);var rs=r.results||{};devTotals[d].conv+=(rs.leads||0)+(rs.appInstalls||0)+(rs.follows||0)+(rs.pageLikes||0);});
-            var devList=Object.keys(devTotals).filter(function(d){return devTotals[d].impressions>0;}).map(function(d){return{name:d,label:d==="mobile"?"Mobile":d==="desktop"?"Desktop":d==="tablet"?"Tablet":d==="ctv"?"Connected TV":"Other",impressions:devTotals[d].impressions,clicks:devTotals[d].clicks,conv:devTotals[d].conv,spend:devTotals[d].spend,color:d==="mobile"?P.cyan:d==="desktop"?P.orchid:d==="tablet"?P.solar:d==="ctv"?P.fuchsia:P.sub};}).sort(function(a,b){return b.impressions-a.impressions;});
-            var devGrandImps=devList.reduce(function(a,r){return a+r.impressions;},0);
-            var devGrandClicks=devList.reduce(function(a,r){return a+r.clicks;},0);
-            var devGrandConv=devList.reduce(function(a,r){return a+r.conv;},0);
-
-            /* ═══ 4. PLATFORM × AGE OVERLAY ═══ */
-            var platformColor={"Meta":P.fb,"TikTok":P.tt,"Google":P.gd};
-            var platAgeMatrix={};
-            agRows.forEach(function(r){
-              var plat=r.platform;var age=String(r.age||"unknown");
-              if(ageOrder.indexOf(age)<0)return;
-              if(!platAgeMatrix[plat])platAgeMatrix[plat]={};
-              platAgeMatrix[plat][age]=(platAgeMatrix[plat][age]||0)+metric.field(r);
-            });
-            var platAgeData=ageOrder.map(function(a){var o={age:a};Object.keys(platAgeMatrix).forEach(function(p){o[p]=platAgeMatrix[p][a]||0;});return o;});
-
-            /* ═══ 5. GOOGLE-ONLY CITY VIEW ═══ */
-            var cityAgg={};
-            cityRows.forEach(function(r){
-              var c=String(r.city||"").trim();if(!c)return;
-              if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0,conv:0,spend:0};
-              cityAgg[c].impressions+=r.impressions||0;
-              cityAgg[c].clicks+=r.clicks||0;
-              cityAgg[c].spend+=parseFloat(r.spend||0);
-              var rs=r.results||{};
-              cityAgg[c].conv+=(rs.leads||0)+(rs.appInstalls||0);
-            });
-            var topCities=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b[curMetric]-a[curMetric];}).slice(0,15);
-
-            /* ═══ INSIGHT NARRATIVE ═══ */
-            var narrative=(function(){
-              var lines=[];
-              // Standout age/gender
-              var best={v:0,age:"",gen:""};
-              ageOrder.forEach(function(a){genderOrder.forEach(function(g){if(agMatrix[a][g]>best.v){best.v=agMatrix[a][g];best.age=a;best.gen=g;}});});
-              if(best.v>0)lines.push("The audience is leaning "+best.age+" "+genderLabel[best.gen].toLowerCase()+", which drove "+(agTotal>0?(best.v/agTotal*100).toFixed(0):"0")+"% of "+metric.label.toLowerCase()+" across all campaigns.");
-              // Standout province
-              var topProv=rankedProvinces[0];
-              if(topProv&&topProv.val>0){var provTotal=rankedProvinces.reduce(function(s,p){return s+p.val;},0);lines.push(topProv.name+" is the leading province with "+fmt(topProv.val)+" "+metric.label.toLowerCase()+" ("+(provTotal>0?(topProv.val/provTotal*100).toFixed(0):"0")+"% share), followed by "+(rankedProvinces[1]?rankedProvinces[1].name:"nothing")+(rankedProvinces[1]?" at "+fmt(rankedProvinces[1].val):"")+".");}
-              // Device call-out
-              if(devList.length>0){var topDev=devList[0];lines.push(topDev.label+" delivered "+(devGrandImps>0?(topDev.impressions/devGrandImps*100).toFixed(0):"0")+"% of impressions and "+(devGrandConv>0?(topDev.conv/devGrandConv*100).toFixed(0):"0")+"% of conversions, confirming this is where the audience actually converts.");}
-              // Google city standout
-              if(topCities.length>0){lines.push("On Google Ads, "+topCities[0].name+" tops the city view with "+fmt(topCities[0][curMetric])+" "+metric.label.toLowerCase()+(topCities[1]?" ahead of "+topCities[1].name+" and "+(topCities[2]?topCities[2].name:"others"):"")+".");}
-              return lines.join(" ");
-            })();
-
-            return <div>
-              {/* Metric picker */}
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-                <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700,textTransform:"uppercase"}}>View By</span>
-                {metricOptions.map(function(o){var act=curMetric===o.k;return <button key={o.k} onClick={function(){setDemoMetric(o.k);}} style={{background:act?o.accent:"transparent",border:"1px solid "+(act?o.accent:P.rule),borderRadius:10,padding:"7px 14px",color:act?"#fff":P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>{o.label}</button>;})}
-              </div>
-
-              {/* Age × Gender Heatmap */}
-              <div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.users(P.cyan,18)}<span style={{fontSize:13,fontWeight:900,color:P.cyan,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Age × Gender Heatmap</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>Metric: {metric.label} — total {fmt(agTotal)}</span></div>
-                {agTotal===0?<div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No age × gender data available for the selected campaigns on this metric.</div>:<div style={{display:"grid",gridTemplateColumns:"100px repeat(3,1fr)",gap:4}}>
-                  <div></div>
-                  {genderOrder.map(function(g){return <div key={g} style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",textAlign:"center",padding:"8px 0"}}>{genderLabel[g]}</div>;})}
-                  {ageOrder.map(function(a){return [<div key={"l"+a} style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,padding:"14px 8px",textAlign:"right"}}>{a}</div>].concat(genderOrder.map(function(g){var v=agMatrix[a][g];var pct=agTotal>0?(v/agTotal*100):0;return <div key={a+g} title={a+" "+genderLabel[g]+": "+fmt(v)+" ("+pct.toFixed(1)+"%)"} style={{background:heatCell(v),border:"1px solid rgba(255,255,255,0.06)",borderRadius:6,padding:"14px 8px",textAlign:"center",minHeight:56,display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <div style={{fontSize:14,fontWeight:900,color:v>0?P.txt:P.dim,fontFamily:fm,lineHeight:1}}>{v>0?fmt(v):"—"}</div>
-                    {v>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.7)",fontFamily:fm,marginTop:3}}>{pct.toFixed(1)+"%"}</div>}
-                  </div>;}));})}
+            // Shared province map render. Called once per funnel stage,
+            // coloured in that stage's accent.
+            var renderProvinceMap=function(stage){
+              var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
+              regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
+              var max=0;Object.keys(totals).forEach(function(p){if(totals[p]>max)max=totals[p];});
+              var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
+              var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
+              var rankMap={};ranked.forEach(function(r,i){rankMap[r.name]=i;});
+              var fillFor=function(val){if(max===0)return stage.accent+"12";var i=val/max;return "url(#provGrad_"+stage.key+"_"+Math.round(i*100)+")";};
+              var intensityAlpha=function(val){if(max===0)return 0.08;return 0.2+(val/max)*0.75;};
+              var rankColor=function(r){return r===0?"#FFD700":r===1?"#C0C0C0":r===2?"#CD7F32":stage.accent;};
+              return <div>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 30% 20%,"+stage.accent+"14,transparent 60%),radial-gradient(ellipse at 70% 80%,"+stage.accentDeep+"20,transparent 55%),#06020e",borderRadius:14,padding:"14px",border:"1px solid "+stage.accent+"22",overflow:"hidden"}}>
+                  <svg viewBox="0 0 580 550" width="100%" height="auto" style={{display:"block",filter:"drop-shadow(0 8px 20px rgba(0,0,0,0.5))"}}>
+                    <defs>
+                      <radialGradient id={"provGrad_"+stage.key+"_light"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.95"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.6"/></radialGradient>
+                      <radialGradient id={"provGrad_"+stage.key+"_med"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.55"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.3"/></radialGradient>
+                      <radialGradient id={"provGrad_"+stage.key+"_dim"} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor={stage.accent} stopOpacity="0.2"/><stop offset="100%" stopColor={stage.accentDeep} stopOpacity="0.08"/></radialGradient>
+                      <filter id={"glow_"+stage.key} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                      <pattern id={"dots_"+stage.key} patternUnits="userSpaceOnUse" width="8" height="8"><circle cx="1" cy="1" r="0.6" fill={stage.accent+"30"}/></pattern>
+                    </defs>
+                    <rect x="0" y="0" width="580" height="550" fill={"url(#dots_"+stage.key+")"}/>
+                    {/* Province paths */}
+                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var i=max>0?val/max:0;var gradKey=i>0.66?"_light":i>0.33?"_med":"_dim";return <path key={p} d={provincePaths[p]} fill={val===0?"#1a0f2a":"url(#provGrad_"+stage.key+gradKey+")"} stroke={val>0?stage.accent:"rgba(255,255,255,0.08)"} strokeWidth={val>0?1.5:0.8} opacity={val===0?0.35:1} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
+                    {/* Labels */}
+                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var isTop3=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
+                      <text x={c.x} y={c.y-4} textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:800,fill:"rgba(255,255,255,0.92)",letterSpacing:0.8}}>{c.abbr}</text>
+                      {val>0&&<text x={c.x} y={c.y+12} textAnchor="middle" style={{fontSize:12,fontFamily:fm,fontWeight:900,fill:isTop3?rankColor(rnk):stage.accent,filter:"drop-shadow(0 1px 3px rgba(0,0,0,0.8))"}}>{fmtAbbr(val)}</text>}
+                      {isTop3&&<g transform={"translate("+(c.x+24)+","+(c.y-16)+")"}><circle cx="0" cy="0" r="9" fill={rankColor(rnk)} stroke="rgba(0,0,0,0.4)" strokeWidth="1"/><text x="0" y="3" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                    </g>;})}
+                    {/* Compass rose */}
+                    <g transform="translate(520,40)" style={{pointerEvents:"none"}}>
+                      <circle r="22" fill="rgba(0,0,0,0.4)" stroke={stage.accent+"60"} strokeWidth="1"/>
+                      <path d="M0,-16 L3,0 L0,16 L-3,0 Z" fill={stage.accent} opacity="0.85"/>
+                      <path d="M-16,0 L0,3 L16,0 L0,-3 Z" fill={stage.accent+"70"}/>
+                      <text x="0" y="-25" textAnchor="middle" style={{fontSize:8,fontFamily:fm,fontWeight:800,fill:stage.accent,letterSpacing:1}}>N</text>
+                    </g>
+                  </svg>
+                  {/* Legend strip under the map */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"0 6px",fontSize:9,fontFamily:fm,color:"rgba(255,255,255,0.6)",letterSpacing:1}}>
+                    <span>LOW</span>
+                    <div style={{flex:1,height:6,borderRadius:3,background:"linear-gradient(90deg,"+stage.accentDeep+"20,"+stage.accent+"ee)"}}></div>
+                    <span>HIGH{max>0?" · "+fmtAbbr(max):""}</span>
+                  </div>
+                </div>
+                {/* Top 3 mini-card strip */}
+                {ranked.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(3,ranked.length)+",1fr)",gap:10,marginTop:12}}>
+                  {ranked.slice(0,3).map(function(r,i){var share=sumAll>0?(r.val/sumAll*100):0;var medal=rankColor(i);return <div key={r.name} style={{background:"linear-gradient(135deg,"+medal+"12,transparent 80%)",border:"1px solid "+medal+"45",borderLeft:"3px solid "+medal,borderRadius:"0 10px 10px 0",padding:"10px 12px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><div style={{width:18,height:18,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div><div style={{fontSize:10,color:medal,fontFamily:fm,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{r.name}</div></div>
+                    <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fmtAbbr(r.val)}</div>
+                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:3}}>{share.toFixed(1)+"% share"}</div>
+                  </div>;})}
                 </div>}
-              </div>
+              </div>;
+            };
 
-              {/* Province Map */}
-              <div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.globe(P.cyan,18)}<span style={{fontSize:13,fontWeight:900,color:P.cyan,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Province Performance Map</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{metric.label} by province — hover to inspect</span></div>
-                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:24,alignItems:"start"}}>
-                  <div>
-                    <svg viewBox="0 0 560 530" width="100%" height="auto" style={{background:"rgba(0,0,0,0.25)",borderRadius:12,display:"block"}}>
-                      {Object.keys(provincePaths).map(function(p){var val=provTotals[p][curMetric]||0;return <path key={p} d={provincePaths[p]} fill={provFill(val)} stroke={provStroke(val)} strokeWidth="1.3" style={{transition:"fill 0.3s"}}><title>{p+": "+fmt(val)+" "+metric.label.toLowerCase()+" | "+fR(provTotals[p].spend)+" spend"}</title></path>;})}
-                      {Object.keys(provincePaths).map(function(p){var bbMatch=/M(\d+),(\d+)/.exec(provincePaths[p]);var cx=200,cy=250;if(p==="Northern Cape"){cx=120;cy=240;}else if(p==="Western Cape"){cx=110;cy=430;}else if(p==="Eastern Cape"){cx=300;cy=430;}else if(p==="Free State"){cx=310;cy=295;}else if(p==="Gauteng"){cx=370;cy=230;}else if(p==="North West"){cx=280;cy=200;}else if(p==="Limpopo"){cx=420;cy=100;}else if(p==="Mpumalanga"){cx=465;cy=220;}else if(p==="KwaZulu-Natal"){cx=435;cy=370;}return <g key={"l"+p} style={{pointerEvents:"none"}}><text x={cx} y={cy} textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:800,fill:"rgba(255,255,255,0.88)",letterSpacing:0.5}}>{p==="KwaZulu-Natal"?"KZN":p==="Northern Cape"?"N. Cape":p==="Western Cape"?"W. Cape":p==="Eastern Cape"?"E. Cape":p==="North West"?"N. West":p}</text><text x={cx} y={cy+12} textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:900,fill:P.cyan}}>{fmt(provTotals[p][curMetric]||0)}</text></g>;})}
-                    </svg>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,fontSize:9,fontFamily:fm,color:P.sub,letterSpacing:1}}>
-                      <span>Low</span>
-                      <div style={{flex:1,height:8,borderRadius:4,background:"linear-gradient(90deg,rgba(34,211,238,0.15),rgba(34,211,238,0.92))"}}></div>
-                      <span>High ({fmt(provMax)})</span>
+            // Horizontal bar renderer with gradient fill.
+            var renderAgeBars=function(stage){
+              var sums={};ageOrder.forEach(function(a){sums[a]=0;});
+              agRows.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
+              var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
+              var total=ageOrder.reduce(function(s,a){return s+sums[a];},0);
+              return <div style={{padding:"6px 0"}}>
+                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=total>0?(v/total*100):0;return <div key={a} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                  <div style={{width:60,fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,textAlign:"right"}}>{a}</div>
+                  <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",transition:"width 0.8s ease"}}></div>
+                    {v>0&&<div style={{position:"absolute",top:0,right:8,height:"100%",display:"flex",alignItems:"center",fontSize:10,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fmtAbbr(v)}</div>}
+                  </div>
+                  <div style={{width:52,textAlign:"right",fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700}}>{v>0?share.toFixed(0)+"%":"0"}</div>
+                </div>;})}
+              </div>;
+            };
+
+            // Gender donut (no Unknown). Uses Recharts PieChart.
+            var renderGenderDonut=function(stage){
+              var byGen={female:0,male:0};
+              agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(byGen[g]===undefined)return;byGen[g]+=stage.field(r);});
+              var total=byGen.female+byGen.male;
+              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No gender data</div>;
+              var data=[{name:"Female",value:byGen.female,color:"#ec4899"},{name:"Male",value:byGen.male,color:"#3b82f6"}];
+              return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                <ResponsiveContainer width="100%" height={210}>
+                  <PieChart>
+                    <defs>
+                      <radialGradient id={"dg_f_"+stage.key} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#f9a8d4"/><stop offset="100%" stopColor="#be185d"/></radialGradient>
+                      <radialGradient id={"dg_m_"+stage.key} cx="50%" cy="50%" r="60%"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#1e40af"/></radialGradient>
+                    </defs>
+                    <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={4} dataKey="value" stroke="rgba(0,0,0,0.35)" strokeWidth={2}>
+                      <Cell fill={"url(#dg_f_"+stage.key+")"}/>
+                      <Cell fill={"url(#dg_m_"+stage.key+")"}/>
+                    </Pie>
+                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{display:"flex",gap:18,marginTop:-14,fontSize:11,fontFamily:fm}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#ec4899",boxShadow:"0 0 8px #ec489980"}}></span><span style={{color:P.txt,fontWeight:700}}>F</span><span style={{color:P.sub}}>{fmtAbbr(byGen.female)}</span><span style={{color:P.dim}}>{"("+(byGen.female/total*100).toFixed(0)+"%)"}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 8px #3b82f680"}}></span><span style={{color:P.txt,fontWeight:700}}>M</span><span style={{color:P.sub}}>{fmtAbbr(byGen.male)}</span><span style={{color:P.dim}}>{"("+(byGen.male/total*100).toFixed(0)+"%)"}</span></div>
+                </div>
+              </div>;
+            };
+
+            // Device donut with gradient slices.
+            var renderDeviceDonut=function(stage){
+              var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
+              var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
+              devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
+              var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
+              var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
+              var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{name:labels[k],key:k,value:bucket[k],color:colors[k]};});
+              var total=data.reduce(function(s,d){return s+d.value;},0);
+              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No device data</div>;
+              return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                <ResponsiveContainer width="100%" height={210}>
+                  <PieChart>
+                    <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value" stroke="rgba(0,0,0,0.35)" strokeWidth={2}>{data.map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Pie>
+                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{display:"flex",gap:10,marginTop:-14,fontSize:10,fontFamily:fm,flexWrap:"wrap",justifyContent:"center"}}>{data.map(function(d){return <div key={d.name} style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:d.color}}></span><span style={{color:P.txt,fontWeight:700}}>{d.name}</span><span style={{color:P.dim}}>{(d.value/total*100).toFixed(0)+"%"}</span></div>;})}</div>
+              </div>;
+            };
+
+            // Single reusable funnel stage block.
+            var renderStage=function(stage,extra){
+              var total=stageTotal(stage);
+              var topCard=function(){
+                var best={val:0,age:"",gen:""};
+                agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});
+                return best;
+              };
+              var champ=topCard();
+              return <div style={{background:"linear-gradient(160deg,"+stage.accent+"14,"+stage.accentDeep+"08 60%,transparent)",borderRadius:22,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+stage.accent+"35",boxShadow:"0 12px 40px rgba(0,0,0,0.35),0 0 60px "+stage.accent+"12 inset"}}>
+                {/* Stage header */}
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14}}>
+                    <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,"+stage.accent+"30,"+stage.accentDeep+"18)",border:"1px solid "+stage.accent+"45",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 24px "+stage.accent+"30"}}>{stage.icon(stage.accent,22)}</div>
+                    <div>
+                      <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>{stage.title}</div>
+                      <div style={{fontSize:13,color:P.txt,fontFamily:ff,fontWeight:600,letterSpacing:0.3}}>{stage.subtitle}</div>
                     </div>
                   </div>
-                  <div>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Ranked Provinces</div>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm}}>
-                      <thead><tr><th style={{textAlign:"left",padding:"8px 6px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule}}>Province</th><th style={{textAlign:"right",padding:"8px 6px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule}}>{metric.label}</th><th style={{textAlign:"right",padding:"8px 6px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule}}>Spend</th></tr></thead>
-                      <tbody>{rankedProvinces.map(function(row,i){var share=provMax>0?(row.val/rankedProvinces.reduce(function(s,p){return s+p.val;},0)*100):0;return <tr key={row.name} style={{borderBottom:"1px solid "+P.rule+"60"}}>
-                        <td style={{padding:"8px 6px",color:P.txt,fontWeight:600,whiteSpace:"nowrap"}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:provFill(row.val),marginRight:8,verticalAlign:"middle"}}></span>{row.name}</td>
-                        <td style={{padding:"8px 6px",color:row.val>0?P.cyan:P.dim,fontWeight:800,textAlign:"right",fontFamily:fm}}>{fmt(row.val)}{row.val>0&&<div style={{fontSize:9,color:P.sub,fontWeight:500,marginTop:2}}>{share.toFixed(1)+"%"}</div>}</td>
-                        <td style={{padding:"8px 6px",color:P.sub,textAlign:"right"}}>{fR(row.spend)}</td>
-                      </tr>;})}</tbody>
-                    </table>
-                    {otherProv.count>0&&<div style={{marginTop:10,fontSize:10,color:P.dim,fontFamily:fm,fontStyle:"italic"}}>+ {fmt(otherProv[curMetric])} {metric.label.toLowerCase()} from {otherProv.count} non-SA / unclassified region row{otherProv.count===1?"":"s"}.</div>}
+                  <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>{stage.label}</div>
+                      <div style={{fontSize:30,fontWeight:900,color:stage.accent,fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 16px "+stage.accent+"44"}}>{fmtAbbr(total)}</div>
+                    </div>
+                    {champ.val>0&&<div style={{padding:"10px 14px",borderRadius:12,background:"rgba(0,0,0,0.3)",border:"1px solid "+stage.accent+"40"}}>
+                      <div style={{fontSize:8,color:stage.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Top Segment</div>
+                      <div style={{fontSize:13,color:P.txt,fontFamily:fm,fontWeight:900}}>{champ.age} · {genderLabel[champ.gen]}</div>
+                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2}}>{fmtAbbr(champ.val)+" "+stage.label.toLowerCase()}</div>
+                    </div>}
                   </div>
                 </div>
-              </div>
 
-              {/* Device Split */}
-              {devList.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.radar(P.orchid,18)}<span style={{fontSize:13,fontWeight:900,color:P.orchid,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Device Split</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.orchid+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>Where the audience actually converts</span></div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat("+devList.length+",1fr)",gap:14}}>
-                  {devList.map(function(d){var impsPct=devGrandImps>0?(d.impressions/devGrandImps*100):0;var clkPct=devGrandClicks>0?(d.clicks/devGrandClicks*100):0;var convPct=devGrandConv>0?(d.conv/devGrandConv*100):0;return <div key={d.name} style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+d.color+"30",borderLeft:"3px solid "+d.color,borderRadius:"0 14px 14px 0",padding:"18px 20px"}}>
-                    <div style={{fontSize:10,fontWeight:800,color:d.color,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>{d.label}</div>
-                    {[{l:"Ads Served",v:d.impressions,pct:impsPct},{l:"Clicks",v:d.clicks,pct:clkPct},{l:"Conversions",v:d.conv,pct:convPct}].map(function(row,i){return <div key={i} style={{marginBottom:10}}>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginBottom:3}}><span>{row.l}</span><span>{fmt(row.v)} ({row.pct.toFixed(0)}%)</span></div>
-                      <div style={{height:6,background:"rgba(0,0,0,0.4)",borderRadius:3,overflow:"hidden"}}><div style={{width:row.pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"cc,"+d.color+"ff)",transition:"width 0.6s"}}></div></div>
-                    </div>;})}
+                {/* Main grid: 2 columns, Age bars + Gender donut in row 1, Map + Device donut in row 2 */}
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:18,marginBottom:16}}>
+                  <div style={{background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.rule}}>
+                    <div style={{fontSize:10,color:P.sub,letterSpacing:2,fontFamily:fm,fontWeight:800,textTransform:"uppercase",marginBottom:12}}>{stage.label} by Age Group</div>
+                    {renderAgeBars(stage)}
+                  </div>
+                  <div style={{background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.rule}}>
+                    <div style={{fontSize:10,color:P.sub,letterSpacing:2,fontFamily:fm,fontWeight:800,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Gender Split</div>
+                    {renderGenderDonut(stage)}
+                  </div>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:18,marginBottom:16}}>
+                  <div>{renderProvinceMap(stage)}</div>
+                  <div style={{background:"rgba(0,0,0,0.25)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.rule,display:"flex",flexDirection:"column"}}>
+                    <div style={{fontSize:10,color:P.sub,letterSpacing:2,fontFamily:fm,fontWeight:800,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Device Mix</div>
+                    {renderDeviceDonut(stage)}
+                  </div>
+                </div>
+
+                {extra}
+
+                {/* Per-stage narrative */}
+                <Insight title={stage.title+" Read"} accent={stage.accent} icon={stage.icon(stage.accent,16)}>{(function(){
+                  var lines=[];
+                  var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});
+                  agRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});
+                  var topAge=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];
+                  var topAgeVal=ageSums[topAge]||0;
+                  var genSum={female:0,male:0};
+                  agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(genSum[g]===undefined)return;genSum[g]+=stage.field(r);});
+                  var genTotal=genSum.female+genSum.male;
+                  var femaleShare=genTotal>0?(genSum.female/genTotal*100):0;
+                  var provTotals={};regRows.forEach(function(r){var pn=String(r.region||"");if(!provincePaths[pn])return;if(!provTotals[pn])provTotals[pn]=0;provTotals[pn]+=stage.field(r);});
+                  var topProv=Object.keys(provTotals).sort(function(a,b){return provTotals[b]-provTotals[a];})[0];
+                  var devTotalsLine={mobile:0,desktop:0,tablet:0};
+                  var devNormLine=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0)return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";return "other";};
+                  devRows.forEach(function(r){var d=devNormLine(r.device);if(devTotalsLine[d]===undefined)return;devTotalsLine[d]+=stage.field(r);});
+                  var devSum=devTotalsLine.mobile+devTotalsLine.desktop+devTotalsLine.tablet;
+                  var mobileShare=devSum>0?(devTotalsLine.mobile/devSum*100):0;
+
+                  if(stage.key==="impressions"){
+                    if(total>0)lines.push(fmt(total)+" ads were served to the audience across the selected campaigns, establishing the reach baseline for everything that follows.");
+                    if(topAge&&topAgeVal>0){var ageShare=total>0?(topAgeVal/total*100).toFixed(0):"0";lines.push("The "+topAge+" age group absorbed "+ageShare+"% of those impressions, the single largest audience slice exposed to the brand this period.");}
+                    if(genTotal>0)lines.push("Gender split is "+femaleShare.toFixed(0)+"% female, "+(100-femaleShare).toFixed(0)+"% male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad audience targeting":femaleShare>55?", skewing female, worth checking whether this is intentional for the category":femaleShare<45?", skewing male, worth checking whether this is intentional for the category":"")+".");
+                    if(topProv)lines.push(topProv+" leads geographic reach, followed by the usual metro corridor, which is typical for a brand campaign in this market.");
+                    if(mobileShare>0)lines.push("Mobile accounts for "+mobileShare.toFixed(0)+"% of ads served"+(mobileShare>70?", a near-monopoly that means creative must be designed mobile-first, no exceptions":mobileShare>50?", confirming the campaign is meeting the audience where they actually are":", leaving room to lean further into mobile placements if efficiency supports it")+".");
+                  }else if(stage.key==="clicks"){
+                    if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push(fmt(total)+" click actions were recorded at a blended "+ctrBlended+"% click-through rate, the engagement signal the creative is earning.");}
+                    if(topAge&&topAgeVal>0){lines.push("The "+topAge+" bracket generated the highest click volume, the creative is landing hardest with this age, and reallocating spend here is the obvious scaling lever.");}
+                    if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"are driving a disproportionate share of clicks")+", which points to where the creative hook is resonating most.");
+                    if(topProv)lines.push(topProv+" also leads click engagement, which is a healthy pattern, the audience that sees the brand is the audience that responds.");
+                    if(mobileShare>0)lines.push("Mobile carries "+mobileShare.toFixed(0)+"% of click volume, meaning the thumb-stop creative is doing its job in feed.");
+                  }else{
+                    if(total>0){var cpa=total>0?totSpend/total:0;lines.push(fmt(total)+" conversions were delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines campaign return.");}
+                    if(champ.val>0&&champ.age){lines.push("The highest converting segment is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+" with "+fmt(champ.val)+" conversions, prime audience to scale, expand lookalikes from, and protect budget for.");}
+                    if(topProv)lines.push(topProv+" produced the most conversions by province, confirming geographic efficiency concentration and pointing to where media weight should sit next cycle.");
+                    if(mobileShare>0)lines.push("Mobile drives "+mobileShare.toFixed(0)+"% of conversions, the audience sees, engages, and converts all on the same device, continuous mobile journey optimisation pays compound returns.");
+                    if(total===0)lines.push("No conversions were recorded for the selected period yet, this can be expected for early-flight awareness campaigns or when the tracking pixel is not wired yet.");
+                  }
+                  return lines.join(" ");
+                })()}</Insight>
+              </div>;
+            };
+
+            // Google city view — visual leaderboard instead of table.
+            var renderCitiesBlock=function(){
+              var cityAgg={};
+              cityRows.forEach(function(r){var c=String(r.city||"").trim();if(!c)return;if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0,conv:0,spend:0};cityAgg[c].impressions+=r.impressions||0;cityAgg[c].clicks+=r.clicks||0;cityAgg[c].spend+=parseFloat(r.spend||0);var rs=r.results||{};cityAgg[c].conv+=(rs.leads||0)+(rs.appInstalls||0);});
+              var top=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b.impressions-a.impressions;}).slice(0,8);
+              if(top.length===0)return null;
+              var maxImps=Math.max.apply(null,top.map(function(c){return c.impressions;}));
+              return <div style={{background:"linear-gradient(135deg,"+P.gd+"10,transparent 60%),#06020e",borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.gd+"35",boxShadow:"0 0 30px "+P.gd+"10"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
+                  <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+P.gd+"30,"+P.gd+"10)",border:"1px solid "+P.gd+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.globe(P.gd,20)}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase"}}>Google Ads — City View</div>
+                    <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600}}>Genuine city-level granularity, Google Ads only</div>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12}}>
+                  {top.map(function(c,i){var pct=maxImps>0?(c.impressions/maxImps)*100:0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;return <div key={c.name} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"30",borderLeft:"3px solid "+medal,borderRadius:"0 12px 12px 0",padding:"14px 16px",position:"relative",overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"18,transparent 80%)",pointerEvents:"none"}}></div>
+                    <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div>
+                        <div style={{fontSize:12,color:P.txt,fontWeight:700,fontFamily:ff}}>{c.name}</div>
+                      </div>
+                      <div style={{fontSize:14,fontWeight:900,color:P.gd,fontFamily:fm}}>{fmtAbbr(c.impressions)}</div>
+                    </div>
+                    <div style={{position:"relative",display:"flex",gap:14,fontSize:10,fontFamily:fm,color:P.sub}}>
+                      <span><span style={{color:P.solar,fontWeight:700}}>{fmtAbbr(c.clicks)}</span> clicks</span>
+                      <span><span style={{color:P.rose,fontWeight:700}}>{fmtAbbr(c.conv)}</span> conv</span>
+                      <span><span style={{color:P.ember,fontWeight:700}}>{fR(c.spend)}</span></span>
+                    </div>
                   </div>;})}
                 </div>
-              </div>}
+              </div>;
+            };
 
-              {/* Platform × Age overlay */}
-              {Object.keys(platAgeMatrix).length>1&&<div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.chart(P.solar,18)}<span style={{fontSize:13,fontWeight:900,color:P.solar,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Platform by Age Group</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.solar+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>Which platform hits which age hardest</span></div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={platAgeData} barSize={28} margin={{top:10,right:24,left:0,bottom:10}}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
-                    <XAxis dataKey="age" tick={{fontSize:11,fill:P.txt,fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
-                    <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                    <Legend wrapperStyle={{fontSize:10,fontFamily:fm,paddingTop:8}}/>
-                    {Object.keys(platAgeMatrix).map(function(p){return <Bar key={p} dataKey={p} fill={platformColor[p]||P.ember} radius={[4,4,0,0]}/>;})}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>}
+            return <div>
+              {/* Funnel overview strip — 3 stage totals at a glance */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
+                {[stageDef.awareness,stageDef.engagement,stageDef.conversion].map(function(s){var v=stageTotal(s);var nextStage=s.key==="impressions"?stageDef.engagement:s.key==="clicks"?stageDef.conversion:null;var dropRate=0;if(nextStage){var nv=stageTotal(nextStage);dropRate=v>0?(nv/v*100):0;}return <div key={s.key} style={{background:"linear-gradient(135deg,"+s.accent+"18,"+s.accentDeep+"08 70%,transparent)",border:"1px solid "+s.accent+"40",borderLeft:"4px solid "+s.accent,borderRadius:"0 16px 16px 0",padding:"18px 22px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <div style={{width:32,height:32,borderRadius:10,background:s.accent+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>{s.icon(s.accent,16)}</div>
+                    <div style={{fontSize:10,color:s.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>{s.title}</div>
+                  </div>
+                  <div style={{fontSize:28,fontWeight:900,color:s.accent,fontFamily:fm,lineHeight:1,marginBottom:4,textShadow:"0 0 12px "+s.accent+"33"}}>{fmtAbbr(v)}</div>
+                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</div>
+                  {nextStage&&v>0&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.dim,fontFamily:fm}}>→ {dropRate.toFixed(2)+"%"} progress to {nextStage.title.toLowerCase()}</div>}
+                </div>;})}
+              </div>
 
-              {/* Google-only city view */}
-              {topCities.length>0&&<div style={{background:P.glass,borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.gd+"30"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>{Ic.target(P.gd,18)}<span style={{fontSize:13,fontWeight:900,color:P.gd,letterSpacing:3,fontFamily:ff,textTransform:"uppercase"}}>Google Ads — City View</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.gd+"40, transparent)"}}></div><span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>True city granularity, Google Ads only</span></div>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm}}>
-                  <thead><tr>{["City",metric.label,"Clicks","Conversions","Spend"].map(function(h,i){return <th key={i} style={{textAlign:i===0?"left":"right",padding:"10px 12px",color:P.ember,fontSize:9,letterSpacing:1.5,fontWeight:800,borderBottom:"1px solid "+P.rule,textTransform:"uppercase"}}>{h}</th>;})}</tr></thead>
-                  <tbody>{topCities.map(function(c,i){return <tr key={c.name} style={{borderBottom:"1px solid "+P.rule+"60",background:i%2===0?"rgba(52,168,83,0.04)":"transparent"}}>
-                    <td style={{padding:"10px 12px",color:P.txt,fontWeight:600,whiteSpace:"nowrap"}}>#{i+1}  {c.name}</td>
-                    <td style={{padding:"10px 12px",textAlign:"right",color:P.cyan,fontWeight:800,fontFamily:fm}}>{fmt(c[curMetric])}</td>
-                    <td style={{padding:"10px 12px",textAlign:"right",color:P.txt,fontFamily:fm}}>{fmt(c.clicks)}</td>
-                    <td style={{padding:"10px 12px",textAlign:"right",color:c.conv>0?P.rose:P.dim,fontFamily:fm,fontWeight:700}}>{fmt(c.conv)}</td>
-                    <td style={{padding:"10px 12px",textAlign:"right",color:P.sub,fontFamily:fm}}>{fR(c.spend)}</td>
-                  </tr>;})}</tbody>
-                </table>
-              </div>}
-
-              {/* Insight Narrative */}
-              {narrative&&<Insight title="Demographic Read" accent={P.cyan} icon={Ic.users(P.cyan,16)}>{narrative}</Insight>}
+              {renderStage(stageDef.awareness)}
+              {renderStage(stageDef.engagement)}
+              {renderStage(stageDef.conversion,renderCitiesBlock())}
             </div>;
           })()}
           {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
