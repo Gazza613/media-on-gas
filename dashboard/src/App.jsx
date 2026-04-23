@@ -4471,72 +4471,105 @@ export default function MediaOnGas(){
               var topCenter=top?provCenters[top.name]:null;
               var fillFor=function(val){if(max===0||val===0)return "#3d2f5a";var i=val/max;if(i>=0.75)return stage.hot;if(i>=0.50)return stage.warm;if(i>=0.25)return stage.cool;return stage.deep;};
               var medal=function(r){return r===0?"#FFD700":r===1?"#E0E0E0":r===2?"#CD7F32":null;};
+              // Lighter top highlight and darker bottom shadow shades per fill —
+              // the per-province linearGradient uses these to create a glossy
+              // 3D feel. Top edge stays lighter than the fill, bottom edge
+              // slightly darker so each province reads as an extruded panel.
+              var lighten=function(hex){var n=parseInt(hex.replace("#",""),16);var r=Math.min(255,((n>>16)&255)+40);var g=Math.min(255,((n>>8)&255)+40);var b=Math.min(255,(n&255)+40);return "rgb("+r+","+g+","+b+")";};
+              var darken=function(hex){var n=parseInt(hex.replace("#",""),16);var r=Math.max(0,((n>>16)&255)-30);var g=Math.max(0,((n>>8)&255)-30);var b=Math.max(0,(n&255)-30);return "rgb("+r+","+g+","+b+")";};
               return <div>
-                <div style={{position:"relative",background:"radial-gradient(ellipse at 40% 35%,#1d2a4a 0%,#12182e 55%,#08061a 100%)",borderRadius:16,padding:"18px 16px 8px",border:"1px solid rgba(100,160,255,0.15)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04),0 12px 40px rgba(0,0,0,0.4)"}}>
+                <div style={{position:"relative",background:"radial-gradient(ellipse at 50% 30%,#1b2547 0%,#0f1528 50%,#050310 100%)",borderRadius:18,padding:"20px 18px 10px",border:"1px solid rgba(140,170,255,0.2)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.06),0 18px 60px rgba(0,0,0,0.5)"}}>
                   <svg viewBox="0 0 900 780" width="100%" height="auto" style={{display:"block"}}>
                     <defs>
-                      <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                      {/* Per-province gloss gradient — each province renders with this gradient so its top edge is brighter and bottom edge darker, giving a subtle 3D extrusion feel. */}
+                      {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var base=fillFor(val);return <linearGradient key={"gr"+p} id={"grad_"+stage.key+"_"+p.replace(/\s+/g,"_")} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={val===0?base:lighten(base)} stopOpacity={val===0?"1":"0.98"}/>
+                        <stop offset="55%" stopColor={base} stopOpacity="1"/>
+                        <stop offset="100%" stopColor={val===0?base:darken(base)} stopOpacity="1"/>
+                      </linearGradient>;})}
+                      {/* Drop shadow filter — gives each province a lifted, card-like appearance */}
+                      <filter id={"provShadow_"+stage.key} x="-10%" y="-10%" width="120%" height="120%">
+                        <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+                        <feOffset dx="2" dy="5" result="offsetblur"/>
+                        <feComponentTransfer><feFuncA type="linear" slope="0.6"/></feComponentTransfer>
+                        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+                      </filter>
+                      {/* Glow filter for the top-ranked province */}
+                      <filter id={"mapGlow_"+stage.key} x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="8" result="blur"/>
+                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                      </filter>
+                      {/* Subtle geodesic grid — a light hex pattern in the background for a premium cartographic feel */}
+                      <pattern id={"hexGrid_"+stage.key} patternUnits="userSpaceOnUse" width="28" height="48" patternTransform="scale(0.9)">
+                        <path d="M 14,0 L 28,8 L 28,24 L 14,32 L 0,24 L 0,8 Z" fill="none" stroke="rgba(140,170,255,0.06)" strokeWidth="0.6"/>
+                      </pattern>
                       <radialGradient id={"spotlight_"+stage.key} cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor={stage.hot} stopOpacity="0.35"/>
-                        <stop offset="60%" stopColor={stage.warm} stopOpacity="0.12"/>
+                        <stop offset="0%" stopColor={stage.hot} stopOpacity="0.45"/>
+                        <stop offset="55%" stopColor={stage.warm} stopOpacity="0.15"/>
                         <stop offset="100%" stopColor={stage.deep} stopOpacity="0"/>
                       </radialGradient>
+                      {/* Country halo — a soft glow around the whole SA silhouette */}
+                      <filter id={"countryHalo_"+stage.key} x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="14" result="blur"/>
+                        <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+                        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+                      </filter>
                     </defs>
+                    {/* Hex grid backdrop */}
+                    <rect x="0" y="0" width="900" height="780" fill={"url(#hexGrid_"+stage.key+")"}/>
                     {/* Radial spotlight under the top-ranked province */}
-                    {topCenter&&<circle cx={topCenter.x} cy={topCenter.y} r="260" fill={"url(#spotlight_"+stage.key+")"} pointerEvents="none"/>}
-                    {/* Province fills - SOLID bright colours */}
-                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.7)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.4:1.2} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title></path>;})}
-                    {/* Lesotho + Eswatini enclaves drawn over the provinces they sit inside, shown as a soft neutral so they read as "not South Africa" */}
+                    {topCenter&&<circle cx={topCenter.x} cy={topCenter.y} r="280" fill={"url(#spotlight_"+stage.key+")"} pointerEvents="none"/>}
+                    {/* Country halo — render every province path as a single softly blurred silhouette layer for a subtle border glow around SA. */}
+                    <g opacity="0.55" filter={"url(#countryHalo_"+stage.key+")"} pointerEvents="none">
+                      {Object.keys(provincePaths).map(function(p){return <path key={"halo"+p} d={provincePaths[p]} fill={stage.hot} stroke="none"/>;})}
+                    </g>
+                    {/* Province fills with gloss gradient + drop shadow */}
+                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <path key={p} d={provincePaths[p]} fill={"url(#grad_"+stage.key+"_"+p.replace(/\s+/g,"_")+")"} stroke="rgba(255,255,255,0.65)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.6:1.3} filter={isTop?"url(#mapGlow_"+stage.key+")":"url(#provShadow_"+stage.key+")"} style={{transition:"all 0.4s ease"}}><title>{p+" · "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title></path>;})}
+                    {/* Glossy top-edge highlight per province — clipped thin slice that simulates reflected light */}
+                    {Object.keys(provincePaths).map(function(p){return <path key={"hi"+p} d={provincePaths[p]} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" style={{pointerEvents:"none",mixBlendMode:"overlay"}}/>;})}
+                    {/* Lesotho + Eswatini enclaves drawn over the provinces they sit inside */}
                     {Object.keys(enclavePaths).map(function(n){return <g key={"encl"+n} style={{pointerEvents:"none"}}>
-                      <path d={enclavePaths[n]} fill="#1a1530" stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeDasharray="2,3"/>
+                      <path d={enclavePaths[n]} fill="#10152a" stroke="rgba(200,220,255,0.4)" strokeWidth="1.2" strokeDasharray="3,3"/>
                     </g>;})}
-                    <text x="645" y="528" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.55)",letterSpacing:1.5,pointerEvents:"none"}}>LESOTHO</text>
-                    <text x="800" y="332" textAnchor="middle" style={{fontSize:7,fontFamily:fm,fontWeight:700,fill:"rgba(255,255,255,0.5)",letterSpacing:1,pointerEvents:"none"}}>ESWATINI</text>
-                    {/* Pulse ring on the #1 province — draws the eye instantly */}
+                    <text x="645" y="528" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.6)",letterSpacing:1.8,pointerEvents:"none"}}>LESOTHO</text>
+                    <text x="800" y="332" textAnchor="middle" style={{fontSize:8,fontFamily:fm,fontWeight:700,fill:"rgba(200,220,255,0.55)",letterSpacing:1,pointerEvents:"none"}}>ESWATINI</text>
+                    {/* Pulse ring on the #1 province */}
                     {topCenter&&<g style={{pointerEvents:"none"}}>
-                      <circle cx={topCenter.x} cy={topCenter.y} r="30" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
-                        <animate attributeName="r" values="26;62;26" dur="2.6s" repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.9;0;0.9" dur="2.6s" repeatCount="indefinite"/>
+                      <circle cx={topCenter.x} cy={topCenter.y} r="32" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
+                        <animate attributeName="r" values="28;72;28" dur="2.8s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.95;0;0.95" dur="2.8s" repeatCount="indefinite"/>
                       </circle>
-                      <circle cx={topCenter.x} cy={topCenter.y} r="26" fill="none" stroke={stage.hot} strokeWidth="1.5" opacity="0.6">
-                        <animate attributeName="r" values="22;50;22" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin="0.8s" repeatCount="indefinite"/>
+                      <circle cx={topCenter.x} cy={topCenter.y} r="28" fill="none" stroke={stage.hot} strokeWidth="1.5" opacity="0.6">
+                        <animate attributeName="r" values="24;56;24" dur="2.8s" begin="0.9s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.75;0;0.75" dur="2.8s" begin="0.9s" repeatCount="indefinite"/>
                       </circle>
                     </g>}
-                    {/* Major city markers (white dot + glow) */}
+                    {/* Major city markers */}
                     {majorCities.map(function(ct){return <g key={"c"+ct.name} style={{pointerEvents:"none"}}>
-                      <circle cx={ct.x} cy={ct.y} r="4.5" fill="#FFFBF8" stroke="rgba(0,0,0,0.85)" strokeWidth="1.5"/>
+                      <circle cx={ct.x} cy={ct.y} r="5" fill="#FFFBF8" stroke="rgba(0,0,0,0.85)" strokeWidth="1.5"/>
                       <circle cx={ct.x} cy={ct.y} r="2" fill="#0a0618"/>
-                      <text x={ct.x+8} y={ct.y+3} style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
+                      <text x={ct.x+9} y={ct.y+3} style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
                     </g>;})}
-                    {/* Province labels with heavy stroke halo — percentage of tagged provincial traffic */}
+                    {/* Province labels — bigger, bolder, more dramatic typography */}
                     {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
-                      <text x={c.x} y={c.y-6} textAnchor="middle" style={{fontSize:14,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+16} textAnchor="middle" style={{fontSize:19,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{share.toFixed(1)+"%"}</text>}
-                      {showMedal&&<g transform={"translate("+(c.x+58)+","+(c.y-22)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
+                      <text x={c.x} y={c.y-8} textAnchor="middle" style={{fontSize:15,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.95)",strokeWidth:"4px",strokeLinejoin:"round",letterSpacing:0.5}}>{c.abbr}</text>
+                      {val>0&&<text x={c.x} y={c.y+22} textAnchor="middle" style={{fontSize:24,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.95)",strokeWidth:"4.5px",strokeLinejoin:"round",letterSpacing:-1}}>{share.toFixed(1)+"%"}</text>}
+                      {showMedal&&<g transform={"translate("+(c.x+62)+","+(c.y-26)+")"}><circle r="14" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5" filter={isTop?undefined:"url(#provShadow_"+stage.key+")"}/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:14,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
                     </g>;})}
-                    {/* Compass rose — top right */}
-                    <g transform="translate(840,70)" style={{pointerEvents:"none"}}>
-                      <circle r="22" fill="rgba(10,6,24,0.55)" stroke={stage.warm+"60"} strokeWidth="1"/>
-                      <path d="M0,-16 L3,0 L0,16 L-3,0 Z" fill={stage.hot}/>
-                      <path d="M-16,0 L0,3 L16,0 L0,-3 Z" fill={stage.warm} opacity="0.75"/>
-                      <circle r="2" fill="#ffffff"/>
-                      <text x="0" y="-27" textAnchor="middle" style={{fontSize:9,fontFamily:fm,fontWeight:900,fill:stage.hot,letterSpacing:1.5}}>N</text>
-                    </g>
-                    {/* Watermark country name — bottom left */}
-                    <text x="40" y="745" style={{fontSize:32,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.04)",letterSpacing:10}}>SOUTH AFRICA</text>
+                    {/* Watermark country name */}
+                    <text x="40" y="755" style={{fontSize:36,fontFamily:fm,fontWeight:900,fill:"rgba(255,255,255,0.05)",letterSpacing:12}}>SOUTH AFRICA</text>
                   </svg>
-                  {/* Legend strip: solid discrete swatches matching the ramp */}
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,padding:"6px 4px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,255,255,0.7)",letterSpacing:1}}>
-                    <span style={{fontWeight:700}}>LOW</span>
-                    <div style={{display:"flex",flex:1,height:10,borderRadius:5,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
+                  {/* Legend strip */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8,padding:"8px 4px 2px",fontSize:10,fontFamily:fm,color:"rgba(255,255,255,0.75)",letterSpacing:1.5}}>
+                    <span style={{fontWeight:800}}>LOW</span>
+                    <div style={{display:"flex",flex:1,height:12,borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.08),inset 0 -1px 0 rgba(0,0,0,0.3)"}}>
                       <div style={{flex:1,background:"#3d2f5a"}}></div>
                       <div style={{flex:1,background:stage.deep}}></div>
                       <div style={{flex:1,background:stage.cool}}></div>
                       <div style={{flex:1,background:stage.warm}}></div>
                       <div style={{flex:1,background:stage.hot}}></div>
                     </div>
-                    <span style={{fontWeight:700}}>HIGH{max>0?" · "+fmtAbbr(max):""}</span>
+                    <span style={{fontWeight:800}}>HIGH</span>
                   </div>
                 </div>
               </div>;
@@ -4744,37 +4777,113 @@ export default function MediaOnGas(){
             };
 
             // Google city view — visual leaderboard instead of table.
+            // Google Ads full demographics block. Shows age, gender, device,
+            // province and top-cities splits from Google-only rows so clients
+            // can see the Google audience profile on its own (otherwise Google
+            // gets blended into the main stage splits alongside Meta + TikTok).
+            // Each sub-panel is percent-only and sums to 100% of Google tagged.
             var renderCitiesBlock=function(){
+              var googleAg=agRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
+              var googleDev=devRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
+              var googleReg=regRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
+
+              // Age aggregation (age-known Google rows only)
+              var ageBuckets={};ageOrder.forEach(function(a){ageBuckets[a]=0;});
+              googleAg.forEach(function(r){var a=String(r.age||"");if(ageBuckets[a]===undefined)return;ageBuckets[a]+=parseFloat(r.impressions||0);});
+              var ageTotal=ageOrder.reduce(function(s,a){return s+ageBuckets[a];},0);
+
+              // Gender aggregation (gender-known Google rows only)
+              var genBuckets={female:0,male:0};
+              googleAg.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(genBuckets[g]===undefined)return;genBuckets[g]+=parseFloat(r.impressions||0);});
+              var genTotal=genBuckets.female+genBuckets.male;
+
+              // Device aggregation
+              var devNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "Mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "Tablet";if(s.indexOf("desktop")>=0||s==="web")return "Desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "Connected TV";return null;};
+              var devBuckets={};
+              googleDev.forEach(function(r){var d=devNorm(r.device);if(!d)return;if(!devBuckets[d])devBuckets[d]=0;devBuckets[d]+=parseFloat(r.impressions||0);});
+              var devList=Object.keys(devBuckets).map(function(k){return{name:k,val:devBuckets[k]};}).sort(function(a,b){return b.val-a.val;});
+              var devTotal=devList.reduce(function(s,x){return s+x.val;},0);
+
+              // Province aggregation (Google-only, city-folded-to-province rows)
+              var provBuckets={};
+              googleReg.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;if(!provBuckets[p])provBuckets[p]=0;provBuckets[p]+=parseFloat(r.impressions||0);});
+              var provList=Object.keys(provBuckets).map(function(k){return{name:k,val:provBuckets[k]};}).sort(function(a,b){return b.val-a.val;});
+              var provTotal=provList.reduce(function(s,x){return s+x.val;},0);
+
+              // Cities aggregation (top 8)
               var cityAgg={};
-              cityRows.forEach(function(r){var c=String(r.city||"").trim();if(!c)return;if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0,conv:0,spend:0};cityAgg[c].impressions+=r.impressions||0;cityAgg[c].clicks+=r.clicks||0;cityAgg[c].spend+=parseFloat(r.spend||0);var rs=r.results||{};cityAgg[c].conv+=(rs.leads||0)+(rs.appInstalls||0);});
-              var top=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b.impressions-a.impressions;}).slice(0,8);
-              if(top.length===0)return null;
-              var totalImps=top.reduce(function(s,c){return s+c.impressions;},0);
-              var totalClicks=top.reduce(function(s,c){return s+c.clicks;},0);
-              var maxImps=Math.max.apply(null,top.map(function(c){return c.impressions;}));
-              return <div style={{background:"linear-gradient(135deg,"+P.gd+"10,transparent 60%),#06020e",borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.gd+"35",boxShadow:"0 0 30px "+P.gd+"10"}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
-                  <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+P.gd+"30,"+P.gd+"10)",border:"1px solid "+P.gd+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.globe(P.gd,20)}</div>
+              cityRows.forEach(function(r){var c=String(r.city||"").trim();if(!c)return;if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0};cityAgg[c].impressions+=parseFloat(r.impressions||0);cityAgg[c].clicks+=parseFloat(r.clicks||0);});
+              var topCities=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b.impressions-a.impressions;}).slice(0,8);
+              var cityTotal=topCities.reduce(function(s,c){return s+c.impressions;},0);
+              var maxCityImps=topCities.length?topCities[0].impressions:0;
+
+              // Bail if there's nothing to show
+              if(ageTotal===0&&genTotal===0&&devTotal===0&&provTotal===0&&topCities.length===0)return null;
+
+              var bar=function(label,pct,col){return <div style={{marginBottom:9,cursor:"default"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm}}>
+                  <span style={{color:"#fff",fontWeight:700}}>{label}</span>
+                  <span style={{color:col,fontWeight:900,fontSize:14,fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(1)+"%"}</span>
+                </div>
+                <div style={{height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden",border:"1px solid rgba(255,255,255,0.04)"}}>
+                  <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 8px "+col+"55",transition:"width 0.6s ease"}}></div>
+                </div>
+              </div>;};
+
+              var panel=function(title,body){return <div style={{background:"linear-gradient(145deg,#0f1828,#060a14)",borderRadius:14,padding:"16px 18px",border:"1px solid "+P.gd+"26",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)"}}>
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>{title}</div>
+                {body}
+              </div>;};
+
+              return <div style={{background:"radial-gradient(ellipse at 20% 10%,"+P.gd+"14,transparent 60%),linear-gradient(165deg,#0a1420 0%,#06090f 100%)",borderRadius:20,padding:"24px 26px",marginBottom:24,border:"1px solid "+P.gd+"40",boxShadow:"0 14px 50px rgba(0,0,0,0.5),0 0 60px "+P.gd+"15 inset"}}>
+                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:20}}>
+                  <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,"+P.gd+"55,"+P.gd+"20)",border:"1.5px solid "+P.gd+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 28px "+P.gd+"40"}}>{Ic.globe("#fff",22)}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase"}}>Google Ads — City Share</div>
-                    <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600}}>Share of Google city-tagged ads served (top 8 cities)</div>
+                    <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads — Full Demographics</div>
+                    <div style={{fontSize:13,color:"#fff",fontFamily:ff,fontWeight:600,letterSpacing:0.3}}>Google-only splits across age, gender, device, province and city</div>
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12}}>
-                  {top.map(function(c,i){var pct=maxImps>0?(c.impressions/maxImps)*100:0;var impShare=totalImps>0?(c.impressions/totalImps*100):0;var clkShare=totalClicks>0?(c.clicks/totalClicks*100):0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var tip=c.name+" — "+impShare.toFixed(1)+"% share of Google city-tagged ads served, "+clkShare.toFixed(1)+"% of city-tagged clicks";return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"30",borderLeft:"3px solid "+medal,borderRadius:"0 12px 12px 0",padding:"14px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+P.gd+"30";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
-                    <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"18,transparent 80%)",pointerEvents:"none"}}></div>
-                    <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{width:22,height:22,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div>
-                        <div style={{fontSize:12,color:P.txt,fontWeight:700,fontFamily:ff}}>{c.name}</div>
-                      </div>
-                      <div style={{fontSize:18,fontWeight:900,color:P.gd,fontFamily:fm,letterSpacing:-0.5}}>{impShare.toFixed(1)+"%"}</div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+                  {/* Age */}
+                  {ageTotal>0&&panel("Age Groups",
+                    <div>{ageOrder.slice().filter(function(a){return ageBuckets[a]>0;}).sort(function(a,b){return ageBuckets[b]-ageBuckets[a];}).map(function(a){var pct=ageBuckets[a]/ageTotal*100;return <div key={a} title={a+" — "+pct.toFixed(1)+"% of Google age-tagged impressions"}>{bar(a,pct,P.gd)}</div>;})}</div>
+                  )}
+                  {/* Gender */}
+                  {genTotal>0&&panel("Gender Split",
+                    <div>
+                      {[{k:"female",label:"Female",color:"#ec4899"},{k:"male",label:"Male",color:"#3b82f6"}].map(function(g){var v=genBuckets[g.k];if(v===0)return null;var pct=v/genTotal*100;return <div key={g.k} title={g.label+" — "+pct.toFixed(1)+"% of Google gender-tagged impressions"}>{bar(g.label,pct,g.color)}</div>;})}
                     </div>
-                    <div style={{position:"relative",display:"flex",gap:14,fontSize:10,fontFamily:fm,color:P.sub}}>
-                      <span><span style={{color:P.solar,fontWeight:700}}>{clkShare.toFixed(1)+"%"}</span> of clicks</span>
-                    </div>
-                  </div>;})}
+                  )}
+                  {/* Device */}
+                  {devTotal>0&&panel("Device Mix",
+                    <div>{devList.map(function(d){var pct=d.val/devTotal*100;var col=d.name==="Mobile"?"#22d3ee":d.name==="Desktop"?"#a855f7":d.name==="Tablet"?"#fbbf24":d.name==="Connected TV"?"#d946ef":"#8b7fa3";return <div key={d.name} title={d.name+" — "+pct.toFixed(1)+"% of Google device-tagged impressions"}>{bar(d.name,pct,col)}</div>;})}</div>
+                  )}
+                  {/* Province */}
+                  {provTotal>0&&panel("By Province",
+                    <div>{provList.slice(0,9).map(function(p){var pct=p.val/provTotal*100;return <div key={p.name} title={p.name+" — "+pct.toFixed(1)+"% of Google province-tagged impressions"}>{bar(p.name,pct,P.gd)}</div>;})}</div>
+                  )}
                 </div>
+
+                {/* Cities */}
+                {topCities.length>0&&<div style={{background:"linear-gradient(145deg,#0f1828,#060a14)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.gd+"26"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                    <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Top Cities</div>
+                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>SHARE OF GOOGLE CITY-TAGGED</div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
+                    {topCities.map(function(c,i){var pct=maxCityImps>0?(c.impressions/maxCityImps)*100:0;var impShare=cityTotal>0?(c.impressions/cityTotal*100):0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var tip=c.name+" — "+impShare.toFixed(1)+"% share of Google city-tagged ads served";return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"2a",borderLeft:"3px solid "+medal,borderRadius:"0 10px 10px 0",padding:"12px 14px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                      <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"14,transparent 80%)",pointerEvents:"none"}}></div>
+                      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{width:20,height:20,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div>
+                          <span style={{fontSize:12,color:"#fff",fontWeight:700,fontFamily:ff}}>{c.name}</span>
+                        </div>
+                        <span style={{fontSize:17,fontWeight:900,color:P.gd,fontFamily:fm,letterSpacing:-0.5}}>{impShare.toFixed(1)+"%"}</span>
+                      </div>
+                    </div>;})}
+                  </div>
+                </div>}
               </div>;
             };
 
