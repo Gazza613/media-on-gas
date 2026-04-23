@@ -1888,7 +1888,17 @@ export default function MediaOnGas(){
     .catch(function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");setAuthChecking(false);});
   },[]);
 
-  var handleLogin=function(token,role,em,nm){setSession(token);setAuthRole(role||"admin");setAuthEmail(em||"");setAuthName(nm||"");};
+  var handleLogin=function(token,role,em,nm){
+    setSession(token);setAuthRole(role||"admin");setAuthEmail(em||"");setAuthName(nm||"");
+    // Hard refresh on login. The token is already in sessionStorage (the login
+    // screen writes it before calling this), so the next boot auto-authenticates
+    // via the session-restore effect. Reloading guarantees returning users
+    // (often logged out by the 5-minute idle timer below) pick up any JS/CSS
+    // shipped since their last login — Vercel serves index.html with
+    // cache-control: no-cache, so the reload always pulls the latest bundle.
+    // Client share-link viewers never call this path.
+    try{window.location.reload();}catch(_){}
+  };
   var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");sessionStorage.removeItem("gas_chat_history");setSession(null);setAuthRole(null);setAuthEmail("");setAuthName("");};
   var isSuperadmin=String(authEmail||"").toLowerCase()==="gary@gasmarketing.co.za";
 
@@ -1911,12 +1921,14 @@ export default function MediaOnGas(){
   var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-api-key":API_KEY,"x-session-token":session||""};};
   var isAuthed=function(){return !!session||!!viewToken;};
 
-  // Idle logout: 15 minutes of no activity ends an admin session.
-  // Client share-link views are excluded, the token there is the auth and
-  // expires on its own schedule, idle-logging them out would be hostile.
+  // Idle logout: 5 minutes of no activity ends an admin or team-member session.
+  // On the next login, handleLogin does a hard reload so returning users pick
+  // up anything shipped since their last login. Client share-link views are
+  // excluded — the token there is the auth and expires on its own schedule,
+  // idle-logging them out would be hostile.
   useEffect(function(){
     if(!session||isClient)return;
-    var IDLE_MS=15*60*1000;
+    var IDLE_MS=5*60*1000;
     var timer=null;
     var doLogout=function(){handleLogout();};
     var resetIdle=function(){if(timer)clearTimeout(timer);timer=setTimeout(doLogout,IDLE_MS);};
