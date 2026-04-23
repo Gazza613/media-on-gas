@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v1-demo";
+var DEMO_CACHE_VERSION = "v2-fb-ig-split-tt-retry";
 
 function extractResults(actions) {
   var map = {};
@@ -56,7 +56,11 @@ async function fetchMetaBreakdown(account, token, from, to, breakdown) {
     while (next && guard < 10) {
       guard++;
       var r = await fetch(next);
-      if (!r.ok) break;
+      if (!r.ok) {
+        var errBody = await r.text();
+        console.warn("[demo] Meta " + breakdown + " non-ok for " + account.name, r.status, errBody.substring(0, 200));
+        break;
+      }
       var d = await r.json();
       if (d.data) rows = rows.concat(d.data);
       next = d.paging && d.paging.next ? d.paging.next : null;
@@ -68,21 +72,39 @@ async function fetchMetaBreakdown(account, token, from, to, breakdown) {
   }
 }
 
+// Publisher platform -> dashboard platform label. Fold audience_network
+// and messenger into Facebook, threads into Instagram.
+function metaPlatformLabel(pub) {
+  var p = String(pub || "").toLowerCase();
+  if (p === "instagram" || p === "threads") return "Instagram";
+  if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
+  return "Facebook"; // conservative default
+}
+
 async function fetchMetaDemo(token, from, to) {
   var agAll = [];
   var regAll = [];
   var devAll = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
+    // publisher_platform added to every Meta breakdown so each row can
+    // be labelled Facebook or Instagram distinctly. This matches how
+    // the rest of the dashboard surfaces these two platforms.
     var res = await Promise.all([
-      fetchMetaBreakdown(acc, token, from, to, "age,gender"),
-      fetchMetaBreakdown(acc, token, from, to, "region"),
-      fetchMetaBreakdown(acc, token, from, to, "impression_device")
+      fetchMetaBreakdown(acc, token, from, to, "age,gender,publisher_platform"),
+      fetchMetaBreakdown(acc, token, from, to, "region,publisher_platform"),
+      fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
+    // Fallback for the (rare) case where Meta rejects 3-dim age+gender+pub
+    // breakdown — fall back to just age+gender without platform split.
+    if ((!ag || ag.length === 0)) {
+      var agFallback = await fetchMetaBreakdown(acc, token, from, to, "age,gender");
+      ag = (agFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+    }
     ag.forEach(function(row) {
       var r = extractResults(row.actions);
       agAll.push({
-        platform: "Meta",
+        platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
         campaignId: String(row.campaign_id || ""),
         campaignName: row.campaign_name || "",
@@ -97,7 +119,7 @@ async function fetchMetaDemo(token, from, to) {
     reg.forEach(function(row) {
       var r = extractResults(row.actions);
       regAll.push({
-        platform: "Meta",
+        platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
         campaignId: String(row.campaign_id || ""),
         campaignName: row.campaign_name || "",
@@ -111,7 +133,7 @@ async function fetchMetaDemo(token, from, to) {
     dev.forEach(function(row) {
       var r = extractResults(row.actions);
       devAll.push({
-        platform: "Meta",
+        platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
         campaignId: String(row.campaign_id || ""),
         campaignName: row.campaign_name || "",
@@ -142,8 +164,12 @@ var TT_PROVINCE_NAMES = {
 
 async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
   try {
+    // report_type=AUDIENCE with data_level=AUCTION_CAMPAIGN is documented
+    // but returns empty lists in practice on many advertiser accounts.
+    // BASIC report type supports the same demographic dimensions at the
+    // campaign level and is consistently populated.
     var dims = encodeURIComponent(JSON.stringify(dimensions));
-    var metrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks", "follows", "likes", "comments", "shares"]));
+    var metrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks"]));
     var url = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/" +
       "?advertiser_id=" + advId +
       "&report_type=AUDIENCE" +
@@ -151,11 +177,29 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
       "&dimensions=" + dims +
       "&metrics=" + metrics +
       "&start_date=" + from + "&end_date=" + to +
-      "&page_size=500";
+      "&page_size=1000";
     var r = await fetch(url, { headers: { "Access-Token": token } });
-    if (!r.ok) return [];
+    if (!r.ok) {
+      console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " non-ok", r.status);
+      return [];
+    }
     var d = await r.json();
+    if (d.code && d.code !== 0) {
+      console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " api error", d.code, d.message);
+      // Retry at AUCTION_AD level — some advertiser accounts only populate
+      // AUDIENCE reports at ad level, not campaign level.
+      var urlAd = url.replace("AUCTION_CAMPAIGN", "AUCTION_AD");
+      var r2 = await fetch(urlAd, { headers: { "Access-Token": token } });
+      if (r2.ok) {
+        var d2 = await r2.json();
+        if (d2.data && d2.data.list) return d2.data.list;
+      }
+      return [];
+    }
     if (!d.data || !d.data.list) return [];
+    if (d.data.list.length === 0) {
+      console.log("[demo] TikTok " + JSON.stringify(dimensions) + " returned 0 rows");
+    }
     return d.data.list;
   } catch (e) {
     console.error("TikTok demo fetch error", dimensions, e && e.message);
