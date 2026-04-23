@@ -2711,14 +2711,14 @@ export default function MediaOnGas(){
                 </div>
 
                 {/* Where — Google province bubble map + ranked provinces */}
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Where (Google)</div>
+                <div style={{fontSize:15,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Where (Google)</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(googleStage,googleReg)}</div>
                   <div>{renderProvinceRanks(googleStage,googleReg)}</div>
                 </div>
 
                 {/* Who + How — age + gender + device, Google-filtered rows */}
-                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Who & How (Google)</div>
+                <div style={{fontSize:15,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Who & How (Google)</div>
                 <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:12,marginBottom:4}}>
                   <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -2803,14 +2803,14 @@ export default function MediaOnGas(){
                 {/* Where — map + ranked provinces. Grid split 1:1 so the bubble
                     map visually ties to the ranked-provinces table on the left
                     instead of dominating the section. */}
-                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Where</div>
+                <div style={{fontSize:15,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Where</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(stage)}</div>
                   <div>{renderProvinceRanks(stage)}</div>
                 </div>
 
                 {/* Who + How — age + gender + device */}
-                <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>· Who & How</div>
+                <div style={{fontSize:15,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Who & How</div>
                 <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:12,marginBottom:12}}>
                   <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
