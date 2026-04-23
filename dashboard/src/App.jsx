@@ -4482,9 +4482,10 @@ export default function MediaOnGas(){
             // country silhouette behind gives geographic context without
             // requiring pixel-accurate province polygons. Top 3 bubbles get
             // a medal badge and an outward pulse ring for visual emphasis.
-            var renderProvinceMap=function(stage){
+            var renderProvinceMap=function(stage,rowOverride){
+              var regData=rowOverride||regRows;
               var totals={};Object.keys(provCenters).forEach(function(p){totals[p]=0;});
-              regRows.forEach(function(r){var pn=String(r.region||"").trim();if(totals[pn]===undefined)return;totals[pn]+=stage.field(r);});
+              regData.forEach(function(r){var pn=String(r.region||"").trim();if(totals[pn]===undefined)return;totals[pn]+=stage.field(r);});
               var max=0;Object.keys(totals).forEach(function(p){if(totals[p]>max)max=totals[p];});
               var ranked=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).filter(function(x){return x.val>0;}).sort(function(a,b){return b.val-a.val;});
               var sumAll=ranked.reduce(function(s,r){return s+r.val;},0);
@@ -4602,9 +4603,10 @@ export default function MediaOnGas(){
             // Top-provinces ranked bars. Sits next to the map as a second
             // visual read, each row is a saturated horizontal bar with the
             // province name, the metric value, and % share.
-            var renderProvinceRanks=function(stage){
+            var renderProvinceRanks=function(stage,rowOverride){
+              var regData=rowOverride||regRows;
               var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
-              regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
+              regData.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
               // Rank all nine provinces; shares are computed against the tagged
               // total so the column always sums to 100% of known data.
               var all=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).sort(function(a,b){return b.val-a.val;});
@@ -4638,9 +4640,10 @@ export default function MediaOnGas(){
 
             // Horizontal bar renderer — shares computed against the tagged
             // subset so the column always sums to 100% of known-age data.
-            var renderAgeBars=function(stage){
+            var renderAgeBars=function(stage,rowOverride){
+              var agData=rowOverride||agRows;
               var sums={};ageOrder.forEach(function(a){sums[a]=0;});
-              agRows.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
+              agData.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
               var knownSum=ageOrder.reduce(function(s,a){return s+sums[a];},0);
               var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
               return <div style={{padding:"6px 0"}}>
@@ -4743,10 +4746,11 @@ export default function MediaOnGas(){
             // Horizontal device bars — clearer than a donut at this scale.
             // Device bars — percent-only, using tagged-device subset as the
             // denominator so rows always sum to 100% of known-device data.
-            var renderDeviceBars=function(stage){
+            var renderDeviceBars=function(stage,rowOverride){
+              var devData=rowOverride||devRows;
               var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
               var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
-              devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
+              devData.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
               var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
               var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
               var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
@@ -4805,134 +4809,95 @@ export default function MediaOnGas(){
             // province and top-cities splits from Google-only rows so clients
             // can see the Google audience profile on its own (otherwise Google
             // gets blended into the main stage splits alongside Meta + TikTok).
-            // Each sub-panel is percent-only and sums to 100% of Google tagged.
+            // Google-only demographics block — mirrors the renderStageBlock shape
+            // (Where row with bubble map + ranked provinces, Who & How row with
+            // age / gender / device) so the tab reads as one consistent page.
+            // Uses the same shared render helpers via the row-override param so
+            // there's no duplicated chart rendering. Province view only; the
+            // city leaderboard was dropped per user preference.
             var renderCitiesBlock=function(){
               var googleAg=agRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
               var googleDev=devRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
               var googleReg=regRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
-
-              // Age aggregation — track BOTH impressions and clicks so we can
-              // show ads-served share AND clicks share per row. Makes the metric
-              // unambiguous (previously a big "%" label read as maybe clicks).
-              var ageBuckets={};ageOrder.forEach(function(a){ageBuckets[a]={imp:0,clk:0};});
-              googleAg.forEach(function(r){var a=String(r.age||"");if(!ageBuckets[a])return;ageBuckets[a].imp+=parseFloat(r.impressions||0);ageBuckets[a].clk+=parseFloat(r.clicks||0);});
-              var ageTotalImp=ageOrder.reduce(function(s,a){return s+ageBuckets[a].imp;},0);
-              var ageTotalClk=ageOrder.reduce(function(s,a){return s+ageBuckets[a].clk;},0);
-
-              // Gender aggregation — impressions + clicks
-              var genBuckets={female:{imp:0,clk:0},male:{imp:0,clk:0}};
-              googleAg.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(!genBuckets[g])return;genBuckets[g].imp+=parseFloat(r.impressions||0);genBuckets[g].clk+=parseFloat(r.clicks||0);});
-              var genTotalImp=genBuckets.female.imp+genBuckets.male.imp;
-              var genTotalClk=genBuckets.female.clk+genBuckets.male.clk;
-
-              // Device aggregation — impressions + clicks
-              var devNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "Mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "Tablet";if(s.indexOf("desktop")>=0||s==="web")return "Desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "Connected TV";return null;};
-              var devBuckets={};
-              googleDev.forEach(function(r){var d=devNorm(r.device);if(!d)return;if(!devBuckets[d])devBuckets[d]={imp:0,clk:0};devBuckets[d].imp+=parseFloat(r.impressions||0);devBuckets[d].clk+=parseFloat(r.clicks||0);});
-              var devList=Object.keys(devBuckets).map(function(k){return{name:k,imp:devBuckets[k].imp,clk:devBuckets[k].clk};}).sort(function(a,b){return b.imp-a.imp;});
-              var devTotalImp=devList.reduce(function(s,x){return s+x.imp;},0);
-              var devTotalClk=devList.reduce(function(s,x){return s+x.clk;},0);
-
-              // Province aggregation — impressions + clicks
-              var provBuckets={};
-              googleReg.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;if(!provBuckets[p])provBuckets[p]={imp:0,clk:0};provBuckets[p].imp+=parseFloat(r.impressions||0);provBuckets[p].clk+=parseFloat(r.clicks||0);});
-              var provList=Object.keys(provBuckets).map(function(k){return{name:k,imp:provBuckets[k].imp,clk:provBuckets[k].clk};}).sort(function(a,b){return b.imp-a.imp;});
-              var provTotalImp=provList.reduce(function(s,x){return s+x.imp;},0);
-              var provTotalClk=provList.reduce(function(s,x){return s+x.clk;},0);
-
-              // Cities aggregation (top 8)
-              var cityAgg={};
-              cityRows.forEach(function(r){var c=String(r.city||"").trim();if(!c)return;if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0};cityAgg[c].impressions+=parseFloat(r.impressions||0);cityAgg[c].clicks+=parseFloat(r.clicks||0);});
-              var topCities=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b.impressions-a.impressions;}).slice(0,8);
-              var cityTotalImp=topCities.reduce(function(s,c){return s+c.impressions;},0);
-              var cityTotalClk=topCities.reduce(function(s,c){return s+c.clicks;},0);
-              var maxCityImps=topCities.length?topCities[0].impressions:0;
-
-              // Bail if there's nothing to show
-              if(ageTotalImp===0&&genTotalImp===0&&devTotalImp===0&&provTotalImp===0&&topCities.length===0)return null;
-
-              // Bar row showing BOTH impressions share and clicks share so the
-              // metric ambiguity is gone. Big primary % = ads served, smaller
-              // secondary = clicks. The bar width follows ads served.
-              var bar=function(label,impPct,clkPct,col){return <div style={{marginBottom:11,cursor:"default"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,fontSize:11,fontFamily:fm,gap:8}}>
-                  <span style={{color:"#fff",fontWeight:700,flex:1}}>{label}</span>
-                  <span style={{color:col,fontWeight:900,fontSize:14,fontVariantNumeric:"tabular-nums"}}>{impPct.toFixed(1)+"%"}</span>
-                  <span style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,fontVariantNumeric:"tabular-nums",letterSpacing:0.3,whiteSpace:"nowrap"}}>{"· "+clkPct.toFixed(1)+"% clicks"}</span>
-                </div>
-                <div style={{height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden",border:"1px solid rgba(255,255,255,0.04)"}}>
-                  <div style={{width:impPct+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 8px "+col+"55",transition:"width 0.6s ease"}}></div>
-                </div>
-              </div>;};
-
-              var panel=function(title,body){return <div style={{background:"linear-gradient(145deg,#0f1828,#060a14)",borderRadius:14,padding:"16px 18px",border:"1px solid "+P.gd+"26",boxShadow:"inset 0 1px 0 rgba(255,255,255,0.03)"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                  <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>{title}</div>
-                  <div style={{fontSize:8,color:"rgba(255,255,255,0.45)",fontFamily:fm,fontWeight:700,letterSpacing:1}}>% ADS SERVED · % CLICKS</div>
-                </div>
-                {body}
-              </div>;};
-
-              return <div style={{background:"radial-gradient(ellipse at 20% 10%,"+P.gd+"14,transparent 60%),linear-gradient(165deg,#0a1420 0%,#06090f 100%)",borderRadius:20,padding:"24px 26px",marginBottom:24,border:"1px solid "+P.gd+"40",boxShadow:"0 14px 50px rgba(0,0,0,0.5),0 0 60px "+P.gd+"15 inset"}}>
-                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:20}}>
-                  <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,"+P.gd+"55,"+P.gd+"20)",border:"1.5px solid "+P.gd+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 28px "+P.gd+"40"}}>{Ic.globe("#fff",22)}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads — Full Demographics</div>
-                    <div style={{fontSize:13,color:"#fff",fontFamily:ff,fontWeight:600,letterSpacing:0.3}}>Google-only splits. Primary % = share of ads served, secondary % = share of clicks.</div>
-                  </div>
-                </div>
-
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
-                  {/* Age */}
-                  {ageTotalImp>0&&panel("Age Groups",
-                    <div>{ageOrder.slice().filter(function(a){return ageBuckets[a].imp>0;}).sort(function(a,b){return ageBuckets[b].imp-ageBuckets[a].imp;}).map(function(a){var impPct=ageBuckets[a].imp/ageTotalImp*100;var clkPct=ageTotalClk>0?(ageBuckets[a].clk/ageTotalClk*100):0;return <div key={a} title={a+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(a,impPct,clkPct,P.gd)}</div>;})}</div>
-                  )}
-                  {/* Gender */}
-                  {genTotalImp>0&&panel("Gender Split",
+              if(googleAg.length===0&&googleDev.length===0&&googleReg.length===0)return null;
+              var googleStage={
+                key:"google",
+                label:"Ads Served",
+                accent:P.gd,
+                accentDeep:"#166534",
+                deep:"#14532d",
+                cool:"#15803d",
+                warm:"#22c55e",
+                hot:"#4ade80",
+                icon:Ic.globe,
+                title:"Google Ads",
+                subtitle:"Google-only demographic view, share of Google ads served",
+                field:function(r){return parseFloat(r.impressions||0);}
+              };
+              var total=(authPlat&&authPlat.Google&&authPlat.Google.imp)||0;
+              return <div style={{background:"linear-gradient(165deg,"+P.gd+"12 0%,"+P.gd+"05 50%,transparent 100%),#0d1a12",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+P.gd+"35",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+P.gd+"12 inset"}}>
+                {/* Stage header — matches renderStageBlock */}
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:16}}>
+                    <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,"+P.gd+"50,"+P.gd+"18)",border:"1.5px solid "+P.gd+"75",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 32px "+P.gd+"40"}}>{Ic.globe("#fff",28)}</div>
                     <div>
-                      {[{k:"female",label:"Female",color:"#ec4899"},{k:"male",label:"Male",color:"#3b82f6"}].map(function(g){var b=genBuckets[g.k];if(b.imp===0)return null;var impPct=b.imp/genTotalImp*100;var clkPct=genTotalClk>0?(b.clk/genTotalClk*100):0;return <div key={g.k} title={g.label+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(g.label,impPct,clkPct,g.color)}</div>;})}
+                      <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:3}}>Google Ads Demographics</div>
+                      <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{googleStage.subtitle}</div>
                     </div>
-                  )}
-                  {/* Device */}
-                  {devTotalImp>0&&panel("Device Mix",
-                    <div>{devList.map(function(d){var impPct=d.imp/devTotalImp*100;var clkPct=devTotalClk>0?(d.clk/devTotalClk*100):0;var col=d.name==="Mobile"?"#22d3ee":d.name==="Desktop"?"#a855f7":d.name==="Tablet"?"#fbbf24":d.name==="Connected TV"?"#d946ef":"#8b7fa3";return <div key={d.name} title={d.name+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(d.name,impPct,clkPct,col)}</div>;})}</div>
-                  )}
-                  {/* Province */}
-                  {provTotalImp>0&&panel("By Province",
-                    <div>{provList.slice(0,9).map(function(p){var impPct=p.imp/provTotalImp*100;var clkPct=provTotalClk>0?(p.clk/provTotalClk*100):0;return <div key={p.name} title={p.name+" — "+impPct.toFixed(1)+"% of ads served, "+clkPct.toFixed(1)+"% of clicks"}>{bar(p.name,impPct,clkPct,P.gd)}</div>;})}</div>
-                  )}
+                  </div>
+                  <div title={"Google Ads — "+fmt(total)+" ads served across the selected campaigns. Splits below are percent-only and sum to 100% of Google-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
+                    <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Ads Served</div>
+                    <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmtAbbr(total)}</div>
+                    <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
+                  </div>
                 </div>
 
-                {/* Cities — keeps the same dual-% surface as the panels above */}
-                {topCities.length>0&&<div style={{background:"linear-gradient(145deg,#0f1828,#060a14)",borderRadius:14,padding:"18px 20px",border:"1px solid "+P.gd+"26"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                    <div style={{fontSize:10,color:P.gd,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Top Cities</div>
-                    <div style={{fontSize:8,color:"rgba(255,255,255,0.45)",fontFamily:fm,fontWeight:700,letterSpacing:1}}>% ADS SERVED · % CLICKS</div>
+                {/* Where — Google province bubble map + ranked provinces */}
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where (Google)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
+                  <div>{renderProvinceMap(googleStage,googleReg)}</div>
+                  <div>{renderProvinceRanks(googleStage,googleReg)}</div>
+                </div>
+
+                {/* Who + How — age + gender + device, Google-filtered rows */}
+                <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Who & How (Google)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:14,marginBottom:4}}>
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                      <div title="Share of age-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderAgeBars(googleStage,googleAg)}
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
-                    {topCities.map(function(c,i){var pct=maxCityImps>0?(c.impressions/maxCityImps)*100:0;var impShare=cityTotalImp>0?(c.impressions/cityTotalImp*100):0;var clkShare=cityTotalClk>0?(c.clicks/cityTotalClk*100):0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var tip=c.name+" — "+impShare.toFixed(1)+"% of ads served, "+clkShare.toFixed(1)+"% of clicks";return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"2a",borderLeft:"3px solid "+medal,borderRadius:"0 10px 10px 0",padding:"12px 14px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                      <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"14,transparent 80%)",pointerEvents:"none"}}></div>
-                      <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
-                          <div style={{width:20,height:20,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#0a0618",fontFamily:fm,flexShrink:0}}>{i+1}</div>
-                          <span style={{fontSize:12,color:"#fff",fontWeight:700,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
-                        </div>
-                        <div style={{display:"flex",alignItems:"baseline",gap:6,flexShrink:0}}>
-                          <span style={{fontSize:17,fontWeight:900,color:P.gd,fontFamily:fm,letterSpacing:-0.5}}>{impShare.toFixed(1)+"%"}</span>
-                          <span style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{"· "+clkShare.toFixed(1)+"% clicks"}</span>
-                        </div>
-                      </div>
-                    </div>;})}
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                      <div title="Share of gender-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderGenderCards(googleStage,googleAg)}
                   </div>
-                </div>}
+                  <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
+                      <div title="Share of device-tagged Google traffic (sums to 100%)" style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                    </div>
+                    {renderDeviceBars(googleStage,googleDev)}
+                  </div>
+                </div>
               </div>;
             };
 
             // Gender split cards — bigger, simpler than a donut at a glance.
             // Gender cards — percent-only, using tagged subset as the
             // denominator so Female + Male always sum to 100%.
-            var renderGenderCards=function(stage){
-              var gs=genderSharesFor(stage);
+            var renderGenderCards=function(stage,rowOverride){
+              var gs;
+              if(rowOverride){
+                gs={female:0,male:0};
+                rowOverride.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]===undefined)return;gs[g]+=stage.field(r);});
+              }else{
+                gs=genderSharesFor(stage);
+              }
               var knownSum=gs.female+gs.male;
               if(knownSum===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender-tagged data for this stage</div>;
               var fShare=gs.female/knownSum*100;
