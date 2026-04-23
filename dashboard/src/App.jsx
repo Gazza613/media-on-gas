@@ -455,7 +455,24 @@ function AdPreviewModal(props){
     if(videoSrc&&videoType==="iframe"){
       // Meta Ad Preview iframe — Facebook-hosted player that handles
       // video playback natively without needing a direct MP4 URL.
-      mediaBlock=<iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",height:"60vh",border:"none",borderRadius:10,background:"#000",display:"block"}}/>;
+      // Meta Ad Preview iframe. We can't control what Meta's widget does when
+      // the user hits unmute, sometimes their internal JS fails in the
+      // embedded context (third-party cookies, sandbox policy, Meta auth
+      // state in the iframe) and the player goes black. Give the user an
+      // obvious escape hatch: open the same preview URL in a new tab, where
+      // Meta's widget has its own cookie jar and works reliably. Copy below
+      // is visible on every iframe render so clients know the option exists
+      // before they encounter the break, not after.
+      mediaBlock=<div style={{position:"relative"}}>
+        <iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",height:"60vh",border:"none",borderRadius:10,background:"#000",display:"block"}}/>
+        <div style={{marginTop:10,padding:"10px 14px",background:"rgba(255,170,0,0.08)",border:"1px solid rgba(255,170,0,0.25)",borderRadius:10,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{flex:"1 1 240px",fontSize:11,fontFamily:fm,color:"rgba(255,251,248,0.85)",lineHeight:1.55}}>
+            <span style={{fontWeight:800,color:P.solar,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:6}}>Tip</span>
+            If the preview freezes when you hit unmute, open the ad in a new tab, sound works reliably there.
+          </div>
+          <a href={videoSrc} target="_blank" rel="noopener noreferrer" style={{background:P.solar,color:"#0a0618",fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",padding:"8px 14px",borderRadius:8,textDecoration:"none",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 14px rgba(255,170,0,0.25)"}}>Open in new tab <span style={{fontSize:12}}>{"↗"}</span></a>
+        </div>
+      </div>;
     } else if(videoSrc){
       mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc}
         onPlaying={function(){hasPlayedRef.current=true;}}
@@ -2001,6 +2018,27 @@ export default function MediaOnGas(){
   var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client"||!!viewToken;
   var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-api-key":API_KEY,"x-session-token":session||""};};
   var isAuthed=function(){return !!session||!!viewToken;};
+
+  // Thumbnail helper. `ad.thumbnail` in the ads payload is a raw signed Meta
+  // CDN URL captured when the ads cache was built, and those signatures
+  // expire within ~1 hour and can also point at low-res poster variants. By
+  // the time a client opens their share link the next day, every tile image
+  // is stale or a 192x192 fuzz. Route every tile through /api/ad-image
+  // instead, which re-resolves on demand to the largest-area creative asset
+  // and 302-redirects the browser to a fresh CDN URL each view. The proxy
+  // has a 10 min server-side cache plus browser cache, so a page with 50
+  // ads does one network round-trip per ad only on the first load.
+  var thumbFor=function(ad){
+    if(!ad)return "";
+    var pLow=String(ad.platform||"").toLowerCase();
+    var pKey=pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0?"meta":pLow.indexOf("tiktok")>=0?"tiktok":"";
+    if(pKey&&ad.adId){
+      var cId=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+      var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&API_KEY?("&api_key="+encodeURIComponent(API_KEY)):"");
+      return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+auth;
+    }
+    return ad.thumbnail||"";
+  };
 
   // Idle logout: 5 minutes of no activity ends an admin or team-member session.
   // On the next login, handleLogin does a hard reload so returning users pick
@@ -3833,7 +3871,7 @@ export default function MediaOnGas(){
                           {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
                         </div>}
                       </div>
-                      {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
+                      {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                       {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
                         <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabelS(ad.resultType)}</div>
                         <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
@@ -4215,7 +4253,7 @@ export default function MediaOnGas(){
               return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
-                  {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={ad.thumbnail} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
+                  {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                   {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabel(ad.resultType)}</div>
                     <div style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
@@ -4253,7 +4291,7 @@ export default function MediaOnGas(){
               return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.sub}}>{"#"+rank}</td>
                 <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
-                  {ad.thumbnail?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={ad.thumbnail} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
+                  {ad.thumbnail?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
@@ -4489,7 +4527,7 @@ export default function MediaOnGas(){
                   var ps=platShort2[ad.platform]||ad.platform;
                   var fm2=fmtMeta(ad.format);
                   var thumbBlock=<div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
-                    {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
+                    {ad.thumbnail?<img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
                     <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:"#fff",fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
                   </div>;
                   return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
