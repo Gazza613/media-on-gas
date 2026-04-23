@@ -2601,8 +2601,21 @@ export default function MediaOnGas(){
               var knownSum=data.reduce(function(s,d){return s+d.value;},0);
               var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
               if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
+              // Round shares so the displayed values sum to exactly 100.0%.
+              // Each raw share is multiplied by 10 (tenths), rounded, and any
+              // rounding residual (sum off by 1 tenth) is pushed onto the
+              // largest bucket. Without this, three thirds would render as
+              // 33.3 + 33.3 + 33.3 = 99.9% which reads as a reporting error.
+              var tenths=data.map(function(d){return Math.round(d.value/knownSum*1000);});
+              var tenthsSum=tenths.reduce(function(a,b){return a+b;},0);
+              if(tenthsSum!==1000&&tenths.length>0){
+                var diff=1000-tenthsSum;
+                var maxIdx=0;
+                tenths.forEach(function(t,i){if(t>tenths[maxIdx])maxIdx=i;});
+                tenths[maxIdx]+=diff;
+              }
               return <div>
-                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=knownSum>0?(d.value/knownSum*100):0;var tip=d.name+" — "+share.toFixed(1)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                {data.map(function(d,di){var pct=max>0?(d.value/max)*100:0;var share=tenths[di]/10;var tip=d.name+", "+share.toFixed(1)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{width:10,height:10,borderRadius:"50%",background:d.color,boxShadow:"0 0 10px "+d.color+"88"}}></span>
