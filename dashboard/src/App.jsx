@@ -4458,7 +4458,7 @@ export default function MediaOnGas(){
                     {/* Ocean label (south of SA) */}
                     <text x="360" y="600" textAnchor="middle" style={{fontSize:10,fontFamily:fm,fontWeight:600,fill:"rgba(120,170,255,0.28)",letterSpacing:6,fontStyle:"italic"}}>SOUTHERN OCEAN</text>
                     {/* Province fills - SOLID bright colours */}
-                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.65)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.4:1.1} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+fmt(val)+" "+stage.label.toLowerCase()+(sumAll>0?" ("+(val/sumAll*100).toFixed(1)+"% share)":"")}</title></path>;})}
+                    {Object.keys(provincePaths).map(function(p){var val=totals[p]||0;var rnk=rankMap[p];var isTop=rnk===0&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <path key={p} d={provincePaths[p]} fill={fillFor(val)} stroke="rgba(255,255,255,0.65)" strokeWidth={typeof rnk==="number"&&rnk<3&&val>0?2.4:1.1} filter={isTop?"url(#mapGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}><title>{p+" · "+share.toFixed(1)+"% of tagged "+stage.label.toLowerCase()}</title></path>;})}
                     {/* Pulse ring on the #1 province — draws the eye instantly */}
                     {topCenter&&<g style={{pointerEvents:"none"}}>
                       <circle cx={topCenter.x} cy={topCenter.y} r="26" fill="none" stroke={stage.hot} strokeWidth="2.5" opacity="0.85">
@@ -4476,10 +4476,10 @@ export default function MediaOnGas(){
                       <circle cx={ct.x} cy={ct.y} r="1.8" fill="#0a0618"/>
                       <text x={ct.x+7} y={ct.y+3} style={{fontSize:9,fontFamily:fm,fontWeight:700,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.9)",strokeWidth:"2.5px",strokeLinejoin:"round"}}>{ct.name}</text>
                     </g>;})}
-                    {/* Province labels with heavy stroke halo */}
-                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
+                    {/* Province labels with heavy stroke halo — percentage of tagged provincial traffic */}
+                    {Object.keys(provincePaths).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var showMedal=typeof rnk==="number"&&rnk<3&&val>0;var share=sumAll>0?(val/sumAll*100):0;return <g key={"l"+p} style={{pointerEvents:"none"}}>
                       <text x={c.x} y={c.y-4} textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:800,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{c.abbr}</text>
-                      {val>0&&<text x={c.x} y={c.y+18} textAnchor="middle" style={{fontSize:18,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{fmtAbbr(val)}</text>}
+                      {val>0&&<text x={c.x} y={c.y+18} textAnchor="middle" style={{fontSize:18,fontFamily:fm,fontWeight:900,fill:"#ffffff",paintOrder:"stroke",stroke:"rgba(0,0,0,0.92)",strokeWidth:"3.5px",strokeLinejoin:"round"}}>{share.toFixed(1)+"%"}</text>}
                       {showMedal&&<g transform={"translate("+(c.x+38)+","+(c.y-22)+")"}><circle r="13" fill={medal(rnk)} stroke="#0a0618" strokeWidth="1.5"/><text x="0" y="4.5" textAnchor="middle" style={{fontSize:13,fontFamily:fm,fontWeight:900,fill:"#0a0618"}}>{rnk+1}</text></g>}
                     </g>;})}
                     {/* Compass rose — top right */}
@@ -4512,83 +4512,56 @@ export default function MediaOnGas(){
             // Top-provinces ranked bars. Sits next to the map as a second
             // visual read, each row is a saturated horizontal bar with the
             // province name, the metric value, and % share.
-            var renderProvinceRanks=function(stage,authTotal){
+            var renderProvinceRanks=function(stage){
               var totals={};Object.keys(provincePaths).forEach(function(p){totals[p]=0;});
               regRows.forEach(function(r){var pn=String(r.region||"").trim();if(!provincePaths[pn])return;totals[pn]+=stage.field(r);});
-              // Show ALL 9 provinces ranked by value — never an empty state so long as the map is showing.
+              // Rank all nine provinces; shares are computed against the tagged
+              // total so the column always sums to 100% of known data.
               var all=Object.keys(totals).map(function(p){return{name:p,val:totals[p]};}).sort(function(a,b){return b.val-a.val;});
               var knownSum=all.reduce(function(s,r){return s+r.val;},0);
-              // "Not Tagged" residual so the column always sums to the authoritative total.
-              var untagged=Math.max(0,(authTotal||0)-knownSum);
-              var tableTotal=knownSum+untagged;
               var max=all.length?all[0].val:0;
-              if(untagged>max)max=untagged;
               var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
               return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:16,padding:"18px 18px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%"}}>
                 <div style={{marginBottom:14,paddingBottom:10,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
                   <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{stage.label} by Province</div>
-                  <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>{fmt(tableTotal)} total · sums to Summary</div>
+                  <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()} · sums to 100%</div>
                 </div>
                 {/* Column header */}
-                <div style={{display:"grid",gridTemplateColumns:"28px 1fr auto 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
+                <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
                   <div>#</div>
                   <div>Province</div>
-                  <div style={{textAlign:"right"}}>{stage.label}</div>
                   <div style={{textAlign:"right"}}>Share</div>
                 </div>
-                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=tableTotal>0?(r.val/tableTotal*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+fmt(r.val)+" "+stage.label.toLowerCase()+(tableTotal>0?" ("+share.toFixed(1)+"% share)":"");return <div key={r.name} title={tip} style={{marginBottom:8,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr auto 60px",gap:10,alignItems:"center",marginBottom:4,fontSize:11,fontFamily:fm}}>
+                {all.map(function(r,i){var pct=max>0?(r.val/max)*100:0;var share=knownSum>0?(r.val/knownSum*100):0;var hasVal=r.val>0;var col=medal(i,hasVal);var tip=r.name+" — "+share.toFixed(1)+"% share of tagged provincial "+stage.label.toLowerCase();return <div key={r.name} title={tip} style={{marginBottom:8,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",marginBottom:4,fontSize:11,fontFamily:fm}}>
                     <div style={{width:22,height:22,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:hasVal?"#0a0618":"#8b7fa3"}}>{i+1}</div>
                     <span style={{color:hasVal?"#fff":"#8b7fa3",fontWeight:700}}>{r.name}</span>
-                    <span style={{color:hasVal?col:"#5c4f72",fontWeight:900,fontSize:13,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{fmt(r.val)}</span>
-                    <span style={{color:hasVal?"rgba(255,255,255,0.7)":"#5c4f72",fontWeight:700,fontSize:11,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{hasVal?share.toFixed(1)+"%":"0%"}</span>
+                    <span style={{color:hasVal?col:"#5c4f72",fontWeight:900,fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{hasVal?share.toFixed(1)+"%":"0%"}</span>
                   </div>
                   <div style={{height:6,marginLeft:38,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
                     <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
-                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Traffic that platforms did not attribute to a specific SA province, common for upper-funnel targeting and international metros.";return <div title={tip} style={{marginTop:12,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr auto 60px",gap:10,alignItems:"center",marginBottom:4,fontSize:11,fontFamily:fm}}>
-                    <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(139,127,163,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900,color:"#8b7fa3"}}>–</div>
-                    <span style={{color:P.sub,fontWeight:700,fontStyle:"italic"}}>Not Tagged</span>
-                    <span style={{color:P.sub,fontWeight:900,fontSize:13,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{fmt(untagged)}</span>
-                    <span style={{color:P.sub,fontWeight:700,fontSize:11,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{share.toFixed(1)+"%"}</span>
-                  </div>
-                  <div style={{height:6,marginLeft:38,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"repeating-linear-gradient(90deg,rgba(139,127,163,0.3) 0,rgba(139,127,163,0.3) 4px,rgba(139,127,163,0.1) 4px,rgba(139,127,163,0.1) 8px)",borderRadius:3,transition:"width 0.6s ease"}}></div>
-                  </div>
-                </div>;})()}
-                {knownSum===0&&untagged===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded for the selected campaigns and period.</div>}
+                {knownSum===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
               </div>;
             };
 
-            // Horizontal bar renderer with gradient fill. The "Unknown" residual
-            // row guarantees bars sum to the authoritative stage total (authTotal).
-            var renderAgeBars=function(stage,authTotal){
+            // Horizontal bar renderer — shares computed against the tagged
+            // subset so the column always sums to 100% of known-age data.
+            var renderAgeBars=function(stage){
               var sums={};ageOrder.forEach(function(a){sums[a]=0;});
               agRows.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
               var knownSum=ageOrder.reduce(function(s,a){return s+sums[a];},0);
-              var untagged=Math.max(0,(authTotal||0)-knownSum);
-              var tableTotal=knownSum+untagged;
               var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
-              if(untagged>max)max=untagged;
               return <div style={{padding:"6px 0"}}>
-                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=tableTotal>0?(v/tableTotal*100):0;var tip=a+" — "+fmt(v)+" "+stage.label.toLowerCase()+(tableTotal>0?" ("+share.toFixed(1)+"% share)":"");return <div key={a} title={tip} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=knownSum>0?(v/knownSum*100):0;var tip=a+" — "+share.toFixed(1)+"% share of tagged "+stage.label.toLowerCase();return <div key={a} title={tip} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{width:60,fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,textAlign:"right"}}>{a}</div>
                   <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
                     <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",transition:"width 0.8s ease"}}></div>
-                    {v>0&&<div style={{position:"absolute",top:0,right:8,height:"100%",display:"flex",alignItems:"center",fontSize:10,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fmtAbbr(v)}</div>}
+                    {v>0&&<div style={{position:"absolute",top:0,right:10,height:"100%",display:"flex",alignItems:"center",fontSize:11,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.85)"}}>{share.toFixed(1)+"%"}</div>}
                   </div>
-                  <div style={{width:52,textAlign:"right",fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700}}>{v>0?share.toFixed(0)+"%":"0"}</div>
                 </div>;})}
-                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Platforms could not attribute this traffic to a specific age bracket (iOS 14.5+ signal loss, logged-out sessions, teen accounts, privacy-mode users).";return <div title={tip} style={{display:"flex",alignItems:"center",gap:12,marginTop:4,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)",cursor:"default"}}>
-                  <div style={{width:60,fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700,textAlign:"right",fontStyle:"italic"}}>Not Tagged</div>
-                  <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"repeating-linear-gradient(90deg,rgba(139,127,163,0.35) 0,rgba(139,127,163,0.35) 5px,rgba(139,127,163,0.15) 5px,rgba(139,127,163,0.15) 10px)",borderRadius:11,transition:"width 0.8s ease"}}></div>
-                    <div style={{position:"absolute",top:0,right:8,height:"100%",display:"flex",alignItems:"center",fontSize:10,fontWeight:900,color:P.sub,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fmtAbbr(untagged)}</div>
-                  </div>
-                  <div style={{width:52,textAlign:"right",fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700}}>{share.toFixed(0)+"%"}</div>
-                </div>;})()}
+                {knownSum===0&&<div style={{marginTop:10,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No age-tagged {stage.label.toLowerCase()} for this period.</div>}
               </div>;
             };
 
@@ -4653,24 +4626,24 @@ export default function MediaOnGas(){
             var renderPlatformMix=function(){
               var agg=authPlat;
               var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
+              var totalClk=agg.Facebook.clk+agg.Instagram.clk+agg.TikTok.clk+agg.Google.clk;
               var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
               return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Ads Served</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Share of Ads Served</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-                  {meta.map(function(m){var d=agg[m.k];var share=totalImp>0?(d.imp/totalImp*100):0;var cpm=d.imp>0?(d.spend/d.imp*1000):0;var cpc=d.clk>0?(d.spend/d.clk):0;var tip=m.k+" — "+fmt(d.imp)+" ads served ("+share.toFixed(1)+"% share) · "+fmt(d.clk)+" clicks · "+fR(d.spend)+" spend"+(cpm>0?" · "+fR(cpm)+" CPM":"")+(cpc>0?" · "+fR(cpc)+" CPC":"");return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"16px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var tip=m.k+" — "+impShare.toFixed(1)+"% share of ads served, "+clkShare.toFixed(1)+"% share of clicks across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                     <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                       <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
                       <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{m.k}</div>
                     </div>
-                    <div style={{fontSize:24,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5,marginBottom:4}}>{fmtAbbr(d.imp)}</div>
-                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>{share.toFixed(1)+"% of ads served"}</div>
+                    <div style={{fontSize:32,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-1,marginBottom:6}}>{impShare.toFixed(1)+"%"}</div>
+                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of ads served</div>
                     <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
+                      <div style={{width:impShare+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10}}>
-                      <span>{fmtAbbr(d.clk)} clicks</span>
-                      <span>{fR(d.spend)}</span>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10,letterSpacing:0.5}}>
+                      <span>{clkShare.toFixed(1)+"% of clicks"}</span>
                     </div>
                   </div>;})}
                 </div>
@@ -4678,7 +4651,9 @@ export default function MediaOnGas(){
             };
 
             // Horizontal device bars — clearer than a donut at this scale.
-            var renderDeviceBars=function(stage,authTotal){
+            // Device bars — percent-only, using tagged-device subset as the
+            // denominator so rows always sum to 100% of known-device data.
+            var renderDeviceBars=function(stage){
               var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
               var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
               devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
@@ -4686,36 +4661,21 @@ export default function MediaOnGas(){
               var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
               var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
               var knownSum=data.reduce(function(s,d){return s+d.value;},0);
-              var untagged=Math.max(0,(authTotal||0)-knownSum);
-              var tableTotal=knownSum+untagged;
               var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
-              if(untagged>max)max=untagged;
-              if(tableTotal===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device data</div>;
+              if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
               return <div>
-                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=tableTotal>0?(d.value/tableTotal*100):0;var tip=d.name+" — "+fmt(d.value)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share)";return <div key={d.key} title={tip} style={{marginBottom:12,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                {data.map(function(d){var pct=max>0?(d.value/max)*100:0;var share=knownSum>0?(d.value/knownSum*100):0;var tip=d.name+" — "+share.toFixed(1)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{width:10,height:10,borderRadius:"50%",background:d.color,boxShadow:"0 0 10px "+d.color+"88"}}></span>
                       <span style={{color:"#fff",fontWeight:700}}>{d.name}</span>
                     </div>
-                    <div><span style={{color:d.color,fontWeight:900,fontSize:14}}>{fmtAbbr(d.value)}</span> <span style={{color:P.sub,fontWeight:600,fontSize:11}}>· {share.toFixed(0)}%</span></div>
+                    <div style={{color:d.color,fontWeight:900,fontSize:16,fontVariantNumeric:"tabular-nums"}}>{share.toFixed(1)+"%"}</div>
                   </div>
                   <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
                     <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
-                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Traffic the platform did not attribute to a specific device type (privacy-mode users, aggregate-level reporting on some ad formats).";return <div title={tip} style={{marginTop:4,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)",cursor:"default"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{width:10,height:10,borderRadius:"50%",background:"rgba(139,127,163,0.35)"}}></span>
-                      <span style={{color:P.sub,fontWeight:700,fontStyle:"italic"}}>Not Tagged</span>
-                    </div>
-                    <div><span style={{color:P.sub,fontWeight:900,fontSize:14}}>{fmtAbbr(untagged)}</span> <span style={{color:P.sub,fontWeight:600,fontSize:11}}>· {share.toFixed(0)}%</span></div>
-                  </div>
-                  <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"repeating-linear-gradient(90deg,rgba(139,127,163,0.4) 0,rgba(139,127,163,0.4) 5px,rgba(139,127,163,0.15) 5px,rgba(139,127,163,0.15) 10px)",borderRadius:6,transition:"width 0.6s ease"}}></div>
-                  </div>
-                </div>;})()}
               </div>;
             };
 
@@ -4756,29 +4716,29 @@ export default function MediaOnGas(){
               cityRows.forEach(function(r){var c=String(r.city||"").trim();if(!c)return;if(!cityAgg[c])cityAgg[c]={name:c,impressions:0,clicks:0,conv:0,spend:0};cityAgg[c].impressions+=r.impressions||0;cityAgg[c].clicks+=r.clicks||0;cityAgg[c].spend+=parseFloat(r.spend||0);var rs=r.results||{};cityAgg[c].conv+=(rs.leads||0)+(rs.appInstalls||0);});
               var top=Object.keys(cityAgg).map(function(k){return cityAgg[k];}).sort(function(a,b){return b.impressions-a.impressions;}).slice(0,8);
               if(top.length===0)return null;
+              var totalImps=top.reduce(function(s,c){return s+c.impressions;},0);
+              var totalClicks=top.reduce(function(s,c){return s+c.clicks;},0);
               var maxImps=Math.max.apply(null,top.map(function(c){return c.impressions;}));
               return <div style={{background:"linear-gradient(135deg,"+P.gd+"10,transparent 60%),#06020e",borderRadius:18,padding:"22px 26px",marginBottom:24,border:"1px solid "+P.gd+"35",boxShadow:"0 0 30px "+P.gd+"10"}}>
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
                   <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+P.gd+"30,"+P.gd+"10)",border:"1px solid "+P.gd+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.globe(P.gd,20)}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase"}}>Google Ads — City View</div>
-                    <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600}}>Genuine city-level granularity, Google Ads only</div>
+                    <div style={{fontSize:10,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase"}}>Google Ads — City Share</div>
+                    <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600}}>Share of Google city-tagged ads served (top 8 cities)</div>
                   </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12}}>
-                  {top.map(function(c,i){var pct=maxImps>0?(c.impressions/maxImps)*100:0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var ctr=c.impressions>0?(c.clicks/c.impressions*100):0;var cpm=c.impressions>0?(c.spend/c.impressions*1000):0;var tip=c.name+" — "+fmt(c.impressions)+" ads served · "+fmt(c.clicks)+" clicks ("+ctr.toFixed(2)+"% CTR) · "+fmt(c.conv)+" conv · "+fR(c.spend)+" spend"+(cpm>0?" · "+fR(cpm)+" CPM":"");return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"30",borderLeft:"3px solid "+medal,borderRadius:"0 12px 12px 0",padding:"14px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+P.gd+"30";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                  {top.map(function(c,i){var pct=maxImps>0?(c.impressions/maxImps)*100:0;var impShare=totalImps>0?(c.impressions/totalImps*100):0;var clkShare=totalClicks>0?(c.clicks/totalClicks*100):0;var medal=i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":P.gd;var tip=c.name+" — "+impShare.toFixed(1)+"% share of Google city-tagged ads served, "+clkShare.toFixed(1)+"% of city-tagged clicks";return <div key={c.name} title={tip} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.gd+"30",borderLeft:"3px solid "+medal,borderRadius:"0 12px 12px 0",padding:"14px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+P.gd+"30";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                     <div style={{position:"absolute",top:0,left:0,width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+P.gd+"18,transparent 80%)",pointerEvents:"none"}}></div>
                     <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <div style={{width:22,height:22,borderRadius:"50%",background:medal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#0a0618",fontFamily:fm}}>{i+1}</div>
                         <div style={{fontSize:12,color:P.txt,fontWeight:700,fontFamily:ff}}>{c.name}</div>
                       </div>
-                      <div style={{fontSize:14,fontWeight:900,color:P.gd,fontFamily:fm}}>{fmtAbbr(c.impressions)}</div>
+                      <div style={{fontSize:18,fontWeight:900,color:P.gd,fontFamily:fm,letterSpacing:-0.5}}>{impShare.toFixed(1)+"%"}</div>
                     </div>
                     <div style={{position:"relative",display:"flex",gap:14,fontSize:10,fontFamily:fm,color:P.sub}}>
-                      <span><span style={{color:P.solar,fontWeight:700}}>{fmtAbbr(c.clicks)}</span> clicks</span>
-                      <span><span style={{color:P.rose,fontWeight:700}}>{fmtAbbr(c.conv)}</span> conv</span>
-                      <span><span style={{color:P.ember,fontWeight:700}}>{fR(c.spend)}</span></span>
+                      <span><span style={{color:P.solar,fontWeight:700}}>{clkShare.toFixed(1)+"%"}</span> of clicks</span>
                     </div>
                   </div>;})}
                 </div>
@@ -4786,46 +4746,30 @@ export default function MediaOnGas(){
             };
 
             // Gender split cards — bigger, simpler than a donut at a glance.
-            var renderGenderCards=function(stage,authTotal){
+            // Gender cards — percent-only, using tagged subset as the
+            // denominator so Female + Male always sum to 100%.
+            var renderGenderCards=function(stage){
               var gs=genderSharesFor(stage);
               var knownSum=gs.female+gs.male;
-              var untagged=Math.max(0,(authTotal||0)-knownSum);
-              var tableTotal=knownSum+untagged;
-              if(tableTotal===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender data for this stage</div>;
-              var fShare=tableTotal>0?gs.female/tableTotal*100:0;
-              var mShare=tableTotal>0?gs.male/tableTotal*100:0;
-              var uShare=tableTotal>0?untagged/tableTotal*100:0;
-              var row=function(name,val,share,col){var tip=name+" — "+fmt(val)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share)";return <div title={tip} style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"14px 16px",marginBottom:10,position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
-                <div style={{position:"absolute",top:0,right:0,width:84,height:84,background:"radial-gradient(circle at 70% 30%,"+col+"22,transparent 70%)",pointerEvents:"none"}}></div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              if(knownSum===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender-tagged data for this stage</div>;
+              var fShare=gs.female/knownSum*100;
+              var mShare=gs.male/knownSum*100;
+              var row=function(name,share,col){var tip=name+" — "+share.toFixed(1)+"% share of gender-tagged "+stage.label.toLowerCase();return <div title={tip} style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                <div style={{position:"absolute",top:0,right:0,width:90,height:90,background:"radial-gradient(circle at 70% 30%,"+col+"22,transparent 70%)",pointerEvents:"none"}}></div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:32,height:32,borderRadius:16,background:col+"25",border:"1px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:900,color:col,fontFamily:fm}}>{name.charAt(0)}</div>
+                    <div style={{width:34,height:34,borderRadius:17,background:col+"25",border:"1px solid "+col+"55",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,color:col,fontFamily:fm}}>{name.charAt(0)}</div>
                     <span style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{name}</span>
                   </div>
-                  <div style={{fontSize:24,fontWeight:900,color:col,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{share.toFixed(0)+"%"}</div>
+                  <div style={{fontSize:32,fontWeight:900,color:col,fontFamily:fm,lineHeight:1,letterSpacing:-1}}>{share.toFixed(1)+"%"}</div>
                 </div>
-                <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:8}}>{fmtAbbr(val)+" "+stage.label.toLowerCase()}</div>
-                <div style={{height:8,background:"rgba(255,255,255,0.04)",borderRadius:4,overflow:"hidden"}}>
-                  <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 10px "+col+"55"}}></div>
-                </div>
-              </div>;};
-              var untaggedCard=function(){var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+uShare.toFixed(1)+"% share). Traffic the platform did not attribute to a specific gender (iOS 14.5+ signal loss, privacy-mode users, logged-out sessions).";return <div title={tip} style={{background:"rgba(139,127,163,0.08)",border:"1px dashed rgba(139,127,163,0.35)",borderLeft:"4px dashed rgba(139,127,163,0.6)",borderRadius:"0 14px 14px 0",padding:"12px 16px",position:"relative",overflow:"hidden",cursor:"default"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:28,height:28,borderRadius:14,background:"rgba(139,127,163,0.2)",border:"1px solid rgba(139,127,163,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:P.sub,fontFamily:fm}}>?</div>
-                    <span style={{fontSize:12,color:P.sub,fontFamily:fm,fontWeight:700,fontStyle:"italic",letterSpacing:0.5}}>Not Tagged</span>
-                  </div>
-                  <div style={{fontSize:20,fontWeight:900,color:P.sub,fontFamily:fm,lineHeight:1}}>{uShare.toFixed(0)+"%"}</div>
-                </div>
-                <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginBottom:6}}>{fmtAbbr(untagged)+" "+stage.label.toLowerCase()}</div>
-                <div style={{height:6,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
-                  <div style={{width:uShare+"%",height:"100%",background:"repeating-linear-gradient(90deg,rgba(139,127,163,0.4) 0,rgba(139,127,163,0.4) 5px,rgba(139,127,163,0.15) 5px,rgba(139,127,163,0.15) 10px)",borderRadius:3}}></div>
+                <div style={{height:10,background:"rgba(255,255,255,0.04)",borderRadius:5,overflow:"hidden"}}>
+                  <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:5,boxShadow:"0 0 10px "+col+"55"}}></div>
                 </div>
               </div>;};
               return <div>
-                {row("Female",gs.female,fShare,"#ec4899")}
-                {row("Male",gs.male,mShare,"#3b82f6")}
-                {untagged>0&&untaggedCard()}
+                {row("Female",fShare,"#ec4899")}
+                {row("Male",mShare,"#3b82f6")}
               </div>;
             };
 
@@ -4851,12 +4795,13 @@ export default function MediaOnGas(){
                   </div>
                 </div>
 
-                {/* Where — map + ranked provinces. Every chart below receives
-                    `total` so its bars always sum to the authoritative stage total. */}
+                {/* Where — map + ranked provinces. All splits on the page are
+                    percentages of the tagged subset, so every chart sums to
+                    100% of what the ad platforms attributed. */}
                 <div style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:10}}>· Where</div>
                 <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:14,marginBottom:18}}>
                   <div>{renderProvinceMap(stage)}</div>
-                  <div>{renderProvinceRanks(stage,total)}</div>
+                  <div>{renderProvinceRanks(stage)}</div>
                 </div>
 
                 {/* Who + How — age + gender + device */}
@@ -4865,23 +4810,23 @@ export default function MediaOnGas(){
                   <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
-                      <div title={"Sums to "+fmt(total)+" (matches Summary)"} style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>{fmtAbbr(total)}</div>
+                      <div title="Share of age-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
-                    {renderAgeBars(stage,total)}
+                    {renderAgeBars(stage)}
                   </div>
                   <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
-                      <div title={"Sums to "+fmt(total)+" (matches Summary)"} style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>{fmtAbbr(total)}</div>
+                      <div title="Share of gender-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
-                    {renderGenderCards(stage,total)}
+                    {renderGenderCards(stage)}
                   </div>
                   <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:14,padding:"18px 20px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
-                      <div title={"Sums to "+fmt(total)+" (matches Summary)"} style={{fontSize:10,color:stage.accent,fontFamily:fm,letterSpacing:1,fontWeight:700}}>{fmtAbbr(total)}</div>
+                      <div title="Share of device-tagged traffic (sums to 100%)" style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
-                    {renderDeviceBars(stage,total)}
+                    {renderDeviceBars(stage)}
                   </div>
                 </div>
 
@@ -4913,8 +4858,8 @@ export default function MediaOnGas(){
               {renderCitiesBlock()}
 
               <div style={{marginTop:20,padding:"14px 18px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.7,letterSpacing:0.3}}>
-                <span style={{color:"#fff",fontWeight:800,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:8}}>About "Not Tagged"</span>
-                Ad platforms return a "not attributed" bucket for every breakdown dimension. Reasons include iOS 14.5+ signal loss, logged-out sessions, teen and privacy-mode users, aggregate-level reporting on some ad formats (Meta Advantage+, Google Performance Max, YouTube), and audiences outside the targeted geography. Every chart here sums to the authoritative stage total shown in the section header; the Not Tagged residual is the honest gap between what the platform attributed and what it served. It is not a calculation error.
+                <span style={{color:"#fff",fontWeight:800,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:8}}>How the splits are computed</span>
+                All percentages on this page are calculated against the subset of traffic the ad platforms attributed to a specific demographic dimension (age, gender, device, province, city). Each chart sums to 100% of that tagged subset, so every split is a true share of what we can confidently measure. Absolute totals appear only in the stage header, where they come from the same campaign-level data Summary uses.
               </div>
             </div>;
           })()}
