@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v4-google-city-to-province";
+var DEMO_CACHE_VERSION = "v5-google-most-specific-location";
 
 function extractResults(actions) {
   var map = {};
@@ -346,9 +346,13 @@ async function fetchGoogleDemo(from, to) {
     var ageQ = "SELECT campaign.id, campaign.name, ad_group_criterion.age_range.type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM age_range_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
     var genQ = "SELECT campaign.id, campaign.name, ad_group_criterion.gender.type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM gender_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
     var devQ = "SELECT campaign.id, campaign.name, segments.device, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
-    // City-level geographic. Pulls resource name of the geo target which
-    // resolves to 'geoTargetConstants/<id>'. Names need a second lookup.
-    var locQ = "SELECT campaign.id, campaign.name, geographic_view.country_criterion_id, segments.geo_target_city, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM geographic_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND geographic_view.location_type = 'LOCATION_OF_PRESENCE'";
+    // Geographic. Using geo_target_most_specific_location rather than
+    // geo_target_city picks up every granularity Google attributed to —
+    // city, metro, county, or region (province). Display / YouTube /
+    // Performance Max often attribute at region level rather than city,
+    // and the city-only query dropped all of those rows. Names + target
+    // type need a second lookup (geo_target_constant).
+    var locQ = "SELECT campaign.id, campaign.name, geographic_view.country_criterion_id, segments.geo_target_most_specific_location, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM geographic_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND geographic_view.location_type = 'LOCATION_OF_PRESENCE'";
 
     var results = await Promise.all([
       googleSearch(ageQ),
@@ -409,24 +413,27 @@ async function fetchGoogleDemo(from, to) {
       });
     });
 
-    // Resolve city names. geo_target_city returns 'geoTargetConstants/{id}',
-    // and we batch-look-up the human-readable name via another query.
-    var cityIds = {};
+    // Resolve location names. geo_target_most_specific_location returns
+    // 'geoTargetConstants/{id}' at whichever granularity Google used
+    // (city / county / metro / region) — we pull name, canonical name,
+    // country code and target_type so the consumer can decide how to
+    // attribute each row.
+    var locIds = {};
     locRows.forEach(function(row) {
       var s = row.segments || {};
-      var gtc = s.geoTargetCity || s.geo_target_city;
-      if (gtc) cityIds[gtc] = true;
+      var gtc = s.geoTargetMostSpecificLocation || s.geo_target_most_specific_location;
+      if (gtc) locIds[gtc] = true;
     });
     var cityNames = {};
-    if (Object.keys(cityIds).length > 0) {
-      var ids = Object.keys(cityIds).map(function(id) { return "'" + id + "'"; }).join(",");
-      var namesQ = "SELECT geo_target_constant.resource_name, geo_target_constant.name, geo_target_constant.canonical_name, geo_target_constant.country_code FROM geo_target_constant WHERE geo_target_constant.resource_name IN (" + ids + ")";
+    if (Object.keys(locIds).length > 0) {
+      var ids = Object.keys(locIds).map(function(id) { return "'" + id + "'"; }).join(",");
+      var namesQ = "SELECT geo_target_constant.resource_name, geo_target_constant.name, geo_target_constant.canonical_name, geo_target_constant.country_code, geo_target_constant.target_type FROM geo_target_constant WHERE geo_target_constant.resource_name IN (" + ids + ")";
       try {
         var nameRows = await googleSearch(namesQ);
         nameRows.forEach(function(nr) {
           var g = nr.geoTargetConstant || {};
           var rn = g.resourceName || g.resource_name;
-          if (rn) cityNames[rn] = { name: g.name, canonical: g.canonicalName || g.canonical_name, country: g.countryCode || g.country_code };
+          if (rn) cityNames[rn] = { name: g.name, canonical: g.canonicalName || g.canonical_name, country: g.countryCode || g.country_code, targetType: g.targetType || g.target_type };
         });
       } catch (_) {}
     }
@@ -461,28 +468,36 @@ async function fetchGoogleDemo(from, to) {
       return PROVINCE_ALIASES[raw] || null;
     };
 
-    // Aggregate Google city rows into province totals, then push as region
-    // rows so the Top Provinces view includes Google clicks/impressions.
+    // Aggregate Google geographic rows into province totals, then push as
+    // region rows so the Top Provinces view includes Google clicks / impressions.
+    // Each row's geo_target_constant can be at city-, county-, metro- or
+    // region-level — we treat the canonical name as authoritative (it always
+    // contains the province for SA rows) and only surface the row in the
+    // Cities block when it really is city-level (canonical has three or more
+    // comma parts, i.e. "<city>, <province>, <country>").
     var googleProvinceAgg = {};
     locRows.forEach(function(row) {
       var c = row.campaign || {}, m = row.metrics || {}, s = row.segments || {};
-      var gtc = s.geoTargetCity || s.geo_target_city;
+      var gtc = s.geoTargetMostSpecificLocation || s.geo_target_most_specific_location;
       var cn = gtc && cityNames[gtc];
-      // Scope to SA cities only — otherwise we surface irrelevant long-tail
-      // international metros for Google campaigns that spilled across regions.
+      // Scope to SA only — otherwise international long-tail rows leak in.
       if (!cn || cn.country !== "ZA") return;
-      out.city.push({
-        platform: "Google",
-        account: "Google Ads",
-        campaignId: String(c.id || ""),
-        campaignName: c.name || "",
-        city: cn.name || "Unknown",
-        canonicalName: cn.canonical || "",
-        impressions: parseInt(m.impressions || 0, 10),
-        clicks: parseInt(m.clicks || 0, 10),
-        spend: parseFloat(m.costMicros || 0) / 1e6,
-        results: { leads: Math.round(parseFloat(m.conversions || 0)), appInstalls: 0, pageLikes: 0, postReactions: 0, landingPageViews: 0, follows: 0 }
-      });
+      var parts = String(cn.canonical || "").split(",").map(function(s) { return s.trim(); }).filter(Boolean);
+      var isCity = parts.length >= 3;
+      if (isCity) {
+        out.city.push({
+          platform: "Google",
+          account: "Google Ads",
+          campaignId: String(c.id || ""),
+          campaignName: c.name || "",
+          city: cn.name || "Unknown",
+          canonicalName: cn.canonical || "",
+          impressions: parseInt(m.impressions || 0, 10),
+          clicks: parseInt(m.clicks || 0, 10),
+          spend: parseFloat(m.costMicros || 0) / 1e6,
+          results: { leads: Math.round(parseFloat(m.conversions || 0)), appInstalls: 0, pageLikes: 0, postReactions: 0, landingPageViews: 0, follows: 0 }
+        });
+      }
       var prov = provinceFromCanonical(cn.canonical);
       if (!prov) return;
       var key = String(c.id || "") + "|" + prov;

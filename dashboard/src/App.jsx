@@ -4581,8 +4581,8 @@ export default function MediaOnGas(){
                   </div>
                   <div style={{width:52,textAlign:"right",fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700}}>{v>0?share.toFixed(0)+"%":"0"}</div>
                 </div>;})}
-                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Unknown age — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Platforms could not attribute this traffic to a specific age bracket.";return <div title={tip} style={{display:"flex",alignItems:"center",gap:12,marginTop:4,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)",cursor:"default"}}>
-                  <div style={{width:60,fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700,textAlign:"right",fontStyle:"italic"}}>Unknown</div>
+                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Platforms could not attribute this traffic to a specific age bracket (iOS 14.5+ signal loss, logged-out sessions, teen accounts, privacy-mode users).";return <div title={tip} style={{display:"flex",alignItems:"center",gap:12,marginTop:4,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)",cursor:"default"}}>
+                  <div style={{width:60,fontSize:10,color:P.sub,fontFamily:fm,fontWeight:700,textAlign:"right",fontStyle:"italic"}}>Not Tagged</div>
                   <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
                     <div style={{width:pct+"%",height:"100%",background:"repeating-linear-gradient(90deg,rgba(139,127,163,0.35) 0,rgba(139,127,163,0.35) 5px,rgba(139,127,163,0.15) 5px,rgba(139,127,163,0.15) 10px)",borderRadius:11,transition:"width 0.8s ease"}}></div>
                     <div style={{position:"absolute",top:0,right:8,height:"100%",display:"flex",alignItems:"center",fontSize:10,fontWeight:900,color:P.sub,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fmtAbbr(untagged)}</div>
@@ -4704,11 +4704,11 @@ export default function MediaOnGas(){
                     <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
-                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Unknown device — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Traffic the platform did not attribute to a specific device type.";return <div title={tip} style={{marginTop:4,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)",cursor:"default"}}>
+                {untagged>0&&(function(){var pct=max>0?(untagged/max)*100:0;var share=tableTotal>0?(untagged/tableTotal*100):0;var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+share.toFixed(1)+"% share). Traffic the platform did not attribute to a specific device type (privacy-mode users, aggregate-level reporting on some ad formats).";return <div title={tip} style={{marginTop:4,paddingTop:10,borderTop:"1px dashed rgba(255,255,255,0.08)",cursor:"default"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{width:10,height:10,borderRadius:"50%",background:"rgba(139,127,163,0.35)"}}></span>
-                      <span style={{color:P.sub,fontWeight:700,fontStyle:"italic"}}>Unknown</span>
+                      <span style={{color:P.sub,fontWeight:700,fontStyle:"italic"}}>Not Tagged</span>
                     </div>
                     <div><span style={{color:P.sub,fontWeight:900,fontSize:14}}>{fmtAbbr(untagged)}</span> <span style={{color:P.sub,fontWeight:600,fontSize:11}}>· {share.toFixed(0)}%</span></div>
                   </div>
@@ -4809,11 +4809,11 @@ export default function MediaOnGas(){
                   <div style={{width:share+"%",height:"100%",background:"linear-gradient(90deg,"+col+"88,"+col+")",borderRadius:4,boxShadow:"0 0 10px "+col+"55"}}></div>
                 </div>
               </div>;};
-              var untaggedCard=function(){var tip="Not Disclosed — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+uShare.toFixed(1)+"% share). Traffic the platform did not attribute to a specific gender.";return <div title={tip} style={{background:"rgba(139,127,163,0.08)",border:"1px dashed rgba(139,127,163,0.35)",borderLeft:"4px dashed rgba(139,127,163,0.6)",borderRadius:"0 14px 14px 0",padding:"12px 16px",position:"relative",overflow:"hidden",cursor:"default"}}>
+              var untaggedCard=function(){var tip="Not Tagged — "+fmt(untagged)+" "+stage.label.toLowerCase()+" ("+uShare.toFixed(1)+"% share). Traffic the platform did not attribute to a specific gender (iOS 14.5+ signal loss, privacy-mode users, logged-out sessions).";return <div title={tip} style={{background:"rgba(139,127,163,0.08)",border:"1px dashed rgba(139,127,163,0.35)",borderLeft:"4px dashed rgba(139,127,163,0.6)",borderRadius:"0 14px 14px 0",padding:"12px 16px",position:"relative",overflow:"hidden",cursor:"default"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <div style={{width:28,height:28,borderRadius:14,background:"rgba(139,127,163,0.2)",border:"1px solid rgba(139,127,163,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:P.sub,fontFamily:fm}}>?</div>
-                    <span style={{fontSize:12,color:P.sub,fontFamily:fm,fontWeight:700,fontStyle:"italic",letterSpacing:0.5}}>Not Disclosed</span>
+                    <span style={{fontSize:12,color:P.sub,fontFamily:fm,fontWeight:700,fontStyle:"italic",letterSpacing:0.5}}>Not Tagged</span>
                   </div>
                   <div style={{fontSize:20,fontWeight:900,color:P.sub,fontFamily:fm,lineHeight:1}}>{uShare.toFixed(0)+"%"}</div>
                 </div>
@@ -4911,6 +4911,11 @@ export default function MediaOnGas(){
               {renderStageBlock(stageDef.objective)}
 
               {renderCitiesBlock()}
+
+              <div style={{marginTop:20,padding:"14px 18px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.7,letterSpacing:0.3}}>
+                <span style={{color:"#fff",fontWeight:800,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:8}}>About "Not Tagged"</span>
+                Ad platforms return a "not attributed" bucket for every breakdown dimension. Reasons include iOS 14.5+ signal loss, logged-out sessions, teen and privacy-mode users, aggregate-level reporting on some ad formats (Meta Advantage+, Google Performance Max, YouTube), and audiences outside the targeted geography. Every chart here sums to the authoritative stage total shown in the section header; the Not Tagged residual is the honest gap between what the platform attributed and what it served. It is not a calculation error.
+              </div>
             </div>;
           })()}
           {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
