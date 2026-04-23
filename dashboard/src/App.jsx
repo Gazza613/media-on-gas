@@ -4722,21 +4722,22 @@ export default function MediaOnGas(){
               var totalClk=agg.Facebook.clk+agg.Instagram.clk+agg.TikTok.clk+agg.Google.clk;
               var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
               return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Share of Ads Served</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Share of Clicks</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var tip=m.k+" — "+impShare.toFixed(1)+"% share of ads served, "+clkShare.toFixed(1)+"% share of clicks across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var tip=m.k+" — "+clkShare.toFixed(1)+"% share of clicks, "+impShare.toFixed(1)+"% share of ads served across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                     <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                       <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
                       <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:800,letterSpacing:1}}>{m.k}</div>
                     </div>
-                    <div style={{fontSize:32,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-1,marginBottom:6}}>{impShare.toFixed(1)+"%"}</div>
-                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of ads served</div>
+                    {/* Primary headline now clicks share — clients care about engagement, not ad serving. */}
+                    <div style={{fontSize:32,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-1,marginBottom:6}}>{clkShare.toFixed(1)+"%"}</div>
+                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of clicks</div>
                     <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{width:impShare+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
+                      <div style={{width:clkShare+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10,letterSpacing:0.5}}>
-                      <span>{clkShare.toFixed(1)+"% of clicks"}</span>
+                      <span>{impShare.toFixed(1)+"% of ads served"}</span>
                     </div>
                   </div>;})}
                 </div>
@@ -4822,7 +4823,7 @@ export default function MediaOnGas(){
               if(googleAg.length===0&&googleDev.length===0&&googleReg.length===0)return null;
               var googleStage={
                 key:"google",
-                label:"Ads Served",
+                label:"Clicks",
                 accent:P.gd,
                 accentDeep:"#166534",
                 deep:"#14532d",
@@ -4831,10 +4832,14 @@ export default function MediaOnGas(){
                 hot:"#4ade80",
                 icon:Ic.globe,
                 title:"Google Ads",
-                subtitle:"Google-only demographic view, share of Google ads served",
-                field:function(r){return parseFloat(r.impressions||0);}
+                // Clicks, not ads served — clients want the engagement read
+                // ("who is actually clicking"), not the delivery read ("who
+                // saw the ad"). This is symmetric with the Engagement stage
+                // above and stays focused on the signal that matters.
+                subtitle:"Google-only engagement view, share of Google clicks",
+                field:function(r){return parseFloat(r.clicks||0);}
               };
-              var total=(authPlat&&authPlat.Google&&authPlat.Google.imp)||0;
+              var total=(authPlat&&authPlat.Google&&authPlat.Google.clk)||0;
               return <div style={{background:"linear-gradient(165deg,"+P.gd+"12 0%,"+P.gd+"05 50%,transparent 100%),#0d1a12",borderRadius:24,padding:"28px 28px 24px",marginBottom:28,border:"1px solid "+P.gd+"35",boxShadow:"0 14px 50px rgba(0,0,0,0.4),0 0 80px "+P.gd+"12 inset"}}>
                 {/* Stage header — matches renderStageBlock */}
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:22,gap:18,flexWrap:"wrap"}}>
@@ -4845,8 +4850,8 @@ export default function MediaOnGas(){
                       <div style={{fontSize:14,color:"#fff",fontFamily:ff,fontWeight:700,letterSpacing:0.3}}>{googleStage.subtitle}</div>
                     </div>
                   </div>
-                  <div title={"Google Ads — "+fmt(total)+" ads served across the selected campaigns. Splits below are percent-only and sum to 100% of Google-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
-                    <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Ads Served</div>
+                  <div title={"Google Ads — "+fmt(total)+" clicks across the selected campaigns. Splits below are percent-only and sum to 100% of Google click-tagged traffic per dimension."} style={{textAlign:"right",padding:"10px 18px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.gd+"55",borderRadius:14,boxShadow:"0 0 20px "+P.gd+"20"}}>
+                    <div style={{fontSize:9,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800}}>Google Clicks</div>
                     <div style={{fontSize:32,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,letterSpacing:-1,textShadow:"0 0 20px "+P.gd+"66"}}>{fmtAbbr(total)}</div>
                     <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:3}}>matches Summary · {fmt(total)}</div>
                   </div>
