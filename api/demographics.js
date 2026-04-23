@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v2-fb-ig-split-tt-retry";
+var DEMO_CACHE_VERSION = "v3-region-device-fallback";
 
 function extractResults(actions) {
   var map = {};
@@ -95,11 +95,22 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
-    // Fallback for the (rare) case where Meta rejects 3-dim age+gender+pub
-    // breakdown — fall back to just age+gender without platform split.
-    if ((!ag || ag.length === 0)) {
+    // Meta silently rejects certain multi-dim breakdown combos by returning an
+    // empty list. Fall back to the single-dim breakdown (without
+    // publisher_platform) so we keep the data, even if we lose the FB vs IG
+    // split for that slice. We default platform to 'facebook' to keep the row
+    // shape consistent downstream — consumers treat it as Meta aggregated.
+    if (!ag || ag.length === 0) {
       var agFallback = await fetchMetaBreakdown(acc, token, from, to, "age,gender");
       ag = (agFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+    }
+    if (!reg || reg.length === 0) {
+      var regFallback = await fetchMetaBreakdown(acc, token, from, to, "region");
+      reg = (regFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+    }
+    if (!dev || dev.length === 0) {
+      var devFallback = await fetchMetaBreakdown(acc, token, from, to, "impression_device");
+      dev = (devFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
     }
     ag.forEach(function(row) {
       var r = extractResults(row.actions);
