@@ -3299,6 +3299,20 @@ export default function MediaOnGas(){
                 </div>
                 {(function(){var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];var widestReach=sortedPlats.slice().sort(function(a,b){return platBreak[b].reach-platBreak[a].reach;})[0];return standRow([bestCpmP?stand("BEST COST PER 1000 ADS SERVED",bestCpmP+", "+fR(platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000),platCol4[bestCpmP]||P.cyan):null,widestReach&&platBreak[widestReach].reach>0?stand("WIDEST REACH",widestReach+", "+fmt(platBreak[widestReach].reach),platCol4[widestReach]||P.orchid):null,blFreq>0?stand("BLENDED FREQUENCY",blFreq.toFixed(2)+"x"+(blFreq>4?" (fatigue)":blFreq>3?" (monitor)":blFreq>2?" (optimal)":" (building)"),blFreq>4?P.rose:blFreq>3?P.warning:P.mint):null]);})()}
                 <div style={{fontSize:10,color:"rgba(255,255,255,0.9)",fontFamily:fm,letterSpacing:0.5,lineHeight:1.6,textAlign:"center",fontStyle:"italic",padding:"14px 8px"}}>* Google Ads does not expose unique-user reach in standard reporting, so Google Display and YouTube reach is estimated using an industry-standard 2x frequency assumption (reach = impressions / 2). This keeps blended reach and frequency representative of the full media mix. Meta and TikTok reach figures remain true unique-user counts from the platform APIs.</div>
+                {(function(){
+                  var totalReach=m.reach+t.reach+computed.gd.reach;
+                  var topPlatByImps=sortedPlats.slice().sort(function(a,b){return platBreak[b].imps-platBreak[a].imps;})[0];
+                  var bestCpmP=sortedPlats.filter(function(pl){return platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].imps*1000)-(platBreak[b].spend/platBreak[b].imps*1000);})[0];
+                  var bestCpmVal=bestCpmP?platBreak[bestCpmP].spend/platBreak[bestCpmP].imps*1000:0;
+                  var freqLbl=blFreq>4?"signalling creative fatigue":blFreq>3?"a level worth monitoring":blFreq>2?"a healthy optimal band":"still in the building phase";
+                  var cpmLbl=computed.blendedCpm<=benchmarks.meta.cpm.low?"an excellent efficiency position":computed.blendedCpm<=benchmarks.meta.cpm.mid?"a solid efficiency position":computed.blendedCpm<=benchmarks.meta.cpm.high?"on track against the benchmark":"above benchmark and worth optimising";
+                  var lines=[];
+                  if(computed.totalImps>0)lines.push("The selected campaigns served "+fmt(computed.totalImps)+" ads to "+fmt(totalReach)+" unique viewers at a blended frequency of "+blFreq.toFixed(2)+"x, "+freqLbl+".");
+                  if(topPlatByImps&&platBreak[topPlatByImps].imps>0)lines.push(topPlatByImps+" carried the heaviest delivery with "+fmt(platBreak[topPlatByImps].imps)+" ads served.");
+                  if(bestCpmP&&bestCpmVal>0)lines.push(bestCpmP+" delivered the cheapest cost per 1000 ads served at "+fR(bestCpmVal)+".");
+                  if(computed.blendedCpm>0)lines.push("Blended CPM sits at "+fR(computed.blendedCpm)+", "+cpmLbl+".");
+                  return <Insight title="Awareness Read" accent={P.cyan} icon={Ic.eye(P.cyan,16)}>{lines.join(" ")}</Insight>;
+                })()}
                 {demoBlocks&&demoBlocks.awarenessBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.awarenessBlock}</div>}
               </div>
 
@@ -3334,6 +3348,22 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var bestCpcP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].clicks)-(platBreak[b].spend/platBreak[b].clicks);})[0];var bestCtrP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[b].clicks/platBreak[b].imps)-(platBreak[a].clicks/platBreak[a].imps);})[0];var mostClicksP=sortedPlats.slice().sort(function(a,b){return platBreak[b].clicks-platBreak[a].clicks;})[0];return standRow([bestCpcP?stand("BEST COST PER CLICK",bestCpcP+", "+fR(platBreak[bestCpcP].spend/platBreak[bestCpcP].clicks),platCol4[bestCpcP]||P.mint):null,bestCtrP?stand("HIGHEST CLICK THROUGH RATE %",bestCtrP+", "+(platBreak[bestCtrP].clicks/platBreak[bestCtrP].imps*100).toFixed(2)+"%",platCol4[bestCtrP]||P.solar):null,mostClicksP?stand("MOST CLICKS",mostClicksP+", "+fmt(platBreak[mostClicksP].clicks),platCol4[mostClicksP]||P.cyan):null]);})()}
+                {(function(){
+                  var bestCpcP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).slice().sort(function(a,b){return(platBreak[a].spend/platBreak[a].clicks)-(platBreak[b].spend/platBreak[b].clicks);})[0];
+                  var bestCpcVal=bestCpcP?platBreak[bestCpcP].spend/platBreak[bestCpcP].clicks:0;
+                  var bestCtrP=sortedPlats.filter(function(pl){return platBreak[pl].clicks>0&&platBreak[pl].imps>0;}).slice().sort(function(a,b){return(platBreak[b].clicks/platBreak[b].imps)-(platBreak[a].clicks/platBreak[a].imps);})[0];
+                  var bestCtrVal=bestCtrP?platBreak[bestCtrP].clicks/platBreak[bestCtrP].imps*100:0;
+                  var mostClicksP=sortedPlats.slice().sort(function(a,b){return platBreak[b].clicks-platBreak[a].clicks;})[0];
+                  var ctrLbl=blCtr>=1.4?"an excellent result against the 0.9 to 1.4% industry benchmark":blCtr>=0.9?"a solid result within the 0.9 to 1.4% industry benchmark":"below the 0.9 to 1.4% industry benchmark and worth optimising";
+                  var cpcLbl=blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"an excellent efficiency position":blCpc<=benchmarks.meta.cpc.mid?"a solid efficiency position":blCpc<=benchmarks.meta.cpc.high?"on track against the benchmark":"above benchmark and worth optimising";
+                  var lines=[];
+                  if(computed.totalClicks>0)lines.push(fmt(computed.totalClicks)+" clicks were recorded at a blended click through rate of "+blCtr.toFixed(2)+"%, "+ctrLbl+".");
+                  if(blCpc>0)lines.push("Blended cost per click sits at "+fR(blCpc)+", "+cpcLbl+".");
+                  if(bestCtrP&&bestCtrVal>0)lines.push(bestCtrP+" converted impressions to clicks at the highest rate of "+bestCtrVal.toFixed(2)+"%.");
+                  if(bestCpcP&&bestCpcVal>0)lines.push(bestCpcP+" delivered the cheapest click at "+fR(bestCpcVal)+".");
+                  if(mostClicksP&&platBreak[mostClicksP].clicks>0)lines.push(mostClicksP+" drove the largest click volume with "+fmt(platBreak[mostClicksP].clicks)+" clicks.");
+                  return <Insight title="Engagement Read" accent={P.mint} icon={Ic.bolt(P.mint,16)}>{lines.join(" ")}</Insight>;
+                })()}
                 {demoBlocks&&demoBlocks.engagementBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.engagementBlock}</div>}
               </div>
 
@@ -3361,6 +3391,20 @@ export default function MediaOnGas(){
                 </div>
                 {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></div>;})()}
                 {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;active.forEach(function(k){totalResults+=objectives4[k].results;});return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);})()}
+                {(function(){
+                  var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
+                  if(active.length===0)return null;
+                  var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];
+                  var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];
+                  var totalResults=0;var totalSpend=0;active.forEach(function(k){totalResults+=objectives4[k].results;totalSpend+=objectives4[k].spend;});
+                  var bestEffCost=bestEff?objectives4[bestEff].spend/objectives4[bestEff].results:0;
+                  var lines=[];
+                  lines.push(fmt(totalResults)+" objective results were delivered across "+active.length+" active objective"+(active.length>1?"s":"")+" from "+fR(totalSpend)+" invested.");
+                  if(topVol)lines.push(topVol+" led volume with "+fmt(objectives4[topVol].results)+" results.");
+                  if(bestEff&&bestEffCost>0)lines.push(bestEff+" achieved the strongest efficiency at "+fR(bestEffCost)+" per result.");
+                  if(active.length>1&&topVol!==bestEff)lines.push("Volume and efficiency leaders differ, a signal to weigh budget shift toward "+bestEff+" if efficiency is the priority, or hold "+topVol+" to protect scale.");
+                  return <Insight title="Objective Read" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
+                })()}
                 {demoBlocks&&demoBlocks.objectiveBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.objectiveBlock}</div>}
               </div>}
 
