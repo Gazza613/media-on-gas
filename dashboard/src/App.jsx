@@ -249,12 +249,12 @@ function LoginScreen(props){
     <div style={{width:"100%",maxWidth:380,padding:32,position:"relative",zIndex:2,animation:"gasEnter 0.8s cubic-bezier(0.2,0.8,0.2,1) both"}}>
       <div style={{textAlign:"center",marginBottom:40,animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.05s both"}}>
         <div style={{width:80,height:80,borderRadius:"50%",overflow:"hidden",margin:"0 auto 22px",animation:"gasLogoGlow 4s ease-in-out infinite",position:"relative"}}>
-          <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+          <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" width="80" height="80" fetchpriority="high" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
           {/* shimmer ring */}
           <div style={{position:"absolute",inset:-2,borderRadius:"50%",background:"conic-gradient(from 0deg,transparent 0deg,rgba(249,98,3,0.35) 60deg,transparent 120deg,transparent 360deg)",animation:"gasOrbit 6s linear infinite",opacity:0.6,pointerEvents:"none"}}/>
         </div>
         <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{backgroundImage:"linear-gradient(90deg,#F96203,#FF3D00,#A855F7,#F96203)",backgroundSize:"300% 100%",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",animation:"gasShimmer 6s linear infinite"}}>GAS</span></div>
-        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",letterSpacing:3,textTransform:"uppercase",fontFamily:fm,fontWeight:600,whiteSpace:"nowrap",animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.15s both"}}>Performance Metrics That Matter</div>
+        <div style={{fontSize:13,color:"rgba(255,251,248,0.78)",letterSpacing:3.5,textTransform:"uppercase",fontFamily:fm,fontWeight:700,whiteSpace:"nowrap",animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.15s both"}}>Metrics That Matter</div>
       </div>
       <div style={{background:"rgba(30,18,50,0.5)",borderRadius:16,padding:28,backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",border:"1px solid rgba(249,98,3,0.25)",animation:"gasCardBreather 4.5s ease-in-out infinite, gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.25s both"}}>
         <div style={{fontSize:12,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:600,marginBottom:16,textAlign:"center"}}>Dashboard Access</div>
@@ -2214,7 +2214,7 @@ export default function MediaOnGas(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
-            <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Performance Metrics That Matter"}</div></div>
+            <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.sub,14)} {selected.length} Campaigns</button>}
