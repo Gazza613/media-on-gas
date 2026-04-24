@@ -109,7 +109,7 @@ export default async function handler(req, res) {
             "login-customer-id": gManagerId,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ query: query, pageSize: 10000 })
+          body: JSON.stringify({ query: query })
         });
         if (!r.ok) {
           // Log the first 300 chars of the response body so we see WHY the

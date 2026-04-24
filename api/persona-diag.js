@@ -66,26 +66,46 @@ export default async function handler(req, res) {
     googleIntent: {}
   };
 
-  // Meta diagnostic, per account
+  // Meta diagnostic, per account. Wide set of breakdown combos so we find
+  // a path that splits FB vs IG for this account, plus error body capture
+  // so we can read Meta's actual rejection reason when a combo 400s.
   var metaToken = process.env.META_ACCESS_TOKEN;
   if (!metaToken) {
     report.meta = { error: "META_ACCESS_TOKEN not configured" };
   } else {
+    var combosToTest = [
+      "age,gender,publisher_platform",
+      "age,publisher_platform",
+      "gender,publisher_platform",
+      "region,publisher_platform",
+      "impression_device,publisher_platform",
+      "publisher_platform,platform_position",
+      "age,gender,platform_position",
+      "age,platform_position",
+      "gender,platform_position",
+      "region,platform_position",
+      "platform_position",
+      "publisher_platform",
+      "age,gender",
+      "age,gender,impression_device"
+    ];
     report.meta.accounts = {};
     for (var i = 0; i < META_ACCOUNTS.length; i++) {
       var acc = META_ACCOUNTS[i];
-      var threeDim = await metaBreakdown(acc, metaToken, from, to, "age,gender,publisher_platform");
-      var agByPlat = await metaBreakdown(acc, metaToken, from, to, "age,publisher_platform");
-      var genByPlat = await metaBreakdown(acc, metaToken, from, to, "gender,publisher_platform");
-      var regByPlat = await metaBreakdown(acc, metaToken, from, to, "region,publisher_platform");
-      var devByPlat = await metaBreakdown(acc, metaToken, from, to, "impression_device,publisher_platform");
-      report.meta.accounts[acc.name] = {
-        "3dim_age_gender_publisher": { error: threeDim.error, distribution: summarisePlatforms(threeDim.rows) },
-        "2dim_age_publisher": { error: agByPlat.error, distribution: summarisePlatforms(agByPlat.rows) },
-        "2dim_gender_publisher": { error: genByPlat.error, distribution: summarisePlatforms(genByPlat.rows) },
-        "2dim_region_publisher": { error: regByPlat.error, distribution: summarisePlatforms(regByPlat.rows) },
-        "2dim_device_publisher": { error: devByPlat.error, distribution: summarisePlatforms(devByPlat.rows) }
-      };
+      var bucket = {};
+      for (var c = 0; c < combosToTest.length; c++) {
+        var combo = combosToTest[c];
+        var result = await metaBreakdown(acc, metaToken, from, to, combo);
+        // Summarise by whichever platform field is present in the rows
+        var platformField = combo.indexOf("publisher_platform") >= 0 ? "publisher_platform" : (combo.indexOf("platform_position") >= 0 ? "platform_position" : null);
+        var dist = platformField ? summarisePlatforms(result.rows.map(function(r) { return { publisher_platform: r[platformField] }; })) : { total: result.rows.length, byPlatform: {} };
+        bucket[combo] = {
+          error: result.error,
+          body: result.error ? (result.body || "").slice(0, 250) : undefined,
+          distribution: dist
+        };
+      }
+      report.meta.accounts[acc.name] = bucket;
     }
   }
 
