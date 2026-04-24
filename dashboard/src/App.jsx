@@ -148,6 +148,22 @@ function findLookerUrl(camps,sel){var s=camps.filter(function(x){return sel.inde
 var fmt=function(n){var v=parseFloat(n);if(isNaN(v))return"0";if(v>=1e6)return(v/1e6).toFixed(2)+"M";if(v>=1e3)return(v/1e3).toFixed(1)+"K";return Math.round(v).toLocaleString();};
 var fR=function(n){var v=parseFloat(n);return isNaN(v)?"R0.00":"R"+v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});};
 var pc=function(n){var v=parseFloat(n);return isNaN(v)?"0.00%":v.toFixed(2)+"%";};
+// textOnAccent picks dark or white text based on background brightness
+// (WCAG relative luminance). Bright brand colours like TikTok cyan
+// (#00F2EA) and Google's gold (#FFAA00) fail white-text contrast badly,
+// dark text on those reads cleanly while staying brand-faithful. Used on
+// any button or chip whose background is a dynamic platform / objective
+// accent colour. Falls back to white for non-hex inputs (gradients,
+// rgb()) since those are typically darker.
+var textOnAccent=function(bg){
+  if(typeof bg!=="string")return"#fff";
+  var hex=bg.charAt(0)==="#"?bg.slice(1):bg;
+  if(hex.length===3)hex=hex.split("").map(function(c){return c+c;}).join("");
+  if(hex.length<6||/[^0-9a-fA-F]/.test(hex.slice(0,6)))return"#fff";
+  var r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
+  var lum=(0.2126*r+0.7152*g+0.0722*b)/255;
+  return lum>0.62?"#0a0618":"#fff";
+};
 
 function SignupScreen(props){
   var loadingS=useState(true),loading=loadingS[0],setLoading=loadingS[1];
@@ -4330,7 +4346,7 @@ export default function MediaOnGas(){
                         <span>{fR(ad.spend)}</span>
                         <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
-                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:"#fff",fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
+                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:textOnAccent(objAccent),fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                     </div>
                   </div>;
                 };
@@ -4749,7 +4765,7 @@ export default function MediaOnGas(){
                     <div style={{fontSize:10,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)}</div>
                   </div>}
                   <div style={{position:"absolute",top:10,left:10,background:isTop?P.mint:"rgba(255,255,255,0.18)",color:isTop?"#062014":P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
-                  <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
+                  <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:textOnAccent(adPlatC),padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
                   <div style={{position:"absolute",bottom:10,left:10,background:fmtMeta(ad.format).color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.5)",zIndex:3}}>{fmtMeta(ad.format).label}</div>
                   {ad._scale&&<div style={{position:"absolute",bottom:10,right:10,background:P.mint,color:"#062014",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(52,211,153,0.45)",zIndex:3,textTransform:"uppercase"}}>{"\u25B2 SCALE"}</div>}
                   {ad._topPerformer&&<div style={{position:"absolute",bottom:10,right:10,background:P.warning,color:"#2a1605",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(251,191,36,0.4)",zIndex:3,textTransform:"uppercase"}}>{"\u2605 TOP PERFORMER"}</div>}
@@ -4767,7 +4783,7 @@ export default function MediaOnGas(){
                     <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:11}}>{ad.ctr.toFixed(2)+"%"}</div></div>
                     <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
                   </div>
-                  <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
+                  <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:textOnAccent(adPlatC),fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                 </div>
               </div>;
             };
@@ -4786,14 +4802,14 @@ export default function MediaOnGas(){
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
                   <div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
                 </td>
-                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:"#fff",fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:textOnAccent(adPlatC),fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{(function(){var fm2=fmtMeta(ad.format);return <span style={{background:fm2.color,color:"#fff",fontSize:9,fontWeight:900,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{fm2.label}</span>;})()}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fmt(ad.results):"-"}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><button onClick={function(){setPreviewAd(ad);}} style={{display:"inline-block",background:adPlatC,color:"#fff",padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,border:"none",letterSpacing:1,cursor:"pointer",whiteSpace:"nowrap"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button></td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><button onClick={function(){setPreviewAd(ad);}} style={{display:"inline-block",background:adPlatC,color:textOnAccent(adPlatC),padding:"5px 11px",borderRadius:5,fontSize:10,fontWeight:800,fontFamily:fm,border:"none",letterSpacing:1,cursor:"pointer",whiteSpace:"nowrap"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button></td>
               </tr>;
             };
 
@@ -5030,7 +5046,7 @@ export default function MediaOnGas(){
                         <span style={{color:P.label}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
                     </div>
-                    <button onClick={function(){setPreviewAd(ad);}} style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,border:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap",cursor:"pointer"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
+                    <button onClick={function(){setPreviewAd(ad);}} style={{flexShrink:0,display:"inline-block",background:pc,color:textOnAccent(pc),padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,border:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap",cursor:"pointer"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                   </div>;
                 };
 
@@ -5695,7 +5711,7 @@ export default function MediaOnGas(){
                       }
                     return <tr key={ri} style={{background:ri%2===0?pc+"06":"transparent",borderTop:ri>0&&r.platform!==sorted6[ri-1].platform?"3px solid "+pc+"30":"none"}}>
                       <td title={r.adsetName} style={{padding:"10px 12px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:300,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div>{isBest&&<span style={{background:P.mint,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:3,display:"inline-block"}}>BEST</span>}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc,color:textOnAccent(pc),fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.impressions)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.clicks)}</td>
