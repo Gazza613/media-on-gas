@@ -337,27 +337,27 @@ function TargetingPersonaCard(props){
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{p.platform}</div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(p.totalClicks)+" clicks · "+p.shareOfClicks.toFixed(2)+"% of total"}</div>
+        <div style={{fontSize:10,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:1}}>{fmt(p.totalClicks)+" clicks · "+p.shareOfClicks.toFixed(2)+"% of total"}</div>
       </div>
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
       <div style={{fontSize:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-1,lineHeight:1,textShadow:"0 0 24px "+c+"60"}}>{p.topAge||"—"}</div>
-      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
+      <div style={{fontSize:9,color:"rgba(255,251,248,0.75)",fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
+        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{genderLead||"—"}</div>
         <div style={{fontSize:10,color:c,fontFamily:fm,fontWeight:700,marginTop:1}}>{genderLead?genderShare.toFixed(2)+"%":""}</div>
       </div>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
+        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{p.mobileShare>0?p.mobileShare.toFixed(2)+"%":"—"}</div>
-        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
+        <div style={{fontSize:10,color:"rgba(255,251,248,0.58)",fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
       </div>
     </div>
     {p.topProvinces.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Regions</div>
+      <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Regions</div>
       {p.topProvinces.map(function(pr,i){return <div key={pr.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<p.topProvinces.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
@@ -436,27 +436,27 @@ function GoogleIntentCard(props){
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Google Ads</div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{subLine}</div>
+        <div style={{fontSize:10,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:1}}>{subLine}</div>
       </div>
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
       <div style={{fontSize:hasIntent?26:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-0.5,lineHeight:1.1,textShadow:"0 0 24px "+c+"50"}}>{anchorBig}</div>
-      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>{anchorSmall}</div>
+      <div style={{fontSize:9,color:"rgba(255,251,248,0.75)",fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>{anchorSmall}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile1Label}</div>
+        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile1Label}</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{tile1Value}</div>
-        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>{tile1Sub}</div>
+        <div style={{fontSize:10,color:"rgba(255,251,248,0.58)",fontFamily:fm,marginTop:1}}>{tile1Sub}</div>
       </div>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile2Label}</div>
+        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile2Label}</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{tile2Value}</div>
-        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>{tile2Sub}</div>
+        <div style={{fontSize:10,color:"rgba(255,251,248,0.58)",fontFamily:fm,marginTop:1}}>{tile2Sub}</div>
       </div>
     </div>
     {rankItems.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>{rankLabel}</div>
+      <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>{rankLabel}</div>
       {rankItems.map(function(r,i){return <div key={i+"-"+r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<rankItems.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
