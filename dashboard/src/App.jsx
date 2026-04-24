@@ -130,7 +130,11 @@ var API_KEY="c0c7438297c52d8100494263d97389b5777312af2e88f8cdfc247622454b3d80";
 var FEATURES={
   targetingPersonas:true,     // Targeting tab, per-platform persona cards (Meta, IG, TikTok)
   googleIntentCard:true,      // Targeting tab, Google Search intent card
-  communityDemographics:true, // Community tab, member demographic cards
+  communityDemographics:false,// DISABLED, Meta / IG / TikTok owned-community demographic APIs
+                              // return "data not exposed" for our connected pages across the
+                              // board so the cards showed placeholders only. Flip back to
+                              // true if the platform permissions / scopes get upgraded and
+                              // real age / gender / country data starts flowing through.
   summaryTeasers:true         // Summary tab, mini previews linking to Targeting and Community
 };
 var LOOKER_URLS={"mtn momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","mtn momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","willowbrook":"https://lookerstudio.google.com/reporting/823fd5fa-b39d-4dc3-b623-549197d0341f/page/p_2upnicpx0d","psycho":"https://lookerstudio.google.com/reporting/0adc106a-50e2-42cc-a4ca-aafc04160e5d/page/p_1ooj1p0nmd","khava":"","concord":"","eden":"","flower":""};
