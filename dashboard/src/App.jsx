@@ -330,8 +330,8 @@ function TargetingPersonaCard(props){
   var p=props.persona;var c=p.color;
   var genderLead=p.genderSplit.female>p.genderSplit.male?"Female":(p.genderSplit.male>0?"Male":"");
   var genderShare=Math.max(p.genderSplit.female,p.genderSplit.male);
-  var segLabel=p.topSegment.age&&p.topSegment.gen?(p.topSegment.age+" "+(p.topSegment.gen==="female"?"Female":"Male")):"";
-  var ctrVerdict=p.ctrRatio>=1.3?"clicking well above blended CTR":p.ctrRatio>=1.0?"in line with blended CTR":p.ctrRatio>0?"below blended CTR":"CTR data still building";
+  var topSegments=Array.isArray(p.topSegments)?p.topSegments:[];
+  var segLabel=function(s){return s&&s.age&&s.gen?(s.age+" "+(s.gen==="female"?"Female":"Male")):"";};
   return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
@@ -366,13 +366,16 @@ function TargetingPersonaCard(props){
         <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{pr.share.toFixed(2)+"%"}</span>
       </div>;})}
     </div>}
-    {segLabel&&<div style={{padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10,marginBottom:10}}>
-      <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:3,fontWeight:800}}>Hottest Segment</div>
-      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:700}}>{segLabel}<span style={{color:c,marginLeft:6,fontWeight:900}}>{p.topSegment.share.toFixed(2)+"%"}</span></div>
+    {topSegments.length>0&&<div style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
+      <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:800}}>Best Personas</div>
+      {topSegments.map(function(s,i){return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<topSegments.length-1?"1px dashed "+c+"20":"none",fontSize:12,fontFamily:fm}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{width:16,height:16,borderRadius:"50%",background:i===0?c:c+"50",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
+          <span style={{color:"#fff",fontWeight:700}}>{segLabel(s)}</span>
+        </div>
+        <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{s.share.toFixed(2)+"%"}</span>
+      </div>;})}
     </div>}
-    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
-      CTR {p.ctr.toFixed(2)+"%"}, {ctrVerdict}
-    </div>
   </div>;
 }
 
@@ -384,51 +387,73 @@ function TargetingPersonaCard(props){
 // as a slim strip at the bottom when Google populates them.
 function GoogleIntentCard(props){
   var g=props.intent;var c=P.gd;
-  if(!g||!g.available){
-    return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",textAlign:"center",minHeight:320}}>
-      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>{Ic.globe("#fff",20)}</div>
-      <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Google Search Intent</div>
-      <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6,maxWidth:260}}>{g&&g.reason?g.reason:"Intent signals will populate here once the Google Ads account exposes the required metrics."}</div>
-    </div>;
+  // Card always renders with the same shape (header + intent themes + match
+  // readiness + when + observation demographics) so the layout reads well
+  // next to the Meta / TikTok cards. If data is missing for a specific
+  // section we show a short, client-friendly placeholder phrase rather than
+  // the old "No search-term data for the selected range" engineer-speak.
+  var themeLabels={branded:"Brand interest",comparison:"Comparison intent",transactional:"Ready-to-act intent",problem:"Problem-solving intent",informational:"Research intent",other:"Other intent"};
+  var themes=g&&g.intentThemes?g.intentThemes.slice(0,4):[];
+  var topAge=g&&g.age&&g.age[0]||null;
+  var genderLead=g&&g.gender&&(g.gender.female>g.gender.male?"Female":(g.gender.male>0?"Male":""));
+  var genderShare=g&&g.gender?Math.max(g.gender.female||0,g.gender.male||0):0;
+  var matchReady=g&&g.matchType&&g.matchType.readinessLabel;
+  var whenLbl=g&&g.whenLabel;
+  var totalSearch=g&&g.totalSearchClicks||0;
+  var subLine=totalSearch>0?fmt(totalSearch)+" search clicks, intent-based profile":"Intent-based profile";
+  var bestPersonaLines=[];
+  if(themes.length>0){
+    var lead=themes[0];
+    bestPersonaLines.push({label:themeLabels[lead.theme]||lead.theme,share:lead.share.toFixed(2)+"%"});
   }
-  var themeLabels={branded:"Brand searches",comparison:"Comparison queries",transactional:"Transactional queries",problem:"Problem / how-to queries",informational:"Informational queries",other:"Other"};
-  var topThemes=(g.intentThemes||[]).slice(0,4);
-  var topAge=(g.age&&g.age[0])||null;
-  var genderLead=g.gender&&(g.gender.female>g.gender.male?"Female":(g.gender.male>0?"Male":""));
-  var genderShare=g.gender?Math.max(g.gender.female||0,g.gender.male||0):0;
+  if(matchReady)bestPersonaLines.push({label:matchReady,share:""});
+  if(whenLbl)bestPersonaLines.push({label:"Searches "+whenLbl,share:""});
   return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Google Search</div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(g.totalSearchClicks||0)+" search clicks, intent-based profile"}</div>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{subLine}</div>
       </div>
     </div>
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Intent Themes</div>
-      {topThemes.length>0?topThemes.map(function(t,i){return <div key={t.theme} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 0",borderBottom:i<topThemes.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
+    <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
+      <div style={{fontSize:30,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-0.5,lineHeight:1.1,textShadow:"0 0 24px "+c+"50"}}>{themes.length>0?(themeLabels[themes[0].theme]||themes[0].theme):"Intent signals"}</div>
+      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Intent{themes.length>0?" · "+themes[0].share.toFixed(2)+"%":""}</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Intent Themes</div>
+        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{themes.length>0?themes.length:"—"}</div>
+        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>distinct query types</div>
+      </div>
+      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Funnel Stage</div>
+        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{matchReady?(matchReady.indexOf("High-intent")>=0?"High":matchReady.indexOf("Research")>=0?"Research":"Mixed"):"—"}</div>
+        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>by match-type mix</div>
+      </div>
+    </div>
+    {themes.length>0&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Search Themes</div>
+      {themes.map(function(t,i){return <div key={t.theme} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<themes.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{width:8,height:8,borderRadius:"50%",background:i===0?c:c+"55"}}></span>
+          <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
           <span style={{color:"#fff",fontWeight:700}}>{themeLabels[t.theme]||t.theme}</span>
         </div>
         <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{t.share.toFixed(2)+"%"}</span>
-      </div>;}):<div style={{fontSize:11,color:P.dim,fontFamily:fm,fontStyle:"italic",padding:"10px 0"}}>No search-term data for the selected range</div>}
-    </div>
-    {g.matchType&&g.matchType.readinessLabel&&<div style={{padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10,marginBottom:12}}>
-      <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:3,fontWeight:800}}>Funnel Readiness</div>
-      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:700}}>{g.matchType.readinessLabel}</div>
-      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:3}}>Exact {g.matchType.exact.toFixed(2)+"%"} · Phrase {g.matchType.phrase.toFixed(2)+"%"} · Broad {g.matchType.broad.toFixed(2)+"%"}</div>
+      </div>;})}
     </div>}
-    {g.whenLabel&&<div style={{padding:"8px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,marginBottom:12,fontSize:11,color:"#fff",fontFamily:fm}}>
-      <span style={{fontSize:8,color:P.sub,letterSpacing:1.8,textTransform:"uppercase",marginRight:8,fontWeight:700}}>When</span>{g.whenLabel}
+    {bestPersonaLines.length>0?<div style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
+      <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:800}}>Best Personas</div>
+      {bestPersonaLines.map(function(line,i){return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<bestPersonaLines.length-1?"1px dashed "+c+"20":"none",fontSize:12,fontFamily:fm}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{width:16,height:16,borderRadius:"50%",background:i===0?c:c+"50",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
+          <span style={{color:"#fff",fontWeight:700}}>{line.label}</span>
+        </div>
+        {line.share&&<span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{line.share}</span>}
+      </div>;})}
+    </div>:<div style={{marginTop:"auto",padding:"12px 12px",background:"rgba(0,0,0,0.22)",border:"1px dashed "+c+"35",borderRadius:10,fontSize:11,color:"rgba(255,251,248,0.78)",fontFamily:fm,lineHeight:1.55,textAlign:"center"}}>
+      Google search signals will populate here once the selected campaigns accumulate Search-channel click activity.
     </div>}
-    {g.observationDemographicsAvailable&&(topAge||genderLead)&&<div style={{padding:"8px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.rule,borderRadius:10,marginBottom:10}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Observation Data</div>
-      <div style={{fontSize:11,color:"#fff",fontFamily:fm,fontWeight:700}}>{topAge?(topAge.age+" leads age, "+topAge.share.toFixed(2)+"%"):""}{topAge&&genderLead?" · ":""}{genderLead?genderLead+" "+genderShare.toFixed(2)+"%":""}</div>
-    </div>}
-    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:10,color:P.sub,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
-      Google profile is intent-led, social platforms are demographic-led, use both together to build the targeting mix.
-    </div>
   </div>;
 }
 
@@ -3270,27 +3295,32 @@ export default function MediaOnGas(){
               var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=stage.field(r);});
               var gSum=gs.female+gs.male;
               var genderSplit={female:gSum>0?(gs.female/gSum*100):0,male:gSum>0?(gs.male/gSum*100):0};
-              // Top provinces (up to 2)
+              // Top provinces (up to 3)
               var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+stage.field(r);});
               var pOrder=Object.keys(provSums).sort(function(a,b){return provSums[b]-provSums[a];});
               var pDenom=Object.keys(provSums).reduce(function(s,k){return s+provSums[k];},0);
-              var topProvinces=pOrder.slice(0,2).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
+              var topProvinces=pOrder.slice(0,3).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
               // Mobile share of device-tagged clicks (Mobile + Desktop + Tablet denominator, matches the Device Mix chart)
               var devB={mobile:0,desktop:0,tablet:0};
               devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=stage.field(r);});
               var devDenom=devB.mobile+devB.desktop+devB.tablet;
               var mobileShare=devDenom>0?(devB.mobile/devDenom*100):0;
-              // Dominant age+gender segment
-              var segBest={val:0,age:"",gen:""};
-              agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>segBest.val)segBest={val:v,age:a,gen:g};});
-              var segShare=totalClicks>0?(segBest.val/totalClicks*100):0;
-              // CTR vs blended
+              // Top 3 age+gender segments, descending. Previously we only
+              // surfaced the single hottest segment, client wanted a top-3
+              // list so multiple converting segments can be weighted in
+              // budget decisions rather than one winner.
+              var segMap={};
+              agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var k=a+"|"+g;var v=stage.field(r);segMap[k]=(segMap[k]||0)+v;});
+              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalClicks>0?(segMap[k]/totalClicks*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
+              // CTR vs blended, kept in the payload even though the card
+              // footer no longer prints it, the Targeting Insights narrative
+              // below the grid still references ctrRatio.
               var pd=authPlat&&authPlat[displayName];
               var platImps=pd?pd.imp:0;var platClk=pd?pd.clk:0;
               var ctr=platImps>0?(platClk/platImps*100):0;
               var blendedCtr=authImps>0?(authClicks/authImps*100):0;
               var ctrRatio=blendedCtr>0?(ctr/blendedCtr):0;
-              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegment:{age:segBest.age,gen:segBest.gen,share:segShare},ctr:ctr,ctrRatio:ctrRatio};
+              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio};
             };
             targetingPersonas=[
               buildPersona("facebook","Facebook",P.fb,Ic.eye),
@@ -4249,8 +4279,8 @@ export default function MediaOnGas(){
                 <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
                   <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Is Clicking — Audience Personas</div>
-                    <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted audience profile per platform. Meta and TikTok read as demographic-led, Google as intent-led. Use both together to sharpen the targeting mix.</div>
+                    <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Audience Personas</div>
+                    <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
                   </div>
                 </div>
                 <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
@@ -4259,7 +4289,7 @@ export default function MediaOnGas(){
                   // Use an empty-persona placeholder for any platform without
                   // click volume so the grid layout is always four columns.
                   var byName={};(targetingPersonas||[]).forEach(function(p){byName[p.platform]=p;});
-                  var empty=function(name,color,iconFn){return {platform:name,color:color,iconFn:iconFn,totalClicks:0,shareOfClicks:0,topAge:"",topAgeShare:0,genderSplit:{female:0,male:0},topProvinces:[],mobileShare:0,topSegment:{age:"",gen:"",share:0},ctr:0,ctrRatio:0};};
+                  var empty=function(name,color,iconFn){return {platform:name,color:color,iconFn:iconFn,totalClicks:0,shareOfClicks:0,topAge:"",topAgeShare:0,genderSplit:{female:0,male:0},topProvinces:[],mobileShare:0,topSegments:[],ctr:0,ctrRatio:0};};
                   var fb=byName["Facebook"]||empty("Facebook",P.fb,Ic.eye);
                   var ig=byName["Instagram"]||empty("Instagram",P.ig,Ic.fire);
                   var tt=byName["TikTok"]||empty("TikTok",P.tt,Ic.bolt);
@@ -5408,8 +5438,8 @@ export default function MediaOnGas(){
             <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
               <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
               <div style={{flex:1}}>
-                <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Is Clicking — Targeting Personas</div>
-                <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted audience profile per platform. Use this to weight budget toward the segments actually converting attention into action.</div>
+                <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Audience Personas</div>
+                <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
               </div>
             </div>
             <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
@@ -5428,7 +5458,8 @@ export default function MediaOnGas(){
               var lines=[];
               var byShare=targetingPersonas.slice().sort(function(a,b){return b.shareOfClicks-a.shareOfClicks;});
               var lead=byShare[0];
-              lines.push(lead.platform+" carries the heaviest click volume at "+lead.shareOfClicks.toFixed(2)+"% of total, with a "+(lead.topAge||"mixed-age")+(lead.topSegment.gen?" "+(lead.topSegment.gen==="female"?"female":"male")+"-led":"")+" audience clicking "+(lead.mobileShare>0?"mostly on mobile at "+lead.mobileShare.toFixed(2)+"%":"across devices")+".");
+              var leadSeg=(lead.topSegments&&lead.topSegments[0])||null;
+              lines.push(lead.platform+" carries the heaviest click volume at "+lead.shareOfClicks.toFixed(2)+"% of total, with a "+(lead.topAge||"mixed-age")+(leadSeg&&leadSeg.gen?" "+(leadSeg.gen==="female"?"female":"male")+"-led":"")+" audience clicking "+(lead.mobileShare>0?"mostly on mobile at "+lead.mobileShare.toFixed(2)+"%":"across devices")+".");
               if(targetingPersonas.length>1){
                 var byCtr=targetingPersonas.slice().filter(function(p){return p.ctrRatio>0;}).sort(function(a,b){return b.ctrRatio-a.ctrRatio;});
                 if(byCtr.length>0){
@@ -5444,7 +5475,7 @@ export default function MediaOnGas(){
                 var geo=strongGeo.sort(function(a,b){return b.share-a.share;})[0];
                 lines.push(geo.plat+" is especially concentrated in "+geo.prov+" at "+geo.share.toFixed(2)+"% of its clicks, the sharpest geographic signal across the personas.");
               }
-              lines.push("Recommendation, keep the current platform mix broadly intact to preserve reach diversity, then weight a larger share of budget to "+lead.platform+" creative variants that speak directly to the "+(lead.topAge||"primary")+(lead.topSegment.gen?" "+(lead.topSegment.gen==="female"?"female":"male"):"")+" segment it is over-indexing on. This is a weighting shift, not an exclusion.");
+              lines.push("Recommendation, keep the current platform mix broadly intact to preserve reach diversity, then weight a larger share of budget to "+lead.platform+" creative variants that speak directly to the "+(lead.topAge||"primary")+(leadSeg&&leadSeg.gen?" "+(leadSeg.gen==="female"?"female":"male"):"")+" segment it is over-indexing on. This is a weighting shift, not an exclusion.");
               return <Insight title="Targeting Insights" accent={P.solar} icon={Ic.radar(P.solar,16)}>{lines.join(" ")}</Insight>;
             })()}
           </div>)}
