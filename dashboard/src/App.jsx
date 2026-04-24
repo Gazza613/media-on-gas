@@ -337,7 +337,6 @@ function TargetingPersonaCard(props){
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{p.platform}</div>
-        <div style={{fontSize:10,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:1}}>{fmt(p.totalClicks)+" clicks · "+p.shareOfClicks.toFixed(2)+"% of total"}</div>
       </div>
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
@@ -421,22 +420,26 @@ function GoogleIntentCard(props){
   // Ranked list, intent themes if they exist, otherwise age brackets
   var rankLabel=hasIntent?"Top Search Themes":"Top Age Brackets";
   var rankItems=hasIntent?themes.map(function(t){return {label:themeLabels[t.theme]||t.theme,share:t.share};}):ages.slice(0,4).map(function(a){return {label:a.age,share:a.share};});
-  // Best Personas footer — 3 rows synthesised from the strongest available signals
+  // Best Personas footer — match the Meta / TikTok card format, a ranked
+  // list of 3 age+gender personas with share percentages. Google observation
+  // data gives us age and gender separately (not a joint matrix like Meta),
+  // so we cross the top 3 age brackets with the dominant gender lead to get
+  // three labelled personas. Share is the age bracket's share of clicks,
+  // labelled with the gender lead so the persona reads as a full archetype.
+  // When no age data exists we fall back to intent themes.
   var bestPersonaLines=[];
-  if(hasIntent){
-    bestPersonaLines.push({label:themeLabels[themes[0].theme]||themes[0].theme,share:themes[0].share.toFixed(2)+"%"});
-    if(matchReady)bestPersonaLines.push({label:matchReady,share:""});
-  } else {
-    if(topAge)bestPersonaLines.push({label:topAge.age+" age lead",share:topAge.share.toFixed(2)+"%"});
-    if(genderLead)bestPersonaLines.push({label:genderLead+" skew",share:genderShare.toFixed(2)+"%"});
+  if(ages.length>0&&genderLead){
+    bestPersonaLines=ages.slice(0,3).map(function(a){return {label:a.age+" "+genderLead,share:a.share.toFixed(2)+"%"};});
+  } else if(ages.length>0){
+    bestPersonaLines=ages.slice(0,3).map(function(a){return {label:a.age+" bracket",share:a.share.toFixed(2)+"%"};});
+  } else if(hasIntent){
+    bestPersonaLines=themes.slice(0,3).map(function(t){return {label:themeLabels[t.theme]||t.theme,share:t.share.toFixed(2)+"%"};});
   }
-  if(whenLbl)bestPersonaLines.push({label:"Clicks "+whenLbl,share:""});
   return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Google Ads</div>
-        <div style={{fontSize:10,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:1}}>{subLine}</div>
       </div>
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
