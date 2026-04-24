@@ -337,7 +337,14 @@ function TargetingPersonaCard(props){
   var genderShare=Math.max(p.genderSplit.female,p.genderSplit.male);
   var topSegments=Array.isArray(p.topSegments)?p.topSegments:[];
   var segLabel=function(s){return s&&s.age&&s.gen?(s.age+" "+(s.gen==="female"?"Female":"Male")):"";};
-  return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
+  var hov=useState(false);
+  // Stagger the breathing glow per card so they don't pulse in unison.
+  // delay prop is set by the parent grid (0, 0.8, 1.6, 2.4 seconds for the
+  // four-card row), if absent we fall back to no delay.
+  var delay=typeof props.delay==="number"?props.delay:0;
+  return <div onMouseEnter={function(){hov[1](true);}} onMouseLeave={function(){hov[1](false);}} style={{position:"relative",background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+(hov[0]?c+"80":c+"40"),padding:"22px 22px 18px",boxShadow:hov[0]?("0 14px 44px rgba(0,0,0,0.45),0 0 80px "+c+"35,0 0 120px "+c+"22 inset"):("0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset"),display:"flex",flexDirection:"column",transition:"box-shadow 0.4s ease, border-color 0.4s ease, transform 0.4s ease",transform:hov[0]?"translateY(-3px)":"translateY(0)"}}>
+    <div aria-hidden style={{position:"absolute",inset:-1,borderRadius:19,boxShadow:"0 0 28px "+c+"55,0 0 64px "+c+"30",pointerEvents:"none",animation:"personaGlowPulse 4.5s ease-in-out infinite",animationDelay:delay+"s",zIndex:0}}/>
+    <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
@@ -380,6 +387,7 @@ function TargetingPersonaCard(props){
         <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{s.share.toFixed(2)+"%"}</span>
       </div>;})}
     </div>}
+    </div>
   </div>;
 }
 
@@ -440,7 +448,11 @@ function GoogleIntentCard(props){
   } else if(hasIntent){
     bestPersonaLines=themes.slice(0,3).map(function(t){return {label:themeLabels[t.theme]||t.theme,share:t.share.toFixed(2)+"%"};});
   }
-  return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
+  var hov=useState(false);
+  var delay=typeof props.delay==="number"?props.delay:0;
+  return <div onMouseEnter={function(){hov[1](true);}} onMouseLeave={function(){hov[1](false);}} style={{position:"relative",background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+(hov[0]?c+"80":c+"40"),padding:"22px 22px 18px",boxShadow:hov[0]?("0 14px 44px rgba(0,0,0,0.45),0 0 80px "+c+"35,0 0 120px "+c+"22 inset"):("0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset"),display:"flex",flexDirection:"column",transition:"box-shadow 0.4s ease, border-color 0.4s ease, transform 0.4s ease",transform:hov[0]?"translateY(-3px)":"translateY(0)"}}>
+    <div aria-hidden style={{position:"absolute",inset:-1,borderRadius:19,boxShadow:"0 0 28px "+c+"55,0 0 64px "+c+"30",pointerEvents:"none",animation:"personaGlowPulse 4.5s ease-in-out infinite",animationDelay:delay+"s",zIndex:0}}/>
+    <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
@@ -485,6 +497,7 @@ function GoogleIntentCard(props){
     </div>:<div style={{marginTop:"auto",padding:"12px 12px",background:"rgba(0,0,0,0.22)",border:"1px dashed "+c+"35",borderRadius:10,fontSize:11,color:"rgba(255,251,248,0.78)",fontFamily:fm,lineHeight:1.55,textAlign:"center"}}>
       Google signals will populate here once the selected campaigns accumulate click activity across age, gender, or search-term dimensions.
     </div>}
+    </div>
   </div>;
 }
 
@@ -3362,6 +3375,12 @@ export default function MediaOnGas(){
   })();
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
+      /* Persona card breathing glow, opacity-only so each card's box-shadow
+         keeps its platform colour. animationDelay is staggered per card via
+         inline style so the four cards pulse out of phase with each other,
+         a soft live-feel rather than a single synchronised heartbeat. */
+      @keyframes personaGlowPulse{0%,100%{opacity:0.35}50%{opacity:0.85}}
+      @keyframes personaCardLift{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
       /* Mobile responsive: attribute selectors match inline React styles so no component refactor needed */
       @media (max-width: 820px) {
         /* Collapse wide grids */
@@ -4325,10 +4344,10 @@ export default function MediaOnGas(){
                   var ig=byName["Instagram"]||empty("Instagram",P.ig,Ic.fire);
                   var tt=byName["TikTok"]||empty("TikTok",P.tt,Ic.bolt);
                   return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-                    <TargetingPersonaCard persona={fb}/>
-                    <TargetingPersonaCard persona={ig}/>
-                    <TargetingPersonaCard persona={tt}/>
-                    {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent}/>}
+                    <TargetingPersonaCard persona={fb} delay={0}/>
+                    <TargetingPersonaCard persona={ig} delay={0.9}/>
+                    <TargetingPersonaCard persona={tt} delay={1.8}/>
+                    {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent} delay={2.7}/>}
                   </div>;
                 })()}
               </div>)}
@@ -5486,10 +5505,10 @@ export default function MediaOnGas(){
               var ig=byName["Instagram"]||empty("Instagram",P.ig,Ic.fire);
               var tt=byName["TikTok"]||empty("TikTok",P.tt,Ic.bolt);
               return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
-                <TargetingPersonaCard persona={fb}/>
-                <TargetingPersonaCard persona={ig}/>
-                <TargetingPersonaCard persona={tt}/>
-                {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent}/>}
+                <TargetingPersonaCard persona={fb} delay={0}/>
+                <TargetingPersonaCard persona={ig} delay={0.9}/>
+                <TargetingPersonaCard persona={tt} delay={1.8}/>
+                {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent} delay={2.7}/>}
               </div>;
             })()}
             {targetingPersonas&&targetingPersonas.length>0&&(function(){
