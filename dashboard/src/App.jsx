@@ -7,7 +7,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 // 70% opacity), every explanation / sub-copy uses P.caption (white at 58%
 // opacity). P.label and P.caption are kept for non-label uses (chart strokes,
 // background tints via concat like P.sub+"15", icon colours, etc.).
-var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#22D3EE",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
+var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
 var ff="Poppins,Outfit,Segoe UI,sans-serif",fm="JetBrains Mono,Consolas,monospace";
 
