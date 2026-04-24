@@ -5,7 +5,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 // label and caption are the canonical tokens for client-visible secondary
 // text. Hard rule across the dashboard: every label uses P.label (white at
 // 70% opacity), every explanation / sub-copy uses P.caption (white at 58%
-// opacity). P.sub and P.dim are kept for non-label uses (chart strokes,
+// opacity). P.label and P.caption are kept for non-label uses (chart strokes,
 // background tints via concat like P.sub+"15", icon colours, etc.).
 var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#22D3EE",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
@@ -194,17 +194,17 @@ function SignupScreen(props){
           <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         </div>
         <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{color:"#FF3D00"}}>GAS</span></div>
-        <div style={{fontSize:10,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Team Invitation</div>
+        <div style={{fontSize:10,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Team Invitation</div>
       </div>
       <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(24px)"}}>
-        {loading&&<div style={{textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,letterSpacing:2}}>Dusting off your invite…</div>}
+        {loading&&<div style={{textAlign:"center",color:P.label,fontFamily:fm,fontSize:12,letterSpacing:2}}>Dusting off your invite…</div>}
         {!loading&&err&&!invite&&<div style={{textAlign:"center"}}>
           <div style={{fontSize:14,color:P.critical,fontFamily:fm,lineHeight:1.6,marginBottom:14}}>{err}</div>
-          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6}}>Ask <span style={{color:P.ember}}>gary@gasmarketing.co.za</span> for a fresh invitation.</div>
+          <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.6}}>Ask <span style={{color:P.ember}}>gary@gasmarketing.co.za</span> for a fresh invitation.</div>
         </div>}
         {!loading&&invite&&!done&&<>
-          <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,textAlign:"center"}}>Set your password</div>
-          <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>Welcome <span style={{color:P.ember,fontWeight:800}}>{invite.name||invite.email}</span><div style={{fontSize:11,color:P.sub,marginTop:4}}>{invite.email}</div></div>
+          <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,textAlign:"center"}}>Set your password</div>
+          <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>Welcome <span style={{color:P.ember,fontWeight:800}}>{invite.name||invite.email}</span><div style={{fontSize:11,color:P.label,marginTop:4}}>{invite.email}</div></div>
           <input type="password" placeholder="Choose a password (8+ chars)" value={pw} onChange={function(e){setPw(e.target.value);setErr("");}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:12,letterSpacing:2}}/>
           <input type="password" placeholder="Confirm password" value={pw2} onChange={function(e){setPw2(e.target.value);setErr("");}} onKeyDown={function(e){if(e.key==="Enter")submit();}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2}}/>
           {err&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center"}}>{err}</div>}
@@ -213,7 +213,7 @@ function SignupScreen(props){
         {done&&<div style={{textAlign:"center"}}>
           <div style={{fontSize:36,marginBottom:10,color:P.mint}}>{"✓"}</div>
           <div style={{fontSize:14,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>Account Ready</div>
-          <div style={{fontSize:12,color:P.sub,fontFamily:ff,marginBottom:20,lineHeight:1.6}}>Password set. Sign in with your email and new password.</div>
+          <div style={{fontSize:12,color:P.label,fontFamily:ff,marginBottom:20,lineHeight:1.6}}>Password set. Sign in with your email and new password.</div>
           <button onClick={function(){window.location.href="/";}} style={{width:"100%",background:gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:2}}>GO TO SIGN IN</button>
         </div>}
       </div>
@@ -322,8 +322,8 @@ power:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" 
 };
 
 function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=props.hv;var s=useState(false);return(<div onMouseEnter={function(){s[1](true);}} onMouseLeave={function(){s[1](false);}} style={Object.assign({background:P.glass,border:"1px solid "+(s[0]&&hv?a+"50":P.rule),borderRadius:16,position:"relative",overflow:"hidden",transition:"all 0.3s ease",transform:s[0]&&hv?"translateY(-2px)":"none",boxShadow:s[0]&&hv?"0 12px 40px "+a+"15":"0 4px 20px rgba(0,0,0,0.25)"},st)}><div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:s[0]&&hv?1:0.4}}/>{props.children}</div>);}
-function Metric(props){return(<Glass accent={props.accent} hv={true} st={{padding:"22px 20px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:8}}>{props.icon}<span style={{fontSize:9,fontWeight:700,color:P.sub,letterSpacing:2.5,textTransform:"uppercase",fontFamily:fm}}>{props.label}</span></div><div style={{width:8,height:8,borderRadius:"50%",background:props.accent,boxShadow:"0 0 12px "+props.accent+"60",animation:"pulse-glow 2s ease-in-out infinite"}}></div></div><div style={{fontSize:28,fontWeight:900,fontFamily:ff,lineHeight:1,letterSpacing:-1.5,color:props.accent,marginBottom:6}}>{props.value}</div>{props.sub&&<div style={{fontSize:10,color:P.dim,marginTop:10,fontFamily:fm,lineHeight:1.7,borderTop:"1px solid "+P.rule,paddingTop:10}}>{props.sub}</div>}</Glass>);}
-function SH(props){var a=props.accent||P.ember;return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{props.icon}</div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);}
+function Metric(props){return(<Glass accent={props.accent} hv={true} st={{padding:"22px 20px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:8}}>{props.icon}<span style={{fontSize:9,fontWeight:700,color:P.label,letterSpacing:2.5,textTransform:"uppercase",fontFamily:fm}}>{props.label}</span></div><div style={{width:8,height:8,borderRadius:"50%",background:props.accent,boxShadow:"0 0 12px "+props.accent+"60",animation:"pulse-glow 2s ease-in-out infinite"}}></div></div><div style={{fontSize:28,fontWeight:900,fontFamily:ff,lineHeight:1,letterSpacing:-1.5,color:props.accent,marginBottom:6}}>{props.value}</div>{props.sub&&<div style={{fontSize:10,color:P.caption,marginTop:10,fontFamily:fm,lineHeight:1.7,borderTop:"1px solid "+P.rule,paddingTop:10}}>{props.sub}</div>}</Glass>);}
+function SH(props){var a=props.accent||P.ember;return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{props.icon}</div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);}
 function Pill(props){return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:props.color+"12",border:"1px solid "+props.color+"30",borderRadius:20,padding:"3px 10px",fontSize:9,fontWeight:700,color:props.color,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:6,height:6,borderRadius:"50%",background:props.color}}/>{props.name}</span>);}
 // Targeting persona card for the Targeting tab. Click-weighted per-platform
 // audience profile, shows the dominant age bracket as the visual anchor and
@@ -500,7 +500,7 @@ function CommunityMemberCard(props){
     return <div style={{background:"linear-gradient(165deg,"+color+"14 0%,"+color+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+color+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",textAlign:"center",minHeight:320}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+color+"55,"+color+"20)",border:"1px solid "+color+"70",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>{iconFn("#fff",20)}</div>
       <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{p} Community</div>
-      <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6,maxWidth:260}}>Audience demographic data not exposed for this connected {p} page. Some older page insights permissions or follower counts below 100 can hide this slice.</div>
+      <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.6,maxWidth:260}}>Audience demographic data not exposed for this connected {p} page. Some older page insights permissions or follower counts below 100 can hide this slice.</div>
     </div>;
   }
   // Parse the platform's age-gender map. Meta uses "F.25-34" / "M.25-34" keys,
@@ -529,11 +529,11 @@ function CommunityMemberCard(props){
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+color+"55,"+color+"20)",border:"1px solid "+color+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+color+"40"}}>{iconFn("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{p} Community</div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(data.totalFollowers||0)+" total followers"}</div>
+        <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1}}>{fmt(data.totalFollowers||0)+" total followers"}</div>
       </div>
     </div>
     {rowsAvailable?<div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Age and Gender</div>
+      <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Age and Gender</div>
       {ageOrder.filter(function(a){return byAgeGender[a];}).map(function(a){
         var row=byAgeGender[a];var rowTotal=row.F+row.M;var share=totalAll>0?(rowTotal/totalAll*100):0;var fPct=rowTotal>0?(row.F/rowTotal*100):0;
         return <div key={a} style={{marginBottom:8,fontSize:11,fontFamily:fm}}>
@@ -547,25 +547,25 @@ function CommunityMemberCard(props){
           </div>
         </div>;
       })}
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10,color:P.sub,fontFamily:fm}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10,color:P.label,fontFamily:fm}}>
         <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ec4899",marginRight:6}}></span>Female {femaleShare.toFixed(2)+"%"}</span>
         <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:6}}></span>Male {maleShare.toFixed(2)+"%"}</span>
       </div>
-    </div>:<div style={{padding:"14px 0",textAlign:"center",fontSize:11,color:P.dim,fontFamily:fm,fontStyle:"italic",marginBottom:12}}>Age and gender breakdown not available for this page</div>}
+    </div>:<div style={{padding:"14px 0",textAlign:"center",fontSize:11,color:P.caption,fontFamily:fm,fontStyle:"italic",marginBottom:12}}>Age and gender breakdown not available for this page</div>}
     {cSorted.length>0&&<div style={{padding:"10px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+color+"25",borderRadius:10,marginBottom:10}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:700}}>Top Countries</div>
+      <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:700}}>Top Countries</div>
       {cSorted.map(function(c,i){var share=cTotal>0?(c.val/cTotal*100):0;return <div key={c.code} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#fff",fontFamily:fm,padding:"3px 0"}}>
         <span style={{fontWeight:700}}>{i+1}. {c.code}</span>
         <span style={{color:color,fontWeight:900}}>{share.toFixed(2)+"%"}</span>
       </div>;})}
     </div>}
-    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:10,color:P.sub,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
+    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:10,color:P.label,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
       Owned community, who already follows you, distinct from the paid audience above.
     </div>
   </div>;
 }
 
-function Tip(props){if(!props.active||!props.payload||!props.payload.length)return null;var first=props.payload[0]&&props.payload[0].payload?props.payload[0].payload:{};var heading=first.fullName||first.name||props.label;return(<div style={{background:"#121212",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxWidth:360}}><div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,marginBottom:4,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{heading}</div>{props.payload.map(function(p,i){var v=p.value;var display="";var n=(p.name||"").toLowerCase();var dn=(p.dataKey||"").toLowerCase();var rowCurrency=!!(p.payload&&p.payload._currency);var isPct=dn==="ctr"||n.indexOf("ctr")>=0||n.indexOf("rate")>=0||(p.payload&&p.payload._pct);var isCurrency=rowCurrency||n.indexOf("spend")>=0||n.indexOf("cpc")>=0||n.indexOf("cpm")>=0||n.indexOf("cpl")>=0||n.indexOf("cpf")>=0||n.indexOf("cpa")>=0||n.indexOf("cpi")>=0||n.indexOf("cost per")>=0||n.indexOf("cost-per")>=0||dn==="spend"||dn==="cpc"||dn==="cpm"||dn==="cpl"||dn==="cpf"||dn==="cpa"||dn==="costper";if(isPct){display=typeof v==="number"?v.toFixed(2)+"%":v;}else if(isCurrency){display="R"+(typeof v==="number"?v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2}):v);}else{display=typeof v==="number"?v.toLocaleString():v;}return<div key={i} style={{fontSize:11,color:p.color||P.sub,fontFamily:fm,lineHeight:1.8}}>{p.name}: {display}</div>;})}</div>);}
+function Tip(props){if(!props.active||!props.payload||!props.payload.length)return null;var first=props.payload[0]&&props.payload[0].payload?props.payload[0].payload:{};var heading=first.fullName||first.name||props.label;return(<div style={{background:"#121212",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxWidth:360}}><div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,marginBottom:4,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{heading}</div>{props.payload.map(function(p,i){var v=p.value;var display="";var n=(p.name||"").toLowerCase();var dn=(p.dataKey||"").toLowerCase();var rowCurrency=!!(p.payload&&p.payload._currency);var isPct=dn==="ctr"||n.indexOf("ctr")>=0||n.indexOf("rate")>=0||(p.payload&&p.payload._pct);var isCurrency=rowCurrency||n.indexOf("spend")>=0||n.indexOf("cpc")>=0||n.indexOf("cpm")>=0||n.indexOf("cpl")>=0||n.indexOf("cpf")>=0||n.indexOf("cpa")>=0||n.indexOf("cpi")>=0||n.indexOf("cost per")>=0||n.indexOf("cost-per")>=0||dn==="spend"||dn==="cpc"||dn==="cpm"||dn==="cpl"||dn==="cpf"||dn==="cpa"||dn==="costper";if(isPct){display=typeof v==="number"?v.toFixed(2)+"%":v;}else if(isCurrency){display="R"+(typeof v==="number"?v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2}):v);}else{display=typeof v==="number"?v.toLocaleString():v;}return<div key={i} style={{fontSize:11,color:p.color||P.label,fontFamily:fm,lineHeight:1.8}}>{p.name}: {display}</div>;})}</div>);}
 function PH(props){var bg=props.platform==="Facebook"?P.fb:props.platform==="Instagram"?"linear-gradient(135deg,#e1306c,#833ab4)":props.platform==="TikTok"?"#1e1e2e":P.ember;var dot=props.platform==="Facebook"?"#fff":props.platform==="TikTok"?P.tt:"#fff";return(<div style={{background:bg,padding:"14px 24px",borderRadius:12,marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:10,height:10,borderRadius:"50%",background:dot,boxShadow:"0 0 10px "+dot}}></span><span style={{fontSize:15,fontWeight:800,color:"#fff",fontFamily:ff,letterSpacing:0.5}}>{props.platform}</span>{props.suffix&&<span style={{fontSize:12,fontWeight:400,color:"rgba(255,255,255,0.7)",fontFamily:fm}}>· {props.suffix}</span>}</div><div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>LIVE DATA</div></div>);}
 function Insight(props){var a=props.accent||P.ember;return(<div style={{marginTop:24,padding:"22px 26px",background:"linear-gradient(135deg,"+a+"08 0%,"+a+"03 50%, transparent 100%)",border:"1px solid "+a+"20",borderLeft:"4px solid "+a,borderRadius:"0 14px 14px 0",position:"relative",overflow:"hidden"}}><div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+a+"06, transparent)",pointerEvents:"none"}}></div><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>{props.icon||Ic.bolt(a,16)}<span style={{fontSize:10,fontWeight:800,color:a,letterSpacing:3,fontFamily:fm,textTransform:"uppercase"}}>{props.title||"Campaign Read"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+a+"30, transparent)",marginLeft:8}}></div></div><div style={{fontSize:13.5,color:P.txt,lineHeight:2.1,fontFamily:ff,position:"relative",letterSpacing:0.2}}>{props.children}</div></div>);}
 function SevBadge(props){var c={critical:P.critical,warning:P.warning,info:P.info,positive:P.positive}[props.s]||P.info;return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:c+"18",border:"1px solid "+c+"40",borderRadius:6,padding:"3px 10px",fontSize:10,fontWeight:800,color:c,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:7,height:7,borderRadius:"50%",background:c}}/>{props.s}</span>);}
@@ -578,13 +578,13 @@ function CampaignSelector(props){
     <input placeholder="Search campaigns..." value={search} onChange={function(e){props.onSearch(e.target.value);}} style={{width:"100%",boxSizing:"border-box",background:"rgba(40,25,60,0.5)",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",marginBottom:12}}/>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       <button onClick={props.onSelectAll} style={{background:P.ember+"15",border:"1px solid "+P.ember+"30",borderRadius:8,padding:"4px 12px",color:P.ember,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>All ({f.length})</button>
-      <button onClick={props.onClearAll} style={{background:P.rule,border:"1px solid "+P.rule,borderRadius:8,padding:"4px 12px",color:P.sub,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Clear</button>
-      <span style={{fontSize:10,color:P.dim,fontFamily:fm,alignSelf:"center",marginLeft:"auto"}}>{sel.length} sel</span>
+      <button onClick={props.onClearAll} style={{background:P.rule,border:"1px solid "+P.rule,borderRadius:8,padding:"4px 12px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Clear</button>
+      <span style={{fontSize:10,color:P.caption,fontFamily:fm,alignSelf:"center",marginLeft:"auto"}}>{sel.length} sel</span>
     </div>
     {Object.keys(g).map(function(k){var gr=g[k];var gc=gr.campaigns[0].platform==="TikTok"?P.tt:gr.campaigns[0].platform==="Google Display"?P.gd:gr.campaigns[0].platform==="Instagram"?P.ig:P.fb;return(<div key={k} style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,paddingBottom:4,borderBottom:"1px solid "+P.rule}}><span style={{width:7,height:7,borderRadius:"50%",background:gc}}/><span style={{fontSize:9,fontWeight:800,color:gc,letterSpacing:2,textTransform:"uppercase",fontFamily:fm}}>{k}</span></div>
       {gr.campaigns.map(function(c){var s=sel.indexOf(c.campaignId)>=0;return(<div key={c.campaignId} onClick={function(){props.onToggle(c.campaignId);}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:2,borderRadius:8,cursor:"pointer",background:s?gc+"10":"transparent",border:"1px solid "+(s?gc+"30":"transparent")}}>
-        <div style={{width:18,height:18,borderRadius:5,border:"2px solid "+(s?gc:P.dim),background:s?gc:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{s&&Ic.check("#fff",12)}</div>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:s?P.txt:P.sub,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{c.campaignName}</div><div style={{fontSize:9,color:P.dim,fontFamily:fm}}>{fmt(c.impressions)} imps {(function(){var isCompleted=(c.endDate&&new Date(c.endDate)<new Date())||(c.status==="paused"||c.status==="campaign_paused"||c.status==="adset_paused");if(isCompleted)return <span style={{background:"rgba(136,136,136,0.2)",color:"#888",fontWeight:800,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>COMPLETED</span>;if(c.status==="scheduled")return <span style={{background:P.solar+"20",color:P.solar,fontWeight:800,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>SCHEDULED</span>;return null;})()} · {fR(parseFloat(c.spend))}</div></div>
+        <div style={{width:18,height:18,borderRadius:5,border:"2px solid "+(s?gc:P.caption),background:s?gc:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{s&&Ic.check("#fff",12)}</div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:s?P.txt:P.label,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{c.campaignName}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm}}>{fmt(c.impressions)} imps {(function(){var isCompleted=(c.endDate&&new Date(c.endDate)<new Date())||(c.status==="paused"||c.status==="campaign_paused"||c.status==="adset_paused");if(isCompleted)return <span style={{background:"rgba(136,136,136,0.2)",color:"#888",fontWeight:800,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>COMPLETED</span>;if(c.status==="scheduled")return <span style={{background:P.solar+"20",color:P.solar,fontWeight:800,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>SCHEDULED</span>;return null;})()} · {fR(parseFloat(c.spend))}</div></div>
       </div>);})}
     </div>);})}
   </div>);
@@ -830,13 +830,13 @@ function AdPreviewModal(props){
           <span style={{background:accent,color:"#fff",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{ad.platform}</span>
           <span style={{background:P.mint,color:"#062014",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{format}</span>
         </div>
-        <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
       </div>
       {mediaBlock}
       <div style={{marginTop:16,fontSize:14,fontWeight:800,color:P.txt,fontFamily:ff,lineHeight:1.4}}>{ad.adName||"Unnamed ad"}</div>
-      {ad.campaignName&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:4}}>Campaign: {ad.campaignName}</div>}
+      {ad.campaignName&&<div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:4}}>Campaign: {ad.campaignName}</div>}
       {(function(){
         // Placements already travel on the ad row: Meta has Feed/Stories/Reels/etc,
         // TikTok is FYP, Google maps to Display/Pmax/Demand/Search/YouTube.
@@ -847,7 +847,7 @@ function AdPreviewModal(props){
         // Sort by impressions desc so dominant placement leads.
         keys.sort(function(a,b){return parseFloat(pl[b].impressions||0)-parseFloat(pl[a].impressions||0);});
         return <div style={{marginTop:10,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          <span style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginRight:2}}>Placements</span>
+          <span style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginRight:2}}>Placements</span>
           {keys.map(function(k){
             var imps=parseFloat(pl[k].impressions||0);
             var pctStr=totalImps>0&&keys.length>1?" · "+(imps/totalImps*100).toFixed(2)+"%":"";
@@ -859,22 +859,22 @@ function AdPreviewModal(props){
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
           <div style={{fontSize:8,color:accent,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>{resultLabel(ad.resultType)}</div>
           <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{results>0?fmt(results):"\u2014"}</div>
-          {results>0&&<div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:4}}>{fR(costPerResult)+" "+costPerLabel(ad.resultType)}</div>}
+          {results>0&&<div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:4}}>{fR(costPerResult)+" "+costPerLabel(ad.resultType)}</div>}
         </div>
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Spend</div>
+          <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Spend</div>
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fR(spend)}</div>
         </div>
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Impressions</div>
+          <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Impressions</div>
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fmt(parseFloat(ad.impressions||0))}</div>
         </div>
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>CTR</div>
+          <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>CTR</div>
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{(parseFloat(ad.ctr||0)).toFixed(2)+"%"}</div>
         </div>
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:8,color:P.sub,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Cost Per Click</div>
+          <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Cost Per Click</div>
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fR(parseFloat(ad.cpc||0))}</div>
         </div>
       </div>
@@ -1100,9 +1100,9 @@ function ShareModal(props){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
         <div>
           <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:4}}>Email Preview</div>
-          <div style={{fontSize:12,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Review this before confirming. To: <span style={{color:P.txt,fontWeight:700}}>{emailTo[0]}</span>{emailCc[0]?<span> | cc: <span style={{color:P.txt}}>{emailCc[0]}</span></span>:null}{emailBcc[0]?<span> | bcc: <span style={{color:P.txt}}>{emailBcc[0]}</span></span>:null}</div>
+          <div style={{fontSize:12,color:P.label,fontFamily:fm,lineHeight:1.5}}>Review this before confirming. To: <span style={{color:P.txt,fontWeight:700}}>{emailTo[0]}</span>{emailCc[0]?<span> | cc: <span style={{color:P.txt}}>{emailCc[0]}</span></span>:null}{emailBcc[0]?<span> | bcc: <span style={{color:P.txt}}>{emailBcc[0]}</span></span>:null}</div>
         </div>
-        <button onClick={cancelPreview} disabled={previewLoading[0]} title="Close preview" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:previewLoading[0]?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:previewLoading[0]?0.5:1}}>
+        <button onClick={cancelPreview} disabled={previewLoading[0]} title="Close preview" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.label,cursor:previewLoading[0]?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:previewLoading[0]?0.5:1}}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
       </div>
@@ -1124,41 +1124,41 @@ function ShareModal(props){
   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
     <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto"}}>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
-      <div style={{fontSize:12,color:P.sub,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
+      <div style={{fontSize:12,color:P.label,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(report id)</span></div>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(report id)</span></div>
           <input value={slug[0]} onChange={function(e){slug[1](e.target.value.replace(/[^a-zA-Z0-9\- ]/g,""));err[1]("");}} placeholder="E.G. MTN MOMO" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase"}}/>
         </div>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.dim,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
           <input value={recipientName[0]} onChange={function(e){recipientName[1](e.target.value);}} placeholder="e.g. Jane or Willowbrook Village" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,outline:"none"}}/>
         </div>
       </div>
 
       <div style={{marginBottom:18}}>
-        <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Expires in</div>
+        <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Expires in</div>
         <div style={{display:"flex",gap:8}}>
-          {[30,60,90,180].map(function(d){return <button key={d} onClick={function(){expiry[1](d);}} style={{flex:1,background:expiry[0]===d?P.ember+"25":"transparent",border:"1px solid "+(expiry[0]===d?P.ember+"70":P.rule),borderRadius:8,padding:"8px 10px",color:expiry[0]===d?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{d+" days"}</button>;})}
+          {[30,60,90,180].map(function(d){return <button key={d} onClick={function(){expiry[1](d);}} style={{flex:1,background:expiry[0]===d?P.ember+"25":"transparent",border:"1px solid "+(expiry[0]===d?P.ember+"70":P.rule),borderRadius:8,padding:"8px 10px",color:expiry[0]===d?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{d+" days"}</button>;})}
         </div>
       </div>
 
-      <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginBottom:16}}>Campaigns in this share: <span style={{color:P.ember,fontWeight:700}}>{(props.selected||[]).length}</span> selected, <span style={{color:P.ember,fontWeight:700}}>{props.dateFrom}</span> to <span style={{color:P.ember,fontWeight:700}}>{props.dateTo}</span></div>
+      <div style={{fontSize:11,color:P.label,fontFamily:fm,marginBottom:16}}>Campaigns in this share: <span style={{color:P.ember,fontWeight:700}}>{(props.selected||[]).length}</span> selected, <span style={{color:P.ember,fontWeight:700}}>{props.dateFrom}</span> to <span style={{color:P.ember,fontWeight:700}}>{props.dateTo}</span></div>
 
       {/* Personal message, used in both sent emails and the copyable draft for link-only */}
       <div style={{marginBottom:14}}>
-        <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Personal message (optional)</div>
+        <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Personal message (optional)</div>
         <textarea value={personalMsg[0]} onChange={function(e){personalMsg[1](e.target.value);}} placeholder="Add a short note for the client. E.g. 'Really strong month, scroll to Engagement Highlights for the click-through rate spike on the new Reels ad.'" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,outline:"none",resize:"vertical",minHeight:70,lineHeight:1.5}}/>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Your name</div>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Your name</div>
           <input value={senderName[0]} onChange={function(e){senderName[1](e.target.value);}} placeholder="e.g. Gary Shepherd" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Title (optional)</div>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Title (optional)</div>
           <input value={senderTitle[0]} onChange={function(e){senderTitle[1](e.target.value);}} placeholder="e.g. Performance Lead" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
       </div>
@@ -1167,20 +1167,20 @@ function ShareModal(props){
       <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
         <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Email delivery (optional)</div>
         <div style={{marginBottom:10}}>
-          <div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>To</div>
+          <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>To</div>
           <input value={emailTo[0]} onChange={function(e){emailTo[1](e.target.value);err[1]("");}} placeholder="client@company.co.za" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
-            <div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Cc</div>
+            <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Cc</div>
             <input value={emailCc[0]} onChange={function(e){emailCc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           </div>
           <div>
-            <div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Bcc</div>
+            <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Bcc</div>
             <input value={emailBcc[0]} onChange={function(e){emailBcc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           </div>
         </div>
-        <div style={{fontSize:9,color:P.dim,fontFamily:fm,marginTop:8,lineHeight:1.5}}>Sends from grow@gasmarketing.co.za with a branded HTML report and a live dashboard link.</div>
+        <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:8,lineHeight:1.5}}>Sends from grow@gasmarketing.co.za with a branded HTML report and a live dashboard link.</div>
       </div>
 
       {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12}}>{err[0]}</div>}
@@ -1201,25 +1201,25 @@ function ShareModal(props){
           <input readOnly value={shareUrl[0]} onClick={function(e){e.target.select();}} style={{flex:1,background:P.glass,border:"1px solid "+P.mint+"40",borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:11,fontFamily:fm,outline:"none"}}/>
           <button onClick={copy} style={{background:copied[0]?P.mint:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{copied[0]?"COPIED":"COPY"}</button>
         </div>
-        <div style={{fontSize:10,color:P.sub,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):","} | Client: <span style={{color:P.ember,fontWeight:700}}>{(slug[0]||"").toUpperCase()}</span></div>
+        <div style={{fontSize:10,color:P.label,fontFamily:fm}}>Expires: {expiresAt[0]?new Date(expiresAt[0]).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):","} | Client: <span style={{color:P.ember,fontWeight:700}}>{(slug[0]||"").toUpperCase()}</span></div>
 
         {!emailSent[0]&&<div style={{marginTop:16,background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
             <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Ready-to-send email draft</div>
             <button onClick={copyDraft} style={{background:draftCopied[0]?P.mint:"transparent",border:"1px solid "+(draftCopied[0]?P.mint:P.rule),borderRadius:8,padding:"6px 14px",color:draftCopied[0]?"#fff":P.txt,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>{draftCopied[0]?"COPIED":"COPY DRAFT"}</button>
           </div>
-          <div style={{fontSize:9,color:P.dim,fontFamily:fm,marginBottom:10,lineHeight:1.5}}>Paste into Gmail compose. Link, sign-off and signature are pre-filled. You can add the GAS logo at the bottom of your Gmail signature (Gmail Settings, Signature, paste logo) so it attaches automatically to every send.</div>
+          <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginBottom:10,lineHeight:1.5}}>Paste into Gmail compose. Link, sign-off and signature are pre-filled. You can add the GAS logo at the bottom of your Gmail signature (Gmail Settings, Signature, paste logo) so it attaches automatically to every send.</div>
           <div style={{background:"rgba(0,0,0,0.45)",border:"1px solid "+P.rule,borderRadius:8,padding:"12px 14px",fontSize:11,fontFamily:fm,color:P.txt,lineHeight:1.7,whiteSpace:"pre-wrap",maxHeight:200,overflowY:"auto"}}>{buildPlainDraft()}</div>
         </div>}
 
-        <button onClick={reset} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
+        <button onClick={reset} style={{marginTop:14,width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 20px",color:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>Generate another</button>
       </div>}
 
       {/* Audit trail, collapsible. Team visibility of recent email activity + KPI signal */}
       <div style={{marginTop:22,borderTop:"1px solid "+P.rule,paddingTop:18}}>
         <button onClick={function(){auditOpen[1](!auditOpen[0]);}} style={{width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span>{auditOpen[0]?"Hide":"View"} Send Log{auditEntries[0].length>0?" ("+auditEntries[0].length+")":""}</span>
-          <span style={{color:P.sub,fontSize:11}}>{auditOpen[0]?"\u25B2":"\u25BC"}</span>
+          <span style={{color:P.label,fontSize:11}}>{auditOpen[0]?"\u25B2":"\u25BC"}</span>
         </button>
         {auditOpen[0]&&<div style={{marginTop:12}}>
           {!auditEnabled[0]&&<div style={{background:P.warning+"10",border:"1px solid "+P.warning+"40",borderRadius:10,padding:"12px 14px",fontSize:11,color:P.warning,fontFamily:fm,lineHeight:1.6}}>
@@ -1229,11 +1229,11 @@ function ShareModal(props){
           {auditEnabled[0]&&<div>
             <div style={{display:"flex",gap:8,marginBottom:10}}>
               <input value={auditQuery[0]} onChange={function(e){auditQuery[1](e.target.value);}} placeholder="Search by client name, slug, sender, or recipient email" style={{flex:1,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
-              <button onClick={loadAudit} disabled={auditLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:auditLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{auditLoading[0]?"…":"REFRESH"}</button>
-              <button onClick={exportCsv} disabled={filteredAudit.length===0} style={{background:filteredAudit.length===0?"transparent":gEmber,border:"1px solid "+(filteredAudit.length===0?P.rule:"transparent"),borderRadius:8,padding:"8px 14px",color:filteredAudit.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filteredAudit.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>
+              <button onClick={loadAudit} disabled={auditLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:auditLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{auditLoading[0]?"…":"REFRESH"}</button>
+              <button onClick={exportCsv} disabled={filteredAudit.length===0} style={{background:filteredAudit.length===0?"transparent":gEmber,border:"1px solid "+(filteredAudit.length===0?P.rule:"transparent"),borderRadius:8,padding:"8px 14px",color:filteredAudit.length===0?P.caption:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filteredAudit.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>
             </div>
-            {auditLoading[0]&&<div style={{color:P.sub,fontSize:11,fontFamily:fm,padding:"16px 4px"}}>Loading send log...</div>}
-            {!auditLoading[0]&&filteredAudit.length===0&&<div style={{color:P.dim,fontSize:11,fontFamily:fm,padding:"18px 4px",textAlign:"center",fontStyle:"italic"}}>{auditEntries[0].length===0?"No emails sent yet. Send your first report to start the log.":"No matches for that search."}</div>}
+            {auditLoading[0]&&<div style={{color:P.label,fontSize:11,fontFamily:fm,padding:"16px 4px"}}>Loading send log...</div>}
+            {!auditLoading[0]&&filteredAudit.length===0&&<div style={{color:P.caption,fontSize:11,fontFamily:fm,padding:"18px 4px",textAlign:"center",fontStyle:"italic"}}>{auditEntries[0].length===0?"No emails sent yet. Send your first report to start the log.":"No matches for that search."}</div>}
             {!auditLoading[0]&&filteredAudit.length>0&&<div style={{maxHeight:420,overflowY:"auto",overflowX:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.25)"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
                 <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
@@ -1258,11 +1258,11 @@ function ShareModal(props){
                     if(e.bcc&&e.bcc.length>0)extras.push("bcc: "+e.bcc.join(", "));
                     return <tr key={e.id||i} style={{borderBottom:"1px solid "+P.rule+"50"}}>
                       <td style={{padding:"10px",color:P.ember,fontWeight:700,verticalAlign:"top",whiteSpace:"nowrap"}}>{slugTxt}</td>
-                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{recipients}{extras.length>0?<div style={{color:P.dim,fontSize:9,marginTop:3,whiteSpace:"nowrap"}}>{extras.join("  |  ")}</div>:null}</td>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{recipients}{extras.length>0?<div style={{color:P.caption,fontSize:9,marginTop:3,whiteSpace:"nowrap"}}>{extras.join("  |  ")}</div>:null}</td>
                       <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{fmtDate(e.sentAt)}</td>
-                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{e.senderName||"—"}{e.senderTitle?<div style={{color:P.dim,fontSize:9,marginTop:2,whiteSpace:"nowrap"}}>{e.senderTitle}</div>:null}</td>
-                      <td style={{padding:"10px",color:P.sub,verticalAlign:"top",whiteSpace:"nowrap"}}>{periodTxt}{e.campaignCount?<div style={{color:P.dim,fontSize:9,marginTop:2,whiteSpace:"nowrap"}}>{e.campaignCount+" campaign"+(e.campaignCount===1?"":"s")}</div>:null}</td>
-                      <td style={{padding:"10px",textAlign:"right",verticalAlign:"top"}}><button onClick={function(){deleteAuditEntry(e.id);}} title="Delete this entry" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.dim,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}} onMouseEnter={function(ev){ev.currentTarget.style.borderColor=P.critical;ev.currentTarget.style.color=P.critical;}} onMouseLeave={function(ev){ev.currentTarget.style.borderColor=P.rule;ev.currentTarget.style.color=P.dim;}}>{"\u00D7"}</button></td>
+                      <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{e.senderName||"—"}{e.senderTitle?<div style={{color:P.caption,fontSize:9,marginTop:2,whiteSpace:"nowrap"}}>{e.senderTitle}</div>:null}</td>
+                      <td style={{padding:"10px",color:P.label,verticalAlign:"top",whiteSpace:"nowrap"}}>{periodTxt}{e.campaignCount?<div style={{color:P.caption,fontSize:9,marginTop:2,whiteSpace:"nowrap"}}>{e.campaignCount+" campaign"+(e.campaignCount===1?"":"s")}</div>:null}</td>
+                      <td style={{padding:"10px",textAlign:"right",verticalAlign:"top"}}><button onClick={function(){deleteAuditEntry(e.id);}} title="Delete this entry" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.caption,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}} onMouseEnter={function(ev){ev.currentTarget.style.borderColor=P.critical;ev.currentTarget.style.color=P.critical;}} onMouseLeave={function(ev){ev.currentTarget.style.borderColor=P.rule;ev.currentTarget.style.color=P.caption;}}>{"\u00D7"}</button></td>
                     </tr>;
                   })}
                 </tbody>
@@ -1385,7 +1385,7 @@ function CampaignAuditModal(props){
   });
   var platforms={};data.forEach(function(c){platforms[c.platform]=true;});
   var objectives={};data.forEach(function(c){objectives[c.detectedObjective]=true;});
-  var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Unclassified":P.sub};
+  var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Unclassified":P.label};
 
   var exportCsv=function(){
     var header=["Platform","Account","Campaign Name","Detected Objective","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
@@ -1402,24 +1402,24 @@ function CampaignAuditModal(props){
     <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 26px",width:1100,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:6,background:"rgba(0,0,0,0.35)",border:"1px solid "+P.rule,borderRadius:12,padding:4}}>
-          <button onClick={function(){view[1]("audit");}} style={{background:view[0]==="audit"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="audit"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="audit"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Objective Audit</button>
-          <button onClick={function(){view[1]("reconcile");}} style={{background:view[0]==="reconcile"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="reconcile"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="reconcile"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>Ground Truth Audit{recSummary[0]&&recSummary[0].red>0?<span style={{background:P.critical,color:"#fff",fontSize:9,padding:"1px 6px",borderRadius:4}}>{recSummary[0].red}</span>:null}</button>
-          <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage Audit</button>
-          {props.isSuperadmin&&<button onClick={function(){view[1]("users");}} style={{background:view[0]==="users"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="users"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="users"?P.ember:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Team Access</button>}
+          <button onClick={function(){view[1]("audit");}} style={{background:view[0]==="audit"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="audit"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="audit"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Objective Audit</button>
+          <button onClick={function(){view[1]("reconcile");}} style={{background:view[0]==="reconcile"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="reconcile"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="reconcile"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>Ground Truth Audit{recSummary[0]&&recSummary[0].red>0?<span style={{background:P.critical,color:"#fff",fontSize:9,padding:"1px 6px",borderRadius:4}}>{recSummary[0].red}</span>:null}</button>
+          <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage Audit</button>
+          {props.isSuperadmin&&<button onClick={function(){view[1]("users");}} style={{background:view[0]==="users"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="users"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="users"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Team Access</button>}
         </div>
         <div style={{display:"flex",gap:8}}>
-          {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
-          {view[0]==="audit"&&<button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.dim:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>}
-          {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(false);}} disabled={recLoading[0]||recSending[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recLoading[0]?"RUNNING...":"RE-RUN"}</button>}
+          {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
+          {view[0]==="audit"&&<button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.caption:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>}
+          {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(false);}} disabled={recLoading[0]||recSending[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recLoading[0]?"RUNNING...":"RE-RUN"}</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(true);}} disabled={recLoading[0]||recSending[0]} title="Run check + email Gary if any deltas found" style={{background:recSending[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recSending[0]?"SENDING...":"CHECK + ALERT"}</button>}
-          {view[0]==="usage"&&<button onClick={loadUsage} disabled={usageLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:usageLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{usageLoading[0]?"LOADING...":"REFRESH"}</button>}
-          <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.sub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {view[0]==="usage"&&<button onClick={loadUsage} disabled={usageLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:usageLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{usageLoading[0]?"LOADING...":"REFRESH"}</button>}
+          <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           </button>
         </div>
       </div>
-      {view[0]==="audit"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Rounding up your campaigns from every platform, they scatter…":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
-      {view[0]==="reconcile"&&<div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Ground truth from Meta / TikTok / Google APIs compared to what the dashboard computes for <strong style={{color:P.ember}}>{props.dateFrom}</strong> to <strong style={{color:P.ember}}>{props.dateTo}</strong>. Green = delta less than 1%, yellow = 1 to 5%, red = more than 5%.{recSent[0]?<span style={{color:P.mint,marginLeft:10}}>{recSent[0]}</span>:null}</div>}
+      {view[0]==="audit"&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Rounding up your campaigns from every platform, they scatter…":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
+      {view[0]==="reconcile"&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Ground truth from Meta / TikTok / Google APIs compared to what the dashboard computes for <strong style={{color:P.ember}}>{props.dateFrom}</strong> to <strong style={{color:P.ember}}>{props.dateTo}</strong>. Green = delta less than 1%, yellow = 1 to 5%, red = more than 5%.{recSent[0]?<span style={{color:P.mint,marginLeft:10}}>{recSent[0]}</span>:null}</div>}
       {view[0]==="audit"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         <select value={platFilter[0]} onChange={function(e){platFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
@@ -1447,7 +1447,7 @@ function CampaignAuditModal(props){
       </div>}
       {view[0]==="audit"&&err[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{err[0]}</div>}
       {view[0]==="reconcile"&&recErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{recErr[0]}</div>}
-      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center",lineHeight:1.7}}>Asking Meta, TikTok and Google to tell the truth, they always take a moment to think about it. This one can run a minute or so, the platforms like to double-check their homework.</div>}
+      {view[0]==="reconcile"&&(recLoading[0]||recSending[0])&&recRows[0].length===0&&<div style={{padding:"20px",color:P.label,fontSize:12,fontFamily:fm,textAlign:"center",lineHeight:1.7}}>Asking Meta, TikTok and Google to tell the truth, they always take a moment to think about it. This one can run a minute or so, the platforms like to double-check their homework.</div>}
       {view[0]==="audit"&&<div style={{flex:1,overflow:"auto",border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:fm,minWidth:900}}>
           <thead style={{position:"sticky",top:0,background:"rgba(0,0,0,0.9)",zIndex:1}}>
@@ -1464,15 +1464,15 @@ function CampaignAuditModal(props){
           </thead>
           <tbody>
             {filtered.map(function(c,i){
-              var oc=objCol[c.detectedObjective]||P.sub;
+              var oc=objCol[c.detectedObjective]||P.label;
               return <tr key={c.campaignId+"_"+i} style={{borderBottom:"1px solid "+P.rule+"50"}}>
                 <td style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.platform}</td>
-                <td style={{padding:"10px",color:P.sub,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.accountName}</td>
+                <td style={{padding:"10px",color:P.label,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.accountName}</td>
                 <td style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:320}}>{c.campaignName}</td>
                 <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}><span style={{background:oc+"18",border:"1px solid "+oc+"50",color:oc,padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{c.detectedObjective}</span></td>
-                <td style={{padding:"10px",color:P.sub,verticalAlign:"top",fontSize:10,lineHeight:1.5}}>{c.classificationSource}</td>
-                <td style={{padding:"10px",color:P.dim,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.apiObjective||"—"}</td>
-                <td style={{padding:"10px",color:P.dim,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.status||"—"}</td>
+                <td style={{padding:"10px",color:P.label,verticalAlign:"top",fontSize:10,lineHeight:1.5}}>{c.classificationSource}</td>
+                <td style={{padding:"10px",color:P.caption,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.apiObjective||"—"}</td>
+                <td style={{padding:"10px",color:P.caption,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.status||"—"}</td>
                 <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}>{(function(){
                   var s=(c.status||"").toUpperCase();
                   var switchedOn=s==="ACTIVE"||s==="ENABLE"||s==="ENABLED";
@@ -1486,11 +1486,11 @@ function CampaignAuditModal(props){
                   if(switchedOn&&c.activeLast30Days)return <span title="Switched on AND delivered in last 30 days" style={{background:P.mint+"18",border:"1px solid "+P.mint+"50",color:P.mint,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>LIVE</span>;
                   if(switchedOn&&!c.activeLast30Days)return <span title="Campaign is switched ON but has had ZERO delivery in the last 30 days. Likely paused at the adset or ad level, rejected creative, or exhausted budget." style={{background:P.warning+"18",border:"1px solid "+P.warning+"50",color:P.warning,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,cursor:"help"}}>NO DELIVERY</span>;
                   if(c.activeLast30Days)return <span title="Switched off now but delivered in the last 30 days, paused after being live" style={{background:P.cyan+"18",border:"1px solid "+P.cyan+"50",color:P.cyan,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>PAUSED</span>;
-                  return <span title="Switched off with no delivery in the last 30 days" style={{background:P.dim+"20",border:"1px solid "+P.sub+"40",color:P.sub,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>DORMANT</span>;
+                  return <span title="Switched off with no delivery in the last 30 days" style={{background:P.dim+"20",border:"1px solid "+P.sub+"40",color:P.label,padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1}}>DORMANT</span>;
                 })()}</td>
               </tr>;
             })}
-            {filtered.length===0&&!loading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the current filter.</td></tr>}
+            {filtered.length===0&&!loading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.caption,fontSize:12,fontStyle:"italic"}}>No campaigns match the current filter.</td></tr>}
           </tbody>
         </table>
       </div>}
@@ -1540,9 +1540,9 @@ function CampaignAuditModal(props){
                   var c=statusBg[m.status];
                   return <tr key={r.campaignId+"_"+m.name+"_"+i+"_"+mi} style={{borderBottom:mi===r.metrics.length-1?"2px solid "+P.rule:"1px solid "+P.rule+"30"}}>
                     {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",whiteSpace:"nowrap",borderRight:"1px solid "+P.rule+"40"}}>{r.platform}</td>:null}
-                    {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:280,borderRight:"1px solid "+P.rule+"40"}}>{r.campaignName}<div style={{color:P.dim,fontSize:9,marginTop:3,fontFamily:fm}}>{r.accountName}</div></td>:null}
+                    {mi===0?<td rowSpan={r.metrics.length} style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:280,borderRight:"1px solid "+P.rule+"40"}}>{r.campaignName}<div style={{color:P.caption,fontSize:9,marginTop:3,fontFamily:fm}}>{r.accountName}</div></td>:null}
                     <td style={{padding:"6px 10px",color:P.cyan,verticalAlign:"middle",fontSize:10,fontWeight:700,letterSpacing:0.5}}>{m.tab||"Summary"}</td>
-                    <td style={{padding:"6px 10px",color:P.sub,verticalAlign:"middle",textTransform:"uppercase",letterSpacing:1,fontSize:10,fontWeight:700}}>{m.name}</td>
+                    <td style={{padding:"6px 10px",color:P.label,verticalAlign:"middle",textTransform:"uppercase",letterSpacing:1,fontSize:10,fontWeight:700}}>{m.name}</td>
                     <td align="right" style={{padding:"6px 10px",color:P.txt,verticalAlign:"middle",fontFamily:fm}}>{fmtVal(m.name,m.source)}</td>
                     <td align="right" style={{padding:"6px 10px",color:P.txt,verticalAlign:"middle",fontFamily:fm}}>{fmtVal(m.name,m.dashboard)}</td>
                     <td align="right" style={{padding:"6px 10px",color:c,fontWeight:800,verticalAlign:"middle",fontFamily:fm}}>{m.deltaPct.toFixed(2)+"%"}</td>
@@ -1550,7 +1550,7 @@ function CampaignAuditModal(props){
                   </tr>;
                 });
               })}
-              {filteredRec.length===0&&!recLoading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.dim,fontSize:12,fontStyle:"italic"}}>No campaigns match the filter.</td></tr>}
+              {filteredRec.length===0&&!recLoading[0]&&<tr><td colSpan={8} style={{padding:"30px",textAlign:"center",color:P.caption,fontSize:12,fontStyle:"italic"}}>No campaigns match the filter.</td></tr>}
             </tbody>
           </table>
         </div>;
@@ -1583,22 +1583,22 @@ function CampaignAuditModal(props){
         var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
         var cell={padding:"10px",color:P.txt,fontSize:12,fontFamily:fm,borderBottom:"1px solid "+P.rule+"30"};
         return <div style={{display:"flex",flexDirection:"column",gap:20,overflow:"auto"}}>
-          {usageLoading[0]&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>Thumbing through the visitor log…</div>}
+          {usageLoading[0]&&<div style={{padding:20,color:P.label,fontSize:12,fontFamily:fm,textAlign:"center"}}>Thumbing through the visitor log…</div>}
           {usageErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm}}>{usageErr[0]}</div>}
-          {!usageLoading[0]&&!usageErr[0]&&events.length===0&&<div style={{padding:20,color:P.sub,fontSize:12,fontFamily:fm,textAlign:"center"}}>No usage events yet. They start recording on the next admin login and client view.</div>}
+          {!usageLoading[0]&&!usageErr[0]&&events.length===0&&<div style={{padding:20,color:P.label,fontSize:12,fontFamily:fm,textAlign:"center"}}>No usage events yet. They start recording on the next admin login and client view.</div>}
           {!usageLoading[0]&&events.length>0&&<>
-            <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Admin login events and client share-link views, each deduplicated per actor per hour so the table stays readable.</div>
+            <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5}}>Admin login events and client share-link views, each deduplicated per actor per hour so the table stays readable.</div>
 
             <div>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                 <span style={{fontSize:13,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Admin usage</span>
-                <span style={{fontSize:11,color:P.sub,fontFamily:fm}}>{adminEvts.length+" logins across "+adminDays.length+" day"+(adminDays.length===1?"":"s")+" (last 30 days shown)"}</span>
+                <span style={{fontSize:11,color:P.label,fontFamily:fm}}>{adminEvts.length+" logins across "+adminDays.length+" day"+(adminDays.length===1?"":"s")+" (last 30 days shown)"}</span>
               </div>
               <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
                   <thead><tr><th style={hdr}>Date</th><th style={hdr}>Logins</th></tr></thead>
                   <tbody>
-                    {adminDays.length===0?<tr><td colSpan={2} style={{padding:14,color:P.dim,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
+                    {adminDays.length===0?<tr><td colSpan={2} style={{padding:14,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
                       return <tr key={d}><td style={cell}>{d}</td><td style={cell}>{adminByDay[d]}</td></tr>;
                     })}
                   </tbody>
@@ -1609,24 +1609,24 @@ function CampaignAuditModal(props){
             <div>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                 <span style={{fontSize:13,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Client share-link usage</span>
-                <span style={{fontSize:11,color:P.sub,fontFamily:fm}}>{clientEvts.length+" views across "+clientRows.length+" client"+(clientRows.length===1?"":"s")}</span>
+                <span style={{fontSize:11,color:P.label,fontFamily:fm}}>{clientEvts.length+" views across "+clientRows.length+" client"+(clientRows.length===1?"":"s")}</span>
               </div>
               <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
                   <thead><tr><th style={hdr}>Client</th><th style={Object.assign({},hdr,{textAlign:"center"})}>Total Views</th><th style={hdr}>First Seen</th><th style={hdr}>Last Seen</th></tr></thead>
                   <tbody>
-                    {clientRows.length===0?<tr><td colSpan={4} style={{padding:14,color:P.dim,textAlign:"center",fontSize:11,fontFamily:fm}}>No client share-link views recorded yet.</td></tr>:clientRows.map(function(r){
+                    {clientRows.length===0?<tr><td colSpan={4} style={{padding:14,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm}}>No client share-link views recorded yet.</td></tr>:clientRows.map(function(r){
                       return <tr key={r.slug}>
                         <td style={Object.assign({},cell,{fontWeight:700,color:P.ember})}>{slugDisplay(r.slug)}</td>
                         <td style={Object.assign({},cell,{textAlign:"center",fontWeight:700})}>{r.views}</td>
-                        <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(r.first)}</td>
-                        <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(r.last)}</td>
+                        <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(r.first)}</td>
+                        <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(r.last)}</td>
                       </tr>;
                     })}
                   </tbody>
                 </table>
               </div>
-              <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:8,fontStyle:"italic"}}>Views are counted once per hour per client to avoid inflating the count from routine API calls as the client browses.</div>
+              <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:8,fontStyle:"italic"}}>Views are counted once per hour per client to avoid inflating the count from routine API calls as the client browses.</div>
             </div>
           </>}
         </div>;
@@ -1643,7 +1643,7 @@ function CampaignAuditModal(props){
         var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
         var cell={padding:"10px",color:P.txt,fontSize:12,fontFamily:fm,borderBottom:"1px solid "+P.rule+"30"};
         return <div style={{display:"flex",flexDirection:"column",gap:20,overflow:"auto"}}>
-          <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5}}>Invite team members by email, revoke access when someone leaves. Invited users set their own password via the emailed link. Client share-link viewers are a separate system and are not listed here.</div>
+          <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5}}>Invite team members by email, revoke access when someone leaves. Invited users set their own password via the emailed link. Client share-link viewers are a separate system and are not listed here.</div>
 
           <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:16}}>
             <div style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Invite a Team Member</div>
@@ -1659,32 +1659,32 @@ function CampaignAuditModal(props){
           <div>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
               <span style={{fontSize:13,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Team Members</span>
-              <span style={{fontSize:11,color:P.sub,fontFamily:fm}}>{users.length+" user"+(users.length===1?"":"s")}</span>
-              <button onClick={loadTeam} disabled={teamLoading[0]} style={{marginLeft:"auto",background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"6px 12px",color:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:teamLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{teamLoading[0]?"LOADING":"REFRESH"}</button>
+              <span style={{fontSize:11,color:P.label,fontFamily:fm}}>{users.length+" user"+(users.length===1?"":"s")}</span>
+              <button onClick={loadTeam} disabled={teamLoading[0]} style={{marginLeft:"auto",background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"6px 12px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:teamLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{teamLoading[0]?"LOADING":"REFRESH"}</button>
             </div>
             <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
                 <thead><tr><th style={hdr}>Name</th><th style={hdr}>Email</th><th style={hdr}>Role</th><th style={hdr}>Status</th><th style={hdr}>Invited</th><th style={hdr}>Last Login</th><th style={Object.assign({},hdr,{textAlign:"right"})}>Action</th></tr></thead>
                 <tbody>
-                  {users.length===0&&!teamLoading[0]?<tr><td colSpan={7} style={{padding:20,color:P.dim,textAlign:"center",fontSize:11,fontFamily:fm,fontStyle:"italic"}}>No team members yet. Invite someone above.</td></tr>:users.map(function(u){
+                  {users.length===0&&!teamLoading[0]?<tr><td colSpan={7} style={{padding:20,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm,fontStyle:"italic"}}>No team members yet. Invite someone above.</td></tr>:users.map(function(u){
                     var s=statusPill(u);
                     var canToggle=u.role!=="superadmin";
                     return <tr key={u.email}>
                       <td style={Object.assign({},cell,{fontWeight:700})}>{u.name||"-"}</td>
-                      <td style={Object.assign({},cell,{color:P.sub})}>{u.email}</td>
+                      <td style={Object.assign({},cell,{color:P.label})}>{u.email}</td>
                       <td style={cell}>{u.role==="superadmin"?"Super Admin":"Team Member"}</td>
                       <td style={cell}><span style={{background:s.color+"20",color:s.color,border:"1px solid "+s.color+"50",padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</span></td>
-                      <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.createdAt)}</td>
-                      <td style={Object.assign({},cell,{color:P.sub})}>{fmtDate(u.lastLogin)}</td>
+                      <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(u.createdAt)}</td>
+                      <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(u.lastLogin)}</td>
                       <td style={Object.assign({},cell,{textAlign:"right"})}>
-                        {canToggle?<button onClick={function(){toggleUser(u.email,u.active);}} style={{background:u.active?"transparent":P.mint+"15",border:"1px solid "+(u.active?P.critical+"60":P.mint+"60"),borderRadius:6,padding:"4px 12px",color:u.active?P.critical:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{u.active?"REVOKE":"RESTORE"}</button>:<span style={{color:P.dim,fontSize:10}}>-</span>}
+                        {canToggle?<button onClick={function(){toggleUser(u.email,u.active);}} style={{background:u.active?"transparent":P.mint+"15",border:"1px solid "+(u.active?P.critical+"60":P.mint+"60"),borderRadius:6,padding:"4px 12px",color:u.active?P.critical:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{u.active?"REVOKE":"RESTORE"}</button>:<span style={{color:P.caption,fontSize:10}}>-</span>}
                       </td>
                     </tr>;
                   })}
                 </tbody>
               </table>
             </div>
-            <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
+            <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
           </div>
         </div>;
       })()}
@@ -1984,10 +1984,10 @@ function ChatPanel(props){
         </div>
         <div style={{flex:1}}>
           <div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>GAS Media Expert</div>
-          <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:2,letterSpacing:1}}>Live, scoped to your campaigns for {props.dateFrom} to {props.dateTo}</div>
+          <div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:2,letterSpacing:1}}>Live, scoped to your campaigns for {props.dateFrom} to {props.dateTo}</div>
         </div>
-        {messages[0].length>0&&<button onClick={resetChat} title="Start a new conversation" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"0 12px",height:36,color:P.sub,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,fontSize:10,fontFamily:fm,fontWeight:800,letterSpacing:1.5,transition:"all 0.2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.color=P.ember;e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.color=P.sub;e.currentTarget.style.background="transparent";}}>NEW CHAT</button>}
-        <button onClick={close} title="Close chat" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.sub,cursor:"pointer",padding:0,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.color=P.ember;e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.color=P.sub;e.currentTarget.style.background="transparent";}}>
+        {messages[0].length>0&&<button onClick={resetChat} title="Start a new conversation" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"0 12px",height:36,color:P.label,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",gap:6,fontSize:10,fontFamily:fm,fontWeight:800,letterSpacing:1.5,transition:"all 0.2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.color=P.ember;e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.color=P.label;e.currentTarget.style.background="transparent";}}>NEW CHAT</button>}
+        <button onClick={close} title="Close chat" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.label,cursor:"pointer",padding:0,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.color=P.ember;e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.color=P.label;e.currentTarget.style.background="transparent";}}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
       </div>
@@ -1997,7 +1997,7 @@ function ChatPanel(props){
           <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px"}}>
             <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.7}}>Hi, I am your GAS Media Expert. Ask me anything about this report and I will ground every answer in your live campaign data.</div>
           </div>
-          <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginTop:4}}>Try asking</div>
+          <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginTop:4}}>Try asking</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {suggestions.map(function(s,i){return <button key={i} onClick={function(){performSend(s);}} style={{textAlign:"left",background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,cursor:"pointer",lineHeight:1.4,transition:"all 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"60";e.currentTarget.style.background="rgba(249,98,3,0.08)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.rule;e.currentTarget.style.background="rgba(255,255,255,0.03)";}}>{s}</button>;})}
           </div>
@@ -2036,14 +2036,14 @@ function ChatPanel(props){
                       {ad.format&&<span style={{background:"rgba(255,255,255,0.08)",color:P.txt,fontSize:8,fontWeight:700,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>{ad.format}</span>}
                     </div>
                     <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,lineHeight:1.3,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ad.adName}</div>
-                    {ad.results>0?<div style={{fontSize:11,color:accent,fontWeight:800,fontFamily:fm}}>{fmt(ad.results)+" "+resultLabel(ad.resultType)+" | "+fR(ad.costPerResult)+" "+costPerLabel(ad.resultType)}</div>:<div style={{fontSize:10,color:P.sub,fontFamily:fm}}>{fR(ad.spend)+" spend | "+ad.ctr.toFixed(2)+"% CTR"}</div>}
+                    {ad.results>0?<div style={{fontSize:11,color:accent,fontWeight:800,fontFamily:fm}}>{fmt(ad.results)+" "+resultLabel(ad.resultType)+" | "+fR(ad.costPerResult)+" "+costPerLabel(ad.resultType)}</div>:<div style={{fontSize:10,color:P.label,fontFamily:fm}}>{fR(ad.spend)+" spend | "+ad.ctr.toFixed(2)+"% CTR"}</div>}
                   </div>
                 </div>;
               })}
             </div>}
             {(isUser||displayContent)&&<div style={{maxWidth:"88%",background:isUser?gEmber:"rgba(255,255,255,0.04)",border:isUser?"none":"1px solid "+P.rule,borderRadius:isUser?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{isUser?m.content:displayContent}{m.streaming&&<span style={{display:"inline-block",width:8,height:14,marginLeft:4,background:P.ember,verticalAlign:"middle",animation:"pulse-glow 1s ease-in-out infinite"}}/>}</div>}
             {showFollowUps&&<div style={{display:"flex",flexDirection:"column",gap:6,maxWidth:"92%",marginTop:2}}>
-              <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Next questions</div>
+              <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Next questions</div>
               {followUps.map(function(q,qi){return <button key={qi} onClick={function(){performSend(q);}} style={{textAlign:"left",background:"rgba(249,98,3,0.06)",border:"1px solid "+P.ember+"35",borderRadius:10,padding:"8px 12px",color:P.txt,fontSize:11,fontFamily:ff,cursor:"pointer",lineHeight:1.4,transition:"all 0.15s"}} onMouseEnter={function(e){e.currentTarget.style.borderColor=P.ember+"80";e.currentTarget.style.background="rgba(249,98,3,0.14)";}} onMouseLeave={function(e){e.currentTarget.style.borderColor=P.ember+"35";e.currentTarget.style.background="rgba(249,98,3,0.06)";}}>{q}</button>;})}
             </div>}
           </div>;
@@ -2056,7 +2056,7 @@ function ChatPanel(props){
             if(last.content||(last.attachments&&last.attachments.length>0))showSpinner=false;
           }
           if(!showSpinner)return null;
-          return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.sub,fontFamily:fm,letterSpacing:1}}>{loadingPhrase}<span style={{display:"inline-block",width:20}}>...</span></div></div>;
+          return <div style={{display:"flex",justifyContent:"flex-start"}}><div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:"14px 14px 14px 4px",padding:"10px 14px",fontSize:12,color:P.label,fontFamily:fm,letterSpacing:1}}>{loadingPhrase}<span style={{display:"inline-block",width:20}}>...</span></div></div>;
         })()}
         {err[0]&&<div style={{background:P.critical+"12",border:"1px solid "+P.critical+"40",borderRadius:10,padding:"10px 14px",fontSize:11,color:P.critical,fontFamily:fm,lineHeight:1.5}}>{err[0]}</div>}
       </div>
@@ -2068,7 +2068,7 @@ function ChatPanel(props){
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="rgba(255,255,255,0.18)"/></svg>
           </button>
         </div>
-        <div style={{marginTop:8,fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:1,textAlign:"center"}}>AI-generated insights grounded in your live data. Verify key decisions with your team.</div>
+        <div style={{marginTop:8,fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1,textAlign:"center"}}>AI-generated insights grounded in your live data. Verify key decisions with your team.</div>
       </div>
     </div>
   </div>}
@@ -2526,7 +2526,7 @@ export default function MediaOnGas(){
   if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}>
     <div style={{width:42,height:42,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
     <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
-    <div style={{color:P.sub,fontFamily:fm,fontSize:11,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Checking you in</div>
+    <div style={{color:P.label,fontFamily:fm,fontSize:11,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Checking you in</div>
   </div>);
   // Invitation signup flow, routed when the URL path starts with /signup.
   // Lives outside the session check so new invitees reach the form even
@@ -2574,7 +2574,7 @@ export default function MediaOnGas(){
             var agRows=agRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
 
             if(agRows.length===0&&regRows.length===0&&devRows.length===0&&cityRows.length===0){
-              demoFallback = <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
+              demoFallback = <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.label,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
               return null;
             }
 
@@ -2841,7 +2841,7 @@ export default function MediaOnGas(){
                   <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:0.8,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()}, sums to 100%</div>
                 </div>
                 {/* Column header */}
-                <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.dim,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
+                <div style={{display:"grid",gridTemplateColumns:"28px 1fr 60px",gap:10,alignItems:"center",padding:"0 2px 6px",fontSize:9,color:P.caption,fontFamily:fm,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",borderBottom:"1px dashed rgba(255,255,255,0.06)",marginBottom:8}}>
                   <div>#</div>
                   <div>Province</div>
                   <div style={{textAlign:"right"}}>Share</div>
@@ -2861,7 +2861,7 @@ export default function MediaOnGas(){
                   </div>
                 </div>;})}
                 </div>
-                {knownSum===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
+                {knownSum===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.label,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
               </div>;
             };
 
@@ -2881,7 +2881,7 @@ export default function MediaOnGas(){
                     {v>0&&<div style={{position:"absolute",top:0,right:10,height:"100%",display:"flex",alignItems:"center",fontSize:11,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.85)"}}>{share.toFixed(2)+"%"}</div>}
                   </div>
                 </div>;})}
-                {knownSum===0&&<div style={{marginTop:10,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.sub,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No age-tagged {stage.label.toLowerCase()} for this period.</div>}
+                {knownSum===0&&<div style={{marginTop:10,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.label,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No age-tagged {stage.label.toLowerCase()} for this period.</div>}
               </div>;
             };
 
@@ -2890,7 +2890,7 @@ export default function MediaOnGas(){
               var byGen={female:0,male:0};
               agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(byGen[g]===undefined)return;byGen[g]+=stage.field(r);});
               var total=byGen.female+byGen.male;
-              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No gender data</div>;
+              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.label,fontFamily:fm,fontSize:11}}>No gender data</div>;
               var data=[{name:"Female",value:byGen.female,color:"#ec4899"},{name:"Male",value:byGen.male,color:"#3b82f6"}];
               return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
                 <ResponsiveContainer width="100%" height={210}>
@@ -2907,8 +2907,8 @@ export default function MediaOnGas(){
                   </PieChart>
                 </ResponsiveContainer>
                 <div style={{display:"flex",gap:18,marginTop:-14,fontSize:11,fontFamily:fm}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#ec4899",boxShadow:"0 0 8px #ec489980"}}></span><span style={{color:P.txt,fontWeight:700}}>F</span><span style={{color:P.sub}}>{fmtAbbr(byGen.female)}</span><span style={{color:P.dim}}>{"("+(byGen.female/total*100).toFixed(2)+"%)"}</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 8px #3b82f680"}}></span><span style={{color:P.txt,fontWeight:700}}>M</span><span style={{color:P.sub}}>{fmtAbbr(byGen.male)}</span><span style={{color:P.dim}}>{"("+(byGen.male/total*100).toFixed(2)+"%)"}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#ec4899",boxShadow:"0 0 8px #ec489980"}}></span><span style={{color:P.txt,fontWeight:700}}>F</span><span style={{color:P.label}}>{fmtAbbr(byGen.female)}</span><span style={{color:P.caption}}>{"("+(byGen.female/total*100).toFixed(2)+"%)"}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 8px #3b82f680"}}></span><span style={{color:P.txt,fontWeight:700}}>M</span><span style={{color:P.label}}>{fmtAbbr(byGen.male)}</span><span style={{color:P.caption}}>{"("+(byGen.male/total*100).toFixed(2)+"%)"}</span></div>
                 </div>
               </div>;
             };
@@ -2922,7 +2922,7 @@ export default function MediaOnGas(){
               var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
               var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{name:labels[k],key:k,value:bucket[k],color:colors[k]};});
               var total=data.reduce(function(s,d){return s+d.value;},0);
-              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.sub,fontFamily:fm,fontSize:11}}>No device data</div>;
+              if(total===0)return <div style={{padding:20,textAlign:"center",color:P.label,fontFamily:fm,fontSize:11}}>No device data</div>;
               return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
                 <ResponsiveContainer width="100%" height={210}>
                   <PieChart>
@@ -2930,7 +2930,7 @@ export default function MediaOnGas(){
                     <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={{display:"flex",gap:10,marginTop:-14,fontSize:10,fontFamily:fm,flexWrap:"wrap",justifyContent:"center"}}>{data.map(function(d){return <div key={d.name} style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:d.color}}></span><span style={{color:P.txt,fontWeight:700}}>{d.name}</span><span style={{color:P.dim}}>{(d.value/total*100).toFixed(2)+"%"}</span></div>;})}</div>
+                <div style={{display:"flex",gap:10,marginTop:-14,fontSize:10,fontFamily:fm,flexWrap:"wrap",justifyContent:"center"}}>{data.map(function(d){return <div key={d.name} style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:"50%",background:d.color}}></span><span style={{color:P.txt,fontWeight:700}}>{d.name}</span><span style={{color:P.caption}}>{(d.value/total*100).toFixed(2)+"%"}</span></div>;})}</div>
               </div>;
             };
 
@@ -2959,11 +2959,11 @@ export default function MediaOnGas(){
                     </div>
                     {/* Primary headline now clicks share — clients care about engagement, not ad serving. */}
                     <div style={{fontSize:32,fontWeight:900,color:m.color,fontFamily:fm,lineHeight:1,letterSpacing:-1,marginBottom:6}}>{clkShare.toFixed(2)+"%"}</div>
-                    <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of clicks</div>
+                    <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:10,letterSpacing:1}}>of clicks</div>
                     <div style={{height:6,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
                       <div style={{width:clkShare+"%",height:"100%",background:"linear-gradient(90deg,"+m.color+"88,"+m.color+")",borderRadius:3}}></div>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.sub,marginTop:10,letterSpacing:0.5}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.label,marginTop:10,letterSpacing:0.5}}>
                       <span>{impShare.toFixed(2)+"% of ads served"}</span>
                     </div>
                   </div>;})}
@@ -2988,7 +2988,7 @@ export default function MediaOnGas(){
               var data=["mobile","desktop","tablet"].filter(function(k){return bucket[k]>0;}).map(function(k){return{key:k,name:labels[k],value:bucket[k],color:colors[k]};});
               var knownSum=data.reduce(function(s,d){return s+d.value;},0);
               var max=data.reduce(function(m,d){return d.value>m?d.value:m;},0);
-              if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
+              if(knownSum===0)return <div style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:14,padding:"30px 20px",textAlign:"center",color:P.label,fontFamily:fm,fontSize:12}}>No device-tagged data</div>;
               // Round shares so the displayed values sum to exactly 100.00%.
               // Each raw share is multiplied by 100 (hundredths), rounded,
               // and any rounding residual is pushed onto the largest bucket.
@@ -3166,7 +3166,7 @@ export default function MediaOnGas(){
                 gs=genderSharesFor(stage);
               }
               var knownSum=gs.female+gs.male;
-              if(knownSum===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.sub,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender-tagged data for this stage</div>;
+              if(knownSum===0)return <div style={{padding:"40px 20px",textAlign:"center",color:P.label,fontFamily:fm,fontSize:12,background:"rgba(0,0,0,0.25)",borderRadius:14}}>No gender-tagged data for this stage</div>;
               var fShare=gs.female/knownSum*100;
               var mShare=gs.male/knownSum*100;
               var row=function(name,share,col){var tip=name+" — "+share.toFixed(2)+"% share of gender-tagged "+stage.label.toLowerCase();return <div title={tip} style={{background:"linear-gradient(135deg,"+col+"15,transparent 70%)",border:"1px solid "+col+"40",borderLeft:"4px solid "+col,borderRadius:"0 14px 14px 0",padding:"16px 18px",marginBottom:12,position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(3px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
@@ -3261,8 +3261,8 @@ export default function MediaOnGas(){
                     <div style={{fontSize:10,color:s.accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase"}}>{s.title}</div>
                   </div>
                   <div style={{fontSize:28,fontWeight:900,color:s.accent,fontFamily:fm,lineHeight:1,marginBottom:4,textShadow:"0 0 12px "+s.accent+"33"}}>{fmtAbbr(v)}</div>
-                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</div>
-                  {nextStage&&v>0&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.dim,fontFamily:fm}}>→ {dropRate.toFixed(2)+"%"} progress to {nextStage.title.toLowerCase()}</div>}
+                  <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</div>
+                  {nextStage&&v>0&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm}}>→ {dropRate.toFixed(2)+"%"} progress to {nextStage.title.toLowerCase()}</div>}
                 </div>;})}
               </div>),
               platformMix: renderPlatformMix(),
@@ -3440,17 +3440,17 @@ export default function MediaOnGas(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
-            <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.sub,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
+            <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.sub,14)} {selected.length} Campaigns</button>}
-            <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
+            {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,14)} {selected.length} Campaigns</button>}
+            <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
             {/* Summary-only compare toggle. Other tabs show the selected
                 range without period-over-period deltas. */}
             <div title="Summary-tab compare mode: show deltas vs the prior period" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
-              {[{k:"off",l:"OFF"},{k:"wow",l:"WoW"},{k:"mom",l:"MoM"}].map(function(opt){var active=compareMode===opt.k;return <button key={opt.k} onClick={function(){setCompareMode(opt.k);}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 10px",color:active?"#fff":P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2}}>{opt.l}</button>;})}
+              {[{k:"off",l:"OFF"},{k:"wow",l:"WoW"},{k:"mom",l:"MoM"}].map(function(opt){var active=compareMode===opt.k;return <button key={opt.k} onClick={function(){setCompareMode(opt.k);}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 10px",color:active?"#fff":P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2}}>{opt.l}</button>;})}
             </div>
-            {compareMode!=="off"&&(function(){var r=computeComparisonRange(df,dt,compareMode);if(!r)return null;return <div title={"Summary delta chips are comparing to "+r.from+" - "+r.to} style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 10px"}}><span style={{color:P.ember,fontWeight:800,marginRight:4}}>vs</span>{r.from}<span style={{color:P.dim,margin:"0 4px"}}>→</span>{r.to}</div>;})()}
+            {compareMode!=="off"&&(function(){var r=computeComparisonRange(df,dt,compareMode);if(!r)return null;return <div title={"Summary delta chips are comparing to "+r.from+" - "+r.to} style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 10px"}}><span style={{color:P.ember,fontWeight:800,marginRight:4}}>vs</span>{r.from}<span style={{color:P.caption,margin:"0 4px"}}>→</span>{r.to}</div>;})()}
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
             {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Settings, Audit, Reconciliation, Usage, Team" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.solar,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,14)} Settings</button>}
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
@@ -3458,8 +3458,8 @@ export default function MediaOnGas(){
           </div>
         </div>
       </div>
-      <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1,alignItems:"center"}}>{tabs.map(function(tb){var isActive=tab===tb.id;var disabled=loading&&!isActive;return<button key={tb.id} disabled={disabled} title={disabled?"Loading your data, tabs unlock when the Summary finishes":undefined} onClick={function(){if(disabled)return;setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:isActive?P.ember+"10":"transparent",border:"none",borderBottom:isActive?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:disabled?"not-allowed":"pointer",color:isActive?P.ember:P.sub,fontSize:13,fontWeight:isActive?800:500,fontFamily:ff,letterSpacing:0.3,opacity:disabled?0.35:1,transition:"opacity 0.2s ease"}}>{tb.icon}<span>{tb.label}</span></button>;})}
-      {loading&&<span style={{marginLeft:14,display:"inline-flex",alignItems:"center",gap:8,fontSize:10,fontFamily:fm,color:P.sub,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}><span style={{width:10,height:10,border:"1.5px solid "+P.rule,borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>Loading, other tabs unlock once Summary lands</span>}
+      <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1,alignItems:"center"}}>{tabs.map(function(tb){var isActive=tab===tb.id;var disabled=loading&&!isActive;return<button key={tb.id} disabled={disabled} title={disabled?"Loading your data, tabs unlock when the Summary finishes":undefined} onClick={function(){if(disabled)return;setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:isActive?P.ember+"10":"transparent",border:"none",borderBottom:isActive?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:disabled?"not-allowed":"pointer",color:isActive?P.ember:P.label,fontSize:13,fontWeight:isActive?800:500,fontFamily:ff,letterSpacing:0.3,opacity:disabled?0.35:1,transition:"opacity 0.2s ease"}}>{tb.icon}<span>{tb.label}</span></button>;})}
+      {loading&&<span style={{marginLeft:14,display:"inline-flex",alignItems:"center",gap:8,fontSize:10,fontFamily:fm,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}><span style={{width:10,height:10,border:"1.5px solid "+P.rule,borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>Loading, other tabs unlock once Summary lands</span>}
       </div></div>
     </header>
 
@@ -3481,9 +3481,9 @@ export default function MediaOnGas(){
             u+=(u.indexOf("?")>=0?"&":"?")+"_r="+Date.now();
             window.location.replace(u);
           }} style={{background:gEmber,border:"none",borderRadius:10,padding:"12px 24px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2,boxShadow:"0 6px 20px rgba(249,98,3,0.35)"}}>Refresh Now</button>
-          <button onClick={function(){setShowIdleNudge(false);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>Not yet</button>
+          <button onClick={function(){setShowIdleNudge(false);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>Not yet</button>
         </div>
-        <div style={{marginTop:16,fontSize:10,color:P.dim,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
+        <div style={{marginTop:16,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
       </div>
     </div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
@@ -3494,11 +3494,11 @@ export default function MediaOnGas(){
       <div style={{color:P.warning,fontSize:18,flexShrink:0,marginTop:1}}>{"\u26A0"}</div>
       <div style={{flex:1,fontSize:11,fontFamily:fm,color:P.txt,lineHeight:1.6}}>
         <div style={{fontWeight:800,color:P.warning,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Partial data: {dataWarnings.length} fetch{dataWarnings.length===1?"":"es"} failed</div>
-        {dataWarnings.slice(0,4).map(function(w,i){return <div key={i} style={{color:P.sub}}>{w.platform+(w.account?(" / "+w.account):"")+(w.stage?(" ("+w.stage+")"):"")+": "+(w.message||"unknown error")}</div>;})}
-        {dataWarnings.length>4&&<div style={{color:P.dim,marginTop:4}}>+ {dataWarnings.length-4} more</div>}
-        <div style={{color:P.dim,marginTop:6,fontStyle:"italic"}}>Numbers shown may be under-reported for affected platforms. Re-try with Refresh.</div>
+        {dataWarnings.slice(0,4).map(function(w,i){return <div key={i} style={{color:P.label}}>{w.platform+(w.account?(" / "+w.account):"")+(w.stage?(" ("+w.stage+")"):"")+": "+(w.message||"unknown error")}</div>;})}
+        {dataWarnings.length>4&&<div style={{color:P.caption,marginTop:4}}>+ {dataWarnings.length-4} more</div>}
+        <div style={{color:P.caption,marginTop:6,fontStyle:"italic"}}>Numbers shown may be under-reported for affected platforms. Re-try with Refresh.</div>
       </div>
-      <button onClick={function(){setDataWarnings([]);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.sub,cursor:"pointer",fontSize:14,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
+      <button onClick={function(){setDataWarnings([]);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.label,cursor:"pointer",fontSize:14,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
     </div>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
@@ -3512,7 +3512,7 @@ export default function MediaOnGas(){
           <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
-            if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view summary.</div>;
+            if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view summary.</div>;
             // Build comparison aggregates when the toggle is on. Match
             // compareCampaigns to the currently selected campaigns using
             // BOTH rawCampaignId (for long-running campaigns) AND a
@@ -3600,7 +3600,7 @@ export default function MediaOnGas(){
               if(compareMode==="off")return null;
               if(!compareComputed){
                 var pendingLabel=compareMode==="mom"?"MoM":"WoW";
-                return <span style={{fontSize:9,fontWeight:800,color:P.sub,background:P.sub+"20",border:"1px dashed "+P.sub+"55",padding:"1px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm,marginLeft:6,verticalAlign:"middle",opacity:0.8}}>{pendingLabel}</span>;
+                return <span style={{fontSize:9,fontWeight:800,color:P.label,background:P.sub+"20",border:"1px dashed "+P.sub+"55",padding:"1px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm,marginLeft:6,verticalAlign:"middle",opacity:0.8}}>{pendingLabel}</span>;
               }
               cur=parseFloat(cur||0);prev=parseFloat(prev||0);
               if(prev===0&&cur===0)return null;
@@ -3717,7 +3717,7 @@ export default function MediaOnGas(){
             var tCell=function(extra){return Object.assign({padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12},extra||{});};
             var secHead=function(color,title,icon){return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 14px"}}><div style={{display:"flex",alignItems:"center",gap:10}}>{icon||<span style={{width:14,height:14,borderRadius:"50%",background:color}}></span>}<span style={{fontSize:16,fontWeight:900,color:color,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{title}</span></div></div>;};
             var lblStyle={fontSize:10,fill:P.txt,fontFamily:"JetBrains Mono,Consolas,monospace",fontWeight:700};
-            var lblStyleSm={fontSize:9,fill:P.sub,fontFamily:"JetBrains Mono,Consolas,monospace",fontWeight:600};
+            var lblStyleSm={fontSize:9,fill:P.label,fontFamily:"JetBrains Mono,Consolas,monospace",fontWeight:600};
             var legStyle={fontSize:10,fontFamily:"JetBrains Mono,Consolas,monospace",paddingTop:6};
             var stand=function(label,value,color,title){return<div title={title||""} style={{flex:1,minWidth:160,background:"rgba(0,0,0,0.25)",border:"1px solid "+color+"30",borderLeft:"3px solid "+color,borderRadius:"0 10px 10px 0",padding:"12px 14px",cursor:title?"help":"default"}}><div style={{fontSize:9,fontWeight:800,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>{label}</div><div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:fm}}>{value}</div></div>;};
             var standRow=function(items){return<div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:16}}>{items.filter(function(x){return x;})}</div>;};
@@ -3744,20 +3744,20 @@ export default function MediaOnGas(){
                       <div style={{position:"absolute",left:pacePct+"%",top:-2,bottom:-2,width:2,background:P.txt,opacity:0.6,zIndex:2}}/>
                       <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:3}}><span style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,textShadow:"0 1px 6px rgba(0,0,0,0.9)"}}>{fR(computed.totalSpend)+" spent, projecting "+fR(projSpend)}</span></div>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}><span style={{fontSize:10,color:P.sub,fontFamily:fm}}>{df}</span><span style={{fontSize:10,color:P.sub,fontFamily:fm}}>{dt}</span></div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}><span style={{fontSize:10,color:P.label,fontFamily:fm}}>{df}</span><span style={{fontSize:10,color:P.label,fontFamily:fm}}>{dt}</span></div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:24}}>
                     <div style={{height:300}}>
-                      <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>SPEND BY PLATFORM</div>
+                      <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>SPEND BY PLATFORM</div>
                       <ResponsiveContainer width="100%" height="92%">
                         {(function(){var sortedSpend=spendData.slice().sort(function(a,b){return b.value-a.value;});return (
-                        <PieChart><Pie data={sortedSpend} dataKey="value" cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={3} stroke="none" startAngle={90} endAngle={-270} label={function(e){var radius=75+22;var rad=Math.PI/180;var x2=e.cx+radius*Math.cos(-e.midAngle*rad);var y2=e.cy+radius*Math.sin(-e.midAngle*rad);return<text x={x2} y={y2} textAnchor={x2>e.cx?"start":"end"} dominantBaseline="central" style={{fontSize:11,fontFamily:fm,fontWeight:700,fill:e.payload.color||P.txt}}>{e.name+" "+(e.value/computed.totalSpend*100).toFixed(2)+"%"}</text>;}} labelLine={{stroke:P.sub,strokeWidth:1}}>{sortedSpend.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle} payload={sortedSpend.map(function(d){return{value:d.name,type:"circle",color:d.color,payload:d};})} formatter={function(v,e){return<span style={{color:P.txt,fontFamily:fm,fontSize:10}}>{v+" ("+fR(e.payload.value)+")"}</span>;}}/></PieChart>);})()}
+                        <PieChart><Pie data={sortedSpend} dataKey="value" cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={3} stroke="none" startAngle={90} endAngle={-270} label={function(e){var radius=75+22;var rad=Math.PI/180;var x2=e.cx+radius*Math.cos(-e.midAngle*rad);var y2=e.cy+radius*Math.sin(-e.midAngle*rad);return<text x={x2} y={y2} textAnchor={x2>e.cx?"start":"end"} dominantBaseline="central" style={{fontSize:11,fontFamily:fm,fontWeight:700,fill:e.payload.color||P.txt}}>{e.name+" "+(e.value/computed.totalSpend*100).toFixed(2)+"%"}</text>;}} labelLine={{stroke:P.label,strokeWidth:1}}>{sortedSpend.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle} payload={sortedSpend.map(function(d){return{value:d.name,type:"circle",color:d.color,payload:d};})} formatter={function(v,e){return<span style={{color:P.txt,fontFamily:fm,fontSize:10}}>{v+" ("+fR(e.payload.value)+")"}</span>;}}/></PieChart>);})()}
                       </ResponsiveContainer>
                     </div>
                     <div style={{height:300}}>
-                      <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>ADS SERVED BY PLATFORM</div>
+                      <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>ADS SERVED BY PLATFORM</div>
                       <ResponsiveContainer width="100%" height="92%">
-                        <BarChart data={impData.slice().sort(function(a,b){return b.value-a.value;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="value" name="Impressions" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{impData.slice().sort(function(a,b){return b.value-a.value;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="value" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
+                        <BarChart data={impData.slice().sort(function(a,b){return b.value-a.value;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="value" name="Impressions" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{impData.slice().sort(function(a,b){return b.value-a.value;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="value" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
@@ -3776,12 +3776,12 @@ export default function MediaOnGas(){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>REACH & IMPRESSIONS BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>REACH & IMPRESSIONS BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,reach:platBreak[pl].reach||0,imps:platBreak[pl].imps||0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.imps-a.imps;})} barGap={4} barCategoryGap="20%" margin={{top:24,right:12,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
-                        <XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/>
-                        <YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                        <XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                        <YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
                         <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                         <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/>
                         <Bar dataKey="imps" name="Impressions" radius={[6,6,0,0]} fill={P.cyan}><LabelList dataKey="imps" position="top" formatter={function(v){return v>0?fmt(v):"";}} style={lblStyle}/></Bar>
@@ -3790,15 +3790,15 @@ export default function MediaOnGas(){
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>FREQUENCY BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>FREQUENCY BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].reach>0&&platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];var fq=pb.reach>0?parseFloat((pb.imps/pb.reach).toFixed(2)):0;var fqColor=fq>4?P.rose:fq>3?P.warning:fq>2?P.mint:platCol4[pl]||P.ember;return{name:platShort[pl]||pl,fullName:pl,frequency:fq,color:fqColor};}).sort(function(a,b){return b.frequency-a.frequency;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"x";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="frequency" name="Frequency" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl].reach>0&&platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,fq:pb.reach>0?pb.imps/pb.reach:0};}).sort(function(a,b){return b.fq-a.fq;}).map(function(e,i){var fq=e.fq;var fqColor=fq>4?P.rose:fq>3?P.warning:fq>2?P.mint:platCol4[e.pl]||P.ember;return <Cell key={i} fill={fqColor}/>;})}<LabelList dataKey="frequency" position="top" formatter={function(v){return v.toFixed(2)+"x";}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].reach>0&&platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];var fq=pb.reach>0?parseFloat((pb.imps/pb.reach).toFixed(2)):0;var fqColor=fq>4?P.rose:fq>3?P.warning:fq>2?P.mint:platCol4[pl]||P.ember;return{name:platShort[pl]||pl,fullName:pl,frequency:fq,color:fqColor};}).sort(function(a,b){return b.frequency-a.frequency;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"x";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="frequency" name="Frequency" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl].reach>0&&platBreak[pl].imps>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,fq:pb.reach>0?pb.imps/pb.reach:0};}).sort(function(a,b){return b.fq-a.fq;}).map(function(e,i){var fq=e.fq;var fqColor=fq>4?P.rose:fq>3?P.warning:fq>2?P.mint:platCol4[e.pl]||P.ember;return <Cell key={i} fill={fqColor}/>;})}<LabelList dataKey="frequency" position="top" formatter={function(v){return v.toFixed(2)+"x";}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER 1000 ADS SERVED BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER 1000 ADS SERVED BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={cpmData.slice().sort(function(a,b){return b.cpm-a.cpm;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="cpm" name="CPM" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{cpmData.slice().sort(function(a,b){return b.cpm-a.cpm;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="cpm" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={cpmData.slice().sort(function(a,b){return b.cpm-a.cpm;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="cpm" name="CPM" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{cpmData.slice().sort(function(a,b){return b.cpm-a.cpm;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="cpm" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -3825,19 +3825,19 @@ export default function MediaOnGas(){
               <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS (MIDDLE OF THE FUNNEL)",Ic.bolt(P.mint,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
-                  <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}{deltaChip(computed.totalClicks,compareComputed&&compareComputed.totalClicks,false)}</div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
-                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}{deltaChip(blCpc,compareComputed&&compareComputed.blendedCpc,true)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:6}}>{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
+                  <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}{deltaChip(computed.totalClicks,compareComputed&&compareComputed.totalClicks,false)}</div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
+                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}{deltaChip(blCpc,compareComputed&&compareComputed.blendedCpc,true)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}}>{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER CLICK & CLICKS BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER CLICK & CLICKS BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
                       <ComposedChart data={cpcData.map(function(d){var pl=Object.keys(platBreak).filter(function(k){return(platShort[k]||k)===d.name;})[0];return{name:d.name,cpc:d.cpc,clicks:pl?platBreak[pl].clicks:0,color:d.color};}).sort(function(a,b){return b.cpc-a.cpc;})} barSize={38} margin={{top:24,right:16,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
-                        <XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/>
-                        <YAxis yAxisId="left" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/>
-                        <YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                        <XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                        <YAxis yAxisId="left" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/>
+                        <YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
                         <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                         <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/>
                         <Bar yAxisId="left" dataKey="cpc" name="CPC" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{cpcData.slice().sort(function(a,b){return b.cpc-a.cpc;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="cpc" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar>
@@ -3846,9 +3846,9 @@ export default function MediaOnGas(){
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CLICK THROUGH RATE BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CLICK THROUGH RATE BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -3887,14 +3887,14 @@ export default function MediaOnGas(){
                     return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{objName}</span></div>
                       <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}{prevResults!==null&&deltaChip(od.results,prevResults,false)}</div>
-                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginBottom:14}}>from {fR(od.spend)} invested</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>from {fR(od.spend)} invested</div>
                       <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?bmCol:P.dim,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}{costPer>0&&prevCostPer!==null&&deltaChip(costPer,prevCostPer,true)}</div></div>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?bmCol:P.caption,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}{costPer>0&&prevCostPer!==null&&deltaChip(costPer,prevCostPer,true)}</div></div>
                         {bmTag&&<span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:bmCol}}>{bmTag}</span>}
                       </div>
                     </div>;})}
                 </div>
-                {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.sub,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.dim,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></div>;})()}
+                {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></div>;})()}
                 {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;active.forEach(function(k){totalResults+=objectives4[k].results;});return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);})()}
                 {(function(){
                   var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
@@ -3923,17 +3923,17 @@ export default function MediaOnGas(){
                   <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL COMMUNITY</div><div style={{fontSize:24,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(grandT2)}</div></Glass>
                   <Glass accent={P.ember} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>EARNED THIS PERIOD</div><div style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{earnedTotal>0?"+"+fmt(earnedTotal):"-"}{compareComputed&&deltaChip(earnedTotal,compareComputed.earnedTotal,false)}</div></Glass>
                   <Glass accent={P.orchid} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>GROWTH RATE</div><div style={{fontSize:24,fontWeight:900,color:P.orchid,fontFamily:fm}}>{grandT2>0&&earnedTotal>0?(earnedTotal/grandT2*100).toFixed(2)+"%":"-"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;var curCpm=earnedTotal>0&&cs>0?cs/earnedTotal:0;var prevCpm=0;if(compareComputed&&compareComputed.objectives&&compareComputed.objectives["Followers & Likes"]&&compareComputed.earnedTotal>0){prevCpm=compareComputed.objectives["Followers & Likes"].spend/compareComputed.earnedTotal;}return <span>{curCpm>0?fR(curCpm):"-"}{curCpm>0&&prevCpm>0&&deltaChip(curCpm,prevCpm,true)}</span>;})()}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm,letterSpacing:1,marginTop:4,fontStyle:"italic"}}>community spend only</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COST PER MEMBER</div><div style={{fontSize:24,fontWeight:900,color:P.solar,fontFamily:fm}}>{(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;var curCpm=earnedTotal>0&&cs>0?cs/earnedTotal:0;var prevCpm=0;if(compareComputed&&compareComputed.objectives&&compareComputed.objectives["Followers & Likes"]&&compareComputed.earnedTotal>0){prevCpm=compareComputed.objectives["Followers & Likes"].spend/compareComputed.earnedTotal;}return <span>{curCpm>0?fR(curCpm):"-"}{curCpm>0&&prevCpm>0&&deltaChip(curCpm,prevCpm,true)}</span>;})()}</div><div style={{fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1,marginTop:4,fontStyle:"italic"}}>community spend only</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COMMUNITY BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COMMUNITY BY PLATFORM</div>
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={communityData.slice().sort(function(a,b){return b.total-a.total;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="total" name="Total Followers" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{communityData.slice().sort(function(a,b){return b.total-a.total;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="total" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>EARNED THIS PERIOD</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>EARNED THIS PERIOD</div>
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.9)",fontFamily:fm,fontWeight:700}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="earned" name="Earned Followers" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;}).map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="earned" position="top" formatter={function(v){return fmt(v);}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer>
@@ -3949,7 +3949,7 @@ export default function MediaOnGas(){
                     <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,"+P.tt+"35,"+P.tt+"15)",border:"1px solid "+P.tt+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.tt,16)}</div>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Already Follows You</div>
-                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:2}}>Owned community demographic per platform, separate from the paid audience shown above.</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:0.5,marginTop:2}}>Owned community demographic per platform, separate from the paid audience shown above.</div>
                     </div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
@@ -4030,7 +4030,7 @@ export default function MediaOnGas(){
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.mint,"BRAND PULSE",Ic.pulse(P.mint,18))}
                   <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
-                  <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,marginBottom:14,textAlign:"right"}}>{fmt(totalAll)} total interactions</div>
+                  <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1,marginBottom:14,textAlign:"right"}}>{fmt(totalAll)} total interactions</div>
                   {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
                     <div style={{display:"flex",alignItems:"center",gap:16}}>
                       {(function(){
@@ -4049,8 +4049,8 @@ export default function MediaOnGas(){
                       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
                       <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
                       <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.sub}}>Positive {fmt(positiveSum)}</span></div>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.sub}}>Negative {fmt(negativeSum)}</span></div>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.label}}>Positive {fmt(positiveSum)}</span></div>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.label}}>Negative {fmt(negativeSum)}</span></div>
                       </div>
                     </div>
                   </div>}
@@ -4060,7 +4060,7 @@ export default function MediaOnGas(){
                     if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
                     if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
                     if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
-                    var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.dim,margin:"0 4px"}}>·</span>);parted.push(n);});
+                    var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.caption,margin:"0 4px"}}>·</span>);parted.push(n);});
                     return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
                         <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
@@ -4090,7 +4090,7 @@ export default function MediaOnGas(){
                 if(!adsList||adsList.length===0){
                   return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                     {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
-                    <div style={{padding:"54px 20px",textAlign:"center",color:P.dim,fontFamily:ff,lineHeight:1.8}}>
+                    <div style={{padding:"54px 20px",textAlign:"center",color:P.caption,fontFamily:ff,lineHeight:1.8}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
                         <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.mint,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
                         <style>{"@keyframes spin{to{transform:rotate(360deg)}}@keyframes adLoaderFade{0%,100%{opacity:0.4}15%,85%{opacity:1}}"}</style>
@@ -4127,7 +4127,7 @@ export default function MediaOnGas(){
                   if(ff2==="CAROUSEL")return{label:"CAROUSEL",color:P.orchid};
                   if(ff2==="GIF")return{label:"GIF",color:P.warning};
                   if(ff2==="RESPONSIVE")return{label:"RESPONSIVE",color:P.blaze};
-                  if(ff2==="TEXT")return{label:"TEXT",color:P.dim};
+                  if(ff2==="TEXT")return{label:"TEXT",color:P.caption};
                   return{label:"STATIC",color:P.cyan};
                 };
                 var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
@@ -4283,13 +4283,13 @@ export default function MediaOnGas(){
                         <div style={{width:10,height:10,borderRadius:"50%",background:s.og.accent,boxShadow:"0 0 10px "+s.og.accent}}/>
                         <span style={{fontSize:16,fontWeight:900,color:s.og.accent,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",lineHeight:1}}>{s.og.label}</span>
                         <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.og.accent+"40, transparent)"}}/>
-                        <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"ranked "+s.og.criterion+" \u00b7 "+s.groups.length+" platform"+(s.groups.length===1?"":"s")}</span>
+                        <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"ranked "+s.og.criterion+" \u00b7 "+s.groups.length+" platform"+(s.groups.length===1?"":"s")}</span>
                       </div>
                       {s.groups.map(function(g){
                         return <div key={s.og.key+"_"+g.pg.key} style={{marginBottom:18,paddingLeft:12,borderLeft:"3px solid "+g.pg.accent+"55"}}>
                           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                             <span style={{fontSize:11,fontWeight:900,color:g.pg.accent,fontFamily:fm,letterSpacing:2}}>{g.pg.label}</span>
-                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"\u2022 "+g.total+" ad"+(g.total===1?"":"s")}</span>
+                            <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"\u2022 "+g.total+" ad"+(g.total===1?"":"s")}</span>
                           </div>
                           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
                             {g.ads.map(function(ad,i){return renderAdCard(ad,i+1,g.pg.accent,g.pg.short,s.og.accent);})}
@@ -4311,7 +4311,7 @@ export default function MediaOnGas(){
                   <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Audience Personas</div>
-                    <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
+                    <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
                   </div>
                 </div>
                 <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
@@ -4471,7 +4471,7 @@ export default function MediaOnGas(){
 
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
                 return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>{df+" to "+dt+" | "+fR(computed.totalSpend)+" spend | "+sortedPlats.length+" platforms"}</div></div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>{Ic.crown(P.ember,22)}<div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>EXECUTIVE SUMMARY</div><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginTop:4}}>{df+" to "+dt+" | "+fR(computed.totalSpend)+" spend | "+sortedPlats.length+" platforms"}</div></div></div>
                   {subSec(P.cyan,Ic.eye(P.cyan,16),"Awareness",awarenessRead)}
                   {subSec(P.mint,Ic.bolt(P.mint,16),"Engagement",engagementRead)}
                   {subSec(P.rose,Ic.target(P.rose,16),"Objective Performance",objectiveRead)}
@@ -4497,7 +4497,7 @@ export default function MediaOnGas(){
                 parts.push("Overall, the campaign is performing strongly, efficient in delivery, meaningful in engagement, and generating measurable results across every active objective.");
                 var text=parts.join(" ");
                 return <div style={{marginTop:20,padding:"24px 28px",background:"linear-gradient(135deg,"+P.orchid+"10 0%,"+P.ember+"06 50%, transparent 100%)",border:"1px solid "+P.orchid+"25",borderLeft:"4px solid "+P.orchid,borderRadius:"0 16px 16px 0"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Combined Summary Insights</div><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginTop:4}}>Recap for the full selected period</div></div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>{Ic.bolt(P.orchid,20)}<div><div style={{fontSize:15,fontWeight:900,color:P.orchid,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Combined Summary Insights</div><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginTop:4}}>Recap for the full selected period</div></div></div>
                   <div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{text}</div>
                 </div>;
               })()}
@@ -4510,7 +4510,7 @@ export default function MediaOnGas(){
           <SH icon={Ic.fire(P.blaze,20)} title="Creative Performance" sub={df+" to "+dt+" | Ad-level performance grouped by campaign objective"} accent={P.blaze}/>
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
-            if(selCamps.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns on the left to view ad-level creative performance.</div>;
+            if(selCamps.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns on the left to view ad-level creative performance.</div>;
 
             var selCampIds={};
             selCamps.forEach(function(c){
@@ -4527,7 +4527,7 @@ export default function MediaOnGas(){
               return false;
             });
 
-            if(allFilteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.sub,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data may still be loading or the campaigns have no ad-level insights yet.</div></div>;
+            if(allFilteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data may still be loading or the campaigns have no ad-level insights yet.</div></div>;
 
             var platformGroup=function(p){
               if(p==="Facebook")return "Facebook";
@@ -4626,7 +4626,7 @@ export default function MediaOnGas(){
               if(ff==="CAROUSEL")return{label:"CAROUSEL",color:P.orchid};
               if(ff==="GIF")return{label:"GIF",color:P.warning};
               if(ff==="RESPONSIVE")return{label:"RESPONSIVE",color:P.blaze};
-              if(ff==="TEXT")return{label:"TEXT",color:P.dim};
+              if(ff==="TEXT")return{label:"TEXT",color:P.caption};
               return{label:"STATIC",color:P.cyan};
             };
             // Option C fallback tile: gradient platform-color background, logo watermark, hero metric, format chip
@@ -4648,7 +4648,7 @@ export default function MediaOnGas(){
               </div>;
             };
             var FilterBtn=function(active,label,onClick,color){
-              return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"7px 14px",color:active?color:P.sub,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",transition:"all 0.2s"}}>{label}</button>;
+              return <button onClick={onClick} style={{background:active?color+"25":"transparent",border:"1px solid "+(active?color+"60":P.rule),borderRadius:8,padding:"7px 14px",color:active?color:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",transition:"all 0.2s"}}>{label}</button>;
             };
 
             // Render an ad card
@@ -4672,17 +4672,17 @@ export default function MediaOnGas(){
                   {ad._topPerformer&&<div style={{position:"absolute",bottom:10,right:10,background:P.warning,color:"#2a1605",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(251,191,36,0.4)",zIndex:3,textTransform:"uppercase"}}>{"\u2605 TOP PERFORMER"}</div>}
                 </div>
                 <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
-                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                  <div style={{fontSize:9,color:P.label,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:10,lineHeight:1.4,minHeight:30,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10,padding:"8px 10px",background:sec.accent+"10",border:"1px solid "+sec.accent+"30",borderRadius:8}}>
                     <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{resultLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{ad.results>0?fmt(ad.results):"-"}</div></div>
                     <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div></div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10}}>
-                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.spend)}</div></div>
-                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fmt(ad.impressions)}</div></div>
-                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:11}}>{ad.ctr.toFixed(2)+"%"}</div></div>
-                    <div><div style={{color:P.sub,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
+                    <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.spend)}</div></div>
+                    <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>IMPS</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fmt(ad.impressions)}</div></div>
+                    <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>CTR</div><div style={{color:ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning,fontWeight:700,fontSize:11}}>{ad.ctr.toFixed(2)+"%"}</div></div>
+                    <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>CPC</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.cpc)}</div></div>
                   </div>
                   <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                 </div>
@@ -4695,13 +4695,13 @@ export default function MediaOnGas(){
               var adPlatShort=platShort2[ad.platform]||ad.platform;
               var ctrCol=ad.ctr>=1.2?P.mint:ad.ctr>=0.8?P.txt:P.warning;
               return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
-                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.sub}}>{"#"+rank}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.label}}>{"#"+rank}</td>
                 <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
                   {ad.thumbnail?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
-                  <div style={{fontSize:9,color:P.sub,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
+                  <div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
                 </td>
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:"#fff",fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{(function(){var fm2=fmtMeta(ad.format);return <span style={{background:fm2.color,color:"#fff",fontSize:9,fontWeight:900,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{fm2.label}</span>;})()}</td>
@@ -4726,30 +4726,30 @@ export default function MediaOnGas(){
                 var note=filtered?"FILTERED AD-LEVEL TOTALS":"MATCHES SUMMARY · ALL SELECTED CAMPAIGNS";
                 return <div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:8}}>
-                    <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div><div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
-                    <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:26,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(spendVal)}</div></Glass>
-                    <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:26,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(impsVal)}</div></Glass>
-                    <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:26,fontWeight:900,color:P.mint,fontFamily:fm}}>{ctrVal.toFixed(2)+"%"}</div></Glass>
+                    <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div><div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
+                    <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:26,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(spendVal)}</div></Glass>
+                    <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:26,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(impsVal)}</div></Glass>
+                    <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:26,fontWeight:900,color:P.mint,fontFamily:fm}}>{ctrVal.toFixed(2)+"%"}</div></Glass>
                   </div>
-                  <div style={{textAlign:"center",fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:1.5,marginBottom:18}}>{note}</div>
+                  <div style={{textAlign:"center",fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1.5,marginBottom:18}}>{note}</div>
                 </div>;
               })()}
 
               <div style={{background:P.glass,borderRadius:14,padding:"14px 20px",marginBottom:24,border:"1px solid "+P.rule,display:"flex",flexWrap:"wrap",gap:18,alignItems:"center"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>PLATFORM:</span>
+                  <span style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginRight:4}}>PLATFORM:</span>
                   {FilterBtn(crFiltP==="all","All",function(){setCrFiltP("all");},P.ember)}
                   {["Facebook","Instagram","TikTok","Google Ads"].filter(function(p){return availPlatformGroups[p];}).map(function(p){return <span key={p}>{FilterBtn(crFiltP===p,p,function(){setCrFiltP(p);},platCol5[p]||P.ember)}</span>;})}
                 </div>
                 <div style={{width:1,height:24,background:P.rule}}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontSize:10,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2,marginRight:4}}>FORMAT:</span>
+                  <span style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginRight:4}}>FORMAT:</span>
                   {FilterBtn(crFiltF==="all","All",function(){setCrFiltF("all");},P.orchid)}
                   {Object.keys(availFormats).sort().map(function(fmt2){return <span key={fmt2}>{FilterBtn(crFiltF===fmt2,fmt2,function(){setCrFiltF(fmt2);},P.orchid)}</span>;})}
                 </div>
               </div>
 
-              {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:objSections.map(function(sec){
+              {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:objSections.map(function(sec){
                 var arr=byObj[sec.key]||[];
                 if(arr.length===0)return null;
                 // Tier-based sort: (1) ads with results rank by results DESC then CPR ASC,
@@ -4792,22 +4792,22 @@ export default function MediaOnGas(){
                       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+sec.accent+"25,"+sec.accent+"08)",border:"1px solid "+sec.accent+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{sec.icon}</div>
                       <div>
                         <div style={{fontSize:19,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1}}>{sec.label}</div>
-                        <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>{sec.desc}</div>
+                        <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:3}}>{sec.desc}</div>
                       </div>
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.5}}>ADS IN SECTION</div>
+                      <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5}}>ADS IN SECTION</div>
                       <div style={{fontSize:22,fontWeight:900,color:sec.accent,fontFamily:fm}}>{arr.length}</div>
                     </div>
                   </div>
 
                   <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:22}}>
-                    <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totals.spend)}</div></Glass>
-                    <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>IMPRESSIONS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(totals.imps)}</div></Glass>
-                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{resultLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.results>0?fmt(totals.results):"-"}</div></Glass>
-                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{costPerLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.cpr>0?fR(totals.cpr):"-"}</div></Glass>
-                    <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>BLENDED CTR</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>{totals.ctr.toFixed(2)+"%"}</div></Glass>
-                    <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>CPC</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{secCpc>0?fR(secCpc):"-"}</div></Glass>
+                    <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totals.spend)}</div></Glass>
+                    <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>IMPRESSIONS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(totals.imps)}</div></Glass>
+                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{resultLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.results>0?fmt(totals.results):"-"}</div></Glass>
+                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{costPerLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.cpr>0?fR(totals.cpr):"-"}</div></Glass>
+                    <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>BLENDED CTR</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>{totals.ctr.toFixed(2)+"%"}</div></Glass>
+                    <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>CPC</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{secCpc>0?fR(secCpc):"-"}</div></Glass>
                   </div>
 
                   {top10.length>0&&<div style={{marginBottom:22}}>
@@ -4815,7 +4815,7 @@ export default function MediaOnGas(){
                       {Ic.crown(sec.accent,16)}
                       <span style={{fontSize:12,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{"TOP "+Math.min(10,top10.length)+" CREATIVES"}</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
-                      <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{"by "+resultLabel(arr[0]?arr[0].resultType:sec.metric)+", then "+sec.costLabel}</span>
+                      <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{"by "+resultLabel(arr[0]?arr[0].resultType:sec.metric)+", then "+sec.costLabel}</span>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>
                       {top10.map(function(ad,i){return renderCard(ad,i+1,sec);})}
@@ -4824,8 +4824,8 @@ export default function MediaOnGas(){
 
                   {rest.length>0&&<div style={{marginBottom:18}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                      {Ic.chart(P.sub,14)}
-                      <span style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{"All other ads ("+rest.length+")"}</span>
+                      {Ic.chart(P.label,14)}
+                      <span style={{fontSize:11,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{"All other ads ("+rest.length+")"}</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.rule+", transparent)"}}/>
                     </div>
                     <div style={{overflowX:"auto"}}>
@@ -4863,7 +4863,7 @@ export default function MediaOnGas(){
                 var matched=Object.keys(byObj);
                 var unmatched=filteredAds.filter(function(a){return matched.indexOf(a.objective||"landingpage")<0;});
                 if(unmatched.length===0)return null;
-                return <div style={{padding:14,textAlign:"center",color:P.dim,fontFamily:fm,fontSize:11,marginBottom:20}}>{unmatched.length+" ads not matched to a known objective category."}</div>;
+                return <div style={{padding:14,textAlign:"center",color:P.caption,fontFamily:fm,fontSize:11,marginBottom:20}}>{unmatched.length+" ads not matched to a known objective category."}</div>;
               })()}
 
               {(function(){
@@ -4944,7 +4944,7 @@ export default function MediaOnGas(){
                         <span style={{color:pc,fontWeight:700}}>{ps}</span>
                         <span style={{color:accent,fontWeight:800}}>{metricVal+" "+metricLabel}</span>
                         {costVal&&<span style={{color:accent,fontWeight:800}}>{costVal+" "+costLabel2}</span>}
-                        <span style={{color:P.sub}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
+                        <span style={{color:P.label}}>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
                     </div>
                     <button onClick={function(){setPreviewAd(ad);}} style={{flexShrink:0,display:"inline-block",background:pc,color:"#fff",padding:"5px 10px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,border:"none",letterSpacing:1,boxShadow:"0 2px 6px "+pc+"40",whiteSpace:"nowrap",cursor:"pointer"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
@@ -4956,7 +4956,7 @@ export default function MediaOnGas(){
                     {Ic.crown(P.mint,24)}
                     <div>
                       <div style={{fontSize:20,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1}}>CREATIVE EXECUTIVE SUMMARY</div>
-                      <div style={{fontSize:11,color:P.sub,fontFamily:fm,marginTop:3}}>Winners by platform, objective breakdown, and creatives recommended to scale</div>
+                      <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:3}}>Winners by platform, objective breakdown, and creatives recommended to scale</div>
                     </div>
                   </div>
 
@@ -4975,7 +4975,7 @@ export default function MediaOnGas(){
                         return <div key={p.pg} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+pc+"30"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                             <span style={{fontSize:12,fontWeight:900,color:pc,fontFamily:ff,letterSpacing:1}}>{p.pg.toUpperCase()}</span>
-                            <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{p.count+" ads | "+fR(p.spend)+" | "+p.ctr.toFixed(2)+"% CTR"}</span>
+                            <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{p.count+" ads | "+fR(p.spend)+" | "+p.ctr.toFixed(2)+"% CTR"}</span>
                           </div>
                           {miniCard(p.winner,pc,resultLabel(resT),p.winner.results>0?fmt(p.winner.results):"0",costPerLabel(resT),p.winner.results>0?fR(p.winner.spend/p.winner.results):null)}
                         </div>;
@@ -4993,7 +4993,7 @@ export default function MediaOnGas(){
                         {sec.icon}
                         <span style={{fontSize:13,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{sec.label+" | TOP 10"}</span>
                         <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
-                        <span style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:1}}>{o.count+" ads | "+fR(o.totals.spend)+" | "+(o.totals.cpr>0?fR(o.totals.cpr)+" "+sec.costLabel:"no results yet")}</span>
+                        <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{o.count+" ads | "+fR(o.totals.spend)+" | "+(o.totals.cpr>0?fR(o.totals.cpr)+" "+sec.costLabel:"no results yet")}</span>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
                         {ten.map(function(ad,ai){
@@ -5122,7 +5122,7 @@ export default function MediaOnGas(){
             <div style={{flex:1,minWidth:240}}>
               <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:800,marginBottom:6}}>Your Data, On Demand</div>
               <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",lineHeight:1.15,marginBottom:6}}>Chat To Your GAS Media Expert Now</div>
-              <div style={{fontSize:12,color:P.sub,fontFamily:ff,lineHeight:1.6,maxWidth:560}}>Ask questions about this report, get expert answers grounded in your live campaign numbers. Which platform is performing, where to scale, why a metric moved, all scoped to this period only.</div>
+              <div style={{fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.6,maxWidth:560}}>Ask questions about this report, get expert answers grounded in your live campaign numbers. Which platform is performing, where to scale, why a metric moved, all scoped to this period only.</div>
             </div>
             <button onClick={function(){setShowChat(true);}} style={{background:gEmber,border:"none",borderRadius:12,padding:"14px 28px",color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2.5,textTransform:"uppercase",boxShadow:"0 6px 20px rgba(255,61,0,0.35)",flexShrink:0}}>Start Chat</button>
           </div>
@@ -5157,7 +5157,7 @@ export default function MediaOnGas(){
 
           {/* \u2550\u2550\u2550 ENGAGEMENT KEY METRICS \u2550\u2550\u2550 */}
           <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>ENGAGEMENT KEY METRICS</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>MIDDLE OF FUNNEL</div></div>
+            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>ENGAGEMENT KEY METRICS</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>MIDDLE OF FUNNEL</div></div>
 
             <table style={{width:"100%",borderCollapse:"collapse",marginBottom:16}}>
               <thead><tr>{["Platform","Media Spend","Impressions","Reach","Clicks","CTR %","CPC"].map(function(h,i){return <th key={i} style={{padding:"10px 12px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1.5,textAlign:i===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",backdropFilter:"blur(8px)",fontFamily:fm,letterSpacing:1}}>{h}</th>;})}</tr></thead>
@@ -5172,7 +5172,7 @@ export default function MediaOnGas(){
               </tbody>
             </table>
 
-            <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:16}}><div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Clicks, CPC & CTR by Platform</div><ResponsiveContainer width="100%" height={220}><ComposedChart data={[{name:"Facebook",Clicks:computed.fb.clicks,CPC:computed.fb.cpc,CTR:computed.fb.ctr},{name:"Instagram",Clicks:computed.ig.clicks,CPC:computed.ig.cpc,CTR:computed.ig.ctr},{name:"TikTok",Clicks:t.clicks,CPC:t.cpc,CTR:t.ctr},{name:"Google",Clicks:computed.gd.clicks,CPC:computed.gd.cpc,CTR:computed.gd.ctr}]}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.ember,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return v<20?v.toFixed(2)+"%":"R"+v.toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar yAxisId="left" dataKey="Clicks" fill={P.mint} radius={[6,6,0,0]} barSize={30}/><Line yAxisId="right" type="monotone" dataKey="CPC" stroke={P.ember} strokeWidth={2.5} dot={{r:5,fill:P.ember}} activeDot={{r:7}}/><Line yAxisId="right" type="monotone" dataKey="CTR" stroke={P.cyan} strokeWidth={2.5} dot={{r:5,fill:P.cyan}} activeDot={{r:7}} strokeDasharray="5 5"/></ComposedChart></ResponsiveContainer></div>
+            <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:16}}><div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Clicks, CPC & CTR by Platform</div><ResponsiveContainer width="100%" height={220}><ComposedChart data={[{name:"Facebook",Clicks:computed.fb.clicks,CPC:computed.fb.cpc,CTR:computed.fb.ctr},{name:"Instagram",Clicks:computed.ig.clicks,CPC:computed.ig.cpc,CTR:computed.ig.ctr},{name:"TikTok",Clicks:t.clicks,CPC:t.cpc,CTR:t.ctr},{name:"Google",Clicks:computed.gd.clicks,CPC:computed.gd.cpc,CTR:computed.gd.ctr}]}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.ember,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return v<20?v.toFixed(2)+"%":"R"+v.toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar yAxisId="left" dataKey="Clicks" fill={P.mint} radius={[6,6,0,0]} barSize={30}/><Line yAxisId="right" type="monotone" dataKey="CPC" stroke={P.ember} strokeWidth={2.5} dot={{r:5,fill:P.ember}} activeDot={{r:7}}/><Line yAxisId="right" type="monotone" dataKey="CTR" stroke={P.cyan} strokeWidth={2.5} dot={{r:5,fill:P.cyan}} activeDot={{r:7}} strokeDasharray="5 5"/></ComposedChart></ResponsiveContainer></div>
 
             
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
@@ -5187,11 +5187,11 @@ export default function MediaOnGas(){
 
           {/* OBJECTIVE KEY METRICS */}
           <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>OBJECTIVE KEY METRICS</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>BOTTOM OF FUNNEL, CAMPAIGN KPIs</div></div>
+            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>OBJECTIVE KEY METRICS</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>BOTTOM OF FUNNEL, CAMPAIGN KPIs</div></div>
 
             {(function(){
               var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
-              if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view objective results.</div>;
+              if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view objective results.</div>;
 
               var getObj=function(name){
                 var n=(name||"").toLowerCase();
@@ -5270,7 +5270,7 @@ export default function MediaOnGas(){
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(r.impressions)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{fmt(r.objective==="Followers & Likes"?r.engagements:r.clicks)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:oc}}>{fmt(r.result)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:700,color:P.ember}}>{fR(r.costPer)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:P.txt}}>{(r.objective==="Followers & Likes"?r.engCtr.toFixed(2):r.ctr.toFixed(2))+"%"}</td>
-                      {objName==="Leads"&&<td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:r.convRate>0?P.orchid:P.dim}}>{r.convRate>0?r.convRate.toFixed(2)+"%":"0"}</td>}
+                      {objName==="Leads"&&<td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,color:r.convRate>0?P.orchid:P.caption}}>{r.convRate>0?r.convRate.toFixed(2)+"%":"0"}</td>}
                     </tr>;})}
                     <tr style={{background:oc+"15"}}><td style={{padding:"10px 12px",border:"1px solid "+P.rule,fontWeight:900,color:oc,fontSize:12}}>Total</td><td style={{padding:"10px 12px",border:"1px solid "+P.rule}}></td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:oc}}>{fR(totalSpend)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:oc}}>{fmt(g.reduce(function(a,r){return a+r.impressions;},0))}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:oc}}>{fmt(objName==="Followers & Likes"?g.reduce(function(a,r){return a+r.engagements;},0):totalClicks)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:14,fontWeight:900,color:oc}}>{fmt(totalResults)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:14,fontWeight:900,color:P.ember}}>{fR(totalCostPer)}</td><td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:P.txt}}>{(function(){var tImps=g.reduce(function(a,r){return a+r.impressions;},0);var tEng=objName==="Followers & Likes"?g.reduce(function(a,r){return a+r.engagements;},0):totalClicks;return tImps>0?(tEng/tImps*100).toFixed(2)+"%":"0.00%";})()}</td>{objName==="Leads"&&<td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:13,fontWeight:900,color:P.orchid}}>{totalConv>0?totalConv.toFixed(2)+"%":"0"}</td>}</tr>
                     </tbody>
@@ -5282,7 +5282,7 @@ export default function MediaOnGas(){
                     return <div style={{background:"rgba(0,0,0,0.22)",borderRadius:12,padding:"18px 22px",marginBottom:16,border:"1px solid "+oc+"20"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                         <div style={{fontSize:10,fontWeight:800,color:oc,letterSpacing:3,fontFamily:fm,textTransform:"uppercase"}}>{objName} by Platform</div>
-                        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(totalResults)} total {g[0].resultLabel.toLowerCase()} at {fR(totalCostPer)} {g[0].costLabel}</div>
+                        <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1}}>{fmt(totalResults)} total {g[0].resultLabel.toLowerCase()} at {fR(totalCostPer)} {g[0].costLabel}</div>
                       </div>
                       <ResponsiveContainer width="100%" height={Math.max(140,chartData.length*48)}>
                         <BarChart data={chartData} layout="vertical" margin={{left:0,right:100,top:6,bottom:6}}>
@@ -5302,7 +5302,7 @@ export default function MediaOnGas(){
                 </div>);
               });
 
-              if(sections.length===0)sections.push(<div key="none" style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view objective performance results.</div>);
+              if(sections.length===0)sections.push(<div key="none" style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view objective performance results.</div>);
 
               var tLeads=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.result;},0);
               var tFollows=rows.filter(function(r){return r.objective==="Followers & Likes";}).reduce(function(a,r){return a+r.result;},0);
@@ -5345,11 +5345,11 @@ export default function MediaOnGas(){
                       {Ic.chart(P.ember,16)}
                       <div style={{fontSize:11,fontWeight:800,color:P.ember,letterSpacing:3,fontFamily:fm,textTransform:"uppercase"}}>All Objectives Combined</div>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.ember+"40, transparent)"}}></div>
-                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fR(grandSpend)} invested across {consolidated.length} objectives</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1}}>{fR(grandSpend)} invested across {consolidated.length} objectives</div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
                       <div>
-                        <div style={{fontSize:9,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Spend Allocation by Objective</div>
+                        <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Spend Allocation by Objective</div>
                         <ResponsiveContainer width="100%" height={220}>
                           <PieChart>
                             <Pie data={donutData} cx="50%" cy="50%" outerRadius={78} innerRadius={44} paddingAngle={3} dataKey="value" stroke="none" label={function(entry){var pct=grandSpend>0?(entry.value/grandSpend*100).toFixed(2):0;return pct>=5?pct+"%":"";}} labelStyle={{fontSize:10,fontFamily:fm,fill:P.txt,fontWeight:700}}>
@@ -5363,7 +5363,7 @@ export default function MediaOnGas(){
                         </div>
                       </div>
                       <div>
-                        <div style={{fontSize:9,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Cost Per Result by Objective</div>
+                        <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Cost Per Result by Objective</div>
                         <ResponsiveContainer width="100%" height={220}>
                           <BarChart data={costData} layout="vertical" margin={{left:0,right:90,top:6,bottom:6}}>
                             <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
@@ -5395,14 +5395,14 @@ export default function MediaOnGas(){
 
           <PH platform="Facebook" suffix="Campaign Performance"/>
           <Glass accent={P.fb} st={{padding:22,marginBottom:20}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:14}}>{[{l:"Impressions",v:fmt(m.impressions)},{l:"Reach",v:fmt(m.reach)},{l:"Frequency",v:m.frequency>0?m.frequency.toFixed(2)+"x":"0"},{l:"CPM",v:fR(m.cpm)}].map(function(x,i){return<div key={i} style={{textAlign:"center"}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>{x.l}</div><div style={{fontSize:20,fontWeight:900,color:P.fb,fontFamily:fm}}>{x.v}</div></div>;})}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:14}}>{[{l:"Impressions",v:fmt(m.impressions)},{l:"Reach",v:fmt(m.reach)},{l:"Frequency",v:m.frequency>0?m.frequency.toFixed(2)+"x":"0"},{l:"CPM",v:fR(m.cpm)}].map(function(x,i){return<div key={i} style={{textAlign:"center"}}><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:2,marginBottom:4}}>{x.l}</div><div style={{fontSize:20,fontWeight:900,color:P.fb,fontFamily:fm}}>{x.v}</div></div>;})}</div>
             {computed.metaCamps.length>0&&<table style={{width:"100%",borderCollapse:"collapse",marginBottom:14}}><thead><tr>{["Campaign","Impressions","Spend","CPC","CTR"].map(function(h,i){return<th key={i} style={{padding:"10px 14px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1.5,textAlign:i===0?"left":"center",background:"rgba(249,98,3,0.15)",border:"1px solid rgba(249,98,3,0.3)",backdropFilter:"blur(8px)",fontFamily:fm}}>{h}</th>;})}</tr></thead><tbody>{computed.metaCamps.sort(function(a,b){return parseFloat(b.impressions)-parseFloat(a.impressions);}).map(function(c,i){return<tr key={i} style={{background:i%2===0?"rgba(240,246,251,0.04)":"transparent"}}><td style={{padding:"10px 14px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule}}>{c.campaignName}</td><td style={{padding:"10px 14px",fontSize:12,color:P.txt,textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>{fmt(c.impressions)}</td><td style={{padding:"10px 14px",fontSize:12,color:P.txt,textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>{fR(parseFloat(c.spend))}</td><td style={{padding:"10px 14px",fontSize:12,color:P.mint,textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontWeight:700}}>{fR(parseFloat(c.cpc||0))}</td><td style={{padding:"10px 14px",fontSize:12,color:P.txt,textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm}}>{pc(parseFloat(c.ctr||0))}</td></tr>;})}</tbody></table>}
             <Insight title="Meta Campaign Read" accent={P.fb} icon={Ic.bolt(P.fb,16)}>Meta has delivered <strong>{fmt(m.impressions)} impressions</strong> reaching <strong>{fmt(m.reach)} unique individuals</strong> at {m.frequency>0?m.frequency.toFixed(2)+"x":"0"} frequency and {fR(m.cpm)} Cost Per Thousand Ads Served. The {fmt(m.clicks)} clicks generated at {fR(m.cpc)} Cost Per Click with {pc(m.ctr)} CTR against {fR(m.spend)} investment confirms the algorithm has successfully identified and is consistently reaching high-intent audience pockets. The frequency level indicates the campaign is within the optimal exposure window, sufficient repetition to build recall without crossing into diminishing returns territory. The platform’s publisher breakdown capabilities are automatically optimising delivery across Facebook feed, Instagram Stories, Reels, and the Audience Network to find the lowest-cost conversion opportunities within each placement.</Insight>
           </Glass>
 
           <PH platform="TikTok" suffix="Campaign Performance"/>
           <Glass accent={P.tt} st={{padding:22,marginBottom:20}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:14}}>{[{l:"Impressions",v:fmt(t.impressions)},{l:"CPM",v:fR(t.cpm)},{l:"Follows",v:fmt(t.follows)},{l:"Spend",v:fR(t.spend)}].map(function(x,i){return<div key={i} style={{textAlign:"center"}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:4}}>{x.l}</div><div style={{fontSize:20,fontWeight:900,color:P.tt,fontFamily:fm}}>{x.v}</div></div>;})}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:14}}>{[{l:"Impressions",v:fmt(t.impressions)},{l:"CPM",v:fR(t.cpm)},{l:"Follows",v:fmt(t.follows)},{l:"Spend",v:fR(t.spend)}].map(function(x,i){return<div key={i} style={{textAlign:"center"}}><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:2,marginBottom:4}}>{x.l}</div><div style={{fontSize:20,fontWeight:900,color:P.tt,fontFamily:fm}}>{x.v}</div></div>;})}</div>
             {computed.ttCamps.length>0&&<table style={{width:"100%",borderCollapse:"collapse",marginBottom:14}}><thead><tr>{["Campaign","Impressions","Spend","CPM"].map(function(h,i){return<th key={i} style={{padding:"10px 14px",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#F96203",letterSpacing:1.5,textAlign:i===0?"left":"center",background:"#252538",border:"1px solid #3a3a4e",fontFamily:fm}}>{h}</th>;})}</tr></thead><tbody>{computed.ttCamps.sort(function(a,b){return parseFloat(b.impressions)-parseFloat(a.impressions);}).map(function(c,i){return<tr key={i} style={{background:i%2===0?"#1e1e2e":"#252538"}}><td style={{padding:"10px 14px",fontSize:11,fontWeight:600,color:"#fff",border:"1px solid #3a3a4e"}}>{c.campaignName}</td><td style={{padding:"10px 14px",fontSize:12,color:"#fff",textAlign:"center",border:"1px solid #3a3a4e",fontFamily:fm}}>{fmt(c.impressions)}</td><td style={{padding:"10px 14px",fontSize:12,color:"#ccc",textAlign:"center",border:"1px solid #3a3a4e",fontFamily:fm}}>{fR(parseFloat(c.spend))}</td><td style={{padding:"10px 14px",fontSize:12,color:P.tt,textAlign:"center",border:"1px solid #3a3a4e",fontFamily:fm,fontWeight:700}}>{fR(parseFloat(c.cpm||0))}</td></tr>;})}</tbody></table>}
             <Insight title="TikTok Campaign Read" accent={P.tt} icon={Ic.bolt(P.tt,16)}>TikTok has delivered <strong>{fmt(t.impressions)} impressions</strong> at <strong>{fR(t.cpm)} CPM</strong> with {fmt(t.follows)} followers and {fmt(t.likes)} engagements against {fR(t.spend)} investment. The platform’s content-first algorithm is rewarding the campaign creative with favourable auction positioning, evidenced by the below-market Cost Per Thousand Ads Served. TikTok’s unique strength lies in its ability to drive simultaneous paid and organic amplification, when paid creative resonates, TikTok’s recommendation engine extends its distribution beyond the paid audience, effectively delivering bonus organic impressions at zero marginal cost. The follower acquisition is particularly valuable: each new follow creates a persistent organic distribution channel that reduces future paid media dependency.</Insight>
           </Glass>
@@ -5420,10 +5420,10 @@ export default function MediaOnGas(){
             {computed.metaCamps.sort(function(a,b){return parseFloat(b.clicks||0)-parseFloat(a.clicks||0);}).slice(0,8).map(function(c,i){var best=i===0;return<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",marginBottom:4,background:i%2===0?P.orchid+"06":"transparent",borderRadius:10,borderLeft:"3px solid "+(best?P.solar:P.fb)}}>
               <div style={{width:28,height:28,borderRadius:8,background:best?P.solar+"15":P.fb+"10",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:best?P.solar:P.fb,fontFamily:fm,flexShrink:0}}>#{i+1}</div>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:P.txt,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{c.campaignName}</div><div style={{display:"flex",gap:6,marginTop:3}}><Pill name={c.accountName} color={P.orchid}/>{best&&<span style={{background:gFire,color:"#fff",fontSize:8,fontWeight:900,padding:"2px 8px",borderRadius:6,fontFamily:fm}}>BEST</span>}</div></div>
-              <div style={{textAlign:"right",minWidth:60}}><div style={{fontSize:14,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(parseFloat(c.clicks||0))}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>clicks</div></div>
-              <div style={{textAlign:"right",minWidth:55}}><div style={{fontSize:13,fontWeight:800,color:P.mint,fontFamily:fm}}>{fR(parseFloat(c.cpc||0))}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>CPC</div></div>
-              <div style={{textAlign:"right",minWidth:50}}><div style={{fontSize:13,fontWeight:700,color:P.sub,fontFamily:fm}}>{pc(parseFloat(c.ctr||0))}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>CTR</div></div>
-              <div style={{textAlign:"right",minWidth:60}}><div style={{fontSize:13,fontWeight:700,color:P.ember,fontFamily:fm}}>{fR(parseFloat(c.spend||0))}</div><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>spend</div></div>
+              <div style={{textAlign:"right",minWidth:60}}><div style={{fontSize:14,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(parseFloat(c.clicks||0))}</div><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>clicks</div></div>
+              <div style={{textAlign:"right",minWidth:55}}><div style={{fontSize:13,fontWeight:800,color:P.mint,fontFamily:fm}}>{fR(parseFloat(c.cpc||0))}</div><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>CPC</div></div>
+              <div style={{textAlign:"right",minWidth:50}}><div style={{fontSize:13,fontWeight:700,color:P.label,fontFamily:fm}}>{pc(parseFloat(c.ctr||0))}</div><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>CTR</div></div>
+              <div style={{textAlign:"right",minWidth:60}}><div style={{fontSize:13,fontWeight:700,color:P.ember,fontFamily:fm}}>{fR(parseFloat(c.spend||0))}</div><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>spend</div></div>
             </div>;})}
             <Insight title="Engagement Analysis" accent={P.mint} icon={Ic.fire(P.mint,16)}>Meta has generated <strong>{fmt(m.clicks)} clicks</strong> at <strong>{fR(m.cpc)} CPC</strong> with {pc(m.ctr)} Click Through Rate, each click represents a deliberate intent signal from a user who has moved beyond passive awareness into active consideration. The CPC level indicates the campaign is winning competitive auctions efficiently, securing high-quality placements without overpaying for attention. TikTok contributed {fmt(t.clicks)} clicks alongside {fmt(t.follows)} new followers and {fmt(t.likes)} engagements, on TikTok, engagement metrics carry amplification weight as the algorithm promotes content with strong interaction signals. The combined click volume of <strong>{fmt(computed.totalClicks)}</strong> across both platforms confirms the creative messaging is resonating at scale, with each platform contributing its unique engagement character: Meta for measured, intentional interaction and TikTok for volume-driven social proof.</Insight>
           </Glass>
@@ -5435,21 +5435,21 @@ export default function MediaOnGas(){
 
           <PH platform="Facebook" suffix="Objective Results"/>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
-            {[{l:"IMPRESSIONS",v:fmt(m.impressions),s1l:"CPM",s1v:fR(m.cpm),s1c:P.fb,s2l:"SPEND",s2v:fR(m.spend)},{l:"CLICKS",v:fmt(m.clicks),s1l:"CPC",s1v:fR(m.cpc),s1c:P.fb,s2l:"CTR",s2v:pc(m.ctr)},{l:"REACH",v:fmt(m.reach),s1l:"FREQUENCY",s1v:m.frequency>0?m.frequency.toFixed(2)+"x":"0",s1c:P.fb}].map(function(x,i){return<Glass key={i} accent={P.fb} hv={true} st={{padding:20}}><div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:12}}>{x.l}</div><div style={{fontSize:26,fontWeight:900,color:P.txt,fontFamily:fm}}>{x.v}</div><div style={{display:"flex",justifyContent:"space-between",paddingTop:10,borderTop:"1px solid "+P.rule,marginTop:10}}><div><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>{x.s1l}</div><div style={{fontSize:15,fontWeight:800,color:x.s1c,fontFamily:fm}}>{x.s1v}</div></div>{x.s2l&&<div style={{textAlign:"right"}}><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>{x.s2l}</div><div style={{fontSize:13,fontWeight:700,color:P.sub,fontFamily:fm}}>{x.s2v}</div></div>}</div></Glass>;})}
+            {[{l:"IMPRESSIONS",v:fmt(m.impressions),s1l:"CPM",s1v:fR(m.cpm),s1c:P.fb,s2l:"SPEND",s2v:fR(m.spend)},{l:"CLICKS",v:fmt(m.clicks),s1l:"CPC",s1v:fR(m.cpc),s1c:P.fb,s2l:"CTR",s2v:pc(m.ctr)},{l:"REACH",v:fmt(m.reach),s1l:"FREQUENCY",s1v:m.frequency>0?m.frequency.toFixed(2)+"x":"0",s1c:P.fb}].map(function(x,i){return<Glass key={i} accent={P.fb} hv={true} st={{padding:20}}><div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:12}}>{x.l}</div><div style={{fontSize:26,fontWeight:900,color:P.txt,fontFamily:fm}}>{x.v}</div><div style={{display:"flex",justifyContent:"space-between",paddingTop:10,borderTop:"1px solid "+P.rule,marginTop:10}}><div><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>{x.s1l}</div><div style={{fontSize:15,fontWeight:800,color:x.s1c,fontFamily:fm}}>{x.s1v}</div></div>{x.s2l&&<div style={{textAlign:"right"}}><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>{x.s2l}</div><div style={{fontSize:13,fontWeight:700,color:P.label,fontFamily:fm}}>{x.s2v}</div></div>}</div></Glass>;})}
           </div>
 
           <PH platform="TikTok" suffix="Objective Results"/>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
-            {[{l:"IMPRESSIONS",v:fmt(t.impressions),s1l:"CPM",s1v:fR(t.cpm),s1c:P.tt,s2l:"SPEND",s2v:fR(t.spend)},{l:"CLICKS",v:fmt(t.clicks),s1l:"CPC",s1v:t.clicks>0?fR(t.spend/t.clicks):"0",s1c:P.tt},{l:"COMMUNITY",v:fmt(t.follows),s1l:"LIKES",s1v:fmt(t.likes),s1c:P.tt}].map(function(x,i){return<Glass key={i} accent={P.tt} hv={true} st={{padding:20}}><div style={{fontSize:9,fontWeight:700,color:P.sub,fontFamily:fm,letterSpacing:2,marginBottom:12}}>{x.l}</div><div style={{fontSize:26,fontWeight:900,color:i===2?P.mint:P.txt,fontFamily:fm}}>{x.v}</div><div style={{paddingTop:10,borderTop:"1px solid "+P.rule,marginTop:10}}><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>{x.s1l}</div><div style={{fontSize:15,fontWeight:800,color:x.s1c,fontFamily:fm}}>{x.s1v}</div></div>{x.s2l&&<div style={{marginTop:8}}><div style={{fontSize:8,color:P.dim,fontFamily:fm}}>{x.s2l}</div><div style={{fontSize:13,fontWeight:700,color:P.sub,fontFamily:fm}}>{x.s2v}</div></div>}</Glass>;})}
+            {[{l:"IMPRESSIONS",v:fmt(t.impressions),s1l:"CPM",s1v:fR(t.cpm),s1c:P.tt,s2l:"SPEND",s2v:fR(t.spend)},{l:"CLICKS",v:fmt(t.clicks),s1l:"CPC",s1v:t.clicks>0?fR(t.spend/t.clicks):"0",s1c:P.tt},{l:"COMMUNITY",v:fmt(t.follows),s1l:"LIKES",s1v:fmt(t.likes),s1c:P.tt}].map(function(x,i){return<Glass key={i} accent={P.tt} hv={true} st={{padding:20}}><div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:12}}>{x.l}</div><div style={{fontSize:26,fontWeight:900,color:i===2?P.mint:P.txt,fontFamily:fm}}>{x.v}</div><div style={{paddingTop:10,borderTop:"1px solid "+P.rule,marginTop:10}}><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>{x.s1l}</div><div style={{fontSize:15,fontWeight:800,color:x.s1c,fontFamily:fm}}>{x.s1v}</div></div>{x.s2l&&<div style={{marginTop:8}}><div style={{fontSize:8,color:P.caption,fontFamily:fm}}>{x.s2l}</div><div style={{fontSize:13,fontWeight:700,color:P.label,fontFamily:fm}}>{x.s2v}</div></div>}</Glass>;})}
           </div>
 
           <Glass accent={P.ember} st={{padding:26,background:"linear-gradient(135deg,"+P.lava+"05,"+P.ember+"05,"+P.solar+"05)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:22}}>{Ic.users(P.ember,18)}<span style={{fontSize:10,fontWeight:800,color:P.ember,letterSpacing:3,fontFamily:fm,textTransform:"uppercase"}}>Combined Results</span></div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:18}}>
-              <div><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:30,fontWeight:900,fontFamily:ff,lineHeight:1,color:P.ember}}>{fmt(computed.totalImps)}</div></div>
-              <div style={{borderLeft:"1px solid "+P.rule,paddingLeft:16}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(computed.totalSpend)}</div></div>
-              <div style={{borderLeft:"1px solid "+P.rule,paddingLeft:16}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>CLICKS</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(computed.totalClicks)}</div></div>
-              <div style={{borderLeft:"1px solid "+P.rule,paddingLeft:16}}><div style={{fontSize:9,color:P.dim,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TT FOLLOWS</div><div style={{fontSize:22,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(t.follows)}</div></div>
+              <div><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:30,fontWeight:900,fontFamily:ff,lineHeight:1,color:P.ember}}>{fmt(computed.totalImps)}</div></div>
+              <div style={{borderLeft:"1px solid "+P.rule,paddingLeft:16}}><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:2,marginBottom:6}}>SPEND</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(computed.totalSpend)}</div></div>
+              <div style={{borderLeft:"1px solid "+P.rule,paddingLeft:16}}><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:2,marginBottom:6}}>CLICKS</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(computed.totalClicks)}</div></div>
+              <div style={{borderLeft:"1px solid "+P.rule,paddingLeft:16}}><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TT FOLLOWS</div><div style={{fontSize:22,fontWeight:900,color:P.tt,fontFamily:fm}}>{fmt(t.follows)}</div></div>
             </div>
             <Insight title="Combined Campaign Read" icon={Ic.crown(P.ember,16)} accent={P.ember}>The selected campaigns have delivered <strong>{fmt(computed.totalImps)} total impressions</strong> across Meta, TikTok, and Google Display against a combined investment of <strong>{fR(computed.totalSpend)}</strong>, achieving a blended Cost Per Thousand Ads Served of {fR(computed.blendedCpm)}, representing exceptional media value in the paid social market. Meta reached <strong>{fmt(m.reach)} unique individuals</strong> at {m.frequency>0?m.frequency.toFixed(2)+"x":"0"} frequency, generating {fmt(m.clicks)} clicks at {fR(m.cpc)} Cost Per Click with {pc(m.ctr)} Click Through Rate. TikTok delivered {fmt(t.impressions)} impressions at {fR(t.cpm)} CPM with {fmt(t.follows)} followers earned, building an owned audience asset that compounds in value with every campaign cycle. The multi-platform architecture is delivering its intended strategic outcome: TikTok provides the mass awareness foundation and cost-efficient community growth, whilst Meta converts that awareness into measurable, attributable engagement actions. This complementary approach ensures neither platform’s limitations constrain overall campaign performance, each amplifies the other’s strengths.</Insight>
           </Glass>
@@ -5470,7 +5470,7 @@ export default function MediaOnGas(){
               <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
               <div style={{flex:1}}>
                 <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Audience Personas</div>
-                <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
+                <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
               </div>
             </div>
             <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
@@ -5533,7 +5533,7 @@ export default function MediaOnGas(){
               for(var sn=0;sn<selNames.length;sn++){if(a.campaignName===selNames[sn])return true;}
               return false;
             }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
-            if(filtered.length===0)return <div style={{padding:30,textAlign:"center",color:P.dim,fontFamily:fm}}>Select campaigns to view adset targeting performance.</div>;
+            if(filtered.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view adset targeting performance.</div>;
 
             var allRows=filtered.map(function(a){
               var getObj2=function(name){var n=(name||"").toLowerCase();if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)return "Clicks to App Store";if(n.indexOf("follower")>=0)return "Followers & Likes";if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";return "Traffic";};
@@ -5566,7 +5566,7 @@ export default function MediaOnGas(){
             var objCL3={"Clicks to App Store":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
             var platOrd3={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
 
-            var adsetTip=function(props){if(!props.active||!props.payload||!props.payload[0])return null;var d=props.payload[0].payload;return <div style={{background:"rgba(6,2,14,0.95)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",maxWidth:360}}><div style={{fontSize:12,fontWeight:700,color:P.txt,marginBottom:6,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.5}}>{d.fullName||d.name}</div><div style={{fontSize:10,color:P.sub,marginBottom:2}}>{d.platform||""}</div>{props.payload.map(function(p,i){return <div key={i} style={{fontSize:11,color:P.ember,fontFamily:fm,fontWeight:700}}>{p.name}: {typeof p.value==="number"&&p.name.indexOf("CTR")>=0?p.value.toFixed(2)+"%":typeof p.value==="number"&&(p.name==="Results"||p.name==="Clicks")?fmt(p.value):typeof p.value==="number"?fR(p.value):p.value}</div>;})}</div>;};
+            var adsetTip=function(props){if(!props.active||!props.payload||!props.payload[0])return null;var d=props.payload[0].payload;return <div style={{background:"rgba(6,2,14,0.95)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",maxWidth:360}}><div style={{fontSize:12,fontWeight:700,color:P.txt,marginBottom:6,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.5}}>{d.fullName||d.name}</div><div style={{fontSize:10,color:P.label,marginBottom:2}}>{d.platform||""}</div>{props.payload.map(function(p,i){return <div key={i} style={{fontSize:11,color:P.ember,fontFamily:fm,fontWeight:700}}>{p.name}: {typeof p.value==="number"&&p.name.indexOf("CTR")>=0?p.value.toFixed(2)+"%":typeof p.value==="number"&&(p.name==="Results"||p.name==="Clicks")?fmt(p.value):typeof p.value==="number"?fR(p.value):p.value}</div>;})}</div>;};
 
             var platSections=[];
             objList3.forEach(function(objName){
@@ -5589,7 +5589,7 @@ export default function MediaOnGas(){
               var platGrp={};sorted6.forEach(function(r){if(!platGrp[r.platform])platGrp[r.platform]={rows:[],spend:0,clicks:0,imps:0,results:0};platGrp[r.platform].rows.push(r);platGrp[r.platform].spend+=r.spend;platGrp[r.platform].clicks+=r.clicks;platGrp[r.platform].imps+=r.impressions;platGrp[r.platform].results+=r.result;});
 
               platSections.push(<div key={objName} style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 16px"}}><span style={{width:16,height:16,borderRadius:"50%",background:oc}}></span><span style={{fontSize:20,fontWeight:900,color:oc,fontFamily:ff,letterSpacing:1}}>{objName.toUpperCase()}</span><span style={{fontSize:11,color:P.sub,fontFamily:fm,marginLeft:8}}>{sorted6.length} adsets across {Object.keys(platGrp).length} platform{Object.keys(platGrp).length>1?"s":""}</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"18px 0 16px"}}><span style={{width:16,height:16,borderRadius:"50%",background:oc}}></span><span style={{fontSize:20,fontWeight:900,color:oc,fontFamily:ff,letterSpacing:1}}>{objName.toUpperCase()}</span><span style={{fontSize:11,color:P.label,fontFamily:fm,marginLeft:8}}>{sorted6.length} adsets across {Object.keys(platGrp).length} platform{Object.keys(platGrp).length>1?"s":""}</span></div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={oc} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:oc,fontFamily:fm}}>{fR(oSpend)}</div></Glass>
                   <Glass accent={oc} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(oImps)}</div></Glass>
@@ -5617,10 +5617,10 @@ export default function MediaOnGas(){
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.impressions)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.clicks)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:900,color:r.result>0?oc:P.dim}}>{fmt(r.result)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:r.costPer>0?P.ember:P.dim}}>{r.costPer>0?fR(r.costPer):"-"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.ctr>2?P.mint:r.ctr>1?P.txt:r.ctr>0?P.warning:P.dim}}>{r.ctr.toFixed(2)+"%"}</td>
-                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.cpc>0&&r.cpc<2?P.mint:r.cpc>0?P.txt:P.dim}}>{r.cpc>0?fR(r.cpc):"-"}</td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:900,color:r.result>0?oc:P.caption}}>{fmt(r.result)}</td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:700,color:r.costPer>0?P.ember:P.caption}}>{r.costPer>0?fR(r.costPer):"-"}</td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.ctr>2?P.mint:r.ctr>1?P.txt:r.ctr>0?P.warning:P.caption}}>{r.ctr.toFixed(2)+"%"}</td>
+                      <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.cpc>0&&r.cpc<2?P.mint:r.cpc>0?P.txt:P.caption}}>{r.cpc>0?fR(r.cpc):"-"}</td>
                     </tr>;})}</tbody>
                 </table>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:14}}>
@@ -5638,7 +5638,7 @@ export default function MediaOnGas(){
 
             return <div>
               <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>ADSET PERFORMANCE BY OBJECTIVE</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TARGETING ANALYSIS</div></div>
+                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>ADSET PERFORMANCE BY OBJECTIVE</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>TARGETING ANALYSIS</div></div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
                   <Glass accent={P.solar} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>ACTIVE ADSETS</div><div style={{fontSize:22,fontWeight:900,color:P.solar,fontFamily:fm}}>{allRows.length}</div></Glass>
                   <Glass accent={P.mint} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(totalClicks)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CTR: {blendedCtr.toFixed(2)+"%"}</div></Glass>
@@ -5648,11 +5648,11 @@ export default function MediaOnGas(){
                 {platSections}
               </div>
               <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>TARGETING HEALTH SCORECARD</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>ALL ADSETS RANKED BY PERFORMANCE</div></div>
+                <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>TARGETING HEALTH SCORECARD</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>ALL ADSETS RANKED BY PERFORMANCE</div></div>
                 <div style={{display:"flex",gap:16,marginBottom:16,justifyContent:"center"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:"#22c55e"}}></span><span style={{fontSize:10,color:P.sub,fontFamily:fm}}>Strong performer</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:"#f59e0b"}}></span><span style={{fontSize:10,color:P.sub,fontFamily:fm}}>On track / Monitor</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:"#ef4444"}}></span><span style={{fontSize:10,color:P.sub,fontFamily:fm}}>Optimise / Action needed</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:"#22c55e"}}></span><span style={{fontSize:10,color:P.label,fontFamily:fm}}>Strong performer</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:"#f59e0b"}}></span><span style={{fontSize:10,color:P.label,fontFamily:fm}}>On track / Monitor</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:"#ef4444"}}></span><span style={{fontSize:10,color:P.label,fontFamily:fm}}>Optimise / Action needed</span></div>
                 </div>
                 {(function(){
                   var scored=allRows.map(function(r){
@@ -5748,12 +5748,12 @@ export default function MediaOnGas(){
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:s.statusColor,color:"#fff",fontSize:9,fontWeight:900,padding:"4px 10px",borderRadius:5,textTransform:"uppercase"}}>{s.statusLabel}</span></td>
                           <td title={r.adsetName} style={{padding:"10px 12px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:260,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div></td>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc4,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
-                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontSize:10,color:P.sub}}>{r.objective}</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontSize:10,color:P.label}}>{r.objective}</td>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
-                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:900,color:r.result>0?s.statusColor:P.dim}}>{fmt(r.result)}</td>
-                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.costPer>0?P.ember:P.dim}}>{r.costPer>0?fR(r.costPer):"-"}</td>
-                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.ctr>2?P.mint:r.ctr>1?P.txt:r.ctr>0?P.warning:P.dim}}>{r.ctr.toFixed(2)+"%"}</td>
-                          <td style={{padding:"10px 10px",border:"1px solid "+P.rule,fontSize:10,color:P.sub,lineHeight:1.5,maxWidth:220}}>{s.assessment}</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:900,color:r.result>0?s.statusColor:P.caption}}>{fmt(r.result)}</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.costPer>0?P.ember:P.caption}}>{r.costPer>0?fR(r.costPer):"-"}</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:r.ctr>2?P.mint:r.ctr>1?P.txt:r.ctr>0?P.warning:P.caption}}>{r.ctr.toFixed(2)+"%"}</td>
+                          <td style={{padding:"10px 10px",border:"1px solid "+P.rule,fontSize:10,color:P.label,lineHeight:1.5,maxWidth:220}}>{s.assessment}</td>
                         </tr>;})}</tbody>
                     </table>
                     <Insight title="Targeting Health Summary" accent={P.solar} icon={Ic.radar(P.solar,16)}>{(function(){var strong=scored.filter(function(s){return s.status==="strong";});var avg=scored.filter(function(s){return s.status==="average";});var weak=scored.filter(function(s){return s.status==="weak";});var p=[];p.push("Across "+scored.length+" active adsets: "+strong.length+" are performing strongly (green), "+avg.length+" require monitoring (orange), and "+weak.length+" need immediate attention (red).");if(strong.length>0){p.push("Top performers include "+strong.slice(0,2).map(function(s){return s.row.adsetName+" on "+s.row.platform+" ("+fmt(s.row.result)+" results at "+fR(s.row.costPer)+")";}).join(" and ")+". These adsets demonstrate strong audience-creative alignment and should be considered for increased budget allocation.");}if(weak.length>0){var weakSpend=weak.reduce(function(a,s){return a+s.row.spend;},0);p.push(weak.length+" adset"+(weak.length>1?"s":"")+" flagged for action represent"+( weakSpend>0?" "+fR(weakSpend)+" of potentially misallocated budget.":". ")+" "+(weak.length>0?"The primary issues are: "+weak.slice(0,2).map(function(s){return s.row.adsetName+" on "+s.row.platform;}).join("; ")+".":""));}if(strong.length>0&&weak.length>0){p.push("Reallocating budget from underperforming (red) adsets to proven (green) performers would improve overall campaign Return On Investment without increasing total media spend.");}if(freqStatus==="critical"||freqStatus==="warning"){p.push("Meta frequency at "+m.frequency.toFixed(2)+"x is "+(freqStatus==="critical"?"above the 4x saturation ceiling":"approaching the 3x fatigue threshold")+". This compounds the underperformance of weaker adsets, making reallocation and creative refresh more urgent.");}return p.join(" ");})()}</Insight>
@@ -5766,13 +5766,13 @@ export default function MediaOnGas(){
 
         {tab==="demographics"&&(<div>
           <SH icon={Ic.globe(P.cyan,20)} title="Demographic Insights" sub={"Who saw, who engaged, who converted  ·  "+df+" to "+dt} accent={P.cyan}/>
-          {demoLoading&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"54px 20px",textAlign:"center",color:P.dim,fontFamily:ff}}>
+          {demoLoading&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"54px 20px",textAlign:"center",color:P.caption,fontFamily:ff}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
               <div style={{width:28,height:28,border:"2px solid "+P.rule,borderTop:"2px solid "+P.cyan,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
               <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
             </div>
             <div key={demoQuip} style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontStyle:"italic",maxWidth:520,margin:"0 auto",lineHeight:1.6,letterSpacing:0.2}}>{demoQuip}<span style={{display:"inline-block",width:18}}>…</span></div>
-            <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:16,letterSpacing:1}}>Each platform returns demographic slices as separate calls, this can take 15 to 30 seconds first time.</div>
+            <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:16,letterSpacing:1}}>Each platform returns demographic slices as separate calls, this can take 15 to 30 seconds first time.</div>
           </div>}
           {!demoLoading&&demoErr&&<div style={{background:P.glass,border:"1px solid "+P.rose+"40",borderRadius:18,padding:"30px 24px",color:P.rose,fontFamily:fm,fontSize:13}}>Demographics failed to load: {demoErr}</div>}
           {!demoLoading&&!demoErr&&demoData&&(demoFallback||(demoBlocks&&<div>
@@ -5784,7 +5784,7 @@ export default function MediaOnGas(){
             {demoBlocks.googleBlock}
             {demoBlocks.footnote}
           </div>))}
-          {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.sub,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
+          {!demoLoading&&!demoErr&&!demoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"30px 24px",textAlign:"center",color:P.label,fontFamily:fm}}>Open this tab to load demographic data for the selected period.</div>}
         </div>)}
 
         {tab==="community"&&(<div>
@@ -5794,7 +5794,7 @@ export default function MediaOnGas(){
               <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.tt+"35,"+P.tt+"15)",border:"1px solid "+P.tt+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.tt,18)}</div>
               <div style={{flex:1}}>
                 <div style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Follows You</div>
-                <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Owned community demographic, distinct from the paid audience. Use this to understand the audience that will see organic content for free and to spot misalignment with the paid targeting mix.</div>
+                <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Owned community demographic, distinct from the paid audience. Use this to understand the audience that will see organic content for free and to spot misalignment with the paid targeting mix.</div>
               </div>
             </div>
             <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.tt+"45,"+P.tt+"15,transparent 80%)"}}/>
@@ -5805,7 +5805,7 @@ export default function MediaOnGas(){
             </div>
           </div>)}
           <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TOTAL COMMUNITY & PERIOD GROWTH</div></div>
+            <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>TOTAL COMMUNITY & PERIOD GROWTH</div></div>
             {(function(){
               var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
               var fbEarned=0;var ttEarned=0;var igEarned=0;
@@ -5869,7 +5869,7 @@ export default function MediaOnGas(){
                   })()}
                 </div>
                 <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
-                  <div style={{fontSize:10,fontWeight:800,color:P.sub,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
+                  <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={[{name:"FB Likes",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;})} barSize={50}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
@@ -5975,7 +5975,7 @@ export default function MediaOnGas(){
                     wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
                     sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
-                    other:{label:"Other Reactions",color:P.sub,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.sub} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.sub}/><circle cx="15" cy="11" r="1" fill={P.sub}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.sub} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                    other:{label:"Other Reactions",color:P.label,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.label} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.label}/><circle cx="15" cy="11" r="1" fill={P.label}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.label} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                     comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                   };
@@ -5990,7 +5990,7 @@ export default function MediaOnGas(){
                       {Ic.pulse(P.mint,18)}
                       <span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:3,textTransform:"uppercase"}}>Engagement Pulse</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}></div>
-                      <span style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(totalAll)} total interactions</span>
+                      <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1}}>{fmt(totalAll)} total interactions</span>
                     </div>
                     {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
                       <div style={{display:"flex",alignItems:"center",gap:16}}>
@@ -6010,8 +6010,8 @@ export default function MediaOnGas(){
                         <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
                         <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
                         <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.sub}}>Positive {fmt(positiveSum)}</span></div>
-                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.sub}}>Negative {fmt(negativeSum)}</span></div>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.label}}>Positive {fmt(positiveSum)}</span></div>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.label}}>Negative {fmt(negativeSum)}</span></div>
                         </div>
                       </div>
                     </div>}
@@ -6021,7 +6021,7 @@ export default function MediaOnGas(){
                       if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
                       if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
                       if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
-                      var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.dim,margin:"0 4px"}}>·</span>);parted.push(n);});
+                      var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.caption,margin:"0 4px"}}>·</span>);parted.push(n);});
                       return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
                         <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
                           <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
@@ -6050,12 +6050,12 @@ export default function MediaOnGas(){
           <SH icon={Ic.eye(P.cyan,20)} title="Deep Dive" sub="Demographics, Creative Performance & Placement Analysis" accent={P.cyan}/>
           <Glass accent={P.cyan} st={{padding:"36px 32px",marginBottom:24}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:28}}>
-              <div style={{padding:24,background:P.fb+"08",border:"1px solid "+P.fb+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:8}}>DEMOGRAPHICS</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Age, Gender, Location</div><div style={{fontSize:11,color:P.sub}}>Audience composition breakdown</div></div>
-              <div style={{padding:24,background:P.tt+"08",border:"1px solid "+P.tt+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.tt,letterSpacing:2,fontFamily:fm,marginBottom:8}}>CREATIVE</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Ad Thumbnails & Performance</div><div style={{fontSize:11,color:P.sub}}>Visual creative ranking with metrics</div></div>
-              <div style={{padding:24,background:P.orchid+"08",border:"1px solid "+P.orchid+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.orchid,letterSpacing:2,fontFamily:fm,marginBottom:8}}>PLACEMENTS</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Feed, Stories, Reels, Network</div><div style={{fontSize:11,color:P.sub}}>Delivery by placement type</div></div>
-              <div style={{padding:24,background:P.mint+"08",border:"1px solid "+P.mint+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.mint,letterSpacing:2,fontFamily:fm,marginBottom:8}}>OBJECTIVE RESULTS</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Results by Campaign Objective</div><div style={{fontSize:11,color:P.sub}}>Objective-level performance data</div></div>
+              <div style={{padding:24,background:P.fb+"08",border:"1px solid "+P.fb+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:8}}>DEMOGRAPHICS</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Age, Gender, Location</div><div style={{fontSize:11,color:P.label}}>Audience composition breakdown</div></div>
+              <div style={{padding:24,background:P.tt+"08",border:"1px solid "+P.tt+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.tt,letterSpacing:2,fontFamily:fm,marginBottom:8}}>CREATIVE</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Ad Thumbnails & Performance</div><div style={{fontSize:11,color:P.label}}>Visual creative ranking with metrics</div></div>
+              <div style={{padding:24,background:P.orchid+"08",border:"1px solid "+P.orchid+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.orchid,letterSpacing:2,fontFamily:fm,marginBottom:8}}>PLACEMENTS</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Feed, Stories, Reels, Network</div><div style={{fontSize:11,color:P.label}}>Delivery by placement type</div></div>
+              <div style={{padding:24,background:P.mint+"08",border:"1px solid "+P.mint+"20",borderRadius:14,textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:P.mint,letterSpacing:2,fontFamily:fm,marginBottom:8}}>OBJECTIVE RESULTS</div><div style={{fontSize:14,fontWeight:700,color:P.txt,marginBottom:4}}>Results by Campaign Objective</div><div style={{fontSize:11,color:P.label}}>Objective-level performance data</div></div>
             </div>
-            <div style={{textAlign:"center"}}><button onClick={function(){var r=findLookerUrl(campaigns,selected);if(r.url){window.open(r.url,"_blank");}else{alert("No Looker report configured for '"+r.client+"' yet.");}}} style={{background:gEmber,border:"none",borderRadius:14,padding:"16px 48px",color:"#fff",fontSize:15,fontWeight:800,fontFamily:ff,cursor:"pointer",boxShadow:"0 4px 24px "+P.ember+"40",display:"inline-flex",alignItems:"center",gap:10}}>Open Interactive Report {Ic.share("#fff",18)}</button><div style={{fontSize:11,color:P.dim,fontFamily:fm,marginTop:14}}>Opens Looker Studio in a new tab with full interactive drill-down analysis</div></div>
+            <div style={{textAlign:"center"}}><button onClick={function(){var r=findLookerUrl(campaigns,selected);if(r.url){window.open(r.url,"_blank");}else{alert("No Looker report configured for '"+r.client+"' yet.");}}} style={{background:gEmber,border:"none",borderRadius:14,padding:"16px 48px",color:"#fff",fontSize:15,fontWeight:800,fontFamily:ff,cursor:"pointer",boxShadow:"0 4px 24px "+P.ember+"40",display:"inline-flex",alignItems:"center",gap:10}}>Open Interactive Report {Ic.share("#fff",18)}</button><div style={{fontSize:11,color:P.caption,fontFamily:fm,marginTop:14}}>Opens Looker Studio in a new tab with full interactive drill-down analysis</div></div>
           </Glass>
           <Insight title="Deep Dive Analysis" accent={P.cyan} icon={Ic.eye(P.cyan,16)}>The Looker Studio report provides granular campaign analysis that complements the dashboard metrics above. It includes audience demographic breakdowns by age, gender, and geographic region, individual ad creative performance with visual thumbnails ranked by key metrics, placement-level delivery analysis across Feed, Stories, Reels, and Audience Network, and device-level performance data showing mobile versus desktop engagement patterns. Use the interactive filters within the report to drill into specific campaigns, date ranges, and audience segments.</Insight>
         </div>)}
@@ -6081,11 +6081,11 @@ export default function MediaOnGas(){
                   <span style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>Performance Trendlines</span>
                 </div>
                 <div style={{display:"flex",gap:6}}>
-                  {["week","month"].map(function(g){return <button key={g} onClick={function(){setTsGran(g);}} style={{background:tsGran===g?P.cyan+"25":"transparent",border:"1px solid "+(tsGran===g?P.cyan+"60":P.rule),borderRadius:6,padding:"5px 12px",color:tsGran===g?P.cyan:P.sub,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{g==="week"?"Weekly":"Monthly"}</button>;})}
+                  {["week","month"].map(function(g){return <button key={g} onClick={function(){setTsGran(g);}} style={{background:tsGran===g?P.cyan+"25":"transparent",border:"1px solid "+(tsGran===g?P.cyan+"60":P.rule),borderRadius:6,padding:"5px 12px",color:tsGran===g?P.cyan:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{g==="week"?"Weekly":"Monthly"}</button>;})}
                 </div>
               </div>
-              {!hasData?<div style={{padding:"40px 20px",textAlign:"center",color:P.dim,fontFamily:fm,fontSize:12,lineHeight:1.8}}><div style={{fontSize:14,color:P.sub,marginBottom:6}}>Loading trendlines…</div><div>Fetching {tsGran==="week"?"weekly":"monthly"} performance from Meta, TikTok and Google.</div></div>:<div>
-                <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{tsGran==="week"?"Weekly":"Monthly"} results by platform x objective | {buckets.length} {tsGran==="week"?"weeks":"months"} in view</div>
+              {!hasData?<div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:6}}>Loading trendlines…</div><div>Fetching {tsGran==="week"?"weekly":"monthly"} performance from Meta, TikTok and Google.</div></div>:<div>
+                <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{tsGran==="week"?"Weekly":"Monthly"} results by platform x objective | {buckets.length} {tsGran==="week"?"weeks":"months"} in view</div>
                 <div style={{display:"grid",gridTemplateColumns:"140px repeat(4,1fr)",gap:8,marginBottom:6}}>
                   <div/>
                   {platCols.map(function(p){return <div key={p.key} style={{textAlign:"center",fontSize:11,fontWeight:900,color:p.accent,fontFamily:fm,letterSpacing:1.5,padding:"8px 4px",borderBottom:"1px solid "+p.accent+"35"}}>{p.label}</div>;})}
@@ -6106,14 +6106,14 @@ export default function MediaOnGas(){
                       return <div key={p.key} style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 10px 6px",display:"flex",flexDirection:"column",minHeight:92}}>
                         {hasActivity?<div>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-                            <div><div style={{fontSize:15,fontWeight:900,color:o.accent,fontFamily:fm,lineHeight:1}}>{fmt(totalResults)}</div><div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1,marginTop:2}}>{fR(totalSpend)}</div></div>
+                            <div><div style={{fontSize:15,fontWeight:900,color:o.accent,fontFamily:fm,lineHeight:1}}>{fmt(totalResults)}</div><div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1,marginTop:2}}>{fR(totalSpend)}</div></div>
                             {delta&&<div style={{fontSize:9,fontWeight:900,color:delta.direction==="up"?P.mint:P.rose,fontFamily:fm,background:(delta.direction==="up"?P.mint:P.rose)+"18",padding:"2px 6px",borderRadius:4,letterSpacing:0.5}}>{delta.label}</div>}
                           </div>
                           <svg width="100%" height="36" viewBox={"0 0 100 36"} preserveAspectRatio="none" style={{display:"block"}}>
                             <path d={sparkArea(pts,36,100)} fill={p.accent+"25"}/>
                             <path d={sparkPath(pts,36,100)} stroke={p.accent} strokeWidth="1.6" fill="none" strokeLinejoin="round" strokeLinecap="round"/>
                           </svg>
-                        </div>:<div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,color:P.dim,fontSize:9,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>No activity</div>}
+                        </div>:<div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,color:P.caption,fontSize:9,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>No activity</div>}
                       </div>;
                     })}
                   </div>;
@@ -6141,20 +6141,20 @@ export default function MediaOnGas(){
             {[{l:"CRITICAL",c:P.critical},{l:"WARNING",c:P.warning},{l:"INFO",c:P.info},{l:"POSITIVE",c:P.positive}].map(function(x){return<Glass key={x.l} accent={x.c} st={{padding:"18px 16px",textAlign:"center"}}><div style={{fontSize:9,fontWeight:700,color:x.c,letterSpacing:2,fontFamily:fm,marginBottom:6}}>{x.l}</div><div style={{fontSize:28,fontWeight:900,color:x.c,fontFamily:fm}}>{flags.filter(function(f){return f.severity===x.l.toLowerCase();}).length}</div></Glass>;})}
           </div>
 
-          {flags.length===0&&<div style={{padding:40,textAlign:"center",color:P.dim,fontFamily:fm}}>No flags. Select campaigns and refresh.</div>}
+          {flags.length===0&&<div style={{padding:40,textAlign:"center",color:P.caption,fontFamily:fm}}>No flags. Select campaigns and refresh.</div>}
           {flags.map(function(f){
             var c={critical:P.critical,warning:P.warning,info:P.info,positive:P.positive}[f.severity]||P.info;
             return<div key={f.id} style={{padding:"18px 22px",marginBottom:10,background:P.glass,border:"1px solid "+P.rule,borderLeft:"4px solid "+c,borderRadius:"0 12px 12px 0"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}><SevBadge s={f.severity}/><Pill name={f.platform} color={f.platform==="TikTok"?P.tt:f.platform==="Cross-platform"?P.orchid:P.fb}/></div>
                 <div style={{display:"flex",gap:6}}>
-                  {f.status==="open"&&<button onClick={function(){ack(f.id);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"5px 12px",color:P.sub,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Acknowledge</button>}
+                  {f.status==="open"&&<button onClick={function(){ack(f.id);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"5px 12px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Acknowledge</button>}
                   {(f.status==="open"||f.status==="acknowledged")&&<button onClick={function(){resolve(f.id);}} style={{background:P.mint+"15",border:"1px solid "+P.mint+"30",borderRadius:8,padding:"5px 12px",color:P.mint,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Resolve</button>}
                   {f.status==="resolved"&&<span style={{fontSize:10,color:P.mint,fontFamily:fm,fontWeight:700}}>Resolved</span>}
                 </div>
               </div>
               <div style={{fontSize:13,fontWeight:700,color:P.txt,marginBottom:6}}>{f.metric}: {f.currentValue} {f.severity!=="positive"?"exceeds":"beats"} {f.threshold} threshold</div>
-              <div style={{fontSize:12,color:P.sub,lineHeight:1.8}}>{f.message}</div>
+              <div style={{fontSize:12,color:P.label,lineHeight:1.8}}>{f.message}</div>
               <div style={{fontSize:12,color:c,marginTop:8}}><strong>Recommendation:</strong> {f.recommendation}</div>
             </div>;
           })}
@@ -6166,6 +6166,6 @@ export default function MediaOnGas(){
       </div>
     </div>
 
-    <footer style={{borderTop:"1px solid "+P.rule,background:"rgba(6,2,14,0.95)",padding:"20px 28px"}}><div style={{maxWidth:1400,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:26,height:26,borderRadius:"50%",overflow:"hidden"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div><span style={{fontSize:11,fontWeight:800,color:P.sub,fontFamily:fm,letterSpacing:2}}>MEDIA ON GAS</span><span style={{fontSize:9,color:P.dim}}>Powered by GAS Marketing Automation</span></div><div style={{fontSize:9,color:P.dim,fontFamily:fm,textAlign:"right",lineHeight:1.8}}>Live data · All figures in ZAR · Confidential · grow@gasmarketing.co.za</div></div></footer>
+    <footer style={{borderTop:"1px solid "+P.rule,background:"rgba(6,2,14,0.95)",padding:"20px 28px"}}><div style={{maxWidth:1400,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:26,height:26,borderRadius:"50%",overflow:"hidden"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div><span style={{fontSize:11,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2}}>MEDIA ON GAS</span><span style={{fontSize:9,color:P.caption}}>Powered by GAS Marketing Automation</span></div><div style={{fontSize:9,color:P.caption,fontFamily:fm,textAlign:"right",lineHeight:1.8}}>Live data · All figures in ZAR · Confidential · grow@gasmarketing.co.za</div></div></footer>
   </div>);
 }
