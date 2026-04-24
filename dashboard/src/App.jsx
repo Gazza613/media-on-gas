@@ -3157,7 +3157,7 @@ export default function MediaOnGas(){
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
                     <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,"+P.gd+"45,"+P.gd+"18)",border:"1px solid "+P.gd+"60",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+P.gd+"30"}}>{Ic.globe("#fff",18)}</div>
                     <div>
-                      <div style={{fontSize:11,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>Google Ads Demographics</div>
+                      <div style={{fontSize:18,color:P.gd,fontFamily:fm,letterSpacing:3,fontWeight:900,textTransform:"uppercase",marginBottom:4}}>Google Ads Demographics</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.72)",fontFamily:fm,fontWeight:500,letterSpacing:0.3}}>{googleStage.subtitle}</div>
                     </div>
                   </div>
@@ -3247,7 +3247,7 @@ export default function MediaOnGas(){
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
                     <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,"+stage.accent+"45,"+stage.accentDeep+"20)",border:"1px solid "+stage.accent+"60",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+stage.accent+"30"}}>{stage.icon("#fff",18)}</div>
                     <div>
-                      <div style={{fontSize:11,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:800,textTransform:"uppercase",marginBottom:2}}>{stage.title} Demographics</div>
+                      <div style={{fontSize:18,color:stage.accent,fontFamily:fm,letterSpacing:3,fontWeight:900,textTransform:"uppercase",marginBottom:4}}>{stage.title} Demographics</div>
                       <div style={{fontSize:11,color:"rgba(255,255,255,0.72)",fontFamily:fm,fontWeight:500,letterSpacing:0.3}}>{stage.subtitle}</div>
                     </div>
                   </div>
