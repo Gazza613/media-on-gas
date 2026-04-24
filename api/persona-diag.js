@@ -20,9 +20,15 @@ var META_ACCOUNTS = [
   { id: "act_1056268272507792", name: "Concord" }
 ];
 
-async function metaBreakdown(acc, token, from, to, breakdowns) {
+async function metaBreakdown(acc, token, from, to, breakdowns, opts) {
+  opts = opts || {};
   try {
-    var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?level=campaign&fields=campaign_name,campaign_id,impressions,clicks,spend&breakdowns=" + encodeURIComponent(breakdowns) + "&time_range=" + encodeURIComponent(JSON.stringify({ since: from, until: to })) + "&limit=500&access_token=" + token;
+    // action_breakdowns=&default_summary=0 is the canonical workaround for
+    // Meta's implicit action_type breakdown, which otherwise conflicts with
+    // age / gender / region co-breakdowns and returns the "invalid combo"
+    // 400. Caller can disable via opts.noActionBreakdownOverride.
+    var extra = opts.noActionBreakdownOverride ? "" : "&action_breakdowns=";
+    var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?level=campaign&fields=campaign_name,campaign_id,impressions,clicks,spend&breakdowns=" + encodeURIComponent(breakdowns) + extra + "&time_range=" + encodeURIComponent(JSON.stringify({ since: from, until: to })) + "&limit=500&access_token=" + token;
     var r = await fetch(url);
     if (!r.ok) {
       var body = "";
@@ -140,7 +146,7 @@ export default async function handler(req, res) {
                 "login-customer-id": gManagerId,
                 "Content-Type": "application/json"
               },
-              body: JSON.stringify({ query: query, pageSize: 10000 })
+              body: JSON.stringify({ query: query })
             });
             if (!r.ok) {
               var body = "";

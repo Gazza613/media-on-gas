@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v8-tt-age-normalised";
+var DEMO_CACHE_VERSION = "v9-meta-action-breakdowns-override";
 
 function extractResults(actions) {
   var map = {};
@@ -43,29 +43,61 @@ function extractResults(actions) {
 }
 
 async function fetchMetaBreakdown(account, token, from, to, breakdown) {
-  try {
-    var url = "https://graph.facebook.com/v25.0/" + account.id +
-      "/insights?fields=campaign_id,campaign_name,impressions,clicks,spend,actions" +
+  // action_breakdowns= (empty) is the canonical Meta workaround for the
+  // implicit action_type breakdown that otherwise conflicts with age /
+  // gender / region + publisher_platform / platform_position combos and
+  // returns the "(#100) Current combination of data breakdown columns
+  // (action_type, age, gender, publisher_platform) is invalid" 400.
+  //
+  // If the first attempt still 400s, retry once without the "actions"
+  // field so Meta doesn't try to include action_type at all. Demographic
+  // rows built from the second-attempt response still carry impressions /
+  // clicks / spend, the results object just ends up empty, which is fine
+  // for the Targeting persona cards (they only use clicks) and degrades
+  // gracefully for the Summary demographic blocks (results become 0).
+  var buildUrl = function(includeActions) {
+    return "https://graph.facebook.com/v25.0/" + account.id +
+      "/insights?fields=campaign_id,campaign_name,impressions,clicks,spend" + (includeActions ? ",actions" : "") +
       "&level=campaign" +
       "&breakdowns=" + encodeURIComponent(breakdown) +
+      "&action_breakdowns=" +
       "&time_range=" + encodeURIComponent(JSON.stringify({ since: from, until: to })) +
       "&limit=1000&access_token=" + token;
+  };
+  var runUrl = async function(url) {
     var rows = [];
     var next = url;
     var guard = 0;
+    var lastStatus = null;
+    var lastBody = "";
     while (next && guard < 10) {
       guard++;
       var r = await fetch(next);
       if (!r.ok) {
-        var errBody = await r.text();
-        console.warn("[demo] Meta " + breakdown + " non-ok for " + account.name, r.status, errBody.substring(0, 200));
+        lastStatus = r.status;
+        lastBody = (await r.text() || "").substring(0, 200);
+        console.warn("[demo] Meta " + breakdown + " non-ok for " + account.name, r.status, lastBody);
         break;
       }
       var d = await r.json();
       if (d.data) rows = rows.concat(d.data);
       next = d.paging && d.paging.next ? d.paging.next : null;
     }
-    return rows;
+    return { rows: rows, status: lastStatus, body: lastBody };
+  };
+  try {
+    var first = await runUrl(buildUrl(true));
+    if (first.rows.length > 0) return first.rows;
+    // If the first attempt failed with a 400 "invalid combination" error,
+    // retry without the actions field which drops action_type from the
+    // implicit breakdown set and usually unblocks age / gender / region
+    // + publisher_platform combos.
+    if (first.status === 400 && first.body.indexOf("invalid") >= 0) {
+      console.warn("[demo] Meta retry without actions for " + account.name + " " + breakdown);
+      var second = await runUrl(buildUrl(false));
+      return second.rows;
+    }
+    return first.rows;
   } catch (e) {
     console.error("Meta demo breakdown error", account.name, breakdown, e && e.message);
     return [];
