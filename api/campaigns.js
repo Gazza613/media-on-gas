@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v12-adlevel-pub-supplement";
+var CAMPAIGNS_CACHE_VERSION = "v13-supplement-diag";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -108,6 +108,11 @@ export default async function handler(req, res) {
   // Surface per-platform fetch failures so the dashboard can show a banner
   // instead of silently rendering zeros.
   var warnings = [];
+  // Diagnostic array for the ad-level publisher_platform supplement.
+  // Populated per Meta account, exposed on the API response so admin
+  // callers can verify whether Meta actually returned IG rows at the ad
+  // level without having to dig through Vercel logs.
+  var supplementDiag = [];
   var now = new Date();
   var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -517,8 +522,30 @@ export default async function handler(req, res) {
           };
           supplementedKeys.push(k);
         });
-        if (supplementedKeys.length > 0) {
-          console.log("[campaigns] " + account.name + " supplemented " + supplementedKeys.length + " publisher rows from ad-level breakdown", supplementedKeys);
+        // Always log the supplement's result so we can reason about empty
+        // findings (algorithm genuinely not delivering to IG at any level)
+        // vs silent failures. Extended with a per-key raw-number summary so
+        // the log is self-sufficient for triage without needing to correlate
+        // against the insights dump.
+        var adAggSummary = Object.keys(adAgg).map(function(k) {
+          var a = adAgg[k];
+          return k + " imps=" + Math.round(a.impressions) + " spend=" + a.spend.toFixed(2) + " leads=" + a.leads;
+        });
+        console.log("[campaigns] " + account.name + " ad-level supplement ran, " +
+          "adLevelRowCount=" + adSuppRows.length + ", " +
+          "adAggKeys=" + Object.keys(adAgg).length + ", " +
+          "supplementedKeys=" + supplementedKeys.length,
+          { adAggSummary: adAggSummary, supplemented: supplementedKeys }
+        );
+        // Stash on the account-scoped diag so the final response can carry
+        // the findings back to the dashboard for admin inspection.
+        if (typeof supplementDiag !== "undefined") {
+          supplementDiag.push({
+            account: account.name,
+            adLevelRowCount: adSuppRows.length,
+            adAggKeys: Object.keys(adAgg),
+            supplementedKeys: supplementedKeys
+          });
         }
       } catch (adSuppErr) {
         console.warn("[campaigns] ad-level publisher_platform supplement failed", account.name, adSuppErr && adSuppErr.message);
@@ -942,7 +969,7 @@ export default async function handler(req, res) {
     _objDiag[plat][obj].spend += parseFloat(c.spend || 0);
     if (_objDiag[plat][obj].names.length < 8) _objDiag[plat][obj].names.push(c.campaignName);
   });
-  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings, objectiveDiagnostic: _objDiag };
+  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings, objectiveDiagnostic: _objDiag, metaSupplementDiag: supplementDiag };
   campaignsResponseCache[cacheKey] = { data: fullResponse, ts: Date.now() };
 
   var principal = req.authPrincipal || { role: "admin" };
