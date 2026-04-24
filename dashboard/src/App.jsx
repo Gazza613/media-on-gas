@@ -1119,12 +1119,15 @@ function ShareModal(props){
   return(<>
   {/* Preview overlay. Appears immediately when the user clicks Preview +
       Send — shows a building spinner while the /api/email-share HTML
-      renders server-side, then swaps to the iframe. Backdrop-filter blur
-      was removed because it forced the entire overlay to re-rasterize on
-      every scroll frame inside the iframe, making scroll feel sluggish.
-      The modal sits on a solid near-black fill instead (cheaper to
-      composite) with will-change hints for smooth scrolling. */}
-  {(previewLoading[0]||previewHtml[0])&&<div style={{position:"fixed",inset:0,background:"rgba(6,2,14,0.92)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:1100,padding:"24px 16px",willChange:"transform"}} onClick={function(e){if(e.target===e.currentTarget&&!previewLoading[0])cancelPreview();}}>
+      renders server-side, then swaps to the iframe. The overlay is FULLY
+      opaque (#06020e, not rgba alpha) so the browser can skip painting
+      the Share modal's backdrop-filter:blur layer underneath on every
+      iframe scroll frame. Iframe itself is promoted to its own GPU layer
+      (translateZ + contain:strict) so scroll inside the email body never
+      invalidates the outer compositor tree. Prior alpha-overlay version
+      caused jerky scroll because every scroll tick had to re-rasterize
+      the blurred share modal showing through the 8% transparent gap. */}
+  {(previewLoading[0]||previewHtml[0])&&<div style={{position:"fixed",inset:0,background:"#06020e",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:1100,padding:"24px 16px",willChange:"transform"}} onClick={function(e){if(e.target===e.currentTarget&&!previewLoading[0])cancelPreview();}}>
     <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"18px 22px",maxWidth:780,width:"100%",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 48px)",boxShadow:"0 24px 80px rgba(0,0,0,0.6)",willChange:"transform",contain:"layout"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12}}>
         <div>
@@ -1141,7 +1144,7 @@ function ShareModal(props){
           <style>{"@keyframes spin{to{transform:rotate(360deg)}}@keyframes emailQuipFade{0%,100%{opacity:0.45}15%,85%{opacity:1}}"}</style>
           <div key={previewQuip[0]} style={{fontSize:14,color:"rgba(255,251,248,0.78)",fontStyle:"italic",fontFamily:ff,letterSpacing:0.3,textAlign:"center",maxWidth:460,lineHeight:1.6,animation:"emailQuipFade 4.5s ease-in-out"}}>{previewQuip[0]}<span style={{display:"inline-block",width:20}}>…</span></div>
         </div>}
-        {previewHtml[0]&&<iframe title="Email preview" srcDoc={previewHtml[0]} loading="lazy" style={{width:"100%",height:"100%",minHeight:"60vh",border:"none",display:"block",background:"#fff"}}/>}
+        {previewHtml[0]&&<iframe title="Email preview" srcDoc={previewHtml[0]} loading="lazy" style={{width:"100%",height:"100%",minHeight:"60vh",border:"none",display:"block",background:"#fff",transform:"translateZ(0)",willChange:"transform",contain:"strict"}}/>}
       </div>
       {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginTop:10}}>{err[0]}</div>}
       <div style={{display:"flex",gap:10,marginTop:14}}>
