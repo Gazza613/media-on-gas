@@ -4330,7 +4330,6 @@ export default function MediaOnGas(){
                   <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Audience Personas</div>
-                    <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
                   </div>
                 </div>
                 <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
@@ -5489,7 +5488,6 @@ export default function MediaOnGas(){
               <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
               <div style={{flex:1}}>
                 <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Audience Personas</div>
-                <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted best audience personas per platform. Meta and TikTok read as demographic-led, Google as intent-led.</div>
               </div>
             </div>
             <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
