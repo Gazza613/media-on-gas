@@ -756,8 +756,8 @@ function AdPreviewModal(props){
         <iframe key={videoSrc} title="Ad preview" src={videoSrc} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{width:"100%",height:"60vh",border:"none",borderRadius:10,background:"#000",display:"block"}}/>
         <div style={{marginTop:10,padding:"10px 14px",background:"rgba(255,170,0,0.08)",border:"1px solid rgba(255,170,0,0.25)",borderRadius:10,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <div style={{flex:"1 1 240px",fontSize:11,fontFamily:fm,color:"rgba(255,251,248,0.85)",lineHeight:1.55}}>
-            <span style={{fontWeight:800,color:P.solar,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:6}}>Tip</span>
-            If the preview freezes when you hit unmute, open the ad in a new tab, sound works reliably there.
+            <span style={{fontWeight:800,color:P.solar,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:6}}>Heads up</span>
+            Meta's embedded player sometimes freezes on unmute. Opening in a new tab helps for most ads, for the ones that still break, Ads Manager is the reliable source.
           </div>
           <a href={videoSrc} target="_blank" rel="noopener noreferrer" style={{background:P.solar,color:"#0a0618",fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",padding:"8px 14px",borderRadius:8,textDecoration:"none",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 4px 14px rgba(255,170,0,0.25)"}}>Open in new tab <span style={{fontSize:12}}>{"↗"}</span></a>
         </div>
@@ -806,23 +806,23 @@ function AdPreviewModal(props){
         console.warn("[GAS] Video playback failed\n"+JSON.stringify({code:code,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
       }} style={{width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,display:"block"}}/>;
     } else if(videoErr){
-      // Video resolution or playback failed. Meta dark-posts most ad videos
-      // so the platform doesn't expose a playable URL. Fall back to the
-      // high-res poster image (same resolver as static ads use) with a
-      // banner so the client still sees the creative visually.
+      // Video resolution or playback failed. Show the poster image when we
+      // have one, but with a branded gradient ALWAYS painted on the parent
+      // so even if the image itself never loads (signed URL expired,
+      // creative archived, Chrome silently swallows onError) the user sees
+      // a polished panel rather than a Chrome broken-image icon. The img
+      // sits on top via objectFit:contain, when it loads the gradient
+      // disappears behind it, when it fails the gradient stays visible.
       if(imageSrc){
-        mediaBlock=<div style={{position:"relative",width:"100%",maxHeight:"60vh",background:"#000",borderRadius:10,overflow:"hidden"}}>
-          <img src={imageSrc} alt={ad.adName||"Ad"} onError={function(e){
-            // Poster image also failed (common for archived creatives where both the
-            // video URL and the thumbnail resolver turn up nothing). Swap the broken-
-            // image icon that browsers render by default for a branded placeholder so
-            // the modal doesn't look broken.
-            var fallback=document.createElement("div");
-            fallback.style.cssText="width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;letter-spacing:2px;font-weight:800;font-family:"+fm+";text-align:center;padding:24px;";
-            fallback.textContent="PREVIEW UNAVAILABLE — creative may have been archived by the platform";
-            if(e.target&&e.target.parentNode)e.target.parentNode.replaceChild(fallback,e.target);
-          }} style={{width:"100%",maxHeight:"60vh",objectFit:"contain",background:"#000",display:"block"}}/>
-          <div style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"6px 12px",display:"flex",alignItems:"center",gap:8}}>
+        mediaBlock=<div style={{position:"relative",width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:"linear-gradient(135deg,"+accent+"45,"+accent+"15 50%,#0a0618 100%)",borderRadius:10,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <img src={imageSrc} alt={ad.adName||"Ad"} onError={function(e){if(e.target)e.target.style.display="none";}} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",display:"block",position:"relative",zIndex:1}}/>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:0}}>
+            <div style={{textAlign:"center",padding:24}}>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Preview Unavailable</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:fm,marginTop:6,letterSpacing:0.5,maxWidth:280,lineHeight:1.5}}>The platform may have archived the creative or the audio session has expired.</div>
+            </div>
+          </div>
+          <div style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.75)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"6px 12px",display:"flex",alignItems:"center",gap:8,zIndex:2}}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.8)" strokeWidth="2"/><polygon points="10,8 16,12 10,16" fill="rgba(255,255,255,0.8)"/></svg>
             <span style={{fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.9)",letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Video Ad, Poster Preview</span>
           </div>
