@@ -126,7 +126,7 @@ function viewAdLabel(platform) {
   return "VIEW AD";
 }
 var API=window.location.origin;
-var API_KEY="c0c7438297c52d8100494263d97389b5777312af2e88f8cdfc247622454b3d80";
+var API_KEY="ec98fe5d876f9d82503c2159ed7ac820cfd56389f04a38b4e4534632a0e6b4a0";
 // Feature flags for the audience-insight build. Flip any one to false to
 // hide that section in production without deleting the code, so we can see
 // each new block live then turn it off cleanly if the client doesn't want
