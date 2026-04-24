@@ -3978,8 +3978,8 @@ export default function MediaOnGas(){
                         return <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
                           <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
                           <circle cx="60" cy="60" r="50" stroke={sentColor} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
-                          <text x="60" y="58" textAnchor="middle" style={{fontSize:22,fontWeight:900,fill:sentColor,fontFamily:fm}}>{sentimentPct.toFixed(2)+"%"}</text>
-                          <text x="60" y="76" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
+                          <text x="60" y="62" textAnchor="middle" style={{fontSize:16,fontWeight:900,fill:sentColor,fontFamily:fm,letterSpacing:-0.5}}>{sentimentPct.toFixed(2)+"%"}</text>
+                          <text x="60" y="78" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
                         </svg>;
                       })()}
                     </div>
@@ -5924,8 +5924,8 @@ export default function MediaOnGas(){
                           return <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
                             <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
                             <circle cx="60" cy="60" r="50" stroke={sentColor} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
-                            <text x="60" y="58" textAnchor="middle" style={{fontSize:22,fontWeight:900,fill:sentColor,fontFamily:fm}}>{sentimentPct.toFixed(2)+"%"}</text>
-                            <text x="60" y="76" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
+                            <text x="60" y="62" textAnchor="middle" style={{fontSize:16,fontWeight:900,fill:sentColor,fontFamily:fm,letterSpacing:-0.5}}>{sentimentPct.toFixed(2)+"%"}</text>
+                            <text x="60" y="78" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
                           </svg>;
                         })()}
                       </div>
