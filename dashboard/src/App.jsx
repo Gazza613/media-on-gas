@@ -5429,12 +5429,12 @@ export default function MediaOnGas(){
         
         {tab==="targeting"&&(<div>
           <SH icon={Ic.radar(P.solar,20)} title="Targeting Performance" sub={df+" to "+dt+" | Adset-Level Analysis by Objective"} accent={P.solar}/>
-          {FEATURES.targetingPersonas&&targetingPersonas&&targetingPersonas.length>0&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-            {/* WHO IS CLICKING, click-weighted per-platform audience persona.
-                Cards follow the Meta / IG / TikTok color language the rest of
-                the dashboard uses so clients can read the platform before the
-                numbers register. Google gets its own intent-based card in the
-                next phase, different data shape. */}
+          {FEATURES.targetingPersonas&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+            {/* Audience Personas, same stable 4-card row Summary renders so
+                the Targeting tab reads consistently. Facebook / Instagram /
+                TikTok / Google always show, each card has its own empty-state
+                placeholder when data hasn't loaded or the platform has no
+                click volume in the selected range. */}
             <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
               <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
               <div style={{flex:1}}>
@@ -5443,11 +5443,25 @@ export default function MediaOnGas(){
               </div>
             </div>
             <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,targetingPersonas.length+(FEATURES.googleIntentCard&&googleIntent&&googleIntent.available?1:0))+",1fr)",gap:16,marginBottom:18}}>
-              {targetingPersonas.map(function(p){return <TargetingPersonaCard key={p.platform} persona={p}/>;})}
-              {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent}/>}
-            </div>
             {(function(){
+              // Build a stable 4-card row so the Targeting tab matches the
+              // Summary layout exactly, one slot per platform (FB, IG, TT,
+              // Google). Missing platforms render an empty-persona placeholder
+              // with the Best Personas / Top Regions blocks omitted and
+              // dashes in the anchor fields.
+              var byName={};(targetingPersonas||[]).forEach(function(p){byName[p.platform]=p;});
+              var empty=function(name,color,iconFn){return {platform:name,color:color,iconFn:iconFn,totalClicks:0,shareOfClicks:0,topAge:"",topAgeShare:0,genderSplit:{female:0,male:0},topProvinces:[],mobileShare:0,topSegments:[],ctr:0,ctrRatio:0};};
+              var fb=byName["Facebook"]||empty("Facebook",P.fb,Ic.eye);
+              var ig=byName["Instagram"]||empty("Instagram",P.ig,Ic.fire);
+              var tt=byName["TikTok"]||empty("TikTok",P.tt,Ic.bolt);
+              return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:18}}>
+                <TargetingPersonaCard persona={fb}/>
+                <TargetingPersonaCard persona={ig}/>
+                <TargetingPersonaCard persona={tt}/>
+                {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent}/>}
+              </div>;
+            })()}
+            {targetingPersonas&&targetingPersonas.length>0&&(function(){
               // Persona narrative, reads the cards like a buy-side planner
               // would: which platform is finding the youngest or most female
               // audience, where does each one concentrate geographically, and
