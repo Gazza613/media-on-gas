@@ -122,6 +122,17 @@ function viewAdLabel(platform) {
 }
 var API=window.location.origin;
 var API_KEY="c0c7438297c52d8100494263d97389b5777312af2e88f8cdfc247622454b3d80";
+// Feature flags for the audience-insight build. Flip any one to false to
+// hide that section in production without deleting the code, so we can see
+// each new block live then turn it off cleanly if the client doesn't want
+// it. Removing a block permanently means deleting the flag and its guards
+// at the same time so the dead code doesn't linger.
+var FEATURES={
+  targetingPersonas:true,     // Targeting tab, per-platform persona cards (Meta, IG, TikTok)
+  googleIntentCard:true,      // Targeting tab, Google Search intent card
+  communityDemographics:true, // Community tab, member demographic cards
+  summaryTeasers:true         // Summary tab, mini previews linking to Targeting and Community
+};
 var LOOKER_URLS={"mtn momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","mtn momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","willowbrook":"https://lookerstudio.google.com/reporting/823fd5fa-b39d-4dc3-b623-549197d0341f/page/p_2upnicpx0d","psycho":"https://lookerstudio.google.com/reporting/0adc106a-50e2-42cc-a4ca-aafc04160e5d/page/p_1ooj1p0nmd","khava":"","concord":"","eden":"","flower":""};
 var LOOKER_KEYS=["mtn momo pos","momo pos","willowbrook","psycho","khava","concord","eden","flower","momo","mtn momo"];
 function findLookerUrl(camps,sel){var s=camps.filter(function(x){return sel.indexOf(x.campaignId)>=0;});if(s.length===0)return{url:"",client:"none"};var names=s.map(function(x){return(x.campaignName||"").toLowerCase();}).join(" ");for(var i=0;i<LOOKER_KEYS.length;i++){if(names.indexOf(LOOKER_KEYS[i])>=0){var u=LOOKER_URLS[LOOKER_KEYS[i]];return{url:u,client:LOOKER_KEYS[i]};}}return{url:"",client:"unknown"};}
@@ -305,6 +316,62 @@ function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=props.hv;va
 function Metric(props){return(<Glass accent={props.accent} hv={true} st={{padding:"22px 20px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:8}}>{props.icon}<span style={{fontSize:9,fontWeight:700,color:P.sub,letterSpacing:2.5,textTransform:"uppercase",fontFamily:fm}}>{props.label}</span></div><div style={{width:8,height:8,borderRadius:"50%",background:props.accent,boxShadow:"0 0 12px "+props.accent+"60",animation:"pulse-glow 2s ease-in-out infinite"}}></div></div><div style={{fontSize:28,fontWeight:900,fontFamily:ff,lineHeight:1,letterSpacing:-1.5,color:props.accent,marginBottom:6}}>{props.value}</div>{props.sub&&<div style={{fontSize:10,color:P.dim,marginTop:10,fontFamily:fm,lineHeight:1.7,borderTop:"1px solid "+P.rule,paddingTop:10}}>{props.sub}</div>}</Glass>);}
 function SH(props){var a=props.accent||P.ember;return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{props.icon}</div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);}
 function Pill(props){return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:props.color+"12",border:"1px solid "+props.color+"30",borderRadius:20,padding:"3px 10px",fontSize:9,fontWeight:700,color:props.color,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:6,height:6,borderRadius:"50%",background:props.color}}/>{props.name}</span>);}
+// Targeting persona card for the Targeting tab. Click-weighted per-platform
+// audience profile, shows the dominant age bracket as the visual anchor and
+// layers gender / mobile / regions / hottest segment / CTR-vs-blended as
+// supporting data strips. Platform-coloured header and accent throughout
+// so the three cards read at a glance as "Facebook vs Instagram vs TikTok"
+// even before the numbers register.
+function TargetingPersonaCard(props){
+  var p=props.persona;var c=p.color;
+  var genderLead=p.genderSplit.female>p.genderSplit.male?"Female":(p.genderSplit.male>0?"Male":"");
+  var genderShare=Math.max(p.genderSplit.female,p.genderSplit.male);
+  var segLabel=p.topSegment.age&&p.topSegment.gen?(p.topSegment.age+" "+(p.topSegment.gen==="female"?"Female":"Male")):"";
+  var ctrVerdict=p.ctrRatio>=1.3?"clicking well above blended CTR":p.ctrRatio>=1.0?"in line with blended CTR":p.ctrRatio>0?"below blended CTR":"CTR data still building";
+  return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
+      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{p.platform}</div>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(p.totalClicks)+" clicks · "+p.shareOfClicks.toFixed(2)+"% of total"}</div>
+      </div>
+    </div>
+    <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
+      <div style={{fontSize:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-1,lineHeight:1,textShadow:"0 0 24px "+c+"60"}}>{p.topAge||"—"}</div>
+      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
+        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{genderLead||"—"}</div>
+        <div style={{fontSize:10,color:c,fontFamily:fm,fontWeight:700,marginTop:1}}>{genderLead?genderShare.toFixed(2)+"%":""}</div>
+      </div>
+      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
+        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{p.mobileShare>0?p.mobileShare.toFixed(2)+"%":"—"}</div>
+        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
+      </div>
+    </div>
+    {p.topProvinces.length>0&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Regions</div>
+      {p.topProvinces.map(function(pr,i){return <div key={pr.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<p.topProvinces.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
+          <span style={{color:"#fff",fontWeight:700}}>{pr.name}</span>
+        </div>
+        <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{pr.share.toFixed(2)+"%"}</span>
+      </div>;})}
+    </div>}
+    {segLabel&&<div style={{padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10,marginBottom:10}}>
+      <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:3,fontWeight:800}}>Hottest Segment</div>
+      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:700}}>{segLabel}<span style={{color:c,marginLeft:6,fontWeight:900}}>{p.topSegment.share.toFixed(2)+"%"}</span></div>
+    </div>}
+    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
+      CTR {p.ctr.toFixed(2)+"%"}, {ctrVerdict}
+    </div>
+  </div>;
+}
+
 function Tip(props){if(!props.active||!props.payload||!props.payload.length)return null;var first=props.payload[0]&&props.payload[0].payload?props.payload[0].payload:{};var heading=first.fullName||first.name||props.label;return(<div style={{background:"#121212",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxWidth:360}}><div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,marginBottom:4,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{heading}</div>{props.payload.map(function(p,i){var v=p.value;var display="";var n=(p.name||"").toLowerCase();var dn=(p.dataKey||"").toLowerCase();var rowCurrency=!!(p.payload&&p.payload._currency);var isPct=dn==="ctr"||n.indexOf("ctr")>=0||n.indexOf("rate")>=0||(p.payload&&p.payload._pct);var isCurrency=rowCurrency||n.indexOf("spend")>=0||n.indexOf("cpc")>=0||n.indexOf("cpm")>=0||n.indexOf("cpl")>=0||n.indexOf("cpf")>=0||n.indexOf("cpa")>=0||n.indexOf("cpi")>=0||n.indexOf("cost per")>=0||n.indexOf("cost-per")>=0||dn==="spend"||dn==="cpc"||dn==="cpm"||dn==="cpl"||dn==="cpf"||dn==="cpa"||dn==="costper";if(isPct){display=typeof v==="number"?v.toFixed(2)+"%":v;}else if(isCurrency){display="R"+(typeof v==="number"?v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2}):v);}else{display=typeof v==="number"?v.toLocaleString():v;}return<div key={i} style={{fontSize:11,color:p.color||P.sub,fontFamily:fm,lineHeight:1.8}}>{p.name}: {display}</div>;})}</div>);}
 function PH(props){var bg=props.platform==="Facebook"?P.fb:props.platform==="Instagram"?"linear-gradient(135deg,#e1306c,#833ab4)":props.platform==="TikTok"?"#1e1e2e":P.ember;var dot=props.platform==="Facebook"?"#fff":props.platform==="TikTok"?P.tt:"#fff";return(<div style={{background:bg,padding:"14px 24px",borderRadius:12,marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:10,height:10,borderRadius:"50%",background:dot,boxShadow:"0 0 10px "+dot}}></span><span style={{fontSize:15,fontWeight:800,color:"#fff",fontFamily:ff,letterSpacing:0.5}}>{props.platform}</span>{props.suffix&&<span style={{fontSize:12,fontWeight:400,color:"rgba(255,255,255,0.7)",fontFamily:fm}}>· {props.suffix}</span>}</div><div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>LIVE DATA</div></div>);}
 function Insight(props){var a=props.accent||P.ember;return(<div style={{marginTop:24,padding:"22px 26px",background:"linear-gradient(135deg,"+a+"08 0%,"+a+"03 50%, transparent 100%)",border:"1px solid "+a+"20",borderLeft:"4px solid "+a,borderRadius:"0 14px 14px 0",position:"relative",overflow:"hidden"}}><div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+a+"06, transparent)",pointerEvents:"none"}}></div><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>{props.icon||Ic.bolt(a,16)}<span style={{fontSize:10,fontWeight:800,color:a,letterSpacing:3,fontFamily:fm,textTransform:"uppercase"}}>{props.title||"Campaign Read"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+a+"30, transparent)",marginLeft:8}}></div></div><div style={{fontSize:13.5,color:P.txt,lineHeight:2.1,fontFamily:ff,position:"relative",letterSpacing:0.2}}>{props.children}</div></div>);}
@@ -2253,6 +2320,10 @@ export default function MediaOnGas(){
   // demographics endpoint is still loading / errored — the exec summary
   // gracefully skips the audience paragraph in that case.
   var demoSummary = null;
+  // Per-platform targeting persona data (click-weighted). Consumed by the
+  // Targeting tab's new Who-Is-Clicking section. Populated by the same IIFE
+  // that builds demoBlocks, so we don't re-filter the demographic rows twice.
+  var targetingPersonas = null;
 
   // Populate shared demoBlocks / demoFallback once per render so Summary and
   // Demographics tabs can read individual stage blocks. Runs regardless of
@@ -3002,6 +3073,58 @@ export default function MediaOnGas(){
               objective:{topAge:topAgeShareFor(stageDef.objective),topProv:topProvShareFor(stageDef.objective),gender:genderSharesFor(stageDef.objective),mobile:mobileShareFor(stageDef.objective),topSegment:topSegmentFor(stageDef.objective)},
               authObj:authObj
             };
+
+            // Build per-platform targeting personas (click-weighted). One card
+            // per platform on the Targeting tab's WHO IS CLICKING section.
+            // Uses the engagement stage so the signal is about who CLICKED,
+            // not who the ad was SERVED to. Platforms with zero click volume
+            // are dropped so an unused account doesn't leave an empty card.
+            var buildPersona=function(matchKey,displayName,color,iconFn){
+              var pKeyLow=matchKey.toLowerCase();
+              var matches=function(r){return String(r.platform||"").toLowerCase().indexOf(pKeyLow)>=0;};
+              var agP=agRows.filter(matches);
+              var devP=devRows.filter(matches);
+              var regP=regRows.filter(matches);
+              var stage=stageDef.engagement;
+              var totalClicks=0;agP.forEach(function(r){totalClicks+=stage.field(r);});
+              var blendedClk=authClicks||0;
+              var shareOfClicks=blendedClk>0?(totalClicks/blendedClk*100):0;
+              // Dominant age
+              var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+stage.field(r);});
+              var topAge="";var topAgeVal=0;Object.keys(ageSums).forEach(function(a){if(ageSums[a]>topAgeVal){topAgeVal=ageSums[a];topAge=a;}});
+              var ageDenom=Object.keys(ageSums).reduce(function(s,k){return s+ageSums[k];},0);
+              var topAgeShare=ageDenom>0?(topAgeVal/ageDenom*100):0;
+              // Gender split
+              var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=stage.field(r);});
+              var gSum=gs.female+gs.male;
+              var genderSplit={female:gSum>0?(gs.female/gSum*100):0,male:gSum>0?(gs.male/gSum*100):0};
+              // Top provinces (up to 2)
+              var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+stage.field(r);});
+              var pOrder=Object.keys(provSums).sort(function(a,b){return provSums[b]-provSums[a];});
+              var pDenom=Object.keys(provSums).reduce(function(s,k){return s+provSums[k];},0);
+              var topProvinces=pOrder.slice(0,2).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
+              // Mobile share of device-tagged clicks (Mobile + Desktop + Tablet denominator, matches the Device Mix chart)
+              var devB={mobile:0,desktop:0,tablet:0};
+              devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=stage.field(r);});
+              var devDenom=devB.mobile+devB.desktop+devB.tablet;
+              var mobileShare=devDenom>0?(devB.mobile/devDenom*100):0;
+              // Dominant age+gender segment
+              var segBest={val:0,age:"",gen:""};
+              agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>segBest.val)segBest={val:v,age:a,gen:g};});
+              var segShare=totalClicks>0?(segBest.val/totalClicks*100):0;
+              // CTR vs blended
+              var pd=authPlat&&authPlat[displayName];
+              var platImps=pd?pd.imp:0;var platClk=pd?pd.clk:0;
+              var ctr=platImps>0?(platClk/platImps*100):0;
+              var blendedCtr=authImps>0?(authClicks/authImps*100):0;
+              var ctrRatio=blendedCtr>0?(ctr/blendedCtr):0;
+              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegment:{age:segBest.age,gen:segBest.gen,share:segShare},ctr:ctr,ctrRatio:ctrRatio};
+            };
+            targetingPersonas=[
+              buildPersona("facebook","Facebook",P.fb,Ic.eye),
+              buildPersona("instagram","Instagram",P.ig,Ic.fire),
+              buildPersona("tiktok","TikTok",P.tt,Ic.bolt)
+            ].filter(function(p){return p.totalClicks>0;});
             return null;
   })();
   return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
@@ -5054,6 +5177,54 @@ export default function MediaOnGas(){
         
         {tab==="targeting"&&(<div>
           <SH icon={Ic.radar(P.solar,20)} title="Targeting Performance" sub={df+" to "+dt+" | Adset-Level Analysis by Objective"} accent={P.solar}/>
+          {FEATURES.targetingPersonas&&targetingPersonas&&targetingPersonas.length>0&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+            {/* WHO IS CLICKING, click-weighted per-platform audience persona.
+                Cards follow the Meta / IG / TikTok color language the rest of
+                the dashboard uses so clients can read the platform before the
+                numbers register. Google gets its own intent-based card in the
+                next phase, different data shape. */}
+            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
+              <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Is Clicking — Targeting Personas</div>
+                <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted audience profile per platform. Use this to weight budget toward the segments actually converting attention into action.</div>
+              </div>
+            </div>
+            <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(3,targetingPersonas.length)+",1fr)",gap:16,marginBottom:18}}>
+              {targetingPersonas.map(function(p){return <TargetingPersonaCard key={p.platform} persona={p}/>;})}
+            </div>
+            {(function(){
+              // Persona narrative, reads the cards like a buy-side planner
+              // would: which platform is finding the youngest or most female
+              // audience, where does each one concentrate geographically, and
+              // which platform's CTR suggests the strongest creative-audience
+              // fit right now. Falls back gracefully when only one platform
+              // has click volume.
+              if(targetingPersonas.length<1)return null;
+              var lines=[];
+              var byShare=targetingPersonas.slice().sort(function(a,b){return b.shareOfClicks-a.shareOfClicks;});
+              var lead=byShare[0];
+              lines.push(lead.platform+" carries the heaviest click volume at "+lead.shareOfClicks.toFixed(2)+"% of total, with a "+(lead.topAge||"mixed-age")+(lead.topSegment.gen?" "+(lead.topSegment.gen==="female"?"female":"male")+"-led":"")+" audience clicking "+(lead.mobileShare>0?"mostly on mobile at "+lead.mobileShare.toFixed(2)+"%":"across devices")+".");
+              if(targetingPersonas.length>1){
+                var byCtr=targetingPersonas.slice().filter(function(p){return p.ctrRatio>0;}).sort(function(a,b){return b.ctrRatio-a.ctrRatio;});
+                if(byCtr.length>0){
+                  var bestCtr=byCtr[0];
+                  if(bestCtr.ctrRatio>=1.2)lines.push(bestCtr.platform+" is converting impressions to clicks at "+bestCtr.ctrRatio.toFixed(2)+"x the blended CTR, the strongest creative-audience fit in the mix right now.");
+                }
+                var ages=targetingPersonas.map(function(p){return {plat:p.platform,age:p.topAge};}).filter(function(x){return x.age;});
+                var uniqueAges=Array.from(new Set(ages.map(function(x){return x.age;})));
+                if(uniqueAges.length>=2)lines.push("Age-bracket dominance differs across platforms ("+ages.map(function(x){return x.plat+" "+x.age;}).join(", ")+"), so the platforms are not duplicating each other demographically, each is pulling a distinct slice of the audience.");
+              }
+              var strongGeo=targetingPersonas.map(function(p){return {plat:p.platform,prov:(p.topProvinces[0]&&p.topProvinces[0].name)||"",share:(p.topProvinces[0]&&p.topProvinces[0].share)||0};}).filter(function(x){return x.prov;});
+              if(strongGeo.length>0){
+                var geo=strongGeo.sort(function(a,b){return b.share-a.share;})[0];
+                lines.push(geo.plat+" is especially concentrated in "+geo.prov+" at "+geo.share.toFixed(2)+"% of its clicks, the sharpest geographic signal across the personas.");
+              }
+              lines.push("Recommendation, keep the current platform mix broadly intact to preserve reach diversity, then weight a larger share of budget to "+lead.platform+" creative variants that speak directly to the "+(lead.topAge||"primary")+(lead.topSegment.gen?" "+(lead.topSegment.gen==="female"?"female":"male"):"")+" segment it is over-indexing on. This is a weighting shift, not an exclusion.");
+              return <Insight title="Targeting Insights" accent={P.solar} icon={Ic.radar(P.solar,16)}>{lines.join(" ")}</Insight>;
+            })()}
+          </div>)}
           {(function(){
             var selCamps=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selIds=selCamps.map(function(x){return x.rawCampaignId||x.campaignId.replace(/_facebook$/,"").replace(/_instagram$/,"");});
