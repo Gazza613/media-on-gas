@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v6-ig-split-preserved";
+var DEMO_CACHE_VERSION = "v7-ig-backfill-always";
 
 function extractResults(actions) {
   var map = {};
@@ -100,42 +100,73 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
-    // Meta silently rejects certain multi-dim breakdown combos by returning
-    // an empty list. When the 3-dim with publisher_platform fails, try the
-    // 2-dim age+publisher_platform and gender+publisher_platform pulls,
-    // merge them back into age+gender rows so the FB / IG split is preserved.
-    // Only if that also fails do we drop to the no-platform single-dim pull
-    // and tag the result as Facebook (which historically under-reported IG
-    // and left the Targeting persona card for Instagram looking empty).
-    if (!ag || ag.length === 0) {
+    // Meta's 3-dim breakdowns with publisher_platform sometimes return an
+    // empty list, and more often return a subset (eg Facebook rows only
+    // when IG has genuine click volume). For every breakdown we:
+    //   1. Check if Instagram rows are present in the 3-dim result.
+    //   2. If not, also pull the 2-dim per-platform query and append any
+    //      Instagram rows found, carrying "unknown" on the axis dropped by
+    //      the 2-dim shape.
+    // This keeps the FB / IG split intact even when Meta is unhelpful.
+    var hasInstagram = function(rows, platformField) {
+      platformField = platformField || "publisher_platform";
+      if (!rows || !rows.length) return false;
+      for (var i = 0; i < rows.length; i++) {
+        var p = String(rows[i][platformField] || "").toLowerCase();
+        if (p.indexOf("instagram") >= 0 || p === "threads") return true;
+      }
+      return false;
+    };
+    if (!ag || ag.length === 0 || !hasInstagram(ag)) {
       var agByPlat = await fetchMetaBreakdown(acc, token, from, to, "age,publisher_platform");
       var genByPlat = await fetchMetaBreakdown(acc, token, from, to, "gender,publisher_platform");
-      if ((agByPlat && agByPlat.length) || (genByPlat && genByPlat.length)) {
-        // Stitch rough age+gender rows per publisher_platform by carrying
-        // the platform tag on each, using "unknown" for the missing axis.
-        var rebuilt = [];
-        (agByPlat || []).forEach(function(row) { rebuilt.push(Object.assign({}, row, { gender: "unknown" })); });
-        (genByPlat || []).forEach(function(row) { rebuilt.push(Object.assign({}, row, { age: "unknown" })); });
-        ag = rebuilt;
-      } else {
+      // Append IG rows only, so FB data in the 3-dim result is preserved.
+      (agByPlat || []).forEach(function(row) {
+        var pp = String(row.publisher_platform || "").toLowerCase();
+        if (pp.indexOf("instagram") >= 0 || pp === "threads") {
+          ag = ag || [];
+          ag.push(Object.assign({}, row, { gender: "unknown" }));
+        }
+      });
+      (genByPlat || []).forEach(function(row) {
+        var pp = String(row.publisher_platform || "").toLowerCase();
+        if (pp.indexOf("instagram") >= 0 || pp === "threads") {
+          ag = ag || [];
+          ag.push(Object.assign({}, row, { age: "unknown" }));
+        }
+      });
+      // If the 3-dim came back completely empty and the per-platform 2-dim
+      // returned no IG either, fall through to the no-platform pull tagged
+      // as Facebook so the shape stays consistent downstream.
+      if (!ag || ag.length === 0) {
         var agFallback = await fetchMetaBreakdown(acc, token, from, to, "age,gender");
         ag = (agFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
       }
     }
-    if (!reg || reg.length === 0) {
+    if (!reg || reg.length === 0 || !hasInstagram(reg)) {
       var regByPlat = await fetchMetaBreakdown(acc, token, from, to, "region,publisher_platform");
-      if (regByPlat && regByPlat.length) {
-        reg = regByPlat;
-      } else {
+      (regByPlat || []).forEach(function(row) {
+        var pp = String(row.publisher_platform || "").toLowerCase();
+        if (pp.indexOf("instagram") >= 0 || pp === "threads") {
+          reg = reg || [];
+          reg.push(row);
+        }
+      });
+      if (!reg || reg.length === 0) {
         var regFallback = await fetchMetaBreakdown(acc, token, from, to, "region");
         reg = (regFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
       }
     }
-    if (!dev || dev.length === 0) {
+    if (!dev || dev.length === 0 || !hasInstagram(dev)) {
       var devByPlat = await fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform");
-      if (devByPlat && devByPlat.length) {
-        dev = devByPlat;
-      } else {
+      (devByPlat || []).forEach(function(row) {
+        var pp = String(row.publisher_platform || "").toLowerCase();
+        if (pp.indexOf("instagram") >= 0 || pp === "threads") {
+          dev = dev || [];
+          dev.push(row);
+        }
+      });
+      if (!dev || dev.length === 0) {
         var devFallback = await fetchMetaBreakdown(acc, token, from, to, "impression_device");
         dev = (devFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
       }

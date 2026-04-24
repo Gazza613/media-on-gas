@@ -3875,6 +3875,24 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var biggestPlat=communityData.slice().sort(function(a,b){return b.total-a.total;})[0];var fastestGrow=communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})[0];return standRow([biggestPlat?stand("LARGEST FOLLOWER COUNT PLATFORM",biggestPlat.name+", "+fmt(biggestPlat.total),biggestPlat.color):null,fastestGrow?stand("TOP GROWTH THIS PERIOD",fastestGrow.name+", +"+fmt(fastestGrow.earned),fastestGrow.color):null,(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;return earnedTotal>0&&cs>0?stand("COST PER MEMBER",fR(cs/earnedTotal)+" (community spend only)",P.solar):null;})()]);})()}
+                {/* Community member demographic cards, slotted directly under
+                    the existing Community Growth KPIs so the owned-audience
+                    composition reads as part of the same section rather than
+                    a separate block. */}
+                {FEATURES.communityDemographics&&(<div style={{marginTop:22,paddingTop:18,borderTop:"1px dashed "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+                    <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,"+P.tt+"35,"+P.tt+"15)",border:"1px solid "+P.tt+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.tt,16)}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Already Follows You</div>
+                      <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:2}}>Owned community demographic per platform, separate from the paid audience shown above.</div>
+                    </div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
+                    <CommunityMemberCard platform="Facebook" data={communityDemo&&communityDemo.facebook} color={P.fb} iconFn={Ic.eye}/>
+                    <CommunityMemberCard platform="Instagram" data={communityDemo&&communityDemo.instagram} color={P.ig} iconFn={Ic.fire}/>
+                    <CommunityMemberCard platform="TikTok" data={communityDemo&&communityDemo.tiktok} color={P.tt} iconFn={Ic.bolt}/>
+                  </div>
+                </div>)}
               </div>}
 
               {/* ═══ ENGAGEMENT PULSE (mirrors Community tab) ═══ */}
@@ -4218,8 +4236,12 @@ export default function MediaOnGas(){
                 </div>;
               })()}
 
-              {/* ═══ 6.5 TARGETING PERSONAS (who is clicking, per platform) ═══ */}
-              {FEATURES.targetingPersonas&&targetingPersonas&&targetingPersonas.length>0&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+              {/* ═══ 6.5 TARGETING PERSONAS (who is clicking, per platform)
+                   Always renders four slots in one row (Facebook, Instagram,
+                   TikTok, Google) so the layout stays consistent. Each card
+                   has its own "data not available" fallback so an empty slot
+                   shows a polished placeholder rather than collapsing the grid. */}
+              {FEATURES.targetingPersonas&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
                 <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
                   <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
                   <div style={{flex:1}}>
@@ -4228,27 +4250,22 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
-                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,targetingPersonas.length+(FEATURES.googleIntentCard&&googleIntent&&googleIntent.available?1:0))+",1fr)",gap:16}}>
-                  {targetingPersonas.map(function(p){return <TargetingPersonaCard key={p.platform} persona={p}/>;})}
-                  {FEATURES.googleIntentCard&&googleIntent&&googleIntent.available&&<GoogleIntentCard intent={googleIntent}/>}
-                </div>
-              </div>)}
-
-              {/* ═══ 6.6 OWNED COMMUNITY DEMOGRAPHICS (who already follows) ═══ */}
-              {FEATURES.communityDemographics&&communityDemo&&communityDemo.available&&(communityDemo.facebook||communityDemo.instagram||communityDemo.tiktok)&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
-                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
-                  <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.tt+"35,"+P.tt+"15)",border:"1px solid "+P.tt+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.tt,18)}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Already Follows You — Community Demographics</div>
-                    <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Demographic composition of your owned community on each platform. Separate from the paid audience above, this is who the page or profile has accumulated over time.</div>
-                  </div>
-                </div>
-                <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.tt+"45,"+P.tt+"15,transparent 80%)"}}/>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
-                  <CommunityMemberCard platform="Facebook" data={communityDemo.facebook} color={P.fb} iconFn={Ic.eye}/>
-                  <CommunityMemberCard platform="Instagram" data={communityDemo.instagram} color={P.ig} iconFn={Ic.fire}/>
-                  <CommunityMemberCard platform="TikTok" data={communityDemo.tiktok} color={P.tt} iconFn={Ic.bolt}/>
-                </div>
+                {(function(){
+                  // Build a stable 4-card row regardless of what data has loaded.
+                  // Use an empty-persona placeholder for any platform without
+                  // click volume so the grid layout is always four columns.
+                  var byName={};(targetingPersonas||[]).forEach(function(p){byName[p.platform]=p;});
+                  var empty=function(name,color,iconFn){return {platform:name,color:color,iconFn:iconFn,totalClicks:0,shareOfClicks:0,topAge:"",topAgeShare:0,genderSplit:{female:0,male:0},topProvinces:[],mobileShare:0,topSegment:{age:"",gen:"",share:0},ctr:0,ctrRatio:0};};
+                  var fb=byName["Facebook"]||empty("Facebook",P.fb,Ic.eye);
+                  var ig=byName["Instagram"]||empty("Instagram",P.ig,Ic.fire);
+                  var tt=byName["TikTok"]||empty("TikTok",P.tt,Ic.bolt);
+                  return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
+                    <TargetingPersonaCard persona={fb}/>
+                    <TargetingPersonaCard persona={ig}/>
+                    <TargetingPersonaCard persona={tt}/>
+                    {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent}/>}
+                  </div>;
+                })()}
               </div>)}
 
               {/* ═══ 7. EXECUTIVE SUMMARY (consolidated at bottom) ═══ */}
