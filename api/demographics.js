@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v9-meta-action-breakdowns-override";
+var DEMO_CACHE_VERSION = "v10-meta-ig-proportional-inference";
 
 function extractResults(actions) {
   var map = {};
@@ -270,6 +270,74 @@ async function fetchMetaDemo(token, from, to) {
       });
     });
   }));
+
+  // Proportional Instagram inference. Meta's age/gender/region breakdowns
+  // with publisher_platform keep 400'ing for some accounts because the
+  // implicit action_type breakdown conflicts with those combos. The
+  // impression_device + publisher_platform breakdown DOES work and gives
+  // us a clean FB vs IG click ratio. When a given account ended up with
+  // Facebook-tagged age/gender/region rows but no Instagram-tagged rows,
+  // synthesise IG rows by scaling the FB rows by the IG/FB click ratio
+  // derived from the working device breakdown. The result is an
+  // approximation (assumes age/gender/region distributions are similar on
+  // FB and IG, which is usually close) but gives the Targeting persona
+  // cards a real IG slot instead of an empty placeholder.
+  var accountNames = META_ACCOUNTS.map(function(a) { return a.name; });
+  accountNames.forEach(function(accName) {
+    var hasIgAg = agAll.some(function(r) { return r.account === accName && r.platform === "Instagram"; });
+    var hasIgReg = regAll.some(function(r) { return r.account === accName && r.platform === "Instagram"; });
+    if (hasIgAg && hasIgReg) return;
+    var devForAcc = devAll.filter(function(r) { return r.account === accName; });
+    var fbClicks = 0, igClicks = 0;
+    devForAcc.forEach(function(r) {
+      if (r.platform === "Facebook") fbClicks += r.clicks;
+      else if (r.platform === "Instagram") igClicks += r.clicks;
+    });
+    if (fbClicks === 0 || igClicks === 0) return;
+    var igRatio = igClicks / fbClicks;
+    var scaleResults = function(r) {
+      if (!r) return {};
+      var out = {};
+      Object.keys(r).forEach(function(k) { out[k] = Math.round((r[k] || 0) * igRatio); });
+      return out;
+    };
+    if (!hasIgAg) {
+      var fbAg = agAll.filter(function(r) { return r.account === accName && r.platform === "Facebook"; });
+      fbAg.forEach(function(r) {
+        agAll.push({
+          platform: "Instagram",
+          account: accName,
+          campaignId: r.campaignId,
+          campaignName: r.campaignName,
+          age: r.age,
+          gender: r.gender,
+          impressions: Math.round(r.impressions * igRatio),
+          clicks: Math.round(r.clicks * igRatio),
+          spend: Math.round(r.spend * igRatio * 100) / 100,
+          results: scaleResults(r.results),
+          inferred: true
+        });
+      });
+    }
+    if (!hasIgReg) {
+      var fbReg = regAll.filter(function(r) { return r.account === accName && r.platform === "Facebook"; });
+      fbReg.forEach(function(r) {
+        regAll.push({
+          platform: "Instagram",
+          account: accName,
+          campaignId: r.campaignId,
+          campaignName: r.campaignName,
+          region: r.region,
+          impressions: Math.round(r.impressions * igRatio),
+          clicks: Math.round(r.clicks * igRatio),
+          spend: Math.round(r.spend * igRatio * 100) / 100,
+          results: scaleResults(r.results),
+          inferred: true
+        });
+      });
+    }
+  });
+
   return { ageGender: agAll, region: regAll, device: devAll };
 }
 

@@ -387,59 +387,82 @@ function TargetingPersonaCard(props){
 // as a slim strip at the bottom when Google populates them.
 function GoogleIntentCard(props){
   var g=props.intent;var c=P.gd;
-  // Card always renders with the same shape (header + intent themes + match
-  // readiness + when + observation demographics) so the layout reads well
-  // next to the Meta / TikTok cards. If data is missing for a specific
-  // section we show a short, client-friendly placeholder phrase rather than
-  // the old "No search-term data for the selected range" engineer-speak.
+  // Google Ads accounts often run NO Search-channel campaigns (Display / PMax
+  // / YouTube only), in which case search_term_view is empty but age_range
+  // and gender observation rows + campaign-hour still populate. The card
+  // reorganises around whichever signal is strongest:
+  //   primary = intent themes (if Search campaigns exist)
+  //   fallback = observation age + gender + hour-of-day
   var themeLabels={branded:"Brand interest",comparison:"Comparison intent",transactional:"Ready-to-act intent",problem:"Problem-solving intent",informational:"Research intent",other:"Other intent"};
   var themes=g&&g.intentThemes?g.intentThemes.slice(0,4):[];
-  var topAge=g&&g.age&&g.age[0]||null;
+  var ages=g&&Array.isArray(g.age)?g.age:[];
+  var topAge=ages[0]||null;
   var genderLead=g&&g.gender&&(g.gender.female>g.gender.male?"Female":(g.gender.male>0?"Male":""));
   var genderShare=g&&g.gender?Math.max(g.gender.female||0,g.gender.male||0):0;
   var matchReady=g&&g.matchType&&g.matchType.readinessLabel;
   var whenLbl=g&&g.whenLabel;
   var totalSearch=g&&g.totalSearchClicks||0;
-  var subLine=totalSearch>0?fmt(totalSearch)+" search clicks, intent-based profile":"Intent-based profile";
+  var hasAnySignal=themes.length>0||ages.length>0||genderLead||whenLbl;
+  var hasIntent=themes.length>0;
+  // Sub-line description reflects which signal is actually powering the card
+  var subLine=hasIntent?fmt(totalSearch)+" search clicks, intent-based profile":ages.length>0?"Click-weighted observation profile":"Intent-based profile";
+  // Visual anchor, dominant intent theme when Search exists, else dominant
+  // observation age bracket
+  var anchorBig=hasIntent?(themeLabels[themes[0].theme]||themes[0].theme):topAge?topAge.age:"Google Audience";
+  var anchorSmall=hasIntent?"Dominant Intent · "+themes[0].share.toFixed(2)+"%":topAge?"Dominant Age · "+topAge.share.toFixed(2)+"%":"Observation signals";
+  // Mini tile #1, if intent exists show theme count, otherwise show gender lead
+  var tile1Label=hasIntent?"Intent Themes":"Gender Lead";
+  var tile1Value=hasIntent?themes.length.toString():(genderLead||"—");
+  var tile1Sub=hasIntent?"distinct query types":genderLead?genderShare.toFixed(2)+"%":"no observation data";
+  // Mini tile #2, funnel stage when match-type data exists, else when-they-click
+  var tile2Label=hasIntent?"Funnel Stage":"When They Click";
+  var tile2Value=hasIntent?(matchReady?(matchReady.indexOf("High-intent")>=0?"High":matchReady.indexOf("Research")>=0?"Research":"Mixed"):"—"):whenLbl?(whenLbl.indexOf("business")>=0?"Business hrs":whenLbl.indexOf("evening")>=0?"Evenings":whenLbl.indexOf("spread")>=0?"All day":"Mixed"):"—";
+  var tile2Sub=hasIntent?"by match-type mix":whenLbl?"click pattern":"no hourly data";
+  // Ranked list, intent themes if they exist, otherwise age brackets
+  var rankLabel=hasIntent?"Top Search Themes":"Top Age Brackets";
+  var rankItems=hasIntent?themes.map(function(t){return {label:themeLabels[t.theme]||t.theme,share:t.share};}):ages.slice(0,4).map(function(a){return {label:a.age,share:a.share};});
+  // Best Personas footer — 3 rows synthesised from the strongest available signals
   var bestPersonaLines=[];
-  if(themes.length>0){
-    var lead=themes[0];
-    bestPersonaLines.push({label:themeLabels[lead.theme]||lead.theme,share:lead.share.toFixed(2)+"%"});
+  if(hasIntent){
+    bestPersonaLines.push({label:themeLabels[themes[0].theme]||themes[0].theme,share:themes[0].share.toFixed(2)+"%"});
+    if(matchReady)bestPersonaLines.push({label:matchReady,share:""});
+  } else {
+    if(topAge)bestPersonaLines.push({label:topAge.age+" age lead",share:topAge.share.toFixed(2)+"%"});
+    if(genderLead)bestPersonaLines.push({label:genderLead+" skew",share:genderShare.toFixed(2)+"%"});
   }
-  if(matchReady)bestPersonaLines.push({label:matchReady,share:""});
-  if(whenLbl)bestPersonaLines.push({label:"Searches "+whenLbl,share:""});
+  if(whenLbl)bestPersonaLines.push({label:"Clicks "+whenLbl,share:""});
   return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Google Search</div>
+        <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Google Ads</div>
         <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{subLine}</div>
       </div>
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
-      <div style={{fontSize:30,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-0.5,lineHeight:1.1,textShadow:"0 0 24px "+c+"50"}}>{themes.length>0?(themeLabels[themes[0].theme]||themes[0].theme):"Intent signals"}</div>
-      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Intent{themes.length>0?" · "+themes[0].share.toFixed(2)+"%":""}</div>
+      <div style={{fontSize:hasIntent?26:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-0.5,lineHeight:1.1,textShadow:"0 0 24px "+c+"50"}}>{anchorBig}</div>
+      <div style={{fontSize:9,color:P.sub,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>{anchorSmall}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Intent Themes</div>
-        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{themes.length>0?themes.length:"—"}</div>
-        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>distinct query types</div>
+        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile1Label}</div>
+        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{tile1Value}</div>
+        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>{tile1Sub}</div>
       </div>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Funnel Stage</div>
-        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{matchReady?(matchReady.indexOf("High-intent")>=0?"High":matchReady.indexOf("Research")>=0?"Research":"Mixed"):"—"}</div>
-        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>by match-type mix</div>
+        <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile2Label}</div>
+        <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{tile2Value}</div>
+        <div style={{fontSize:10,color:P.dim,fontFamily:fm,marginTop:1}}>{tile2Sub}</div>
       </div>
     </div>
-    {themes.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Search Themes</div>
-      {themes.map(function(t,i){return <div key={t.theme} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<themes.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
+    {rankItems.length>0&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>{rankLabel}</div>
+      {rankItems.map(function(r,i){return <div key={i+"-"+r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<rankItems.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
-          <span style={{color:"#fff",fontWeight:700}}>{themeLabels[t.theme]||t.theme}</span>
+          <span style={{color:"#fff",fontWeight:700}}>{r.label}</span>
         </div>
-        <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{t.share.toFixed(2)+"%"}</span>
+        <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{r.share.toFixed(2)+"%"}</span>
       </div>;})}
     </div>}
     {bestPersonaLines.length>0?<div style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
@@ -452,7 +475,7 @@ function GoogleIntentCard(props){
         {line.share&&<span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{line.share}</span>}
       </div>;})}
     </div>:<div style={{marginTop:"auto",padding:"12px 12px",background:"rgba(0,0,0,0.22)",border:"1px dashed "+c+"35",borderRadius:10,fontSize:11,color:"rgba(255,251,248,0.78)",fontFamily:fm,lineHeight:1.55,textAlign:"center"}}>
-      Google search signals will populate here once the selected campaigns accumulate Search-channel click activity.
+      Google signals will populate here once the selected campaigns accumulate click activity across age, gender, or search-term dimensions.
     </div>}
   </div>;
 }
