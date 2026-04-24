@@ -71,7 +71,10 @@ export default async function handler(req, res) {
     });
   }
 
-  var cacheKey = "v1|" + from + "|" + to;
+  // Cache key includes role defensively, the admin gate above already
+  // blocks non-admin callers but if the gate is ever relaxed in future the
+  // cache won't bleed admin data to other principals via a shared slot.
+  var cacheKey = "v1|" + (principal.role || "admin") + "|" + from + "|" + to;
   var cached = intentCache[cacheKey];
   if (cached && Date.now() - cached.ts < INTENT_TTL_MS) {
     return res.status(200).json(cached.data);

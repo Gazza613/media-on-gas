@@ -207,8 +207,21 @@ function aggregateByPlatform(entries, platform) {
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!checkAuth(req, res)) return;
+  // Admin-only. The endpoint pulls owned-community demographics across every
+  // configured Meta ad account and IG business account, plus the TikTok
+  // advertiser, with no per-client scope filter, so a client JWT must not
+  // be allowed to read this cross-tenant view. The dashboard's UI only
+  // calls this from admin code paths anyway, so the gate doesn't change
+  // behaviour, just blocks the direct-URL bypass.
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role !== "admin") {
+    res.status(403).json({ error: "Admin-only endpoint" });
+    return;
+  }
 
-  var cacheKey = "v1";
+  // Cache key includes role so a future scope expansion doesn't bleed
+  // admin data to other roles via a shared cache slot.
+  var cacheKey = "v1|" + (principal.role || "admin");
   var cached = demoCache[cacheKey];
   if (cached && Date.now() - cached.ts < DEMO_CACHE_TTL_MS) {
     return res.status(200).json(cached.data);
