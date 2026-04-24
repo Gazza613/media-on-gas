@@ -2209,6 +2209,11 @@ export default function MediaOnGas(){
   // skips rendering the Google card for share-link views.
   var gi1=useState(null),googleIntent=gi1[0],setGoogleIntent=gi1[1];
   var gi2=useState(false),googleIntentLoading=gi2[0],setGoogleIntentLoading=gi2[1];
+  // Last-fetched key for Google intent. The fetch effect short-circuits when
+  // data is already present, so without tracking the (from, to, selection)
+  // tuple we never refetch on campaign-selection change, the previous fix
+  // symptom was Willowbrook reports reusing MoMo's cached Google persona.
+  var gi3=useRef("");var googleIntentKeyRef=gi3;
   // Community member demographics (FB Page + IG + TikTok). One endpoint
   // that returns a per-platform breakdown of the owned-community audience,
   // rendered on the Community tab and on Summary.
@@ -2233,16 +2238,34 @@ export default function MediaOnGas(){
   useEffect(function(){
     // Google intent fetch for Summary and Targeting persona cards. Admin-only
     // endpoint returns {available:false} for client tokens and the card
-    // renderer falls through cleanly.
+    // renderer falls through cleanly. Passes the current campaign selection
+    // as &campaignIds=..., without this the endpoint aggregated across every
+    // Google campaign in the account so selecting e.g. Willowbrook showed
+    // MoMo-dominated persona data. The key ref forces a refetch whenever
+    // dates or selection change, instead of short-circuiting on any prior
+    // data.
     if(tab!=="summary"&&tab!=="targeting")return;
-    if(!isAuthed()||googleIntent||googleIntentLoading)return;
+    if(!isAuthed())return;
+    var ids=(selected||[]).slice();
+    var extra=[];
+    (selected||[]).forEach(function(x){
+      var s=String(x||"");
+      var stripped=s.replace(/_(facebook|instagram)$/,"").replace(/^google_/,"");
+      if(stripped&&extra.indexOf(stripped)<0)extra.push(stripped);
+    });
+    var allIds=ids.concat(extra);
+    var key=df+"|"+dt+"|"+allIds.slice().sort().join(",");
+    if(googleIntentKeyRef.current===key)return;
+    if(googleIntentLoading)return;
+    googleIntentKeyRef.current=key;
     setGoogleIntentLoading(true);
     var h=authHeaders();
-    fetch(API+"/api/google-intent?from="+df+"&to="+dt,{headers:h})
+    var idsQs=allIds.length>0?("&campaignIds="+encodeURIComponent(allIds.join(","))):"";
+    fetch(API+"/api/google-intent?from="+df+"&to="+dt+idsQs,{headers:h})
       .then(function(r){return r.ok?r.json():{available:false};})
       .then(function(d){setGoogleIntentLoading(false);setGoogleIntent(d||{available:false});})
       .catch(function(){setGoogleIntentLoading(false);setGoogleIntent({available:false});});
-  },[tab,df,dt,session,viewToken,googleIntent,googleIntentLoading]);
+  },[tab,df,dt,session,viewToken,googleIntentLoading,selected]);
   useEffect(function(){
     // Community member demographics fetch. Drives the owned-audience cards
     // on the Community tab and Summary. Falls back silently on error.

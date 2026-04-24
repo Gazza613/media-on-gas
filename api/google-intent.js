@@ -71,10 +71,39 @@ export default async function handler(req, res) {
     });
   }
 
-  // Cache key includes role defensively, the admin gate above already
-  // blocks non-admin callers but if the gate is ever relaxed in future the
-  // cache won't bleed admin data to other principals via a shared slot.
-  var cacheKey = "v1|" + (principal.role || "admin") + "|" + from + "|" + to;
+  // Campaign scoping. The dashboard passes the current selection as
+  // &campaignIds=... (suffixed forms like "google_123", plus stripped raw
+  // numeric variants). We accept anything, but only the Google campaign ids
+  // are relevant to GAQL filters. Extract them here, then build an
+  // "AND campaign.id IN (...)" clause used by every query below. If the
+  // caller passed a selection but none of them were Google campaigns, return
+  // available:false rather than quietly aggregating across the whole account,
+  // that was the bug (e.g. selecting Willowbrook showed MoMo's Google data
+  // because no filter was applied).
+  var rawIds = String(req.query.campaignIds || "").split(",").map(function(s){return s.trim();}).filter(Boolean);
+  var hasSelection = rawIds.length > 0;
+  var googleIds = [];
+  rawIds.forEach(function(s){
+    var m = /^google_(\d+)$/.exec(s);
+    if (m) { if (googleIds.indexOf(m[1]) < 0) googleIds.push(m[1]); return; }
+    // Pure numeric in the selection list could be a Google id if the caller
+    // also stripped the prefix (as the dashboard does). We accept it only if
+    // we haven't already gathered prefixed ones, to avoid matching Meta
+    // numeric ids. In practice the dashboard always sends both forms, so the
+    // prefixed branch above will have populated googleIds first.
+  });
+  if (hasSelection && googleIds.length === 0) {
+    return res.status(200).json({
+      available: false,
+      reason: "No Google Ads campaigns in the current selection"
+    });
+  }
+  var campaignFilter = googleIds.length > 0 ? " AND campaign.id IN (" + googleIds.join(",") + ")" : "";
+
+  // Cache key includes role + campaign filter so different selections do not
+  // share a slot. The role axis is defensive, the admin gate above already
+  // blocks non-admin callers but a future relaxation won't bleed data.
+  var cacheKey = "v2|" + (principal.role || "admin") + "|" + from + "|" + to + "|" + googleIds.slice().sort().join(",");
   var cached = intentCache[cacheKey];
   if (cached && Date.now() - cached.ts < INTENT_TTL_MS) {
     return res.status(200).json(cached.data);
@@ -136,7 +165,7 @@ export default async function handler(req, res) {
     var stRows = await runQuery(
       "SELECT search_term_view.search_term, metrics.clicks, metrics.impressions " +
       "FROM search_term_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' " +
-      "AND metrics.clicks > 0 ORDER BY metrics.clicks DESC LIMIT 500"
+      "AND metrics.clicks > 0" + campaignFilter + " ORDER BY metrics.clicks DESC LIMIT 500"
     );
     var themeSums = { branded: 0, comparison: 0, problem: 0, transactional: 0, informational: 0, other: 0 };
     var totalSearchClicks = 0;
@@ -157,7 +186,7 @@ export default async function handler(req, res) {
     // 2. Age observation
     var ageRows = await runQuery(
       "SELECT ad_group_criterion.age_range.type, metrics.clicks " +
-      "FROM age_range_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0"
+      "FROM age_range_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0" + campaignFilter
     );
     var ageAgg = {};
     ageRows.forEach(function(row) {
@@ -179,7 +208,7 @@ export default async function handler(req, res) {
     // 3. Gender observation
     var genRows = await runQuery(
       "SELECT ad_group_criterion.gender.type, metrics.clicks " +
-      "FROM gender_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0"
+      "FROM gender_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0" + campaignFilter
     );
     var genAgg = { female: 0, male: 0 };
     genRows.forEach(function(row) {
@@ -197,7 +226,7 @@ export default async function handler(req, res) {
     // 4. Match type distribution -> funnel readiness
     var mtRows = await runQuery(
       "SELECT ad_group_criterion.keyword.match_type, metrics.clicks " +
-      "FROM keyword_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0"
+      "FROM keyword_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0" + campaignFilter
     );
     var mtAgg = { EXACT: 0, PHRASE: 0, BROAD: 0 };
     mtRows.forEach(function(row) {
@@ -224,7 +253,7 @@ export default async function handler(req, res) {
     // 5. Hour of day pattern
     var hrRows = await runQuery(
       "SELECT segments.hour, metrics.clicks " +
-      "FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0"
+      "FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND metrics.clicks > 0" + campaignFilter
     );
     var hourAgg = {};
     hrRows.forEach(function(row) {
