@@ -372,6 +372,139 @@ function TargetingPersonaCard(props){
   </div>;
 }
 
+// Google Search intent persona card. Different data shape from Meta / TikTok
+// because Google Search does not surface strong demographics, but it does
+// surface rich intent signals (what the user was trying to do) that the
+// social platforms don't have. Card leads on intent themes, layers match-
+// type readiness and when-they-search, and shows observation demographics
+// as a slim strip at the bottom when Google populates them.
+function GoogleIntentCard(props){
+  var g=props.intent;var c=P.gd;
+  if(!g||!g.available){
+    return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",textAlign:"center",minHeight:320}}>
+      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>{Ic.globe("#fff",20)}</div>
+      <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Google Search Intent</div>
+      <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6,maxWidth:260}}>{g&&g.reason?g.reason:"Intent signals will populate here once the Google Ads account exposes the required metrics."}</div>
+    </div>;
+  }
+  var themeLabels={branded:"Brand searches",comparison:"Comparison queries",transactional:"Transactional queries",problem:"Problem / how-to queries",informational:"Informational queries",other:"Other"};
+  var topThemes=(g.intentThemes||[]).slice(0,4);
+  var topAge=(g.age&&g.age[0])||null;
+  var genderLead=g.gender&&(g.gender.female>g.gender.male?"Female":(g.gender.male>0?"Male":""));
+  var genderShare=g.gender?Math.max(g.gender.female||0,g.gender.male||0):0;
+  return <div style={{background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+c+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset",display:"flex",flexDirection:"column"}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
+      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Google Search</div>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(g.totalSearchClicks||0)+" search clicks, intent-based profile"}</div>
+      </div>
+    </div>
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Intent Themes</div>
+      {topThemes.length>0?topThemes.map(function(t,i){return <div key={t.theme} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 0",borderBottom:i<topThemes.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{width:8,height:8,borderRadius:"50%",background:i===0?c:c+"55"}}></span>
+          <span style={{color:"#fff",fontWeight:700}}>{themeLabels[t.theme]||t.theme}</span>
+        </div>
+        <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{t.share.toFixed(2)+"%"}</span>
+      </div>;}):<div style={{fontSize:11,color:P.dim,fontFamily:fm,fontStyle:"italic",padding:"10px 0"}}>No search-term data for the selected range</div>}
+    </div>
+    {g.matchType&&g.matchType.readinessLabel&&<div style={{padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10,marginBottom:12}}>
+      <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:3,fontWeight:800}}>Funnel Readiness</div>
+      <div style={{fontSize:12,color:"#fff",fontFamily:fm,fontWeight:700}}>{g.matchType.readinessLabel}</div>
+      <div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:3}}>Exact {g.matchType.exact.toFixed(2)+"%"} · Phrase {g.matchType.phrase.toFixed(2)+"%"} · Broad {g.matchType.broad.toFixed(2)+"%"}</div>
+    </div>}
+    {g.whenLabel&&<div style={{padding:"8px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,marginBottom:12,fontSize:11,color:"#fff",fontFamily:fm}}>
+      <span style={{fontSize:8,color:P.sub,letterSpacing:1.8,textTransform:"uppercase",marginRight:8,fontWeight:700}}>When</span>{g.whenLabel}
+    </div>}
+    {g.observationDemographicsAvailable&&(topAge||genderLead)&&<div style={{padding:"8px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+P.rule,borderRadius:10,marginBottom:10}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Observation Data</div>
+      <div style={{fontSize:11,color:"#fff",fontFamily:fm,fontWeight:700}}>{topAge?(topAge.age+" leads age, "+topAge.share.toFixed(2)+"%"):""}{topAge&&genderLead?" · ":""}{genderLead?genderLead+" "+genderShare.toFixed(2)+"%":""}</div>
+    </div>}
+    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:10,color:P.sub,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
+      Google profile is intent-led, social platforms are demographic-led, use both together to build the targeting mix.
+    </div>
+  </div>;
+}
+
+// Community member demographic card. One per platform (FB / IG / TikTok).
+// Renders the owned-community audience, separate from the paid audience.
+// Each card shows total followers, age-gender split (stacked age bars with
+// female / male overlay), top countries / cities when available, and a
+// caveat label if the platform hasn't populated any of its demographic
+// endpoints for the connected pages.
+function CommunityMemberCard(props){
+  var p=props.platform;var data=props.data;var color=props.color;var iconFn=props.iconFn;
+  if(!data||!data.available){
+    return <div style={{background:"linear-gradient(165deg,"+color+"14 0%,"+color+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+color+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",textAlign:"center",minHeight:320}}>
+      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+color+"55,"+color+"20)",border:"1px solid "+color+"70",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>{iconFn("#fff",20)}</div>
+      <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{p} Community</div>
+      <div style={{fontSize:11,color:P.sub,fontFamily:fm,lineHeight:1.6,maxWidth:260}}>Audience demographic data not exposed for this connected {p} page. Some older page insights permissions or follower counts below 100 can hide this slice.</div>
+    </div>;
+  }
+  // Parse the platform's age-gender map. Meta uses "F.25-34" / "M.25-34" keys,
+  // TikTok uses age-bracket top level with gender nested. Normalise both into
+  // one age-then-gender structure.
+  var ageOrder=["13-17","18-24","25-34","35-44","45-54","55-64","65+"];
+  var genders=["F","M"];
+  var genderLabel={F:"Female",M:"Male"};
+  var byAgeGender={};var totalAll=0;
+  Object.keys(data.ageGender||{}).forEach(function(k){
+    var v=data.ageGender[k];var m=/^([FMU])\.(.+)$/.exec(k);
+    if(m){var g=m[1];var a=m[2];if(g==="U")return;if(!byAgeGender[a])byAgeGender[a]={F:0,M:0};byAgeGender[a][g]=(byAgeGender[a][g]||0)+v;totalAll+=v;}
+  });
+  var rowsAvailable=Object.keys(byAgeGender).length>0;
+  // Gender donut data
+  var genSum={F:0,M:0};
+  Object.keys(byAgeGender).forEach(function(a){genSum.F+=byAgeGender[a].F||0;genSum.M+=byAgeGender[a].M||0;});
+  var genTotal=genSum.F+genSum.M;
+  var femaleShare=genTotal>0?(genSum.F/genTotal*100):0;
+  var maleShare=genTotal>0?(genSum.M/genTotal*100):0;
+  // Top countries
+  var cSorted=Object.keys(data.countries||{}).map(function(k){return {code:k,val:data.countries[k]};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
+  var cTotal=cSorted.reduce(function(s,c){return s+c.val;},0);
+  return <div style={{background:"linear-gradient(165deg,"+color+"14 0%,"+color+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+color+"40",padding:"22px 22px 18px",boxShadow:"0 10px 36px rgba(0,0,0,0.35),0 0 60px "+color+"10 inset",display:"flex",flexDirection:"column"}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+color+"28"}}>
+      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+color+"55,"+color+"20)",border:"1px solid "+color+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+color+"40"}}>{iconFn("#fff",20)}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{p} Community</div>
+        <div style={{fontSize:10,color:P.sub,fontFamily:fm,letterSpacing:1}}>{fmt(data.totalFollowers||0)+" total followers"}</div>
+      </div>
+    </div>
+    {rowsAvailable?<div style={{marginBottom:14}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Age and Gender</div>
+      {ageOrder.filter(function(a){return byAgeGender[a];}).map(function(a){
+        var row=byAgeGender[a];var rowTotal=row.F+row.M;var share=totalAll>0?(rowTotal/totalAll*100):0;var fPct=rowTotal>0?(row.F/rowTotal*100):0;
+        return <div key={a} style={{marginBottom:8,fontSize:11,fontFamily:fm}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,color:"#fff"}}>
+            <span style={{fontWeight:700}}>{a}</span>
+            <span style={{color:color,fontWeight:900}}>{share.toFixed(2)+"%"}</span>
+          </div>
+          <div style={{height:9,background:"rgba(255,255,255,0.04)",borderRadius:5,overflow:"hidden",display:"flex"}}>
+            <div title={"Female "+fPct.toFixed(2)+"%"} style={{width:(share*fPct/100)+"%",background:"#ec4899"}}></div>
+            <div title={"Male "+(100-fPct).toFixed(2)+"%"} style={{width:(share*(100-fPct)/100)+"%",background:"#3b82f6"}}></div>
+          </div>
+        </div>;
+      })}
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10,color:P.sub,fontFamily:fm}}>
+        <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#ec4899",marginRight:6}}></span>Female {femaleShare.toFixed(2)+"%"}</span>
+        <span><span style={{display:"inline-block",width:9,height:9,borderRadius:"50%",background:"#3b82f6",marginRight:6}}></span>Male {maleShare.toFixed(2)+"%"}</span>
+      </div>
+    </div>:<div style={{padding:"14px 0",textAlign:"center",fontSize:11,color:P.dim,fontFamily:fm,fontStyle:"italic",marginBottom:12}}>Age and gender breakdown not available for this page</div>}
+    {cSorted.length>0&&<div style={{padding:"10px 12px",background:"rgba(0,0,0,0.28)",border:"1px solid "+color+"25",borderRadius:10,marginBottom:10}}>
+      <div style={{fontSize:8,color:P.sub,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:700}}>Top Countries</div>
+      {cSorted.map(function(c,i){var share=cTotal>0?(c.val/cTotal*100):0;return <div key={c.code} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#fff",fontFamily:fm,padding:"3px 0"}}>
+        <span style={{fontWeight:700}}>{i+1}. {c.code}</span>
+        <span style={{color:color,fontWeight:900}}>{share.toFixed(2)+"%"}</span>
+      </div>;})}
+    </div>}
+    <div style={{marginTop:"auto",paddingTop:8,borderTop:"1px dashed "+P.rule,fontSize:10,color:P.sub,fontFamily:fm,lineHeight:1.5,fontStyle:"italic",textAlign:"center"}}>
+      Owned community, who already follows you, distinct from the paid audience above.
+    </div>
+  </div>;
+}
+
 function Tip(props){if(!props.active||!props.payload||!props.payload.length)return null;var first=props.payload[0]&&props.payload[0].payload?props.payload[0].payload:{};var heading=first.fullName||first.name||props.label;return(<div style={{background:"#121212",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxWidth:360}}><div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,marginBottom:4,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{heading}</div>{props.payload.map(function(p,i){var v=p.value;var display="";var n=(p.name||"").toLowerCase();var dn=(p.dataKey||"").toLowerCase();var rowCurrency=!!(p.payload&&p.payload._currency);var isPct=dn==="ctr"||n.indexOf("ctr")>=0||n.indexOf("rate")>=0||(p.payload&&p.payload._pct);var isCurrency=rowCurrency||n.indexOf("spend")>=0||n.indexOf("cpc")>=0||n.indexOf("cpm")>=0||n.indexOf("cpl")>=0||n.indexOf("cpf")>=0||n.indexOf("cpa")>=0||n.indexOf("cpi")>=0||n.indexOf("cost per")>=0||n.indexOf("cost-per")>=0||dn==="spend"||dn==="cpc"||dn==="cpm"||dn==="cpl"||dn==="cpf"||dn==="cpa"||dn==="costper";if(isPct){display=typeof v==="number"?v.toFixed(2)+"%":v;}else if(isCurrency){display="R"+(typeof v==="number"?v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2}):v);}else{display=typeof v==="number"?v.toLocaleString():v;}return<div key={i} style={{fontSize:11,color:p.color||P.sub,fontFamily:fm,lineHeight:1.8}}>{p.name}: {display}</div>;})}</div>);}
 function PH(props){var bg=props.platform==="Facebook"?P.fb:props.platform==="Instagram"?"linear-gradient(135deg,#e1306c,#833ab4)":props.platform==="TikTok"?"#1e1e2e":P.ember;var dot=props.platform==="Facebook"?"#fff":props.platform==="TikTok"?P.tt:"#fff";return(<div style={{background:bg,padding:"14px 24px",borderRadius:12,marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:10,height:10,borderRadius:"50%",background:dot,boxShadow:"0 0 10px "+dot}}></span><span style={{fontSize:15,fontWeight:800,color:"#fff",fontFamily:ff,letterSpacing:0.5}}>{props.platform}</span>{props.suffix&&<span style={{fontSize:12,fontWeight:400,color:"rgba(255,255,255,0.7)",fontFamily:fm}}>· {props.suffix}</span>}</div><div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>LIVE DATA</div></div>);}
 function Insight(props){var a=props.accent||P.ember;return(<div style={{marginTop:24,padding:"22px 26px",background:"linear-gradient(135deg,"+a+"08 0%,"+a+"03 50%, transparent 100%)",border:"1px solid "+a+"20",borderLeft:"4px solid "+a,borderRadius:"0 14px 14px 0",position:"relative",overflow:"hidden"}}><div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+a+"06, transparent)",pointerEvents:"none"}}></div><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>{props.icon||Ic.bolt(a,16)}<span style={{fontSize:10,fontWeight:800,color:a,letterSpacing:3,fontFamily:fm,textTransform:"uppercase"}}>{props.title||"Campaign Read"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+a+"30, transparent)",marginLeft:8}}></div></div><div style={{fontSize:13.5,color:P.txt,lineHeight:2.1,fontFamily:ff,position:"relative",letterSpacing:0.2}}>{props.children}</div></div>);}
@@ -1979,9 +2112,19 @@ export default function MediaOnGas(){
   var dm3=useState(""),demoErr=dm3[0],setDemoErr=dm3[1];
   var dm4=useState(QUIRKY_AD_LOADERS[0]),demoQuip=dm4[0],setDemoQuip=dm4[1];
   var dm5=useState("impressions"),demoMetric=dm5[0],setDemoMetric=dm5[1];
+  // Google intent signals for the Targeting and Summary persona cards.
+  // Admin-only endpoint, so clients silently get null and the frontend
+  // skips rendering the Google card for share-link views.
+  var gi1=useState(null),googleIntent=gi1[0],setGoogleIntent=gi1[1];
+  var gi2=useState(false),googleIntentLoading=gi2[0],setGoogleIntentLoading=gi2[1];
+  // Community member demographics (FB Page + IG + TikTok). One endpoint
+  // that returns a per-platform breakdown of the owned-community audience,
+  // rendered on the Community tab and on Summary.
+  var cd1=useState(null),communityDemo=cd1[0],setCommunityDemo=cd1[1];
+  var cd2=useState(false),communityDemoLoading=cd2[0],setCommunityDemoLoading=cd2[1];
   // Reset cached demo payload when date range changes so the tab fetches
   // fresh the next time it's opened.
-  useEffect(function(){setDemoData(null);},[df,dt]);
+  useEffect(function(){setDemoData(null);setGoogleIntent(null);setCommunityDemo(null);},[df,dt]);
   useEffect(function(){
     // Summary tab also renders per-stage demographic blocks under each
     // HIGHLIGHTS section, so fetch demoData whenever the user is on Summary
@@ -1995,6 +2138,31 @@ export default function MediaOnGas(){
       .then(function(d){setDemoLoading(false);if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
       .catch(function(err){setDemoLoading(false);setDemoErr("Connection error");console.error("Demo API error",err);});
   },[tab,df,dt,session,viewToken,demoData,demoLoading]);
+  useEffect(function(){
+    // Google intent fetch for Summary and Targeting persona cards. Admin-only
+    // endpoint returns {available:false} for client tokens and the card
+    // renderer falls through cleanly.
+    if(tab!=="summary"&&tab!=="targeting")return;
+    if(!isAuthed()||googleIntent||googleIntentLoading)return;
+    setGoogleIntentLoading(true);
+    var h=authHeaders();
+    fetch(API+"/api/google-intent?from="+df+"&to="+dt,{headers:h})
+      .then(function(r){return r.ok?r.json():{available:false};})
+      .then(function(d){setGoogleIntentLoading(false);setGoogleIntent(d||{available:false});})
+      .catch(function(){setGoogleIntentLoading(false);setGoogleIntent({available:false});});
+  },[tab,df,dt,session,viewToken,googleIntent,googleIntentLoading]);
+  useEffect(function(){
+    // Community member demographics fetch. Drives the owned-audience cards
+    // on the Community tab and Summary. Falls back silently on error.
+    if(tab!=="community"&&tab!=="summary")return;
+    if(!isAuthed()||communityDemo||communityDemoLoading)return;
+    setCommunityDemoLoading(true);
+    var h=authHeaders();
+    fetch(API+"/api/community-demographics",{headers:h})
+      .then(function(r){return r.ok?r.json():{available:false};})
+      .then(function(d){setCommunityDemoLoading(false);setCommunityDemo(d||{available:false});})
+      .catch(function(){setCommunityDemoLoading(false);setCommunityDemo({available:false});});
+  },[tab,session,viewToken,communityDemo,communityDemoLoading]);
   useEffect(function(){
     if(!demoLoading)return;
     setDemoQuip(pickQuirky(QUIRKY_AD_LOADERS));
@@ -4050,6 +4218,39 @@ export default function MediaOnGas(){
                 </div>;
               })()}
 
+              {/* ═══ 6.5 TARGETING PERSONAS (who is clicking, per platform) ═══ */}
+              {FEATURES.targetingPersonas&&targetingPersonas&&targetingPersonas.length>0&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
+                  <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.solar+"35,"+P.solar+"15)",border:"1px solid "+P.solar+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.solar,18)}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Is Clicking — Audience Personas</div>
+                    <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Click-weighted audience profile per platform. Meta and TikTok read as demographic-led, Google as intent-led. Use both together to sharpen the targeting mix.</div>
+                  </div>
+                </div>
+                <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
+                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,targetingPersonas.length+(FEATURES.googleIntentCard&&googleIntent&&googleIntent.available?1:0))+",1fr)",gap:16}}>
+                  {targetingPersonas.map(function(p){return <TargetingPersonaCard key={p.platform} persona={p}/>;})}
+                  {FEATURES.googleIntentCard&&googleIntent&&googleIntent.available&&<GoogleIntentCard intent={googleIntent}/>}
+                </div>
+              </div>)}
+
+              {/* ═══ 6.6 OWNED COMMUNITY DEMOGRAPHICS (who already follows) ═══ */}
+              {FEATURES.communityDemographics&&communityDemo&&communityDemo.available&&(communityDemo.facebook||communityDemo.instagram||communityDemo.tiktok)&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 28px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
+                  <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.tt+"35,"+P.tt+"15)",border:"1px solid "+P.tt+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.tt,18)}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Already Follows You — Community Demographics</div>
+                    <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Demographic composition of your owned community on each platform. Separate from the paid audience above, this is who the page or profile has accumulated over time.</div>
+                  </div>
+                </div>
+                <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.tt+"45,"+P.tt+"15,transparent 80%)"}}/>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+                  <CommunityMemberCard platform="Facebook" data={communityDemo.facebook} color={P.fb} iconFn={Ic.eye}/>
+                  <CommunityMemberCard platform="Instagram" data={communityDemo.instagram} color={P.ig} iconFn={Ic.fire}/>
+                  <CommunityMemberCard platform="TikTok" data={communityDemo.tiktok} color={P.tt} iconFn={Ic.bolt}/>
+                </div>
+              </div>)}
+
               {/* ═══ 7. EXECUTIVE SUMMARY (consolidated at bottom) ═══ */}
               {(function(){
                 var bestCpcPlatLocal="";var bestCpcValLocal=Infinity;
@@ -5191,8 +5392,9 @@ export default function MediaOnGas(){
               </div>
             </div>
             <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.solar+"45,"+P.solar+"15,transparent 80%)"}}/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(3,targetingPersonas.length)+",1fr)",gap:16,marginBottom:18}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,targetingPersonas.length+(FEATURES.googleIntentCard&&googleIntent&&googleIntent.available?1:0))+",1fr)",gap:16,marginBottom:18}}>
               {targetingPersonas.map(function(p){return <TargetingPersonaCard key={p.platform} persona={p}/>;})}
+              {FEATURES.googleIntentCard&&<GoogleIntentCard intent={googleIntent}/>}
             </div>
             {(function(){
               // Persona narrative, reads the cards like a buy-side planner
@@ -5490,6 +5692,21 @@ export default function MediaOnGas(){
 
         {tab==="community"&&(<div>
           <SH icon={Ic.users(P.mint,20)} title="Community Growth" sub={df+" to "+dt+" | Followers & Likes by Platform"} accent={P.mint}/>
+          {FEATURES.communityDemographics&&communityDemo&&communityDemo.available&&(<div style={{background:P.glass,borderRadius:18,padding:"20px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:8}}>
+              <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,"+P.tt+"35,"+P.tt+"15)",border:"1px solid "+P.tt+"55",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.users(P.tt,18)}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:16,fontWeight:900,color:P.tt,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase"}}>Who Follows You</div>
+                <div style={{fontSize:11,color:P.sub,fontFamily:fm,letterSpacing:0.5,marginTop:3}}>Owned community demographic, distinct from the paid audience. Use this to understand the audience that will see organic content for free and to spot misalignment with the paid targeting mix.</div>
+              </div>
+            </div>
+            <div style={{height:1,marginBottom:18,background:"linear-gradient(90deg,"+P.tt+"45,"+P.tt+"15,transparent 80%)"}}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+              <CommunityMemberCard platform="Facebook" data={communityDemo.facebook} color={P.fb} iconFn={Ic.eye}/>
+              <CommunityMemberCard platform="Instagram" data={communityDemo.instagram} color={P.ig} iconFn={Ic.fire}/>
+              <CommunityMemberCard platform="TikTok" data={communityDemo.tiktok} color={P.tt} iconFn={Ic.bolt}/>
+            </div>
+          </div>)}
           <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
             <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>COMMUNITY GROWTH</span><div style={{fontSize:10,color:P.sub,fontFamily:fm,marginTop:4,letterSpacing:3}}>TOTAL COMMUNITY & PERIOD GROWTH</div></div>
             {(function(){

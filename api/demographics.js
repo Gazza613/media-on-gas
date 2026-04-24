@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v5-google-most-specific-location";
+var DEMO_CACHE_VERSION = "v6-ig-split-preserved";
 
 function extractResults(actions) {
   var map = {};
@@ -73,10 +73,15 @@ async function fetchMetaBreakdown(account, token, from, to, breakdown) {
 }
 
 // Publisher platform -> dashboard platform label. Fold audience_network
-// and messenger into Facebook, threads into Instagram.
+// and messenger into Facebook, threads and any instagram_* variant into
+// Instagram. Use indexOf so odd Meta placement tags like "instagram_stories"
+// or "instagram_reels" still land on Instagram rather than falling through
+// to the conservative Facebook default, which would quietly bury IG data
+// in the FB bucket and make the Targeting tab persona card for IG look
+// empty even when IG had real click volume.
 function metaPlatformLabel(pub) {
   var p = String(pub || "").toLowerCase();
-  if (p === "instagram" || p === "threads") return "Instagram";
+  if (p.indexOf("instagram") >= 0 || p === "threads") return "Instagram";
   if (p === "facebook" || p === "audience_network" || p === "messenger" || p === "oculus") return "Facebook";
   return "Facebook"; // conservative default
 }
@@ -95,22 +100,45 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
-    // Meta silently rejects certain multi-dim breakdown combos by returning an
-    // empty list. Fall back to the single-dim breakdown (without
-    // publisher_platform) so we keep the data, even if we lose the FB vs IG
-    // split for that slice. We default platform to 'facebook' to keep the row
-    // shape consistent downstream — consumers treat it as Meta aggregated.
+    // Meta silently rejects certain multi-dim breakdown combos by returning
+    // an empty list. When the 3-dim with publisher_platform fails, try the
+    // 2-dim age+publisher_platform and gender+publisher_platform pulls,
+    // merge them back into age+gender rows so the FB / IG split is preserved.
+    // Only if that also fails do we drop to the no-platform single-dim pull
+    // and tag the result as Facebook (which historically under-reported IG
+    // and left the Targeting persona card for Instagram looking empty).
     if (!ag || ag.length === 0) {
-      var agFallback = await fetchMetaBreakdown(acc, token, from, to, "age,gender");
-      ag = (agFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+      var agByPlat = await fetchMetaBreakdown(acc, token, from, to, "age,publisher_platform");
+      var genByPlat = await fetchMetaBreakdown(acc, token, from, to, "gender,publisher_platform");
+      if ((agByPlat && agByPlat.length) || (genByPlat && genByPlat.length)) {
+        // Stitch rough age+gender rows per publisher_platform by carrying
+        // the platform tag on each, using "unknown" for the missing axis.
+        var rebuilt = [];
+        (agByPlat || []).forEach(function(row) { rebuilt.push(Object.assign({}, row, { gender: "unknown" })); });
+        (genByPlat || []).forEach(function(row) { rebuilt.push(Object.assign({}, row, { age: "unknown" })); });
+        ag = rebuilt;
+      } else {
+        var agFallback = await fetchMetaBreakdown(acc, token, from, to, "age,gender");
+        ag = (agFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+      }
     }
     if (!reg || reg.length === 0) {
-      var regFallback = await fetchMetaBreakdown(acc, token, from, to, "region");
-      reg = (regFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+      var regByPlat = await fetchMetaBreakdown(acc, token, from, to, "region,publisher_platform");
+      if (regByPlat && regByPlat.length) {
+        reg = regByPlat;
+      } else {
+        var regFallback = await fetchMetaBreakdown(acc, token, from, to, "region");
+        reg = (regFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+      }
     }
     if (!dev || dev.length === 0) {
-      var devFallback = await fetchMetaBreakdown(acc, token, from, to, "impression_device");
-      dev = (devFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+      var devByPlat = await fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform");
+      if (devByPlat && devByPlat.length) {
+        dev = devByPlat;
+      } else {
+        var devFallback = await fetchMetaBreakdown(acc, token, from, to, "impression_device");
+        dev = (devFallback || []).map(function(row) { row.publisher_platform = "facebook"; return row; });
+      }
     }
     ag.forEach(function(row) {
       var r = extractResults(row.actions);
