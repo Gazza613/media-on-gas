@@ -2,7 +2,12 @@ import { useState, useEffect, useMemo, useRef } from "react";
 var _v="2.0";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend, LabelList } from "recharts";
 
-var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#22D3EE",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
+// label and caption are the canonical tokens for client-visible secondary
+// text. Hard rule across the dashboard: every label uses P.label (white at
+// 70% opacity), every explanation / sub-copy uses P.caption (white at 58%
+// opacity). P.sub and P.dim are kept for non-label uses (chart strokes,
+// background tints via concat like P.sub+"15", icon colours, etc.).
+var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#22D3EE",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
 var ff="Poppins,Outfit,Segoe UI,sans-serif",fm="JetBrains Mono,Consolas,monospace";
 
@@ -341,22 +346,22 @@ function TargetingPersonaCard(props){
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
       <div style={{fontSize:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-1,lineHeight:1,textShadow:"0 0 24px "+c+"60"}}>{p.topAge||"—"}</div>
-      <div style={{fontSize:9,color:"rgba(255,251,248,0.75)",fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
+      <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
+        <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{genderLead||"—"}</div>
         <div style={{fontSize:10,color:c,fontFamily:fm,fontWeight:700,marginTop:1}}>{genderLead?genderShare.toFixed(2)+"%":""}</div>
       </div>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
+        <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{p.mobileShare>0?p.mobileShare.toFixed(2)+"%":"—"}</div>
-        <div style={{fontSize:10,color:"rgba(255,251,248,0.58)",fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
+        <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
       </div>
     </div>
     {p.topProvinces.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Regions</div>
+      <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>Top Regions</div>
       {p.topProvinces.map(function(pr,i){return <div key={pr.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<p.topProvinces.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
@@ -444,22 +449,22 @@ function GoogleIntentCard(props){
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
       <div style={{fontSize:hasIntent?26:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-0.5,lineHeight:1.1,textShadow:"0 0 24px "+c+"50"}}>{anchorBig}</div>
-      <div style={{fontSize:9,color:"rgba(255,251,248,0.75)",fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>{anchorSmall}</div>
+      <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>{anchorSmall}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile1Label}</div>
+        <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile1Label}</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{tile1Value}</div>
-        <div style={{fontSize:10,color:"rgba(255,251,248,0.58)",fontFamily:fm,marginTop:1}}>{tile1Sub}</div>
+        <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:1}}>{tile1Sub}</div>
       </div>
       <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile2Label}</div>
+        <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>{tile2Label}</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{tile2Value}</div>
-        <div style={{fontSize:10,color:"rgba(255,251,248,0.58)",fontFamily:fm,marginTop:1}}>{tile2Sub}</div>
+        <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:1}}>{tile2Sub}</div>
       </div>
     </div>
     {rankItems.length>0&&<div style={{marginBottom:14}}>
-      <div style={{fontSize:8,color:"rgba(255,251,248,0.7)",fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>{rankLabel}</div>
+      <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:8,fontWeight:700}}>{rankLabel}</div>
       {rankItems.map(function(r,i){return <div key={i+"-"+r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<rankItems.length-1?"1px dashed "+P.rule:"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{width:18,height:18,borderRadius:"50%",background:i===0?c:c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:i===0?"#0a0618":"#fff",fontFamily:fm}}>{i+1}</span>
