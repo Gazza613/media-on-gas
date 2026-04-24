@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v10-sot-aligned-spend";
+var CAMPAIGNS_CACHE_VERSION = "v11-configured-placements";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -139,6 +139,51 @@ export default async function handler(req, res) {
       }
     } catch (err) { console.error("Meta campaign list error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "campaign-list", message: String(err && err.message || err) }); }
 
+    // Fetch adset-level placement CONFIGURATION, separate from the insights
+    // delivery fetch below. Insights only surface placements that actually
+    // received spend, so a brand-new Meta campaign where the algorithm has
+    // front-loaded Facebook delivery shows up as "Facebook only" even when
+    // Instagram is configured on every adset. The Willowbrook report made
+    // this visible: the client knew IG was configured, but the report hid it
+    // entirely. This block collects targeting.publisher_platforms per
+    // campaign, later in the merge step we synthesise zero-delivery rows
+    // for any configured placement that didn't get an insights row.
+    var configuredPlacements = {};
+    try {
+      var adsetsCfgUrl = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,effective_status,targeting{publisher_platforms}&limit=500&access_token=" + metaToken;
+      var adsetsCfgNext = adsetsCfgUrl;
+      var adsetsCfgGuard = 0;
+      while (adsetsCfgNext && adsetsCfgGuard < 10) {
+        adsetsCfgGuard++;
+        var adsetsCfgRes = await fetch(adsetsCfgNext);
+        if (!adsetsCfgRes.ok) break;
+        var adsetsCfgJson = await adsetsCfgRes.json();
+        (adsetsCfgJson.data || []).forEach(function(a) {
+          var cid = String(a.campaign_id || "");
+          if (!cid) return;
+          var status = String(a.effective_status || "").toUpperCase();
+          // Ignore deleted / archived adsets, they do not represent the
+          // current configuration clients are paying against.
+          if (status === "DELETED" || status === "ARCHIVED") return;
+          var pubs = a.targeting && a.targeting.publisher_platforms;
+          // A null publisher_platforms means Meta chooses automatically
+          // across every available placement, which includes both FB and
+          // IG on Advantage+ campaigns. Treat it as both-configured so we
+          // do not undercount IG on algorithm-managed campaigns.
+          if (!pubs || pubs.length === 0) pubs = ["facebook", "instagram"];
+          if (!configuredPlacements[cid]) configuredPlacements[cid] = {};
+          pubs.forEach(function(p) {
+            var norm = String(p).toLowerCase();
+            if (norm === "facebook" || norm === "audience_network" || norm === "messenger" || norm === "oculus") configuredPlacements[cid]["Facebook"] = true;
+            if (norm === "instagram" || norm === "threads") configuredPlacements[cid]["Instagram"] = true;
+          });
+        });
+        adsetsCfgNext = adsetsCfgJson.paging && adsetsCfgJson.paging.next ? adsetsCfgJson.paging.next : null;
+      }
+    } catch (cfgErr) {
+      console.warn("[campaigns] adset placement fetch failed", account.name, cfgErr && cfgErr.message);
+    }
+
     try {
       var timeRange = JSON.stringify({since: from, until: to});
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
@@ -204,12 +249,35 @@ export default async function handler(req, res) {
       };
       var rowMap = {};
 
+      // Diagnostic, every publisher_platform value Meta returned for this
+      // account, with impression / spend totals. Lets us verify that IG
+      // delivery is actually absent (algorithm not yet allocating) vs being
+      // silently dropped because Meta returned a string our mapPubToPlat
+      // does not recognise (e.g. a new placement key like "instagram_reels").
+      var pubDiag = {};
+      var unknownPubs = {};
+
       if (allMetaRows.length > 0) {
         for (var j = 0; j < allMetaRows.length; j++) {
           var c = allMetaRows[j];
+          var rawPub = String(c.publisher_platform || "facebook").toLowerCase();
+          var cidForDiag = String(c.campaign_id || "");
+          if (!pubDiag[cidForDiag]) pubDiag[cidForDiag] = {};
+          if (!pubDiag[cidForDiag][rawPub]) pubDiag[cidForDiag][rawPub] = { imps: 0, spend: 0 };
+          pubDiag[cidForDiag][rawPub].imps += parseFloat(c.impressions || 0);
+          pubDiag[cidForDiag][rawPub].spend += parseFloat(c.spend || 0);
           if (!(parseFloat(c.impressions) > 0 || parseFloat(c.spend) > 0)) continue;
           var platName = mapPubToPlat(c.publisher_platform || "facebook");
-          if (!platName) continue;
+          if (!platName) {
+            // Track unknown placement strings so we notice if Meta introduces
+            // a new one. Last-observed-wins on the value pointer so we still
+            // log the imp/spend magnitude getting dropped.
+            if (!unknownPubs[rawPub]) unknownPubs[rawPub] = { imps: 0, spend: 0, campaigns: {} };
+            unknownPubs[rawPub].imps += parseFloat(c.impressions || 0);
+            unknownPubs[rawPub].spend += parseFloat(c.spend || 0);
+            unknownPubs[rawPub].campaigns[cidForDiag] = (c.campaign_name || "").slice(0, 60);
+            continue;
+          }
           var uniqueId = c.campaign_id + "_" + platName.toLowerCase();
           seenIds[c.campaign_id] = true;
 
@@ -340,6 +408,61 @@ export default async function handler(req, res) {
         });
       } catch (rxnErr) { console.error("Meta action_reactions breakdown error", account.name, rxnErr); }
 
+      // Synthesise zero-delivery rows for configured-but-undelivered
+      // placements. Every configured Facebook / Instagram placement gets a
+      // row even when Meta's delivery algorithm has not allocated any spend
+      // to it in the requested window. Without this, a Willowbrook-style
+      // campaign that runs on both FB and IG but has only delivered to FB
+      // so far shows up in the report as "Facebook only", which looked like
+      // we were hiding data. The awaitingDelivery flag lets the dashboard
+      // surface "IG is configured, 0 delivery in this period" honestly.
+      Object.keys(configuredPlacements).forEach(function(cid) {
+        var info = campaignInfo[cid];
+        if (!info) return; // only synthesise for campaigns in this account's active list
+        var configured = configuredPlacements[cid];
+        ["Facebook", "Instagram"].forEach(function(platName) {
+          if (!configured[platName]) return;
+          var uniqueId = cid + "_" + platName.toLowerCase();
+          if (rowMap[uniqueId]) return; // already have real delivery data
+          seenIds[cid] = true;
+          rowMap[uniqueId] = {
+            platform: platName,
+            metaPlatform: platName.toLowerCase(),
+            accountName: account.name + (account.name.indexOf("Meta")<0 && account.name.indexOf("meta")<0 ? " Meta" : ""),
+            accountId: account.id,
+            campaignId: uniqueId,
+            rawCampaignId: cid,
+            campaignName: info.name || ("Campaign " + cid),
+            objective: objectiveFromName(info.name || ""),
+            _sumImpressions: 0, _sumSpend: 0, _sumClicks: 0, _sumReachPublisher: 0,
+            leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, pageFollows: 0,
+            actions: [],
+            reactionsByType: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+            reactionsTotal: 0,
+            awaitingDelivery: true
+          };
+        });
+      });
+
+      // Diagnostic log, so we can verify in Vercel logs what Meta returned
+      // for each campaign's publisher_platform breakdown vs what adsets
+      // actually have configured. Fires once per account so log volume stays
+      // manageable.
+      try {
+        console.log("[campaigns] " + account.name + " publisher_platform diagnostics", {
+          campaigns: Object.keys(pubDiag).map(function(cid) {
+            var info = campaignInfo[cid] || {};
+            var pubs = pubDiag[cid];
+            var pubSummary = Object.keys(pubs).map(function(p) {
+              return p + " imps=" + Math.round(pubs[p].imps) + " spend=" + pubs[p].spend.toFixed(2);
+            }).join(" | ");
+            var configured = configuredPlacements[cid] ? Object.keys(configuredPlacements[cid]).join("+") : "(unknown)";
+            return (info.name || cid) + " [configured=" + configured + "] " + pubSummary;
+          }),
+          unknownPlacements: Object.keys(unknownPubs).length > 0 ? unknownPubs : "(none)"
+        });
+      } catch (diagErr) { /* non-fatal */ }
+
       // Apportion authoritative campaign-level totals (reach, spend,
       // impressions, clicks) across merged FB / IG rows by that row's
       // publisher-split share so the dashboard totals match what Meta
@@ -425,7 +548,11 @@ export default async function handler(req, res) {
           budgetAmount: _info.budgetAmount || null,
           budgetDaily: _info.budgetDaily || null,
           budgetMode: _info.budgetMode || "unset",
-          budgetFlightDays: _info.budgetFlightDays || null
+          budgetFlightDays: _info.budgetFlightDays || null,
+          // Flag zero-delivery rows synthesised from adset placement config
+          // so the dashboard can label them "awaiting delivery" instead of
+          // presenting them as active placements.
+          awaitingDelivery: r.awaitingDelivery === true
         });
       });
     } catch (err) { console.error("Meta insights error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "insights", message: String(err && err.message || err) }); }

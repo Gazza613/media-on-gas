@@ -3785,9 +3785,27 @@ export default function MediaOnGas(){
               objectives4[obj].results+=result;
             });
 
-            var platBreak={};sel.forEach(function(camp){
+            var platBreak={};
+            // Track which platforms have configured-but-awaiting-delivery
+            // rows so the "Spend by Platform" / "Ads Served by Platform"
+            // charts can honestly label them. Without this, a Meta campaign
+            // configured for FB + IG but currently only delivering to FB
+            // shows up as "Facebook only", which made Willowbrook reports
+            // look like Instagram was missing from the media plan.
+            var awaitingByPlatform={};
+            sel.forEach(function(camp){
               var pl=camp.platform;if(!platBreak[pl])platBreak[pl]={spend:0,clicks:0,imps:0,reach:0};
               platBreak[pl].spend+=parseFloat(camp.spend||0);platBreak[pl].clicks+=parseFloat(camp.clicks||0);platBreak[pl].imps+=parseFloat(camp.impressions||0);platBreak[pl].reach+=parseFloat(camp.reach||0);
+              if(camp.awaitingDelivery){if(!awaitingByPlatform[pl])awaitingByPlatform[pl]=[];if(awaitingByPlatform[pl].indexOf(camp.campaignName)<0)awaitingByPlatform[pl].push(camp.campaignName);}
+            });
+            // A campaign is truly "awaiting delivery" only if EVERY selected
+            // row for that platform is flagged awaitingDelivery. Once any
+            // real delivery row arrives for the same platform (even from a
+            // different campaign in the selection), stop labelling.
+            Object.keys(awaitingByPlatform).forEach(function(pl){
+              if((platBreak[pl]||{spend:0,imps:0}).spend>0||(platBreak[pl]||{imps:0}).imps>0){
+                delete awaitingByPlatform[pl];
+              }
             });
 
             var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
@@ -3876,7 +3894,7 @@ export default function MediaOnGas(){
                     <div style={{height:300}}>
                       <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:8,textAlign:"center"}}>SPEND BY PLATFORM</div>
                       <ResponsiveContainer width="100%" height="92%">
-                        {(function(){var sortedSpend=spendData.slice().sort(function(a,b){return b.value-a.value;});return (
+                        {(function(){var sortedSpend=spendData.filter(function(x){return x.value>0;}).sort(function(a,b){return b.value-a.value;});return (
                         <PieChart><Pie data={sortedSpend} dataKey="value" cx="50%" cy="45%" innerRadius={45} outerRadius={75} paddingAngle={3} stroke="none" startAngle={90} endAngle={-270} label={function(e){var radius=75+22;var rad=Math.PI/180;var x2=e.cx+radius*Math.cos(-e.midAngle*rad);var y2=e.cy+radius*Math.sin(-e.midAngle*rad);return<text x={x2} y={y2} textAnchor={x2>e.cx?"start":"end"} dominantBaseline="central" style={{fontSize:11,fontFamily:fm,fontWeight:700,fill:e.payload.color||P.txt}}>{e.name+" "+(e.value/computed.totalSpend*100).toFixed(2)+"%"}</text>;}} labelLine={{stroke:P.label,strokeWidth:1}}>{sortedSpend.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}</Pie><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle} payload={sortedSpend.map(function(d){return{value:d.name,type:"circle",color:d.color,payload:d};})} formatter={function(v,e){return<span style={{color:P.txt,fontFamily:fm,fontSize:10}}>{v+" ("+fR(e.payload.value)+")"}</span>;}}/></PieChart>);})()}
                       </ResponsiveContainer>
                     </div>
@@ -3887,6 +3905,7 @@ export default function MediaOnGas(){
                       </ResponsiveContainer>
                     </div>
                   </div>
+                  {(function(){var awaitingKeys=Object.keys(awaitingByPlatform);if(awaitingKeys.length===0)return null;var phrase=awaitingKeys.map(function(pl){var names=awaitingByPlatform[pl];return pl+" (configured on "+names.join(", ")+")";}).join(" and ");return <div style={{marginTop:10,padding:"10px 14px",background:"rgba(249,98,3,0.06)",border:"1px solid rgba(249,98,3,0.2)",borderRadius:10,fontSize:11,fontFamily:fm,color:P.label,lineHeight:1.55,textAlign:"center"}}><span style={{fontWeight:800,color:P.solar,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginRight:8}}>Awaiting delivery</span>{phrase} has not yet received impressions in this period. Meta's delivery algorithm typically front-loads the strongest performing placement before broadening, the split will rebalance as the campaign matures.</div>;})()}
                   {(function(){var topPlatBySpend=sortedPlats.slice().sort(function(a,b){return platBreak[b].spend-platBreak[a].spend;})[0];var topPlatByImps=sortedPlats.slice().sort(function(a,b){return platBreak[b].imps-platBreak[a].imps;})[0];return standRow([stand("SPEND TO DATE",fR(computed.totalSpend),P.ember),stand("DAILY RUN RATE",fR(dailySpend)+"/day",P.solar),stand("PROJECTED TOTAL",fR(projSpend),P.cyan),topPlatBySpend?stand("BIGGEST SPEND",topPlatBySpend+" ("+fR(platBreak[topPlatBySpend].spend)+")",platCol4[topPlatBySpend]||P.orchid):null,topPlatByImps?stand("MOST IMPRESSIONS",topPlatByImps+" ("+fmt(platBreak[topPlatByImps].imps)+")",platCol4[topPlatByImps]||P.mint):null]);})()}
                 </div>
               </div>
