@@ -3046,6 +3046,23 @@ export default function MediaOnGas(){
                 hundredths.forEach(function(t,i){if(t>hundredths[maxIdx])maxIdx=i;});
                 hundredths[maxIdx]+=diff;
               }
+              // Top device-brand row, slots into the empty space below the
+              // three Mobile/Desktop/Tablet bars without inflating the panel
+              // height (the age-bar panel beside it has 6 rows, this panel
+              // currently has 3 plus whitespace). Computed from the raw
+              // r.device strings, normalised into common phone / tablet
+              // brand buckets, denominator is brand-tagged rows only so
+              // it's intentionally NOT part of the 100% Mobile/Desktop/
+              // Tablet tally above. Visual style mirrors the standard bars
+              // but uses a distinct rose accent so the eye reads it as a
+              // separate signal, not a fourth device category.
+              var brandOf=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("iphone")>=0)return "iPhone";if(s.indexOf("ipad")>=0)return "iPad";if(s.indexOf("android")>=0&&s.indexOf("tab")>=0)return "Android Tablet";if(s.indexOf("android")>=0)return "Android Phone";if(s.indexOf("windows")>=0)return "Windows PC";if(s.indexOf("mac")>=0||s.indexOf("macintosh")>=0)return "Mac";return null;};
+              var brandSums={};
+              devData.forEach(function(r){var b=brandOf(r.device);if(!b)return;brandSums[b]=(brandSums[b]||0)+stage.field(r);});
+              var brandTotal=0;Object.keys(brandSums).forEach(function(k){brandTotal+=brandSums[k];});
+              var topBrand=null;Object.keys(brandSums).forEach(function(k){if(!topBrand||brandSums[k]>brandSums[topBrand])topBrand=k;});
+              var brandShare=topBrand&&brandTotal>0?(brandSums[topBrand]/brandTotal*100):0;
+              var brandColor=P.rose;
               return <div>
                 {data.map(function(d,di){var pct=max>0?(d.value/max)*100:0;var share=hundredths[di]/100;var tip=d.name+", "+share.toFixed(2)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
@@ -3059,6 +3076,19 @@ export default function MediaOnGas(){
                     <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
+                {topBrand&&<div title={"Top brand among device-tagged "+stage.label.toLowerCase()+", "+brandShare.toFixed(2)+"% of brand-tagged rows. Separate read from the Mobile / Desktop / Tablet split above, not part of the 100%."} style={{marginTop:6,paddingTop:12,borderTop:"1px dashed "+P.rule,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{width:10,height:10,borderRadius:"50%",background:brandColor,boxShadow:"0 0 10px "+brandColor+"88"}}></span>
+                      <span style={{color:"#fff",fontWeight:700}}>Top Device</span>
+                      <span style={{color:P.label,fontWeight:600,fontSize:11}}>· {topBrand}</span>
+                    </div>
+                    <div style={{color:brandColor,fontWeight:900,fontSize:16,fontVariantNumeric:"tabular-nums"}}>{brandShare.toFixed(2)+"%"}</div>
+                  </div>
+                  <div style={{height:12,background:"rgba(255,255,255,0.05)",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{width:brandShare+"%",height:"100%",background:"linear-gradient(90deg,"+brandColor+"88,"+brandColor+")",borderRadius:6,boxShadow:"0 0 10px "+brandColor+"55",transition:"width 0.6s ease"}}></div>
+                  </div>
+                </div>}
               </div>;
             };
 
