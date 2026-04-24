@@ -3080,7 +3080,7 @@ export default function MediaOnGas(){
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{width:10,height:10,borderRadius:"50%",background:brandColor,boxShadow:"0 0 10px "+brandColor+"88"}}></span>
-                      <span style={{color:"#fff",fontWeight:700}}>Top Device</span>
+                      <span style={{color:"#fff",fontWeight:700}}>Top Brand</span>
                       <span style={{color:P.label,fontWeight:600,fontSize:11}}>· {topBrand}</span>
                     </div>
                     <div style={{color:brandColor,fontWeight:900,fontSize:16,fontVariantNumeric:"tabular-nums"}}>{brandShare.toFixed(2)+"%"}</div>
