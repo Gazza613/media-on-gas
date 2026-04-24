@@ -3073,29 +3073,40 @@ export default function MediaOnGas(){
               // shows the authoritative total, so the read sits on top of
               // that with audience mix commentary only.
               var lines=[];
+              // Tagged-only subtotals for THIS stage. Used as the denominator
+              // on every demographic share line so narrative percentages match
+              // the demographic block charts and persona cards exactly.
+              // Dividing by the authoritative stage total (which includes
+              // untagged rows) systematically under-stated the share and made
+              // narrative numbers drift from the chart numbers, e.g. chart
+              // showed 25-34 at 36.06% while narrative said 33.46%, same
+              // numerator but different denominators. taggedAgeOnly excludes
+              // gender-filter for awareness/engagement age lines (gender is
+              // not part of those numerators); taggedAgeAndGender is used
+              // for the objective top-cell line where both axes matter.
+              var taggedAgeOnly=0;
+              var taggedAgeAndGender=0;
+              agRows.forEach(function(r){
+                var ax=String(r.age||""),gx=String(r.gender||"").toLowerCase();
+                if(ageOrder.indexOf(ax)>=0)taggedAgeOnly+=stage.field(r);
+                if(ageOrder.indexOf(ax)>=0&&genderOrder.indexOf(gx)>=0)taggedAgeAndGender+=stage.field(r);
+              });
               if(stage.key==="impressions"){
                 if(total>0)lines.push("Ads were delivered across the selected campaigns, establishing the reach baseline for everything that follows.");
-                if(ta.age&&ta.val>0){var ageShareRaw=total>0?(ta.val/total*100):0;lines.push("The "+ta.age+" age group absorbed "+pctLabel(ageShareRaw)+" of those impressions, the single largest audience slice exposed this period.");}
+                if(ta.age&&ta.val>0){var ageShareRaw=taggedAgeOnly>0?(ta.val/taggedAgeOnly*100):0;lines.push("The "+ta.age+" age group absorbed "+pctLabel(ageShareRaw)+" of tagged impressions, the largest age slice exposed this period.");}
                 if(genTotal>0)lines.push("Gender split is "+pctLabel(femaleShare)+" female, "+pctLabel(100-femaleShare)+" male"+(Math.abs(femaleShare-50)<8?", a balanced mix indicating broad targeting":femaleShare>55?", skewing female":femaleShare<45?", skewing male":"")+".");
                 if(tp)lines.push(tp+" leads geographic reach, consistent with metro-corridor weighting.");
                 if(mobileShare>0)lines.push("Mobile accounts for "+pctLabel(mobileShare)+" of ads served"+(mobileShare>70?", a near-monopoly, creative must be mobile-first":mobileShare>50?", meeting the audience where they are":", leaving room to push further into mobile")+".");
               }else if(stage.key==="clicks"){
                 if(total>0){var ctrBlended=totImps>0?(total/totImps*100).toFixed(2):"0";lines.push("Clicks were recorded at a blended "+ctrBlended+"% CTR, the engagement signal the creative is earning.");}
-                if(ta.age&&ta.val>0){var ageClickShare=total>0?(ta.val/total*100):0;lines.push("The "+ta.age+" bracket generated "+pctLabel(ageClickShare)+" of clicks, the largest single age slice this period.");}
+                if(ta.age&&ta.val>0){var ageClickShare=taggedAgeOnly>0?(ta.val/taggedAgeOnly*100):0;lines.push("The "+ta.age+" bracket generated "+pctLabel(ageClickShare)+" of tagged clicks, the largest single age slice this period.");}
                 if(genTotal>0)lines.push("On engagement, "+(femaleShare>55?"female":femaleShare<45?"male":"both genders")+" "+(Math.abs(femaleShare-50)<8?"are clicking at comparable rates":"hold the larger share")+".");
                 if(tp)lines.push(tp+" also leads click engagement, a healthy see-then-respond pattern.");
                 if(mobileShare>0)lines.push("Mobile carries "+pctLabel(mobileShare)+" of click volume.");
               }else{
                 if(total>0){var cpa=total>0?totSpend/total:0;lines.push("Conversions delivered at "+fR(cpa)+" blended cost per conversion, the bottom-of-funnel outcome that defines return.");}
                 if(champ.val>0&&champ.age){
-                  // Use the tagged-only sum as denominator so the % matches
-                  // what the demographic block charts and persona cards
-                  // show for the same stage. Dividing by stageTotal (which
-                  // includes untagged conversions) under-states the cell
-                  // share and confused clients into thinking the segment
-                  // was smaller than it actually is.
-                  var taggedConv=0;agRows.forEach(function(r){var ax=String(r.age||"");var gx=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(ax)<0||genderOrder.indexOf(gx)<0)return;taggedConv+=stage.field(r);});
-                  var champShare=taggedConv>0?(champ.val/taggedConv*100):0;
+                  var champShare=taggedAgeAndGender>0?(champ.val/taggedAgeAndGender*100):0;
                   lines.push("Largest single converting cell is "+champ.age+" "+genderLabel[champ.gen].toLowerCase()+", capturing "+pctLabel(champShare)+" of tagged conversions this period.");
                 }
                 if(tp)lines.push(tp+" produced the most conversions this period.");
