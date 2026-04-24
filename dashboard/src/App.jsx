@@ -343,7 +343,7 @@ function TargetingPersonaCard(props){
   // four-card row), if absent we fall back to no delay.
   var delay=typeof props.delay==="number"?props.delay:0;
   return <div onMouseEnter={function(){hov[1](true);}} onMouseLeave={function(){hov[1](false);}} style={{position:"relative",background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+(hov[0]?c+"80":c+"40"),padding:"22px 22px 18px",boxShadow:hov[0]?("0 14px 44px rgba(0,0,0,0.45),0 0 80px "+c+"35,0 0 120px "+c+"22 inset"):("0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset"),display:"flex",flexDirection:"column",transition:"box-shadow 0.4s ease, border-color 0.4s ease, transform 0.4s ease",transform:hov[0]?"translateY(-3px)":"translateY(0)"}}>
-    <div aria-hidden style={{position:"absolute",inset:-1,borderRadius:19,boxShadow:"0 0 28px "+c+"55,0 0 64px "+c+"30",pointerEvents:"none",animation:"personaGlowPulse 4.5s ease-in-out infinite",animationDelay:delay+"s",zIndex:0}}/>
+    <div aria-hidden style={{position:"absolute",inset:-1,borderRadius:19,boxShadow:"0 0 28px "+c+"55,0 0 64px "+c+"30",pointerEvents:"none",animation:"personaGlowPulse 4.5s ease-in-out infinite",animationDelay:delay+"s",zIndex:0,willChange:"opacity",transform:"translateZ(0)"}}/>
     <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
@@ -451,7 +451,7 @@ function GoogleIntentCard(props){
   var hov=useState(false);
   var delay=typeof props.delay==="number"?props.delay:0;
   return <div onMouseEnter={function(){hov[1](true);}} onMouseLeave={function(){hov[1](false);}} style={{position:"relative",background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d1a12",borderRadius:18,border:"1px solid "+(hov[0]?c+"80":c+"40"),padding:"22px 22px 18px",boxShadow:hov[0]?("0 14px 44px rgba(0,0,0,0.45),0 0 80px "+c+"35,0 0 120px "+c+"22 inset"):("0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset"),display:"flex",flexDirection:"column",transition:"box-shadow 0.4s ease, border-color 0.4s ease, transform 0.4s ease",transform:hov[0]?"translateY(-3px)":"translateY(0)"}}>
-    <div aria-hidden style={{position:"absolute",inset:-1,borderRadius:19,boxShadow:"0 0 28px "+c+"55,0 0 64px "+c+"30",pointerEvents:"none",animation:"personaGlowPulse 4.5s ease-in-out infinite",animationDelay:delay+"s",zIndex:0}}/>
+    <div aria-hidden style={{position:"absolute",inset:-1,borderRadius:19,boxShadow:"0 0 28px "+c+"55,0 0 64px "+c+"30",pointerEvents:"none",animation:"personaGlowPulse 4.5s ease-in-out infinite",animationDelay:delay+"s",zIndex:0,willChange:"opacity",transform:"translateZ(0)"}}/>
     <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{Ic.globe("#fff",20)}</div>
@@ -3486,7 +3486,7 @@ export default function MediaOnGas(){
     `}</style>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
 
-    <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(6,2,14,0.92)",backdropFilter:"blur(24px)",borderBottom:"1px solid "+P.rule}}>
+    <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(6,2,14,0.97)",borderBottom:"1px solid "+P.rule}}>
       <div style={{maxWidth:1400,margin:"0 auto",padding:"10px 28px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
