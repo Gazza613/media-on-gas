@@ -356,12 +356,12 @@ function TargetingPersonaCard(props){
       <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+      <div title="Overall click share by gender, summed across all age brackets. Can differ from the top Best Personas entry below if one gender is concentrated in a single age bracket while the other is spread across many." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
         <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{genderLead||"—"}</div>
         <div style={{fontSize:10,color:c,fontFamily:fm,fontWeight:700,marginTop:1}}>{genderLead?genderShare.toFixed(2)+"%":""}</div>
       </div>
-      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+      <div title="Share of device-tagged clicks that came from a mobile device, with desktop and tablet making up the rest." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
         <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{p.mobileShare>0?p.mobileShare.toFixed(2)+"%":"—"}</div>
         <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
@@ -377,7 +377,7 @@ function TargetingPersonaCard(props){
         <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{pr.share.toFixed(2)+"%"}</span>
       </div>;})}
     </div>}
-    {topSegments.length>0&&<div style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
+    {topSegments.length>0&&<div title="Top three age + gender segments by click share. Each row is a single age × gender cell, ranked. The cells can rank differently from the overall Gender Lead above because the Lead sums across all ages while these are individual cells, the largest single cell is sometimes a male age band even when females are more numerous in total." style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
       <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:800}}>Best Personas</div>
       {topSegments.map(function(s,i){return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<topSegments.length-1?"1px dashed "+c+"20":"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -3154,7 +3154,7 @@ export default function MediaOnGas(){
                 </div>
 
                 {/* Who + How — age + gender + device, Google-filtered rows */}
-                <div style={{fontSize:15,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Who & How (Google)</div>
+                <div style={{fontSize:15,color:P.gd,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginTop:18,marginBottom:12}}>· Who & How (Google)</div>
                 <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:12,marginBottom:4}}>
                   <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -3246,7 +3246,7 @@ export default function MediaOnGas(){
                 </div>
 
                 {/* Who + How — age + gender + device */}
-                <div style={{fontSize:15,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Who & How</div>
+                <div style={{fontSize:15,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginTop:18,marginBottom:12}}>· Who & How</div>
                 <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:12,marginBottom:12}}>
                   <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
