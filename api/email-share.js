@@ -494,7 +494,10 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:20px 40px 0;">
         <div style="font-size:11px;color:rgba(255,251,248,0.55);line-height:1.6;text-align:center;">
-          Your dashboard unlocks creative top performers, audience insights, and objective-level deep dives. Link stays active until <strong style="color:#F96203;">${expiresDisplay}</strong>.
+          Your dashboard unlocks creative top performers, audience insights, and objective-level deep dives.
+        </div>
+        <div style="font-size:11px;color:rgba(255,251,248,0.55);line-height:1.6;text-align:center;margin-top:6px;">
+          Link stays active until <strong style="color:#F96203;">${expiresDisplay}</strong>.
         </div>
       </td></tr>
 
