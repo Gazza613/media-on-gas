@@ -3776,13 +3776,23 @@ export default function MediaOnGas(){
                 else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
                 else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
               }
-              if(!objectives4[obj])objectives4[obj]={spend:0,clicks:0,imps:0,results:0};
+              if(!objectives4[obj])objectives4[obj]={spend:0,clicks:0,imps:0,results:0,byPlatform:{}};
               objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);
               var result;
               if(obj==="Leads"){result=parseFloat(camp.leads||0);}
               else if(obj==="Followers & Likes"){result=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);if(result===0&&camp.platform==="Instagram"){var igFL1=findIgGrowth(camp.campaignName,pages);if(igFL1>0)result=igFL1;}}
               else{result=parseFloat(camp.clicks||0);}
               objectives4[obj].results+=result;
+              // Per-platform split so the Objective Insights narrative can
+              // break down Cost Per Lead (and Cost Per Result generally) by
+              // platform when a single objective delivered across multiple
+              // placements. Without this, a Willowbrook-style Leads campaign
+              // showed a blended CPL only, clients asked to see the FB vs
+              // IG split that feeds the blended number.
+              var pl=camp.platform||"Other";
+              if(!objectives4[obj].byPlatform[pl])objectives4[obj].byPlatform[pl]={spend:0,results:0};
+              objectives4[obj].byPlatform[pl].spend+=parseFloat(camp.spend||0);
+              objectives4[obj].byPlatform[pl].results+=result;
             });
 
             var platBreak={};
@@ -4053,6 +4063,24 @@ export default function MediaOnGas(){
                   if(topVol)lines.push(topVol+" led volume with "+fmt(objectives4[topVol].results)+" results.");
                   if(bestEff&&bestEffCost>0)lines.push(bestEff+" achieved the strongest efficiency at "+fR(bestEffCost)+" per result.");
                   if(active.length>1&&topVol!==bestEff)lines.push("Volume and efficiency leaders differ, a signal to weigh budget shift toward "+bestEff+" if efficiency is the priority, or hold "+topVol+" to protect scale.");
+                  // Per-platform cost split for each active objective. Only
+                  // emit when the objective actually ran across 2+ platforms,
+                  // otherwise the blended number already tells the full
+                  // story. Costs labelled using the objective's own cost
+                  // label (Cost Per Lead, Cost Per Click etc).
+                  active.forEach(function(objName){
+                    var od=objectives4[objName];
+                    var costLabel=(objCL4[objName]||"COST PER RESULT").toLowerCase();
+                    var platsWithResults=Object.keys(od.byPlatform||{}).filter(function(pl){return od.byPlatform[pl].results>0;});
+                    if(platsWithResults.length<2)return;
+                    var parts=platsWithResults.sort(function(a,b){return od.byPlatform[b].results-od.byPlatform[a].results;}).map(function(pl){
+                      var pb=od.byPlatform[pl];
+                      var cp=pb.results>0?pb.spend/pb.results:0;
+                      var shareR=od.results>0?(pb.results/od.results*100).toFixed(2):"0.00";
+                      return pl+" contributed "+fmt(pb.results)+" "+(pb.results===1?"result":"results")+" ("+shareR+"% of "+objName+") at "+fR(cp)+" "+costLabel;
+                    });
+                    lines.push(objName+" split by platform, "+parts.join(", ")+".");
+                  });
                   return <Insight title="Objective Insights" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
                 })()}
                 {demoBlocks&&demoBlocks.objectiveBlock&&<div style={{marginTop:22,marginBottom:-8,paddingTop:18,borderTop:"1px dashed "+P.rule}}>{demoBlocks.objectiveBlock}</div>}
