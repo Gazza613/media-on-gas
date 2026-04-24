@@ -856,7 +856,7 @@ function AdPreviewModal(props){
     <div onClick={function(e){e.stopPropagation();}} style={{width:760,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",overflowY:"auto",background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 24px",boxShadow:"0 30px 80px rgba(0,0,0,0.65)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <span style={{background:accent,color:"#fff",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{ad.platform}</span>
+          <span style={{background:accent,color:textOnAccent(accent),fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{ad.platform}</span>
           <span style={{background:P.mint,color:"#062014",fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,letterSpacing:1.5,textTransform:"uppercase"}}>{format}</span>
         </div>
         <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:36,height:36,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -2061,7 +2061,7 @@ function ChatPanel(props){
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                      <span style={{background:accent,color:"#fff",fontSize:8,fontWeight:800,padding:"2px 7px",borderRadius:4,letterSpacing:1}}>{(ad.platform||"").toUpperCase()}</span>
+                      <span style={{background:accent,color:textOnAccent(accent),fontSize:8,fontWeight:800,padding:"2px 7px",borderRadius:4,letterSpacing:1}}>{(ad.platform||"").toUpperCase()}</span>
                       {ad.format&&<span style={{background:"rgba(255,255,255,0.08)",color:P.txt,fontSize:8,fontWeight:700,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>{ad.format}</span>}
                     </div>
                     <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,lineHeight:1.3,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ad.adName}</div>
@@ -4328,7 +4328,7 @@ export default function MediaOnGas(){
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>
                       </div>}
                       <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
-                      <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:"#fff",padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
+                      <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:textOnAccent(fm2.color),padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
                       {rank<=3&&ad.results>0&&<div style={{position:"absolute",bottom:8,right:8,background:P.mint,color:"#062014",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(52,211,153,0.45)",zIndex:3}}>{"\u25B2 SCALE"}</div>}
                       {rank>=4&&rank<=5&&ad.results>=0&&<div style={{position:"absolute",bottom:8,right:8,background:P.warning,color:"#2a1605",padding:"3px 8px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 8px rgba(251,191,36,0.4)",zIndex:3}}>{"\u2605 TOP"}</div>}
                     </div>
@@ -4803,7 +4803,7 @@ export default function MediaOnGas(){
                   <div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
                 </td>
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:textOnAccent(adPlatC),fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
-                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{(function(){var fm2=fmtMeta(ad.format);return <span style={{background:fm2.color,color:"#fff",fontSize:9,fontWeight:900,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{fm2.label}</span>;})()}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{(function(){var fm2=fmtMeta(ad.format);return <span style={{background:fm2.color,color:textOnAccent(fm2.color),fontSize:9,fontWeight:900,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{fm2.label}</span>;})()}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fmt(ad.results):"-"}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
@@ -5033,7 +5033,7 @@ export default function MediaOnGas(){
                   var fm2=fmtMeta(ad.format);
                   var thumbBlock=<div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
                     {ad.thumbnail?<img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
-                    <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:"#fff",fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
+                    <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:textOnAccent(fm2.color),fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
                   </div>;
                   return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
                     <div onClick={function(){setPreviewAd(ad);}} style={{display:"block",flexShrink:0,cursor:"pointer"}}>{thumbBlock}</div>
@@ -5710,7 +5710,7 @@ export default function MediaOnGas(){
                         }
                       }
                     return <tr key={ri} style={{background:ri%2===0?pc+"06":"transparent",borderTop:ri>0&&r.platform!==sorted6[ri-1].platform?"3px solid "+pc+"30":"none"}}>
-                      <td title={r.adsetName} style={{padding:"10px 12px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:300,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div>{isBest&&<span style={{background:P.mint,color:"#fff",fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:3,display:"inline-block"}}>BEST</span>}</td>
+                      <td title={r.adsetName} style={{padding:"10px 12px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:300,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div>{isBest&&<span style={{background:P.mint,color:textOnAccent(P.mint),fontSize:7,fontWeight:900,padding:"2px 6px",borderRadius:6,marginTop:3,display:"inline-block"}}>BEST</span>}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc,color:textOnAccent(pc),fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
                       <td style={{padding:"10px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(r.impressions)}</td>
@@ -5843,9 +5843,9 @@ export default function MediaOnGas(){
                       <tbody>{scored.map(function(s,si){
                         var r=s.row;var pc4=platCol3[r.platform]||P.ember;
                         return <tr key={si} style={{background:pc4+"08",borderTop:si>0&&scored[si-1].status!==s.status?"3px solid "+s.statusColor+"40":"none"}}>
-                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:s.statusColor,color:"#fff",fontSize:9,fontWeight:900,padding:"4px 10px",borderRadius:5,textTransform:"uppercase"}}>{s.statusLabel}</span></td>
+                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:s.statusColor,color:textOnAccent(s.statusColor),fontSize:9,fontWeight:900,padding:"4px 10px",borderRadius:5,textTransform:"uppercase"}}>{s.statusLabel}</span></td>
                           <td title={r.adsetName} style={{padding:"10px 12px",fontSize:11,fontWeight:600,color:P.txt,border:"1px solid "+P.rule,maxWidth:260,lineHeight:1.4}}><div style={{whiteSpace:"normal",wordBreak:"break-word"}}>{r.adsetName}</div></td>
-                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc4,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
+                          <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:pc4,color:textOnAccent(pc4),fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10}}>{platBdg3[r.platform]||"?"}</span></td>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontSize:10,color:P.label}}>{r.objective}</td>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(r.spend)}</td>
                           <td style={{padding:"10px 8px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:12,fontWeight:900,color:r.result>0?s.statusColor:P.caption}}>{fmt(r.result)}</td>
