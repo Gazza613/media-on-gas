@@ -2473,7 +2473,19 @@ export default function MediaOnGas(){
       .then(function(d){if(d.series){setTimeseries(d);}})
       .catch(function(){});
   },[df,dt,session,viewToken,tsGran,selected]);
-  var refreshData=function(){fetchData();};
+  // REFRESH button does a cache-busting hard reload, the _r=timestamp
+  // strips any prior _r and appends a fresh one so the browser refetches
+  // index.html and picks up the latest hashed JS bundle. This means any
+  // dashboard updates we have shipped since the user opened the tab come
+  // through immediately on a single click rather than requiring them to
+  // manually clear cache or close and reopen the tab. Fresh platform data
+  // follows automatically from the new page load. Preserves the JWT view
+  // token + any other existing query params (campaigns, from, to, etc).
+  var refreshData=function(){
+    var u=window.location.href.replace(/[?&]_r=\d+/g,"");
+    u+=(u.indexOf("?")>=0?"&":"?")+"_r="+Date.now();
+    window.location.replace(u);
+  };
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
   var clearAll=function(){setSelected([]);};
