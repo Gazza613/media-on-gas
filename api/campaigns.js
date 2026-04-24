@@ -38,7 +38,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v11-configured-placements";
+var CAMPAIGNS_CACHE_VERSION = "v12-adlevel-pub-supplement";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -407,6 +407,122 @@ export default async function handler(req, res) {
           });
         });
       } catch (rxnErr) { console.error("Meta action_reactions breakdown error", account.name, rxnErr); }
+
+      // Ad-level publisher_platform SUPPLEMENT. Meta's campaign-level
+      // publisher_platform breakdown sometimes silently drops a publisher
+      // row for certain objectives / attribution models (confirmed on
+      // Willowbrook, campaign-level returned Facebook only while ad-level
+      // clearly showed Instagram delivery with leads). The /api/ads
+      // endpoint already uses level=ad + publisher_platform and produces
+      // correct IG rows, the Creative tab's Best Performers proves this.
+      // We rerun the same breakdown here at ad level and, for any
+      // (campaign, publisher) combination missing from rowMap, synthesise
+      // the row from the aggregated ad data. Rows that ARE present at
+      // campaign level stay untouched so the authoritative-total
+      // reconciliation below keeps working.
+      try {
+        var adSuppUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,campaign_name,impressions,reach,spend,clicks,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+        var adSuppRows = [];
+        var adSuppNext = adSuppUrl;
+        var adSuppGuard = 0;
+        while (adSuppNext && adSuppGuard < 10) {
+          adSuppGuard++;
+          var adSuppRes = await fetch(adSuppNext);
+          if (!adSuppRes.ok) break;
+          var adSuppJson = await adSuppRes.json();
+          if (adSuppJson.data) adSuppRows = adSuppRows.concat(adSuppJson.data);
+          adSuppNext = adSuppJson.paging && adSuppJson.paging.next ? adSuppJson.paging.next : null;
+        }
+        // Aggregate ad rows to (campaign_id, publisher_family).
+        var adAgg = {};
+        adSuppRows.forEach(function(r) {
+          var rawPub = String(r.publisher_platform || "facebook").toLowerCase();
+          var platName = mapPubToPlat(r.publisher_platform || "facebook");
+          if (!platName) return;
+          if (!(parseFloat(r.impressions) > 0 || parseFloat(r.spend) > 0)) return;
+          var k = r.campaign_id + "_" + platName.toLowerCase();
+          if (!adAgg[k]) {
+            adAgg[k] = {
+              campaign_id: r.campaign_id,
+              campaign_name: r.campaign_name,
+              platform: platName,
+              impressions: 0, reach: 0, spend: 0, clicks: 0,
+              leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, reactionLikes: 0, pageFollows: 0, reactionsTotal: 0,
+              actions: []
+            };
+          }
+          var a = adAgg[k];
+          a.impressions += parseFloat(r.impressions || 0);
+          a.reach += parseFloat(r.reach || 0);
+          a.spend += parseFloat(r.spend || 0);
+          a.clicks += parseFloat(r.clicks || 0);
+          if (r.actions) {
+            r.actions.forEach(function(act) {
+              var v = parseInt(act.value || 0, 10);
+              if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") a.leads += v;
+              if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") a.appInstalls += v;
+              if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") a.landingPageViews += v;
+              if (act.action_type === "page_like") a.pageLikes += v;
+              if (act.action_type === "like") a.reactionLikes += v;
+              if (act.action_type === "page_engagement") a.pageFollows += v;
+              if (act.action_type === "post_reaction") a.reactionsTotal += v;
+              a.actions.push(act);
+            });
+          }
+        });
+        // For any (campaign, publisher) missing from rowMap but present in
+        // adAgg, create the rowMap entry from the aggregated ad data. These
+        // are real-delivery rows, so DO NOT set awaitingDelivery.
+        var supplementedKeys = [];
+        Object.keys(adAgg).forEach(function(k) {
+          if (rowMap[k]) return;
+          var a = adAgg[k];
+          var info = campaignInfo[a.campaign_id];
+          if (!info) return; // skip campaigns not in this account's active list
+          var rawMetaObj = String(info.objective || "").toUpperCase();
+          var isFbPlacement = a.platform === "Facebook";
+          var canonObj = (function() {
+            var o = rawMetaObj;
+            if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
+            if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
+            if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
+            if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
+            if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
+            return objectiveFromName(a.campaign_name || "");
+          })();
+          var pageLikes = a.pageLikes;
+          if (canonObj === "followers" && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
+          seenIds[a.campaign_id] = true;
+          rowMap[k] = {
+            platform: a.platform,
+            metaPlatform: a.platform.toLowerCase(),
+            accountName: account.name + (account.name.indexOf("Meta")<0 && account.name.indexOf("meta")<0 ? " Meta" : ""),
+            accountId: account.id,
+            campaignId: k,
+            rawCampaignId: a.campaign_id,
+            campaignName: a.campaign_name,
+            objective: canonObj,
+            _sumImpressions: a.impressions,
+            _sumSpend: a.spend,
+            _sumClicks: a.clicks,
+            _sumReachPublisher: a.reach,
+            leads: a.leads,
+            appInstalls: a.appInstalls,
+            landingPageViews: a.landingPageViews,
+            pageLikes: pageLikes,
+            pageFollows: a.pageFollows,
+            actions: a.actions,
+            reactionsByType: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+            reactionsTotal: a.reactionsTotal
+          };
+          supplementedKeys.push(k);
+        });
+        if (supplementedKeys.length > 0) {
+          console.log("[campaigns] " + account.name + " supplemented " + supplementedKeys.length + " publisher rows from ad-level breakdown", supplementedKeys);
+        }
+      } catch (adSuppErr) {
+        console.warn("[campaigns] ad-level publisher_platform supplement failed", account.name, adSuppErr && adSuppErr.message);
+      }
 
       // Synthesise zero-delivery rows for configured-but-undelivered
       // placements. Every configured Facebook / Instagram placement gets a
