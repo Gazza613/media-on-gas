@@ -339,7 +339,7 @@ function TargetingPersonaCard(props){
   var segLabel=function(s){return s&&s.age&&s.gen?(s.age+" "+(s.gen==="female"?"Female":"Male")):"";};
   var hov=useState(false);
   // Stagger the breathing glow per card so they don't pulse in unison.
-  // delay prop is set by the parent grid (0, 0.8, 1.6, 2.4 seconds for the
+  // delay prop is set by the parent grid (0, 0.9, 1.8, 2.7 seconds for the
   // four-card row), if absent we fall back to no delay.
   var delay=typeof props.delay==="number"?props.delay:0;
   return <div onMouseEnter={function(){hov[1](true);}} onMouseLeave={function(){hov[1](false);}} style={{position:"relative",background:"linear-gradient(165deg,"+c+"14 0%,"+c+"05 50%,transparent 100%),#0d0520",borderRadius:18,border:"1px solid "+(hov[0]?c+"80":c+"40"),padding:"22px 22px 18px",boxShadow:hov[0]?("0 14px 44px rgba(0,0,0,0.45),0 0 80px "+c+"35,0 0 120px "+c+"22 inset"):("0 10px 36px rgba(0,0,0,0.35),0 0 60px "+c+"10 inset"),display:"flex",flexDirection:"column",transition:"box-shadow 0.4s ease, border-color 0.4s ease, transform 0.4s ease",transform:hov[0]?"translateY(-3px)":"translateY(0)"}}>
@@ -2473,19 +2473,21 @@ export default function MediaOnGas(){
       .then(function(d){if(d.series){setTimeseries(d);}})
       .catch(function(){});
   },[df,dt,session,viewToken,tsGran,selected]);
-  // REFRESH button does a cache-busting hard reload, the _r=timestamp
-  // strips any prior _r and appends a fresh one so the browser refetches
-  // index.html and picks up the latest hashed JS bundle. This means any
-  // dashboard updates we have shipped since the user opened the tab come
-  // through immediately on a single click rather than requiring them to
-  // manually clear cache or close and reopen the tab. Fresh platform data
-  // follows automatically from the new page load. Preserves the JWT view
-  // token + any other existing query params (campaigns, from, to, etc).
-  var refreshData=function(){
+  // Cache-busting hard reload, used by the header REFRESH button and the
+  // idle-nudge "Refresh Now" button. Strips any prior _r=, then cleans up
+  // the dangling separators that strip can leave behind (?_r=X&token → ?
+  // &token, &_r=X&token → &&token), then appends a fresh _r=timestamp so
+  // the browser refetches index.html and picks up the latest hashed JS
+  // bundle. Fresh platform data follows automatically from the new page
+  // load. Preserves the JWT view token + any other existing query params
+  // (campaigns, from, to, etc) so client share links survive the refresh.
+  var hardRefresh=function(){
     var u=window.location.href.replace(/[?&]_r=\d+/g,"");
+    u=u.replace(/\?&/g,"?").replace(/&&+/g,"&").replace(/[?&]$/,"");
     u+=(u.indexOf("?")>=0?"&":"?")+"_r="+Date.now();
     window.location.replace(u);
   };
+  var refreshData=hardRefresh;
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
   var clearAll=function(){setSelected([]);};
@@ -3503,15 +3505,7 @@ export default function MediaOnGas(){
         <div style={{fontSize:15,color:P.txt,fontFamily:ff,lineHeight:1.6,fontWeight:700,marginBottom:8}}>Your dashboard just took a 10 minute coffee break.</div>
         <div style={{fontSize:12,color:"rgba(255,251,248,0.72)",fontFamily:fm,lineHeight:1.7,marginBottom:20}}>Tap refresh to pull the latest metrics and the newest dashboard features. Your ads have been busy, we promise.</div>
         <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-          <button onClick={function(){
-            // Cache-busting reload, the _r timestamp forces the browser to
-            // refetch index.html so any dashboard updates we have deployed
-            // since the tab was first loaded come through with the new hashed
-            // JS bundle. Preserves the view token + any other existing params.
-            var u=window.location.href.replace(/[?&]_r=\d+/g,"");
-            u+=(u.indexOf("?")>=0?"&":"?")+"_r="+Date.now();
-            window.location.replace(u);
-          }} style={{background:gEmber,border:"none",borderRadius:10,padding:"12px 24px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2,boxShadow:"0 6px 20px rgba(249,98,3,0.35)"}}>Refresh Now</button>
+          <button onClick={hardRefresh} style={{background:gEmber,border:"none",borderRadius:10,padding:"12px 24px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2,boxShadow:"0 6px 20px rgba(249,98,3,0.35)"}}>Refresh Now</button>
           <button onClick={function(){setShowIdleNudge(false);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>Not yet</button>
         </div>
         <div style={{marginTop:16,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
