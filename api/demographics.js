@@ -18,7 +18,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v7-ig-backfill-always";
+var DEMO_CACHE_VERSION = "v8-tt-age-normalised";
 
 function extractResults(actions) {
   var map = {};
@@ -100,6 +100,25 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
+    // Diagnostic: log row counts and publisher_platform distribution so we
+    // can see in Vercel logs exactly what Meta is returning for this account
+    // per breakdown. Helps distinguish "IG genuinely has no clicks in this
+    // period" from "Meta dropped IG from the 3-dim breakdown silently".
+    var summarisePlatforms = function(rows) {
+      if (!rows || !rows.length) return "empty";
+      var counts = {};
+      rows.forEach(function(r) {
+        var p = String(r.publisher_platform || "none").toLowerCase();
+        counts[p] = (counts[p] || 0) + 1;
+      });
+      return Object.keys(counts).map(function(k) { return k + ":" + counts[k]; }).join(", ");
+    };
+    console.log("[demo-meta] " + acc.name + " 3-dim counts", {
+      ag: summarisePlatforms(ag),
+      reg: summarisePlatforms(reg),
+      dev: summarisePlatforms(dev)
+    });
+
     // Meta's 3-dim breakdowns with publisher_platform sometimes return an
     // empty list, and more often return a subset (eg Facebook rows only
     // when IG has genuine click volume). For every breakdown we:
@@ -120,6 +139,10 @@ async function fetchMetaDemo(token, from, to) {
     if (!ag || ag.length === 0 || !hasInstagram(ag)) {
       var agByPlat = await fetchMetaBreakdown(acc, token, from, to, "age,publisher_platform");
       var genByPlat = await fetchMetaBreakdown(acc, token, from, to, "gender,publisher_platform");
+      console.log("[demo-meta] " + acc.name + " 2-dim backfill counts", {
+        "age,publisher_platform": summarisePlatforms(agByPlat),
+        "gender,publisher_platform": summarisePlatforms(genByPlat)
+      });
       // Append IG rows only, so FB data in the 3-dim result is preserved.
       (agByPlat || []).forEach(function(row) {
         var pp = String(row.publisher_platform || "").toLowerCase();
@@ -277,6 +300,38 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
   }
 }
 
+// TikTok returns age enums like AGE_25_34 and gender enums like GENDER_FEMALE.
+// Normalise both to the dashboard format so downstream consumers (persona
+// cards, demographic blocks) treat TikTok rows the same as Meta / Google.
+var TT_AGE_MAP = {
+  "AGE_13_17": "13-17",
+  "AGE_18_24": "18-24",
+  "AGE_25_34": "25-34",
+  "AGE_35_44": "35-44",
+  "AGE_45_54": "45-54",
+  "AGE_55_64": "55-64",
+  "AGE_55_PLUS": "55+",
+  "AGE_65_UP": "65+",
+  "AGE_UNDETERMINED": "unknown"
+};
+function normaliseTikTokAge(raw) {
+  var k = String(raw || "").toUpperCase();
+  if (TT_AGE_MAP[k]) return TT_AGE_MAP[k];
+  // Fallback, if the prefix is AGE_XX_YY pattern we haven't mapped explicitly
+  var m = /^AGE_(\d+)_(\d+)$/.exec(k);
+  if (m) return m[1] + "-" + m[2];
+  var m2 = /^AGE_(\d+)_UP$|^AGE_(\d+)_PLUS$/.exec(k);
+  if (m2) return (m2[1] || m2[2]) + "+";
+  if (!raw) return "unknown";
+  return String(raw); // last resort, keep original so nothing silently disappears
+}
+function normaliseTikTokGender(raw) {
+  var k = String(raw || "").toUpperCase();
+  if (k === "GENDER_FEMALE" || k === "FEMALE") return "female";
+  if (k === "GENDER_MALE" || k === "MALE") return "male";
+  return "unknown";
+}
+
 async function fetchTikTokDemo(token, advId, from, to) {
   var ageGender = [];
   var region = [];
@@ -296,8 +351,8 @@ async function fetchTikTokDemo(token, advId, from, to) {
       account: "TikTok",
       campaignId: String(dim.campaign_id || ""),
       campaignName: "",
-      age: dim.age || "unknown",
-      gender: dim.gender || "unknown",
+      age: normaliseTikTokAge(dim.age),
+      gender: normaliseTikTokGender(dim.gender),
       impressions: parseInt(met.impressions || 0, 10),
       clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),

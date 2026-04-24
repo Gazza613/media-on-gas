@@ -111,10 +111,22 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({ query: query, pageSize: 10000 })
         });
-        if (!r.ok) return [];
+        if (!r.ok) {
+          // Log the first 300 chars of the response body so we see WHY the
+          // query failed (usually a GAQL syntax error, permission scope
+          // problem, or missing resource). Silent returns have been hiding
+          // real errors that look identical to "account has no Search data".
+          var body = "";
+          try { body = (await r.text() || "").slice(0, 300); } catch (_) {}
+          console.warn("[google-intent] query failed", { status: r.status, bodyPreview: body, queryPreview: query.slice(0, 120) });
+          return [];
+        }
         var d = await r.json();
         return d.results || [];
-      } catch (_) { return []; }
+      } catch (err) {
+        console.warn("[google-intent] query threw", { err: String(err && err.message || err), queryPreview: query.slice(0, 120) });
+        return [];
+      }
     };
 
     // 1. Search terms -> intent theme buckets
@@ -233,6 +245,23 @@ export default async function handler(req, res) {
       whenLabel: whenLabel,
       observationDemographicsAvailable: ageTotal > 0 || genSum > 0
     };
+
+    // Diagnostic, tell us in the Vercel logs exactly what each Google Ads
+    // query returned for this date range so we can distinguish between
+    // "no Search campaigns active" and "account lacks observation audiences"
+    // and "the account simply has nothing in this period".
+    console.log("[google-intent] " + from + " to " + to + " raw counts", {
+      searchTermRows: stRows.length,
+      totalSearchClicks: totalSearchClicks,
+      ageRows: ageRows.length,
+      ageAggBuckets: Object.keys(ageAgg).length,
+      genderRows: genRows.length,
+      genderSum: genSum,
+      matchTypeRows: mtRows.length,
+      matchTypeTotal: mtTotal,
+      hourRows: hrRows.length,
+      intentThemeBreakdown: intentThemes.map(function(t) { return t.theme + ":" + t.clicks; }).join(", ")
+    });
 
     intentCache[cacheKey] = { data: payload, ts: Date.now() };
     res.status(200).json(payload);
