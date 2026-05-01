@@ -5529,11 +5529,18 @@ export default function MediaOnGas(){
               var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
               if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view objective results.</div>;
 
-              var getObj=function(name){
-                var n=(name||"").toLowerCase();
-                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)return "Clicks to App Store";
-                if(n.indexOf("follower")>=0)return "Followers & Likes";
-                if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidSocial_like")>=0||n.indexOf("paidsocial_like")>=0)return "Followers & Likes";
+              // Canonical-first classifier — matches the Summary tab exactly so
+              // Followers and App Install campaigns don't fall through to the
+              // Landing Page bucket on Deep Dive.
+              var getObj=function(camp){
+                var canon=String(camp&&camp.objective||"").toLowerCase();
+                if(canon==="appinstall")return "Clicks to App Store";
+                if(canon==="leads")return "Leads";
+                if(canon==="followers")return "Followers & Likes";
+                if(canon==="landingpage")return "Landing Page Clicks";
+                var n=String(camp&&camp.campaignName||"").toLowerCase();
+                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
+                if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
                 return "Traffic";
@@ -5549,7 +5556,7 @@ export default function MediaOnGas(){
               var getCostLabel=function(obj){if(obj==="Leads")return "CPL";if(obj==="Followers & Likes")return "CPF";return "CPC";};
 
               var rows=sel.map(function(camp){
-                var obj=getObj(camp.campaignName);var result=getResult(camp,obj);var spend=parseFloat(camp.spend||0);var clicks=parseFloat(camp.clicks||0);var costPer=result>0?spend/result:0;var convRate=clicks>0&&obj==="Leads"?(parseFloat(camp.leads||0)/clicks*100):0;
+                var obj=getObj(camp);var result=getResult(camp,obj);var spend=parseFloat(camp.spend||0);var clicks=parseFloat(camp.clicks||0);var costPer=result>0?spend/result:0;var convRate=clicks>0&&obj==="Leads"?(parseFloat(camp.leads||0)/clicks*100):0;
                 var imps=parseFloat(camp.impressions||0);var ctrVal=imps>0?(clicks/imps*100):0;var engagements=parseFloat(camp.follows||0)+parseFloat(camp.likes||0)+parseFloat(camp.pageLikes||0);if(engagements===0&&camp.platform==="Instagram"){var igEng=findIgGrowth(camp.campaignName,pages);if(igEng>0)engagements=igEng;}return{name:camp.campaignName,engagements:engagements,engCtr:imps>0?(engagements/imps*100):0,platform:camp.platform,objective:obj,spend:spend,clicks:clicks,impressions:imps,ctr:ctrVal,result:result,resultLabel:getResultLabel(obj),costPer:costPer,costLabel:getCostLabel(obj),convRate:convRate};
               });
               var platOrder={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
@@ -5870,9 +5877,30 @@ export default function MediaOnGas(){
             }).filter(function(a){return parseFloat(a.impressions||0)>0||parseFloat(a.spend||0)>0;});
             if(filtered.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view adset targeting performance.</div>;
 
+            // Map parent-campaign canonical objective by id and name so adsets
+            // inherit the same classification as their parent campaign on the
+            // Summary tab.
+            var campObjById={};var campObjByName={};
+            selCamps.forEach(function(c){
+              var canon=String(c.objective||"").toLowerCase();
+              var rawId=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+              if(canon){campObjById[String(c.campaignId||"")]=canon;if(rawId)campObjById[rawId]=canon;campObjByName[c.campaignName]=canon;}
+            });
             var allRows=filtered.map(function(a){
-              var getObj2=function(name){var n=(name||"").toLowerCase();if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)return "Clicks to App Store";if(n.indexOf("follower")>=0)return "Followers & Likes";if(n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";return "Traffic";};
-              var obj=getObj2(a.campaignName);
+              var getObj2=function(adset){
+                var canon=campObjById[String(adset.campaignId||"")]||campObjByName[adset.campaignName]||"";
+                if(canon==="appinstall")return "Clicks to App Store";
+                if(canon==="leads")return "Leads";
+                if(canon==="followers")return "Followers & Likes";
+                if(canon==="landingpage")return "Landing Page Clicks";
+                var n=String(adset.campaignName||"").toLowerCase();
+                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
+                if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
+                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
+                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
+                return "Traffic";
+              };
+              var obj=getObj2(a);
               var result=obj==="Leads"?parseFloat(a.leads||0):obj==="Followers & Likes"?parseFloat(a.follows||0)+parseFloat(a.pageLikes||0):parseFloat(a.clicks||0);
               var spend=parseFloat(a.spend||0);var clicks=parseFloat(a.clicks||0);var imps=parseFloat(a.impressions||0);
               var ctr=imps>0?(clicks/imps*100):0;var cpc=clicks>0?spend/clicks:0;var costPer=result>0?spend/result:0;
