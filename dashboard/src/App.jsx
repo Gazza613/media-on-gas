@@ -1674,12 +1674,15 @@ function CampaignAuditModal(props){
           if(e.ts>byClient[slug].last)byClient[slug].last=e.ts;
         });
         var clientRows=Object.keys(byClient).map(function(s){return byClient[s];}).sort(function(a,b){return (b.last||"").localeCompare(a.last||"");});
-        // Admin rollup by day.
+        // Admin rollup by day + user.
         var adminByDay={};
         adminEvts.forEach(function(e){
           var d=(e.ts||"").substring(0,10);
           if(!d)return;
-          adminByDay[d]=(adminByDay[d]||0)+1;
+          if(!adminByDay[d])adminByDay[d]={count:0,users:{}};
+          adminByDay[d].count++;
+          var who=e.actor||"unknown";
+          adminByDay[d].users[who]=(adminByDay[d].users[who]||0)+1;
         });
         var adminDays=Object.keys(adminByDay).sort(function(a,b){return b.localeCompare(a);}).slice(0,30);
         var fmtDate=function(iso){if(!iso)return "-";try{return new Date(iso).toLocaleString("en-ZA",{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return iso;}};
@@ -1700,10 +1703,18 @@ function CampaignAuditModal(props){
               </div>
               <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
-                  <thead><tr><th style={hdr}>Date</th><th style={hdr}>Logins</th></tr></thead>
+                  <thead><tr><th style={hdr}>Date</th><th style={hdr}>User</th><th style={hdr}>Logins</th></tr></thead>
                   <tbody>
-                    {adminDays.length===0?<tr><td colSpan={2} style={{padding:14,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
-                      return <tr key={d}><td style={cell}>{d}</td><td style={cell}>{adminByDay[d]}</td></tr>;
+                    {adminDays.length===0?<tr><td colSpan={3} style={{padding:14,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
+                      var dayData=adminByDay[d];
+                      var users=Object.keys(dayData.users).sort();
+                      return users.map(function(u,ui){
+                        return <tr key={d+"_"+u}>
+                          {ui===0&&<td rowSpan={users.length} style={Object.assign({},cell,{verticalAlign:"top",fontWeight:700})}>{d}</td>}
+                          <td style={cell}>{u}</td>
+                          <td style={cell}>{dayData.users[u]}</td>
+                        </tr>;
+                      });
                     })}
                   </tbody>
                 </table>
