@@ -30,17 +30,22 @@ async function resolveMetaAdThumbnail(adId, token) {
   var c = d.creative || {};
   var accountId = d.account_id ? "act_" + d.account_id : null;
 
-  if (c.video_id) {
+  // Collect video_id from all possible sources: top-level creative, object_story_spec
+  // video_data, and link_data. GIF ads often store the video_id only in object_story_spec.
+  var oss = c.object_story_spec || {};
+  var allVideoIds = [];
+  if (c.video_id) allVideoIds.push(c.video_id);
+  if (oss.video_data && oss.video_data.video_id) allVideoIds.push(oss.video_data.video_id);
+  if (oss.link_data && oss.link_data.video_id) allVideoIds.push(oss.link_data.video_id);
+  var afs0 = c.asset_feed_spec || {};
+  if (afs0.videos) afs0.videos.forEach(function(v) { if (v.video_id && allVideoIds.indexOf(v.video_id) < 0) allVideoIds.push(v.video_id); });
+
+  for (var vi = 0; vi < allVideoIds.length; vi++) {
     try {
-      var vr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(c.video_id) + "?fields=picture,thumbnails{uri,is_preferred,width,height}&access_token=" + token);
+      var vr = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(allVideoIds[vi]) + "?fields=picture,thumbnails{uri,is_preferred,width,height}&access_token=" + token);
       if (vr.ok) {
         var vd = await vr.json();
         if (vd.thumbnails && vd.thumbnails.data && vd.thumbnails.data.length > 0) {
-          // ALWAYS pick the largest-area thumbnail. Meta's `is_preferred` flag
-          // is often set on a tiny 192x192 auto-chosen frame — preferring it
-          // returned blurry 192-px posters into the preview modal even though
-          // 1080x1080 variants were sitting right next to it. If there's a
-          // tie on area, use is_preferred as the tiebreaker only.
           var best = null;
           var bestArea = 0;
           var bestIsPreferred = false;
@@ -75,6 +80,9 @@ async function resolveMetaAdThumbnail(adId, token) {
       if (afs.images[ah].hash) candidateHashes.push(afs.images[ah].hash);
     }
   }
+  // object_story_spec can carry image hashes in link_data or video_data
+  if (oss.link_data && oss.link_data.image_hash) candidateHashes.push(oss.link_data.image_hash);
+  if (oss.video_data && oss.video_data.image_hash) candidateHashes.push(oss.video_data.image_hash);
   if (candidateHashes.length > 0 && accountId) {
     try {
       var hashes = encodeURIComponent(JSON.stringify(candidateHashes));
@@ -127,7 +135,6 @@ async function resolveMetaAdThumbnail(adId, token) {
 
   if (c.image_url) return c.image_url;
 
-  var oss = c.object_story_spec || {};
   if (oss.link_data && oss.link_data.picture) return oss.link_data.picture;
 
   if (c.thumbnail_url) return c.thumbnail_url;
