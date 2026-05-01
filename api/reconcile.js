@@ -475,7 +475,7 @@ export default async function handler(req, res) {
     req.authPrincipal = { role: "admin" };
   } else {
     if (!rateLimit(req, res, { maxPerMin: 6, maxPerHour: 50 })) return;
-    if (!checkAuth(req, res)) return;
+    if (!(await checkAuth(req, res))) return;
     if (!req.authPrincipal || req.authPrincipal.role !== "admin") {
       res.status(403).json({ error: "Admin-only" });
       return;

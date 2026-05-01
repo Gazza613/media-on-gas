@@ -7,7 +7,7 @@ const clientAdvertisers = {
 
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
-  if (!checkAuth(req, res)) return;
+  if (!(await checkAuth(req, res))) return;
   if (!validateDates(req, res)) return;
   // Admin-only, raw TikTok Business API proxy with no per-campaign scope
   // filter. Clients go through /api/campaigns + /api/ads which apply their

@@ -126,7 +126,6 @@ function viewAdLabel(platform) {
   return "VIEW AD";
 }
 var API=window.location.origin;
-var API_KEY="ec98fe5d876f9d82503c2159ed7ac820cfd56389f04a38b4e4534632a0e6b4a0";
 // Feature flags for the audience-insight build. Flip any one to false to
 // hide that section in production without deleting the code, so we can see
 // each new block live then turn it off cleanly if the client doesn't want
@@ -676,7 +675,7 @@ function AdPreviewModal(props){
     if(!ad||!isVideo)return;
     if(platformKey!=="meta"&&platformKey!=="tiktok")return;
     if(!ad.videoId)return;
-    var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+    var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
     var url=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQ+"&resolveOnly=1";
     var cancelled=false;
     // 15 second timeout — if the platform API is slow or the creative was
@@ -717,9 +716,9 @@ function AdPreviewModal(props){
   // clients viewing a share link get a FRESHLY signed Meta / TikTok CDN
   // URL on every render. Direct CDN URLs expire in about an hour, which
   // left client previews broken whenever the share link was opened a day
-  // after issuing. Admin flows carry api_key, client flows carry the view
-  // token, both resolve server-side using platform admin credentials.
-  var authQs=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+  // after issuing. Admin flows carry the session token, client flows carry
+  // the view token, both resolve server-side using platform admin credentials.
+  var authQs=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
   var proxyImage=null;
   if(ad.adId&&(platformKey==="meta"||platformKey==="tiktok")){
     proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQs;
@@ -785,7 +784,7 @@ function AdPreviewModal(props){
           retryCountRef.current+=1;
           hasPlayedRef.current=false;
           console.warn("[GAS] Video mid-playback error, refetching fresh URL\n"+JSON.stringify({code:code,retry:retryCountRef.current,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
-          var rAuthQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.apiKey?("&api_key="+encodeURIComponent(props.apiKey)):"");
+          var rAuthQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
           var rUrl=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+rAuthQ+"&resolveOnly=1&bust=1&t="+Date.now();
           // Capture the generation at fire time. If the modal closes or the
           // user opens a different ad before this fetch resolves, adGenRef
@@ -1060,7 +1059,7 @@ function ShareModal(props){
     err[1]("");busy[1](true);emailSent[1](false);
     fetch(props.apiBase+"/api/issue-token",{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
+      headers:{"Content-Type":"application/json","x-session-token":props.session||""},
       body:JSON.stringify(buildCampaignPayload())
     }).then(function(r){return r.json();}).then(function(d){
       busy[1](false);
@@ -1082,7 +1081,7 @@ function ShareModal(props){
     payload.preview=true;
     fetch(props.apiBase+"/api/email-share",{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
+      headers:{"Content-Type":"application/json","x-session-token":props.session||""},
       body:JSON.stringify(payload)
     }).then(function(r){return r.json();}).then(function(d){
       previewLoading[1](false);
@@ -1099,7 +1098,7 @@ function ShareModal(props){
     // preview omitted -> real send
     fetch(props.apiBase+"/api/email-share",{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""},
+      headers:{"Content-Type":"application/json","x-session-token":props.session||""},
       body:JSON.stringify(payload)
     }).then(function(r){return r.json();}).then(function(d){
       busy[1](false);
@@ -1125,7 +1124,7 @@ function ShareModal(props){
   var auditQuery=useState("");
   var loadAudit=function(){
     auditLoading[1](true);
-    fetch(props.apiBase+"/api/audit-log?limit=500",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+    fetch(props.apiBase+"/api/audit-log?limit=500",{headers:{"x-session-token":props.session||""}})
       .then(function(r){return r.json();})
       .then(function(d){
         auditLoading[1](false);
@@ -1140,7 +1139,7 @@ function ShareModal(props){
   var deleteAuditEntry=function(id){
     if(!id)return;
     if(!window.confirm("Delete this log entry? This cannot be undone."))return;
-    fetch(props.apiBase+"/api/audit-log?id="+encodeURIComponent(id),{method:"DELETE",headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+    fetch(props.apiBase+"/api/audit-log?id="+encodeURIComponent(id),{method:"DELETE",headers:{"x-session-token":props.session||""}})
       .then(function(r){return r.json();})
       .then(function(d){if(d.ok){auditEntries[1](auditEntries[0].filter(function(e){return e.id!==id;}));}})
       .catch(function(){});
@@ -1408,7 +1407,7 @@ function CampaignAuditModal(props){
   var usageErr=useState("");
   var loadUsage=function(){
     usageLoading[1](true);usageErr[1]("");
-    fetch(props.apiBase+"/api/usage?limit=1000",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+    fetch(props.apiBase+"/api/usage?limit=1000",{headers:{"x-session-token":props.session||""}})
       .then(function(r){return r.json();})
       .then(function(d){usageLoading[1](false);if(Array.isArray(d.events)){usageEvents[1](d.events);}else{usageErr[1](d.error||"Could not load usage");}})
       .catch(function(){usageLoading[1](false);usageErr[1]("Connection error");});
@@ -1451,7 +1450,7 @@ function CampaignAuditModal(props){
 
   var load=function(){
     loading[1](true);err[1]("");
-    fetch(props.apiBase+"/api/objective-audit",{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+    fetch(props.apiBase+"/api/objective-audit",{headers:{"x-session-token":props.session||""}})
       .then(function(r){return r.json();})
       .then(function(d){loading[1](false);if(Array.isArray(d.campaigns)){rows[1](d.campaigns);}else{err[1](d.error||"Could not load audit");}})
       .catch(function(){loading[1](false);err[1]("Connection error");});
@@ -1460,7 +1459,7 @@ function CampaignAuditModal(props){
     recErr[1]("");
     if(sendAlert)recSending[1](true); else recLoading[1](true);
     var qs="?from="+encodeURIComponent(props.dateFrom||"")+"&to="+encodeURIComponent(props.dateTo||"")+(sendAlert?"&alert=1":"");
-    fetch(props.apiBase+"/api/reconcile"+qs,{headers:{"x-api-key":props.apiKey,"x-session-token":props.session||""}})
+    fetch(props.apiBase+"/api/reconcile"+qs,{headers:{"x-session-token":props.session||""}})
       .then(function(r){return r.json();})
       .then(function(d){
         recLoading[1](false);recSending[1](false);
@@ -1896,7 +1895,7 @@ function ChatPanel(props){
 
   var authHeaders=function(){
     if(props.viewToken)return{"Content-Type":"application/json","Authorization":"Bearer "+props.viewToken};
-    return{"Content-Type":"application/json","x-api-key":props.apiKey,"x-session-token":props.session||""};
+    return{"Content-Type":"application/json","x-session-token":props.session||""};
   };
   var performSend=function(msgText){
     var msg=(msgText||"").trim();
@@ -2453,7 +2452,7 @@ export default function MediaOnGas(){
     if(loginTs&&em){
       var durMs=Date.now()-loginTs;
       var durMin=Math.round(durMs/60000);
-      navigator.sendBeacon(API+"/api/usage?kind=session_end&actor="+encodeURIComponent(em)+"&duration="+durMin+"&reason="+encodeURIComponent(reason||"logout")+"&api_key="+encodeURIComponent(API_KEY));
+      navigator.sendBeacon(API+"/api/usage?kind=session_end&actor="+encodeURIComponent(em)+"&duration="+durMin+"&reason="+encodeURIComponent(reason||"logout")+"&st="+encodeURIComponent(session||""));
     }
   };
   var handleLogout=function(){logSessionEnd("logout");sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");sessionStorage.removeItem("gas_chat_history");sessionStorage.removeItem("gas_login_ts");setSession(null);setAuthRole(null);setAuthEmail("");setAuthName("");};
@@ -2475,7 +2474,7 @@ export default function MediaOnGas(){
   },[]);
 
   var isClient=window.location.pathname.indexOf("/view/")===0||authRole==="client"||!!viewToken;
-  var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-api-key":API_KEY,"x-session-token":session||""};};
+  var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-session-token":session||""};};
   var isAuthed=function(){return !!session||!!viewToken;};
 
   // Thumbnail helper. `ad.thumbnail` in the ads payload is a raw signed Meta
@@ -2493,7 +2492,7 @@ export default function MediaOnGas(){
     var pKey=pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0?"meta":pLow.indexOf("tiktok")>=0?"tiktok":"";
     if(pKey&&ad.adId){
       var cId=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
-      var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&API_KEY?("&api_key="+encodeURIComponent(API_KEY)):"");
+      var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&session?("&st="+encodeURIComponent(session)):"");
       return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+auth;
     }
     return ad.thumbnail||"";
@@ -3718,7 +3717,7 @@ export default function MediaOnGas(){
       </div></div>
     </header>
 
-    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} apiKey={API_KEY} session={session}/>}
+    {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} session={session}/>}
     {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}
     {showIdleNudge&&<div style={{position:"fixed",inset:0,zIndex:2100,background:"rgba(6,2,14,0.72)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
       <div style={{width:420,maxWidth:"94vw",background:"linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%)",border:"1px solid rgba(249,98,3,0.35)",borderRadius:18,padding:"28px 28px 22px",boxShadow:"0 30px 80px rgba(0,0,0,0.65),0 0 60px rgba(249,98,3,0.18)",textAlign:"center",animation:"gasEnter 0.45s cubic-bezier(0.2,0.8,0.2,1) both"}}>
@@ -3733,9 +3732,9 @@ export default function MediaOnGas(){
         <div style={{marginTop:16,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
       </div>
     </div>}
-    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} apiKey={API_KEY} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
-    <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} apiKey={viewToken?"":API_KEY} viewToken={viewToken}/>
-    {!isClient&&<ChatPanel apiBase={API} apiKey={API_KEY} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected} onOpenAd={setPreviewAd}/>}
+    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
+    <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} session={viewToken?"":session} viewToken={viewToken}/>
+    {!isClient&&<ChatPanel apiBase={API} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected} onOpenAd={setPreviewAd}/>}
 
     {!isClient&&dataWarnings.length>0&&<div style={{maxWidth:1400,margin:"12px auto 0",padding:"12px 18px",background:P.warning+"15",border:"1px solid "+P.warning+"50",borderLeft:"4px solid "+P.warning,borderRadius:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative",zIndex:2}}>
       <div style={{color:P.warning,fontSize:18,flexShrink:0,marginTop:1}}>{"\u26A0"}</div>

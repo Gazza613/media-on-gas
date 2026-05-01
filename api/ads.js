@@ -66,7 +66,7 @@ function mapTikTokObjective(ttObj) {
 
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
-  if (!checkAuth(req, res)) return;
+  if (!(await checkAuth(req, res))) return;
   if (!validateDates(req, res)) return;
 
   var from = req.query.from || "2026-04-01";

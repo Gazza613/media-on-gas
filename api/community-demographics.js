@@ -206,7 +206,7 @@ function aggregateByPlatform(entries, platform) {
 
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
-  if (!checkAuth(req, res)) return;
+  if (!(await checkAuth(req, res))) return;
   // Admin-only. The endpoint pulls owned-community demographics across every
   // configured Meta ad account and IG business account, plus the TikTok
   // advertiser, with no per-client scope filter, so a client JWT must not

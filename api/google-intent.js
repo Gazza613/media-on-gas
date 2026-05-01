@@ -53,7 +53,7 @@ function hourPatternLabel(hourClicks) {
 
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
-  if (!checkAuth(req, res)) return;
+  if (!(await checkAuth(req, res))) return;
   if (!validateDates(req, res)) return;
   var from = req.query.from, to = req.query.to;
   if (!from || !to) return res.status(400).json({ error: "from and to required" });

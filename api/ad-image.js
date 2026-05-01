@@ -183,7 +183,7 @@ async function resolveTikTokAdImage(adId, advId, token) {
 
 export default async function handler(req, res) {
   if (!rateLimit(req, res, { maxPerMin: 240, maxPerHour: 2000 })) return;
-  if (!checkAuth(req, res)) return;
+  if (!(await checkAuth(req, res))) return;
 
   var platform = String(req.query.platform || "").toLowerCase();
   var adId = String(req.query.adId || req.query.id || "").trim();

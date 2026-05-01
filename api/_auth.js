@@ -1,5 +1,6 @@
 import { verifyToken } from "./_jwt.js";
 import { logUsageEvent } from "./_audit.js";
+import { getSessionByToken, deleteSession, getUser } from "./_users.js";
 
 var ALLOWED_ORIGINS = [
   "https://media-on-gas.vercel.app",
@@ -30,21 +31,54 @@ export function setCorsHeaders(req, res) {
   res.setHeader("X-Frame-Options", "DENY");
 }
 
-// Returns true/false for back-compat. Attaches `req.authPrincipal` with role + allowlist info
+// Returns true/false. Attaches `req.authPrincipal` with role + allowlist info
 // for endpoints that want to apply client-scoped filtering.
 //
-// NOTE: still synchronous. Usage-event writes are handled by the async
-// checkAuthAsync below, callers that want reliable tracking should use
-// that variant. checkAuth stays available so untouched endpoints behave
-// exactly as before.
-export function checkAuth(req, res) {
+// Now async because session-token validation hits Redis. Every callsite
+// uses `await checkAuth(req, res)`. Three auth options checked in order:
+//   1. x-session-token header (browser sessions, preferred — also accepts
+//      ?st= query param so <img> previews and sendBeacon calls that can't
+//      attach headers still authenticate without leaking the master api key)
+//   2. x-api-key header / ?api_key= query (server-to-server only; cron,
+//      reconcile->ads, email-share->summary, chat->context. The browser
+//      bundle no longer ships this key.)
+//   3. Bearer JWT (signed share URLs for read-only client access)
+export async function checkAuth(req, res) {
   setCorsHeaders(req, res);
   if (req.method === "OPTIONS") {
     res.status(200).end();
     return false;
   }
 
-  // Option 1: admin API key
+  // Option 1: Browser session token. Validates against the Redis-backed
+  // session store, checks TTL, and re-checks user.active so a revoked
+  // user is locked out the moment they next hit any endpoint.
+  var sessionToken = req.headers["x-session-token"] || req.query.st || "";
+  if (sessionToken) {
+    try {
+      var s = await getSessionByToken(sessionToken);
+      if (s) {
+        if (s.expires && s.expires < Date.now()) {
+          await deleteSession(sessionToken);
+        } else {
+          var user = await getUser(s.email);
+          if (user && user.active !== false) {
+            req.authPrincipal = {
+              role: s.role || "admin",
+              email: s.email,
+              name: s.name || ""
+            };
+            return true;
+          }
+          // Revoked since session began — kill the session.
+          await deleteSession(sessionToken);
+        }
+      }
+    } catch (_) { /* fall through to other auth options */ }
+  }
+
+  // Option 2: Admin API key. After the bundle removal this is server-to-
+  // server only (env var). Browser requests no longer ship this key.
   var key = req.headers["x-api-key"] || req.query.api_key || "";
   var expected = process.env.DASHBOARD_API_KEY || "";
   if (key && expected && timingSafeEqual(key, expected)) {
@@ -52,7 +86,7 @@ export function checkAuth(req, res) {
     return true;
   }
 
-  // Option 2: client Bearer token (for shareable URLs)
+  // Option 3: client Bearer token (for shareable URLs)
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
   var bearer = "";
   if (authHeader.indexOf("Bearer ") === 0) bearer = authHeader.substring(7);
