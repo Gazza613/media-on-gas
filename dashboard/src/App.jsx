@@ -256,6 +256,7 @@ function LoginScreen(props){
         sessionStorage.setItem("gas_role",d.role||"admin");
         sessionStorage.setItem("gas_email",d.email||"");
         sessionStorage.setItem("gas_name",d.name||"");
+        sessionStorage.setItem("gas_login_ts",String(Date.now()));
         props.onLogin(d.token,d.role,d.email,d.name);
       }else{
         setLoginErr(d.error||"Invalid email or password");
@@ -1674,6 +1675,19 @@ function CampaignAuditModal(props){
           if(e.ts>byClient[slug].last)byClient[slug].last=e.ts;
         });
         var clientRows=Object.keys(byClient).map(function(s){return byClient[s];}).sort(function(a,b){return (b.last||"").localeCompare(a.last||"");});
+        // Session duration lookup: map actor+date to total minutes from session_end events.
+        var sessionEndEvts=events.filter(function(e){return e.kind==="session_end";});
+        var sessionDurMap={};
+        sessionEndEvts.forEach(function(e){
+          var d=(e.ts||"").substring(0,10);
+          var who=e.actor||"unknown";
+          var dur=e.meta&&e.meta.durationMin?parseInt(e.meta.durationMin):0;
+          var key=d+"|"+who;
+          if(!sessionDurMap[key])sessionDurMap[key]={totalMin:0,sessions:0};
+          sessionDurMap[key].totalMin+=dur;
+          sessionDurMap[key].sessions++;
+        });
+        var fmtDur=function(min){if(!min||min<=0)return "-";if(min<60)return min+"m";return Math.floor(min/60)+"h "+min%60+"m";};
         // Admin rollup by day + user.
         var adminByDay={};
         adminEvts.forEach(function(e){
@@ -1703,16 +1717,19 @@ function CampaignAuditModal(props){
               </div>
               <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
-                  <thead><tr><th style={hdr}>Date</th><th style={hdr}>User</th><th style={hdr}>Logins</th></tr></thead>
+                  <thead><tr><th style={hdr}>Date</th><th style={hdr}>User</th><th style={hdr}>Logins</th><th style={hdr}>Session time</th></tr></thead>
                   <tbody>
-                    {adminDays.length===0?<tr><td colSpan={3} style={{padding:14,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
+                    {adminDays.length===0?<tr><td colSpan={4} style={{padding:14,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm}}>No admin logins recorded yet.</td></tr>:adminDays.map(function(d){
                       var dayData=adminByDay[d];
                       var users=Object.keys(dayData.users).sort();
                       return users.map(function(u,ui){
+                        var durKey=d+"|"+u;
+                        var durInfo=sessionDurMap[durKey];
                         return <tr key={d+"_"+u}>
                           {ui===0&&<td rowSpan={users.length} style={Object.assign({},cell,{verticalAlign:"top",fontWeight:700})}>{d}</td>}
                           <td style={cell}>{u}</td>
                           <td style={cell}>{dayData.users[u]}</td>
+                          <td style={cell}>{durInfo?fmtDur(durInfo.totalMin):"-"}</td>
                         </tr>;
                       });
                     })}
@@ -2430,7 +2447,16 @@ export default function MediaOnGas(){
     // Client share-link viewers never call this path.
     try{window.location.reload();}catch(_){}
   };
-  var handleLogout=function(){sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");sessionStorage.removeItem("gas_chat_history");setSession(null);setAuthRole(null);setAuthEmail("");setAuthName("");};
+  var logSessionEnd=function(reason){
+    var loginTs=parseInt(sessionStorage.getItem("gas_login_ts")||"0");
+    var em=sessionStorage.getItem("gas_email")||"";
+    if(loginTs&&em){
+      var durMs=Date.now()-loginTs;
+      var durMin=Math.round(durMs/60000);
+      navigator.sendBeacon(API+"/api/usage?kind=session_end&actor="+encodeURIComponent(em)+"&duration="+durMin+"&reason="+encodeURIComponent(reason||"logout")+"&api_key="+encodeURIComponent(API_KEY));
+    }
+  };
+  var handleLogout=function(){logSessionEnd("logout");sessionStorage.removeItem("gas_session");sessionStorage.removeItem("gas_role");sessionStorage.removeItem("gas_email");sessionStorage.removeItem("gas_name");sessionStorage.removeItem("gas_chat_history");sessionStorage.removeItem("gas_login_ts");setSession(null);setAuthRole(null);setAuthEmail("");setAuthName("");};
   var isSuperadmin=String(authEmail||"").toLowerCase()==="gary@gasmarketing.co.za";
 
   // Hard refresh (Ctrl/Cmd + Shift + R) forces admin re-login. The keydown
@@ -2491,12 +2517,14 @@ export default function MediaOnGas(){
     if(!session||isClient)return;
     var IDLE_MS=5*60*1000;
     var timer=null;
-    var doLogout=function(){handleLogout();};
+    var doLogout=function(){logSessionEnd("idle");handleLogout();};
     var resetIdle=function(){if(timer)clearTimeout(timer);timer=setTimeout(doLogout,IDLE_MS);};
     var events=["mousemove","mousedown","keydown","scroll","touchstart","wheel"];
     events.forEach(function(e){window.addEventListener(e,resetIdle,{passive:true});});
+    var onUnload=function(){logSessionEnd("tab_close");};
+    window.addEventListener("beforeunload",onUnload);
     resetIdle();
-    return function(){if(timer)clearTimeout(timer);events.forEach(function(e){window.removeEventListener(e,resetIdle);});};
+    return function(){if(timer)clearTimeout(timer);events.forEach(function(e){window.removeEventListener(e,resetIdle);});window.removeEventListener("beforeunload",onUnload);};
   },[session,isClient]);
 
   // Client idle refresh: on a share link we don't log the viewer out (it's

@@ -21,6 +21,19 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Session-end beacon: fired by the dashboard on logout, idle timeout, or
+  // tab close via navigator.sendBeacon. Records the session duration.
+  if (req.query.kind === "session_end") {
+    var actor = req.query.actor || "";
+    var duration = parseInt(req.query.duration || "0");
+    var reason = req.query.reason || "unknown";
+    if (actor) {
+      await logUsageEvent("session_end", actor, { durationMin: duration, reason: reason }, { skipDedup: true });
+    }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   // Write-path diagnostic, skips dedup so you always see a fresh event.
   if (req.query.ping === "1") {
     try {
