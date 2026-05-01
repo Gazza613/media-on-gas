@@ -343,6 +343,42 @@ export default async function handler(req, res) {
         }
       } catch (trueErr) { console.error("Meta no-breakdown totals fetch error", account.name, trueErr); }
 
+      // Authoritative campaign-level spend (no breakdowns) so we can scale
+      // ad-level spend to match. Meta's ad-level publisher_platform breakdown
+      // often sums to ~93-99% of the campaign total because some spend is
+      // attributed at higher levels (deleted ads, attribution overhead, etc.).
+      var campAuthSpend = {};
+      try {
+        var campSpendUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        var campSpendRes = await fetch(campSpendUrl);
+        var campSpendData = await campSpendRes.json();
+        if (campSpendData.data) {
+          campSpendData.data.forEach(function(r) {
+            var s = parseFloat(r.spend || 0);
+            if (s > 0) campAuthSpend[r.campaign_id] = (campAuthSpend[r.campaign_id] || 0) + s;
+          });
+        }
+      } catch (_) {}
+
+      // Scale ad spend proportionally so the sum per campaign matches the
+      // authoritative campaign-level total.
+      var adSpendByCamp = {};
+      Object.keys(insMap).forEach(function(k) {
+        var r = insMap[k];
+        var cid = r.campaign_id;
+        if (!adSpendByCamp[cid]) adSpendByCamp[cid] = 0;
+        adSpendByCamp[cid] += r.spend;
+      });
+      Object.keys(insMap).forEach(function(k) {
+        var r = insMap[k];
+        var cid = r.campaign_id;
+        var auth = campAuthSpend[cid];
+        var adSum = adSpendByCamp[cid];
+        if (auth && adSum > 0 && Math.abs(auth - adSum) > 0.01) {
+          r.spend = parseFloat((auth * (r.spend / adSum)).toFixed(2));
+        }
+      });
+
       var insights = Object.keys(insMap).map(function(k) {
         var row = insMap[k];
         row.trueTotals = adTrueTotals[row.ad_id] || null;
