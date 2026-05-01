@@ -79,11 +79,15 @@ export default async function handler(req, res) {
   // per ad so we can verify what Meta is actually returning when a tile
   // number looks wrong. Bypasses cache so diagnostic is always fresh.
   var debugFollows = String(req.query.debug || "") === "1";
+  // ?fresh=1 also bypasses the cache — used by the Ground Truth Audit so the
+  // comparison runs against just-fetched data, not a possibly-stale cached
+  // snapshot.
+  var freshOverride = String(req.query.fresh || "") === "1";
 
   // Whole-response cache check: if we've served this exact date range within the last
   // 5 minutes on this warm instance, return immediately and skip every downstream fetch.
   var cacheKey = from + "|" + to;
-  var cached = debugFollows ? null : adsResponseCache[cacheKey];
+  var cached = (debugFollows || freshOverride) ? null : adsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
@@ -343,39 +347,62 @@ export default async function handler(req, res) {
         }
       } catch (trueErr) { console.error("Meta no-breakdown totals fetch error", account.name, trueErr); }
 
-      // Authoritative campaign-level spend (no breakdowns) so we can scale
-      // ad-level spend to match. Meta's ad-level publisher_platform breakdown
-      // often sums to ~93-99% of the campaign total because some spend is
-      // attributed at higher levels (deleted ads, attribution overhead, etc.).
+      // Authoritative campaign-level totals (no breakdowns) so we can scale
+      // ad-level metrics to match. Meta's ad-level publisher_platform
+      // breakdown sums to ~93-99% of campaign total because some spend /
+      // impressions / clicks attribute at higher levels (deleted ads,
+      // attribution overhead, etc.). Spend, impressions and clicks each
+      // need their own scale factor since the drift differs per metric.
       var campAuthSpend = {};
+      var campAuthImps = {};
+      var campAuthClicks = {};
       try {
-        var campSpendUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
-        var campSpendRes = await fetch(campSpendUrl);
-        var campSpendData = await campSpendRes.json();
-        if (campSpendData.data) {
-          campSpendData.data.forEach(function(r) {
+        var campTotalsUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend,impressions,clicks&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        var campTotalsRes = await fetch(campTotalsUrl);
+        var campTotalsData = await campTotalsRes.json();
+        if (campTotalsData.data) {
+          campTotalsData.data.forEach(function(r) {
             var s = parseFloat(r.spend || 0);
+            var i = parseInt(r.impressions || 0);
+            var c = parseInt(r.clicks || 0);
             if (s > 0) campAuthSpend[r.campaign_id] = (campAuthSpend[r.campaign_id] || 0) + s;
+            if (i > 0) campAuthImps[r.campaign_id] = (campAuthImps[r.campaign_id] || 0) + i;
+            if (c > 0) campAuthClicks[r.campaign_id] = (campAuthClicks[r.campaign_id] || 0) + c;
           });
         }
       } catch (_) {}
 
-      // Scale ad spend proportionally so the sum per campaign matches the
-      // authoritative campaign-level total.
+      // Scale ad spend / impressions / clicks proportionally so the sum per
+      // campaign matches the authoritative campaign-level total. Ground
+      // Truth Audit was flagging Creative ads sum impressions / clicks
+      // yellow on every Meta campaign because only spend was being scaled.
       var adSpendByCamp = {};
+      var adImpsByCamp = {};
+      var adClicksByCamp = {};
       Object.keys(insMap).forEach(function(k) {
         var r = insMap[k];
         var cid = r.campaign_id;
-        if (!adSpendByCamp[cid]) adSpendByCamp[cid] = 0;
-        adSpendByCamp[cid] += r.spend;
+        adSpendByCamp[cid] = (adSpendByCamp[cid] || 0) + r.spend;
+        adImpsByCamp[cid] = (adImpsByCamp[cid] || 0) + r.impressions;
+        adClicksByCamp[cid] = (adClicksByCamp[cid] || 0) + r.clicks;
       });
       Object.keys(insMap).forEach(function(k) {
         var r = insMap[k];
         var cid = r.campaign_id;
-        var auth = campAuthSpend[cid];
-        var adSum = adSpendByCamp[cid];
-        if (auth && adSum > 0 && Math.abs(auth - adSum) > 0.01) {
-          r.spend = parseFloat((auth * (r.spend / adSum)).toFixed(2));
+        var authS = campAuthSpend[cid];
+        var authI = campAuthImps[cid];
+        var authC = campAuthClicks[cid];
+        var adSumS = adSpendByCamp[cid];
+        var adSumI = adImpsByCamp[cid];
+        var adSumC = adClicksByCamp[cid];
+        if (authS && adSumS > 0 && Math.abs(authS - adSumS) > 0.01) {
+          r.spend = parseFloat((authS * (r.spend / adSumS)).toFixed(2));
+        }
+        if (authI && adSumI > 0 && Math.abs(authI - adSumI) >= 1) {
+          r.impressions = Math.round(authI * (r.impressions / adSumI));
+        }
+        if (authC && adSumC > 0 && Math.abs(authC - adSumC) >= 1) {
+          r.clicks = Math.round(authC * (r.clicks / adSumC));
         }
       });
 
@@ -1061,7 +1088,12 @@ export default async function handler(req, res) {
       var gTokenData = await gTokenRes.json();
       googleDebug.tokenOk = !!gTokenData.access_token;
       if (gTokenData.access_token) {
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.responsive_display_ad.long_headline, ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.app_ad.headlines, ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND ad_group_ad.status != 'REMOVED'";
+        // No status filter: an ad whose current status is REMOVED can still
+        // have spent money during the requested period and the campaign-level
+        // total includes that spend. Filtering REMOVED here was undercounting
+        // Creative spend on long-running campaigns whose ads had been deleted
+        // since the period (Ground Truth Audit caught a -6.3% drift).
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.responsive_display_ad.long_headline, ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.app_ad.headlines, ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {

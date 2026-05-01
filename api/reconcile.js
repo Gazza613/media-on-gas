@@ -243,7 +243,7 @@ async function fetchAdSumsByCampaign(req, from, to) {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) return {};
     var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
-    var r = await fetch("https://" + host + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), { headers: { "x-api-key": apiKey } });
+    var r = await fetch("https://" + host + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&fresh=1", { headers: { "x-api-key": apiKey } });
     if (!r.ok) return {};
     var d = await r.json();
     var out = {};
@@ -316,7 +316,12 @@ async function fetchDashboardNumbers(req, from, to) {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) return [];
     var host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
-    var r = await fetch("https://" + host + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), { headers: { "x-api-key": apiKey } });
+    // ?fresh=1 bypasses the 5-minute response cache so the audit compares
+    // freshly fetched dashboard numbers against freshly fetched source-of-truth.
+    // Without this, the audit was flagging Summary metrics as yellow because
+    // the cached /api/campaigns response could be up to 5 min stale relative
+    // to the just-fetched Meta truth on actively-spending campaigns.
+    var r = await fetch("https://" + host + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&fresh=1", { headers: { "x-api-key": apiKey } });
     if (!r.ok) return [];
     var d = await r.json();
     return (d.campaigns || []).map(function(c) {
