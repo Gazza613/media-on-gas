@@ -6174,8 +6174,12 @@ export default function MediaOnGas(){
               var fbEarned=0;var ttEarned=0;var igEarned=0;
               var fbSpend=0;var ttSpend=0;var igSpend=0;
               sel.forEach(function(camp){
+                // Canonical-first match — mirrors Summary's classifier so a
+                // campaign with objective="followers" is included even if its
+                // name doesn't match the legacy like-patterns.
+                var canon=String(camp.objective||"").toLowerCase();
                 var n=(camp.campaignName||"").toLowerCase();
-                var isFollowLike=n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0;
+                var isFollowLike=canon==="followers"||n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0;
                 if(isFollowLike){
                   if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
                   if(camp.platform==="Instagram"){var igG=findIgGrowth(camp.campaignName,pages);igEarned+=igG>0?igG:0;igSpend+=parseFloat(camp.spend||0);}
