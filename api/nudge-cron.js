@@ -146,9 +146,23 @@ function isInternalTestSend(entry, teamEmailSet) {
   return true;
 }
 
+// Normalise a slug the same way clientIdentity() does so that
+// "mtn-momo", "MTN MOMO", "mtn momo" all collapse to "mtnmomo".
+function normalizeSlug(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 // Groups audit entries by client identity, returns the last-send record
 // per client plus derived fields. Skips internal test sends so the SLA
 // watcher only reasons over real client-facing emails.
+//
+// After the initial identity-based grouping, a second pass merges
+// identities that share the same normalised clientSlug. This handles the
+// common case where the same real-world client is contacted via different
+// email addresses across sends (e.g. a contact person changes, or the
+// recipient switches from a freemail address to a corporate one). Without
+// the merge the old identity stays overdue forever even though a report
+// was just sent to the same client under a new identity.
 function groupByClient(entries, teamEmailSet) {
   var byIdentity = {};
   entries.forEach(function(e) {
@@ -176,6 +190,31 @@ function groupByClient(entries, teamEmailSet) {
       };
     }
   });
+
+  // Second pass: merge identities that share the same normalised slug.
+  // When two identities map to the same slug, keep only the one with the
+  // most recent send. This prevents stale identities from generating
+  // spurious nudges when a client's contact email changes.
+  var bySlug = {};
+  Object.keys(byIdentity).forEach(function(id) {
+    var rec = byIdentity[id];
+    var ns = normalizeSlug(rec.lastSlug);
+    if (!ns) return; // no slug, keep identity-based grouping as-is
+    var prev = bySlug[ns];
+    if (!prev || rec.lastSentTs > prev.lastSentTs) {
+      bySlug[ns] = rec;
+    }
+  });
+  // Remove identities that were superseded by a newer send under the same slug.
+  Object.keys(byIdentity).forEach(function(id) {
+    var rec = byIdentity[id];
+    var ns = normalizeSlug(rec.lastSlug);
+    if (!ns) return;
+    if (bySlug[ns] && bySlug[ns] !== rec) {
+      delete byIdentity[id];
+    }
+  });
+
   return byIdentity;
 }
 

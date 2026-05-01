@@ -610,7 +610,7 @@ function CampaignSelector(props){
       <button onClick={props.onClearAll} style={{background:P.rule,border:"1px solid "+P.rule,borderRadius:8,padding:"4px 12px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Clear</button>
       <span style={{fontSize:10,color:P.caption,fontFamily:fm,alignSelf:"center",marginLeft:"auto"}}>{sel.length} sel</span>
     </div>
-    {Object.keys(g).map(function(k){var gr=g[k];var gc=gr.campaigns[0].platform==="TikTok"?P.tt:gr.campaigns[0].platform==="Google Display"?P.gd:gr.campaigns[0].platform==="Instagram"?P.ig:P.fb;return(<div key={k} style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,paddingBottom:4,borderBottom:"1px solid "+P.rule}}><span style={{width:7,height:7,borderRadius:"50%",background:gc}}/><span style={{fontSize:9,fontWeight:800,color:gc,letterSpacing:2,textTransform:"uppercase",fontFamily:fm}}>{k}</span></div>
+    {Object.keys(g).map(function(k){var gr=g[k];var gc=gr.campaigns[0].platform==="TikTok"?P.tt:gr.campaigns[0].platform==="Google Display"?P.gd:gr.campaigns[0].platform==="Instagram"?P.ig:P.fb;var grpIds=gr.campaigns.map(function(c){return c.campaignId;});var grpSelCount=grpIds.filter(function(id){return sel.indexOf(id)>=0;}).length;var grpAll=grpSelCount===grpIds.length;var grpSome=grpSelCount>0&&!grpAll;return(<div key={k} style={{marginBottom:12}}><div onClick={function(){props.onToggleGroup(grpIds);}} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,paddingBottom:4,borderBottom:"1px solid "+P.rule,cursor:"pointer",userSelect:"none"}}><div style={{width:14,height:14,borderRadius:4,border:"2px solid "+(grpAll||grpSome?gc:P.caption),background:grpAll?gc:grpSome?gc+"50":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{grpAll&&Ic.check("#fff",10)}{grpSome&&<span style={{width:6,height:2,background:"#fff",borderRadius:1}}/>}</div><span style={{width:7,height:7,borderRadius:"50%",background:gc}}/><span style={{fontSize:9,fontWeight:800,color:gc,letterSpacing:2,textTransform:"uppercase",fontFamily:fm}}>{k}</span><span style={{fontSize:8,color:P.caption,fontFamily:fm,marginLeft:"auto"}}>{grpSelCount}/{grpIds.length}</span></div>
       {gr.campaigns.map(function(c){var s=sel.indexOf(c.campaignId)>=0;return(<div key={c.campaignId} onClick={function(){props.onToggle(c.campaignId);}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:2,borderRadius:8,cursor:"pointer",background:s?gc+"10":"transparent",border:"1px solid "+(s?gc+"30":"transparent")}}>
         <div style={{width:18,height:18,borderRadius:5,border:"2px solid "+(s?gc:P.caption),background:s?gc:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{s&&Ic.check("#fff",12)}</div>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,color:s?P.txt:P.label,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{c.campaignName}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm}}>{fmt(c.impressions)} imps {(function(){var isCompleted=(c.endDate&&new Date(c.endDate)<new Date())||(c.status==="paused"||c.status==="campaign_paused"||c.status==="adset_paused");if(isCompleted)return <span style={{background:"rgba(136,136,136,0.2)",color:"#888",fontWeight:800,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>COMPLETED</span>;if(c.status==="scheduled")return <span style={{background:P.solar+"20",color:P.solar,fontWeight:800,textTransform:"uppercase",marginLeft:4,fontSize:7,padding:"2px 6px",borderRadius:4,letterSpacing:1}}>SCHEDULED</span>;return null;})()} · {fR(parseFloat(c.spend))}</div></div>
@@ -911,8 +911,44 @@ function AdPreviewModal(props){
   </div>;
 }
 
+// Derive unique client names from campaign account names by stripping
+// trailing platform labels (Meta, Google, TikTok, Facebook, Instagram).
+function deriveClientNames(campaigns){
+  var PLATFORM_SUFFIXES=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+  var seen={};
+  (campaigns||[]).forEach(function(c){
+    var raw=(c.accountName||"").trim();
+    if(!raw)return;
+    var clean=raw.replace(PLATFORM_SUFFIXES,"").replace(PLATFORM_SUFFIXES,"").trim();
+    if(!clean)return;
+    var key=clean.toLowerCase();
+    if(!seen[key])seen[key]=clean;
+  });
+  return Object.keys(seen).sort().map(function(k){return seen[k];});
+}
+
 function ShareModal(props){
+  // Derive client names once from all campaigns; auto-select the client
+  // whose campaigns are currently selected (most-frequent account name).
+  var clientNames=useMemo(function(){return deriveClientNames(props.campaigns);},[props.campaigns]);
+  var autoClient=useMemo(function(){
+    var PLATFORM_SUFFIXES=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+    var counts={};
+    (props.campaigns||[]).forEach(function(c){
+      if((props.selected||[]).indexOf(c.campaignId)<0)return;
+      var raw=(c.accountName||"").trim();
+      var clean=raw.replace(PLATFORM_SUFFIXES,"").replace(PLATFORM_SUFFIXES,"").trim().toLowerCase();
+      if(clean){counts[clean]=(counts[clean]||0)+1;}
+    });
+    var best="";var bestN=0;
+    Object.keys(counts).forEach(function(k){if(counts[k]>bestN){bestN=counts[k];best=k;}});
+    // Return the display-cased version from clientNames
+    for(var i=0;i<clientNames.length;i++){if(clientNames[i].toLowerCase()===best)return clientNames[i];}
+    return "";
+  },[props.campaigns,props.selected,clientNames]);
   var slug=useState("");
+  // Auto-populate slug from the selected campaigns' client name.
+  useEffect(function(){if(autoClient&&!slug[0])slug[1](autoClient);},[autoClient]);
   var expiry=useState(30);
   var shareUrl=useState("");
   var expiresAt=useState("");
@@ -949,7 +985,7 @@ function ShareModal(props){
     draftCopied[1](true);setTimeout(function(){draftCopied[1](false);},2000);
   };
   var buildPlainDraft=function(){
-    var slugWho=slug[0]?slug[0].split("-").map(function(w){return w.toUpperCase();}).join(" "):"";
+    var slugWho=slug[0]?slug[0].toUpperCase():"";
     var who=(recipientName[0]||"").trim()||slugWho;
     var lines=[];
     lines.push("Hi "+(who||"there")+",");
@@ -981,7 +1017,7 @@ function ShareModal(props){
     return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim()};
   };
   var validateBasics=function(){
-    if(!slug[0].trim()){err[1]("Enter a client slug (e.g. mtn-momo)");return false;}
+    if(!slug[0].trim()){err[1]("Select a client before sharing");return false;}
     if(!props.selected||props.selected.length===0){err[1]("Select at least one campaign on the left before sharing");return false;}
     return true;
   };
@@ -1160,8 +1196,11 @@ function ShareModal(props){
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client slug <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(report id)</span></div>
-          <input value={slug[0]} onChange={function(e){slug[1](e.target.value.replace(/[^a-zA-Z0-9\- ]/g,""));err[1]("");}} placeholder="E.G. MTN MOMO" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase"}}/>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client</div>
+          <select value={slug[0]} onChange={function(e){slug[1](e.target.value);err[1]("");}} style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:slug[0]?P.txt:P.caption,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase",appearance:"none",WebkitAppearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238B7FA3' stroke-width='1.5' fill='none'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center",cursor:"pointer"}}>
+            <option value="" style={{background:P.cosmos}}>Select client</option>
+            {clientNames.map(function(n){return <option key={n} value={n} style={{background:P.cosmos}}>{n.toUpperCase()}</option>;})}
+          </select>
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
@@ -1284,7 +1323,7 @@ function ShareModal(props){
                     var periodTxt=(e.fromDate||"—")+" to "+(e.toDate||"—");
                     // Show the raw client slug in the first column (falls
                     // back to clientName / 'Unknown' when slug missing).
-                    var slugTxt=e.clientSlug?e.clientSlug.split("-").map(function(w){return w.toUpperCase();}).join(" "):(e.clientName||"Unknown");
+                    var slugTxt=e.clientSlug?(e.clientSlug.indexOf("-")>=0?e.clientSlug.split("-").map(function(w){return w.toUpperCase();}).join(" "):e.clientSlug.toUpperCase()):(e.clientName||"Unknown");
                     var extras=[];
                     if(e.cc&&e.cc.length>0)extras.push("cc: "+e.cc.join(", "));
                     if(e.bcc&&e.bcc.length>0)extras.push("bcc: "+e.bcc.join(", "));
@@ -1611,7 +1650,7 @@ function CampaignAuditModal(props){
         });
         var adminDays=Object.keys(adminByDay).sort(function(a,b){return b.localeCompare(a);}).slice(0,30);
         var fmtDate=function(iso){if(!iso)return "-";try{return new Date(iso).toLocaleString("en-ZA",{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return iso;}};
-        var slugDisplay=function(s){return (s||"").split("-").map(function(w){return w.toUpperCase();}).join(" ");};
+        var slugDisplay=function(s){var v=(s||"");return v.indexOf("-")>=0?v.split("-").map(function(w){return w.toUpperCase();}).join(" "):v.toUpperCase();};
         var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
         var cell={padding:"10px",color:P.txt,fontSize:12,fontFamily:fm,borderBottom:"1px solid "+P.rule+"30"};
         return <div style={{display:"flex",flexDirection:"column",gap:20,overflow:"auto"}}>
@@ -2531,6 +2570,7 @@ export default function MediaOnGas(){
   };
   var refreshData=hardRefresh;
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
+  var toggleGroup=function(ids){setSelected(function(p){var allIn=ids.every(function(id){return p.indexOf(id)>=0;});if(allIn){return p.filter(function(x){return ids.indexOf(x)<0;});}var merged=p.slice();ids.forEach(function(id){if(merged.indexOf(id)<0)merged.push(id);});return merged;});};
   var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
   var clearAll=function(){setSelected([]);};
 
@@ -3628,7 +3668,7 @@ export default function MediaOnGas(){
     </div>}
 
     <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
-      {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
+      {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onToggleGroup={toggleGroup} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
         {loading?(<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontFamily:ff,fontStyle:"italic",textAlign:"center",maxWidth:520,lineHeight:1.6,letterSpacing:0.2,transition:"opacity 0.3s"}}>{loaderQuip}<span style={{display:"inline-block",width:20}}>…</span></div></div>):(<>

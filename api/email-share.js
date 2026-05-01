@@ -633,7 +633,9 @@ export default async function handler(req, res) {
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
-    var clientName = clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" ");
+    var clientName = clientSlug.indexOf("-") >= 0
+      ? clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" ")
+      : clientSlug.toUpperCase();
     var greetingName = (body.recipientName || "").trim() || clientName;
     var expiresDisplay = new Date(expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
     var textLines = [];
@@ -724,7 +726,9 @@ export default async function handler(req, res) {
 
     logEmailSend({
       clientSlug: clientSlug,
-      clientName: clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" "),
+      clientName: clientSlug.indexOf("-") >= 0
+        ? clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" ")
+        : clientSlug.toUpperCase(),
       to: toList,
       cc: ccList,
       bcc: bccList,
