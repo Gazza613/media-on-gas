@@ -602,7 +602,7 @@ function SevBadge(props){var c={critical:P.critical,warning:P.warning,info:P.inf
 
 function CampaignSelector(props){
   var cs=props.campaigns,sel=props.selected,search=props.search;
-  var f=cs.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});
+  var f=cs.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(String(c.campaignName||"").toLowerCase().indexOf(search.toLowerCase())>=0||String(c.accountName||"").toLowerCase().indexOf(search.toLowerCase())>=0);});
   var g={};f.forEach(function(c){var k=c.accountName||"Unknown";if(!g[k])g[k]={platform:c.platform,campaigns:[]};g[k].campaigns.push(c);});
   return(<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:16,padding:18,maxHeight:480,overflowY:"auto"}}>
     <input placeholder="Search campaigns..." value={search} onChange={function(e){props.onSearch(e.target.value);}} style={{width:"100%",boxSizing:"border-box",background:"rgba(40,25,60,0.5)",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",marginBottom:12}}/>
@@ -2652,7 +2652,7 @@ export default function MediaOnGas(){
   var refreshData=hardRefresh;
   var toggle=function(id){setSelected(function(p){return p.indexOf(id)>=0?p.filter(function(x){return x!==id;}):p.concat([id]);});};
   var toggleGroup=function(ids){setSelected(function(p){var allIn=ids.every(function(id){return p.indexOf(id)>=0;});if(allIn){return p.filter(function(x){return ids.indexOf(x)<0;});}var merged=p.slice();ids.forEach(function(id){if(merged.indexOf(id)<0)merged.push(id);});return merged;});};
-  var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(c.campaignName.toLowerCase().indexOf(search.toLowerCase())>=0||c.accountName.toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
+  var selectAll=function(){var f=campaigns.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(String(c.campaignName||"").toLowerCase().indexOf(search.toLowerCase())>=0||String(c.accountName||"").toLowerCase().indexOf(search.toLowerCase())>=0);});setSelected(f.map(function(c){return c.campaignId;}));};
   var clearAll=function(){setSelected([]);};
 
   var computed=useMemo(function(){
@@ -6036,7 +6036,7 @@ export default function MediaOnGas(){
                     var a=[];
                     if(r.spend>300&&r.result===0){
                       score=-3;
-                      a.push("Zero results from "+fR(r.spend)+" spend ("+spendShare.toFixed(2)+"% of "+r.objective.toLowerCase()+" budget).");
+                      a.push("Zero results from "+fR(r.spend)+" spend ("+spendShare.toFixed(2)+"% of "+String(r.objective||"").toLowerCase()+" budget).");
                       a.push("This audience consumed budget without converting.");
                       if(r.ctr<0.5&&r.impressions>3000){a.push("CTR at "+r.ctr.toFixed(2)+"% confirms the creative is not resonating with this targeting segment.");}
                       else if(r.clicks>0){a.push(fmt(r.clicks)+" clicks generated but none converted, suggesting a landing page or offer disconnect.");}
