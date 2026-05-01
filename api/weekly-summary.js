@@ -39,6 +39,8 @@ function buildHtml(opts) {
   var loginRows = opts.loginRows;
   var reportRows = opts.reportRows;
   var overdueRows = opts.overdueRows;
+  var memberCards = opts.memberCards || [];
+  var narrativeLines = opts.narrativeLines || [];
   var origin = opts.origin;
   var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
@@ -160,6 +162,46 @@ function buildHtml(opts) {
     '<div style="border:1px solid rgba(168,85,247,0.18);border-radius:10px;overflow:hidden;">' +
     overdueSection +
     '</div></td></tr>' +
+
+    // Section 4: Team adoption scorecards
+    (memberCards.length > 0 ? (
+    '<tr><td style="padding:28px 40px 8px;">' +
+    '<div style="font-size:11px;color:#A855F7;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:12px;">Team adoption scorecards</div>' +
+    '<div style="border:1px solid rgba(168,85,247,0.18);border-radius:10px;overflow:hidden;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
+    '<tr>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#A855F7").replace(/249,98,3/g, "168,85,247") + '">Team member</th>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#A855F7").replace(/249,98,3/g, "168,85,247") + 'text-align:center;">Logins</th>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#A855F7").replace(/249,98,3/g, "168,85,247") + 'text-align:center;">Time</th>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#A855F7").replace(/249,98,3/g, "168,85,247") + 'text-align:center;">Reports</th>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#A855F7").replace(/249,98,3/g, "168,85,247") + 'text-align:center;">Status</th>' +
+    '</tr>' +
+    memberCards.map(function(m) {
+      return '<tr>' +
+        '<td style="padding:10px 12px;border-bottom:1px solid rgba(168,85,247,0.12);">' +
+        '<div style="color:#FFFBF8;font-size:12px;font-weight:700;">' + escapeHtml(m.name) + '</div>' +
+        '<div style="color:#8B7FA3;font-size:10px;margin-top:2px;">' + escapeHtml(m.email) + '</div></td>' +
+        '<td style="padding:10px 12px;color:#FFFBF8;font-size:13px;font-weight:700;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + m.logins + '</td>' +
+        '<td style="padding:10px 12px;color:#FFFBF8;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + fmtDur(m.totalMin) + '</td>' +
+        '<td style="padding:10px 12px;color:' + (m.reportsWeek > 0 ? '#22D3EE' : '#8B7FA3') + ';font-size:13px;font-weight:700;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + m.reportsWeek + '</td>' +
+        '<td style="padding:10px 12px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' +
+        '<span style="display:inline-block;background:' + m.statusColor + '18;border:1px solid ' + m.statusColor + '40;color:' + m.statusColor + ';font-size:9px;font-weight:900;padding:3px 10px;border-radius:6px;letter-spacing:1.5px;">' + m.status + '</span></td>' +
+        '</tr>';
+    }).join("") +
+    '</table></div></td></tr>'
+    ) : '') +
+
+    // Section 5: EXCO Assessment narrative
+    (narrativeLines.length > 0 ? (
+    '<tr><td style="padding:28px 40px 8px;">' +
+    '<div style="font-size:11px;color:#FBBF24;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:12px;">EXCO adoption assessment</div>' +
+    '<div style="background:linear-gradient(135deg,rgba(251,191,36,0.06),rgba(0,0,0,0.3));border:1px solid rgba(251,191,36,0.2);border-left:4px solid #FBBF24;border-radius:0 10px 10px 0;padding:20px 22px;">' +
+    narrativeLines.map(function(line) {
+      return '<div style="font-size:13px;color:#FFFBF8;line-height:1.9;margin-bottom:10px;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
+        '<span style="color:#FBBF24;font-weight:900;margin-right:8px;">&#9656;</span>' + escapeHtml(line) + '</div>';
+    }).join("") +
+    '</div></td></tr>'
+    ) : '') +
 
     // CTA button
     '<tr><td style="padding:28px 40px 8px;" align="center">' +
@@ -330,12 +372,98 @@ export default async function handler(req, res) {
     })
     .sort(function(a, b) { return b.daysOverdue - a.daysOverdue; });
 
+  // 4. Per-member adoption scorecards
+  var allUsers = [];
+  try { allUsers = await listUsers(); } catch (_) {}
+  var activeTeam = allUsers.filter(function(u) { return u.active !== false && isTeamEmail(u.email); });
+
+  // Reports sent per sender (all time in the log, for context)
+  var reportsBySender = {};
+  var reportsThisWeekBySender = {};
+  emailLog.forEach(function(e) {
+    var to = Array.isArray(e.to) ? e.to : [];
+    if (to.length === 0) return;
+    var allInternal = true;
+    for (var i = 0; i < to.length; i++) {
+      if (!teamEmailSet[normalizeEmail(to[i])]) { allInternal = false; break; }
+    }
+    if (allInternal) return;
+    var sender = normalizeEmail(e.senderEmail || "");
+    if (!sender) return;
+    reportsBySender[sender] = (reportsBySender[sender] || 0) + 1;
+    if (e.sentAt && e.sentAt >= weekAgoIso) {
+      reportsThisWeekBySender[sender] = (reportsThisWeekBySender[sender] || 0) + 1;
+    }
+  });
+
+  var memberCards = activeTeam.map(function(u) {
+    var em = normalizeEmail(u.email);
+    var login = loginByUser[em] || { logins: 0, totalMin: 0, lastLogin: "" };
+    var reportsWeek = reportsThisWeekBySender[em] || 0;
+    var reportsTotal = reportsBySender[em] || 0;
+    // Adoption score: 0-100 based on login frequency, session depth, and reports sent
+    var loginScore = Math.min(login.logins * 20, 40); // up to 40 points for 2+ logins
+    var sessionScore = Math.min(Math.round(login.totalMin / 2), 30); // up to 30 points for 60+ min
+    var reportScore = Math.min(reportsWeek * 30, 30); // up to 30 points for 1+ report
+    var adoptionScore = loginScore + sessionScore + reportScore;
+    var status = adoptionScore >= 70 ? "ACTIVE" : adoptionScore >= 30 ? "MODERATE" : login.logins > 0 ? "LOW" : "INACTIVE";
+    var statusColor = status === "ACTIVE" ? "#34D399" : status === "MODERATE" ? "#FBBF24" : status === "LOW" ? "#F96203" : "#FF3D00";
+    return {
+      name: u.name || em.split("@")[0],
+      email: em,
+      role: u.role || "admin",
+      logins: login.logins,
+      totalMin: login.totalMin,
+      lastLogin: login.lastLogin,
+      reportsWeek: reportsWeek,
+      reportsTotal: reportsTotal,
+      adoptionScore: adoptionScore,
+      status: status,
+      statusColor: statusColor
+    };
+  }).sort(function(a, b) { return b.adoptionScore - a.adoptionScore; });
+
+  // Generate EXCO narrative
+  var totalTeam = memberCards.length;
+  var activeCount = memberCards.filter(function(m) { return m.status === "ACTIVE"; }).length;
+  var moderateCount = memberCards.filter(function(m) { return m.status === "MODERATE"; }).length;
+  var lowCount = memberCards.filter(function(m) { return m.status === "LOW"; }).length;
+  var inactiveCount = memberCards.filter(function(m) { return m.status === "INACTIVE"; }).length;
+  var totalLogins = memberCards.reduce(function(a, m) { return a + m.logins; }, 0);
+  var totalSessionMin = memberCards.reduce(function(a, m) { return a + m.totalMin; }, 0);
+  var totalReportsWeek = memberCards.reduce(function(a, m) { return a + m.reportsWeek; }, 0);
+  var adoptionPct = totalTeam > 0 ? Math.round((activeCount + moderateCount) / totalTeam * 100) : 0;
+
+  var narrativeLines = [];
+  narrativeLines.push("Of " + totalTeam + " authorised team members, " + activeCount + " are actively using Media On Gas this week (" + adoptionPct + "% adoption rate).");
+  if (inactiveCount > 0) {
+    var inactiveNames = memberCards.filter(function(m) { return m.status === "INACTIVE"; }).map(function(m) { return m.name; });
+    narrativeLines.push(inactiveCount + " team member" + (inactiveCount === 1 ? " has" : "s have") + " not logged in this week: " + inactiveNames.join(", ") + ". This represents a gap in platform utilisation that should be addressed in the next team check-in.");
+  }
+  if (totalSessionMin > 0) {
+    narrativeLines.push("Combined platform time across the team: " + fmtDur(totalSessionMin) + ". " + (totalSessionMin >= totalTeam * 30 ? "Session depth indicates the team is engaging with the analytics, not just logging in." : "Session times are short, suggesting quick check-ins rather than deep analysis. Encourage the team to spend time on the Creative and Insights tabs."));
+  }
+  if (totalReportsWeek > 0) {
+    narrativeLines.push(totalReportsWeek + " client report" + (totalReportsWeek === 1 ? " was" : "s were") + " sent this week. " + (overdueRows.length === 0 ? "All client SLAs are current, no overdue reports." : overdueRows.length + " client" + (overdueRows.length === 1 ? " is" : "s are") + " overdue for their 7-day report, requiring immediate attention."));
+  } else {
+    narrativeLines.push("No client reports were sent this week. If clients have active campaigns, this is a missed SLA obligation that needs immediate follow-up.");
+  }
+  if (activeCount === totalTeam) {
+    narrativeLines.push("Assessment: Full team adoption. Media On Gas is embedded in the weekly workflow.");
+  } else if (adoptionPct >= 60) {
+    narrativeLines.push("Assessment: Majority adoption. Focus on onboarding the remaining " + (totalTeam - activeCount - moderateCount) + " team member" + ((totalTeam - activeCount - moderateCount) === 1 ? "" : "s") + " to reach full utilisation.");
+  } else {
+    narrativeLines.push("Assessment: Platform adoption is below target. Recommend a team training session and setting clear expectations for weekly dashboard usage and client reporting cadence.");
+  }
+
   // Build email
   var html = buildHtml({
     weekLabel: weekLabel,
     loginRows: loginRows,
     reportRows: reportRows,
     overdueRows: overdueRows,
+    memberCards: memberCards,
+    narrativeLines: narrativeLines,
     origin: origin
   });
 
