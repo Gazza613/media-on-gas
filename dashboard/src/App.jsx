@@ -2461,6 +2461,15 @@ export default function MediaOnGas(){
     }
     return ad.thumbnail||"";
   };
+  // Whether the ad has a resolvable thumbnail source. True when the ad-image
+  // proxy can attempt resolution (Meta/TikTok with an adId) even if ads.js
+  // didn't find a thumbnail in the initial batch fetch.
+  var hasThumb=function(ad){
+    if(!ad)return false;
+    if(ad.thumbnail)return true;
+    var pLow=String(ad.platform||"").toLowerCase();
+    return !!(ad.adId&&(pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0||pLow.indexOf("tiktok")>=0));
+  };
 
   // Idle logout: 5 minutes of no activity ends an admin or team-member session.
   // On the next login, handleLogin does a hard reload so returning users pick
@@ -4501,14 +4510,14 @@ export default function MediaOnGas(){
                     <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                       <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+pgAccent+"55,"+pgAccent+"15 55%,#0a0618 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:40,fontWeight:900,letterSpacing:4,color:pgAccent,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{pgShort}</div>
-                        {!ad.thumbnail&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
+                        {!hasThumb(ad)&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
                           <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
                           <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
                           {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
                         </div>}
                       </div>
-                      {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
-                      {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
+                      {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
+                      {hasThumb(ad)&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
                         <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabelS(ad.resultType)}</div>
                         <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>
@@ -4922,7 +4931,7 @@ export default function MediaOnGas(){
               // Only render the centred metric when there's no thumbnail, when there is one,
               // the card-level gradient-backed overlay handles the callout and a second copy
               // from here bubbles up to the same stacking layer and duplicates.
-              var showMetric=!ad.thumbnail;
+              var showMetric=!hasThumb(ad);
               return <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+pc+"55,"+pc+"15 55%,#0a0618 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
                 <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-18deg)",fontSize:56,fontWeight:900,letterSpacing:4,color:pc,opacity:0.16,fontFamily:ff,whiteSpace:"nowrap",pointerEvents:"none"}}>{ps.toUpperCase()}</div>
                 {showMetric&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 14px"}}>
@@ -4944,8 +4953,8 @@ export default function MediaOnGas(){
               return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
-                  {ad.thumbnail&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
-                  {ad.thumbnail&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
+                  {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
+                  {hasThumb(ad)&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabel(ad.resultType)}</div>
                     <div style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
                     <div style={{fontSize:10,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)}</div>
@@ -4982,7 +4991,7 @@ export default function MediaOnGas(){
               return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.label}}>{"#"+rank}</td>
                 <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
-                  {ad.thumbnail?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
+                  {hasThumb(ad)?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.parentNode.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
@@ -5218,7 +5227,7 @@ export default function MediaOnGas(){
                   var ps=platShort2[ad.platform]||ad.platform;
                   var fm2=fmtMeta(ad.format);
                   var thumbBlock=<div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
-                    {ad.thumbnail?<img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
+                    {hasThumb(ad)?<img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
                     <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:textOnAccent(fm2.color),fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
                   </div>;
                   return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
