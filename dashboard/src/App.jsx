@@ -4355,7 +4355,7 @@ export default function MediaOnGas(){
                       })()}
                     </div>
                     <div>
-                      <div style={{fontSize:10,fontWeight:800,color:sentColor,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
+                      <div style={{fontSize:14,fontWeight:800,color:sentColor,letterSpacing:2.4,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
                       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
                       <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
                       <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
@@ -6347,7 +6347,7 @@ export default function MediaOnGas(){
                         })()}
                       </div>
                       <div>
-                        <div style={{fontSize:10,fontWeight:800,color:sentColor,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
+                        <div style={{fontSize:14,fontWeight:800,color:sentColor,letterSpacing:2.4,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
                         <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
                         <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
                         <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
