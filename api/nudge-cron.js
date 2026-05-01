@@ -238,6 +238,27 @@ export default async function handler(req, res) {
 
   var dryRun = req.query.dryRun === "1" || req.query.dry === "1";
 
+  // ?reset=1 — set a baseline date in Redis. All clients are treated as
+  // if they last sent on this date, so the SLA counter restarts from now.
+  // The first nudges will fire SLA_DAYS + BUFFER_HOURS after the reset.
+  var BASELINE_KEY = "nudge:baseline";
+  if (req.query.reset === "1") {
+    var baselineIso = new Date().toISOString();
+    await redisCmd(["SET", BASELINE_KEY, baselineIso]);
+    res.status(200).json({ ok: true, action: "reset", baseline: baselineIso, nextNudgeAfter: SLA_DAYS + " days + " + BUFFER_HOURS + "h from now" });
+    return;
+  }
+
+  // Read baseline (if set). Clients whose last send is before the baseline
+  // are treated as if they sent on the baseline date, giving them a fresh
+  // SLA window. Once the baseline itself is older than SLA_DAYS the effect
+  // expires naturally.
+  var baselineTs = 0;
+  try {
+    var bRes = await redisCmd(["GET", BASELINE_KEY]);
+    if (bRes && bRes.result) baselineTs = Date.parse(bRes.result) || 0;
+  } catch (_) {}
+
   // Pull a reasonably deep window of audit entries so a client that last
   // reported 29 days ago still registers.
   var entries = [];
@@ -257,6 +278,15 @@ export default async function handler(req, res) {
   var identities = Object.keys(byClient);
   var now = Date.now();
   var slaMs = SLA_DAYS * 24 * 60 * 60 * 1000 + BUFFER_HOURS * 60 * 60 * 1000;
+
+  // Apply baseline: if a client's last send is before the baseline,
+  // bump their effective last-sent timestamp to the baseline date.
+  if (baselineTs > 0) {
+    identities.forEach(function(id) {
+      var c = byClient[id];
+      if (c.lastSentTs < baselineTs) c.lastSentTs = baselineTs;
+    });
+  }
 
   var overdue = identities.map(function(id) { return byClient[id]; })
     .filter(function(c) { return (now - c.lastSentTs) > slaMs; });
@@ -356,6 +386,7 @@ export default async function handler(req, res) {
     mode: isCron ? "cron" : "manual",
     dryRun: dryRun,
     slaDays: SLA_DAYS,
+    baseline: baselineTs ? new Date(baselineTs).toISOString() : null,
     clientsTracked: identities.length,
     overdueCount: overdue.length,
     nudges: results,
