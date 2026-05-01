@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   // Admin-only, this endpoint lists every Meta ad account attached to the
   // admin token. Clients must never see other clients' account names and ids.
   var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role !== "admin") {
+  if (principal.role !== "admin" && principal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only endpoint" });
     return;
   }

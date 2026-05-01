@@ -119,6 +119,17 @@ export async function checkAuth(req, res) {
   return false;
 }
 
+// Internal-staff gate. "admin" is a regular GAS team member, "superadmin"
+// is gary@gasmarketing.co.za. Both have full access to admin endpoints
+// (audit log, usage stats, ground truth audit, email share, etc.).
+// "client" is a read-only share-link viewer; they're rejected.
+// Endpoints that need superadmin-only privileges (e.g. revoke other
+// admins) check isSuperadminEmail(principal.email) on top of this.
+export function isAdminOrSuperadmin(principal) {
+  if (!principal) return false;
+  return principal.role === "admin" || principal.role === "superadmin";
+}
+
 // Helper for data endpoints: given a campaign id/name and the current principal,
 // decide if the caller is allowed to see it. Admins see everything.
 // Strict matching only, no prefix bypass. Accepts raw and _facebook/_instagram

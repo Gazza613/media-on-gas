@@ -12,7 +12,7 @@ import { readUsageEvents, logUsageEvent, isAuditEnabled } from "./_audit.js";
 export default async function handler(req, res) {
   if (!rateLimit(req, res, { maxPerMin: 30, maxPerHour: 300 })) return;
   if (!(await checkAuth(req, res))) return;
-  if (req.authPrincipal && req.authPrincipal.role !== "admin") {
+  if (req.authPrincipal && req.authPrincipal.role !== "admin" && req.authPrincipal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only" });
     return;
   }

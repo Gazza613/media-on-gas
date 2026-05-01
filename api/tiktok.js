@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   // filter. Clients go through /api/campaigns + /api/ads which apply their
   // token's campaign allowlist.
   var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role !== "admin") {
+  if (principal.role !== "admin" && principal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only endpoint" });
     return;
   }

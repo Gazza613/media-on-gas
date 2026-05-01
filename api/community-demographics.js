@@ -214,7 +214,7 @@ export default async function handler(req, res) {
   // calls this from admin code paths anyway, so the gate doesn't change
   // behaviour, just blocks the direct-URL bypass.
   var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role !== "admin") {
+  if (principal.role !== "admin" && principal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only endpoint" });
     return;
   }

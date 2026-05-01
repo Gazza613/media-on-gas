@@ -64,7 +64,7 @@ export default async function handler(req, res) {
   // it complicates the search_term_view query), we gate the whole endpoint
   // to admins for now. If a client-visible version is needed later, we filter
   // at result time using segments.campaign_id in each query.
-  if (principal.role !== "admin") {
+  if (principal.role !== "admin" && principal.role !== "superadmin") {
     return res.status(200).json({
       available: false,
       reason: "Google intent signals are admin-only for now. Client flows continue to use the aggregated Google row in /api/demographics."

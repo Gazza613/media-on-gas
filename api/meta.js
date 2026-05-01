@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   // Clients must go through /api/campaigns + /api/ads which enforce a
   // per-token campaign-scope filter.
   var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role !== "admin") {
+  if (principal.role !== "admin" && principal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only endpoint" });
     return;
   }

@@ -11,7 +11,7 @@ import { readEmailLog, deleteEmailLogEntry, isAuditEnabled } from "./_audit.js";
 export default async function handler(req, res) {
   if (!rateLimit(req, res, { maxPerMin: 60, maxPerHour: 1000 })) return;
   if (!(await checkAuth(req, res))) return;
-  if (!req.authPrincipal || req.authPrincipal.role !== "admin") {
+  if (!req.authPrincipal || req.authPrincipal.role !== "admin" && req.authPrincipal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only" });
     return;
   }

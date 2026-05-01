@@ -124,7 +124,7 @@ export default async function handler(req, res) {
   // panel for client principals, this is a belt-and-suspenders guard for
   // anyone hitting the endpoint directly with a client JWT.
   var chatPrincipal = req.authPrincipal || { role: "admin" };
-  if (chatPrincipal.role !== "admin") {
+  if (chatPrincipal.role !== "admin" && chatPrincipal.role !== "superadmin") {
     res.status(403).json({ error: "Chat is admin-only" });
     return;
   }
