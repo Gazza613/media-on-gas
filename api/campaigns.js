@@ -926,6 +926,11 @@ export default async function handler(req, res) {
         var pg = pagesJson.data[pi];
         var pgToken = pg.access_token || metaToken;
         if (pg.instagram_business_account) {
+          // Always initialize follower_growth so the field is present on the
+          // response. Any failure path below leaves it at 0 rather than
+          // undefined, so the dashboard's `|| 0` fallback can't mask a
+          // silent IG insights failure as genuine zero growth.
+          pg.instagram_business_account.follower_growth = 0;
           try {
             var igId = pg.instagram_business_account.id;
             var since = Math.floor(new Date(from).getTime() / 1000);
