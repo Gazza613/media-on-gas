@@ -5132,7 +5132,7 @@ export default function MediaOnGas(){
                     </div>
                   </div>}
 
-                  <Insight title={sec.label+" Read"} accent={sec.accent} icon={sec.icon}>{(function(){
+                  <Insight title={sec.label+" Insights"} accent={sec.accent} icon={sec.icon}>{(function(){
                     var lines=[];
                     var topAd=top10[0];
                     lines.push(arr.length+" "+sec.label.toLowerCase()+" creatives delivered "+(totals.results>0?fmt(totals.results)+" "+resultLabel(arr[0]?arr[0].resultType:sec.metric).toLowerCase():"no measurable results yet")+" from "+fR(totals.spend)+" spend"+(totals.cpr>0?", a blended "+sec.costLabel+" of "+fR(totals.cpr):"")+(verdict?" ("+verdict.toLowerCase()+")":"")+".");
@@ -5307,11 +5307,13 @@ export default function MediaOnGas(){
                         })}
                       </div>
 
-                      {/* ANALYST READ, per objective */}
-                      <div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid "+sec.accent+"25"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                          {Ic.eye(sec.accent,12)}
-                          <span style={{fontSize:10,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{"ANALYST READ | "+sec.label}</span>
+                      {/* ANALYST INSIGHTS, per objective */}
+                      <div style={{marginTop:18,padding:"20px 22px",background:"linear-gradient(135deg,"+sec.accent+"08 0%,"+sec.accent+"03 50%, transparent 100%)",borderRadius:"0 14px 14px 0",border:"1px solid "+sec.accent+"20",borderLeft:"4px solid "+sec.accent,position:"relative",overflow:"hidden"}}>
+                        <div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+sec.accent+"06, transparent)",pointerEvents:"none"}}></div>
+                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>
+                          {Ic.eye(sec.accent,16)}
+                          <span style={{fontSize:10,fontWeight:800,color:sec.accent,fontFamily:fm,letterSpacing:3,textTransform:"uppercase"}}>{"ANALYST INSIGHTS | "+sec.label}</span>
+                          <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)",marginLeft:8}}></div>
                         </div>
                         {(function(){
                           var lines=[];
@@ -5351,18 +5353,19 @@ export default function MediaOnGas(){
                               lines.push("Attention delta: top 5 CTR "+o.topCtr.toFixed(2)+"% vs tail "+o.tailCtr.toFixed(2)+"%"+(ctrDelta>0?". Top creatives are also earning disproportionate attention, the hook is doing work, not just the algorithm.":". Tail has stronger CTR but weaker conversion, the hook attracts but the offer/landing isn't converting. Audit funnel past the click."));
                             }
                           }
-                          return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:6,display:"flex",gap:8}}><span style={{color:sec.accent,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
+                          return <div style={{fontSize:13.5,color:P.txt,fontFamily:ff,lineHeight:2.1,letterSpacing:0.2,position:"relative"}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:8,display:"flex",gap:8}}><span style={{color:sec.accent,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
                         })()}
                       </div>
                     </div>;
                   })}
 
-                  {/* CROSS-OBJECTIVE STRATEGIC READ */}
-                  <div style={{marginTop:28,padding:"20px 22px",background:"linear-gradient(135deg,rgba(251,191,36,0.06),rgba(0,0,0,0.4))",borderRadius:12,border:"1px solid "+P.ember+"30"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  {/* CROSS-OBJECTIVE STRATEGIC INSIGHTS */}
+                  <div style={{marginTop:28,padding:"22px 26px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",borderRadius:"0 14px 14px 0",border:"1px solid "+P.ember+"20",borderLeft:"4px solid "+P.ember,position:"relative",overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+P.ember+"06, transparent)",pointerEvents:"none"}}></div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>
                       {Ic.crown(P.ember,16)}
-                      <span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:ff,letterSpacing:1.5}}>STRATEGIC READ | CROSS-OBJECTIVE</span>
-                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.ember+"30, transparent)"}}/>
+                      <span style={{fontSize:10,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase"}}>STRATEGIC INSIGHTS | CROSS-OBJECTIVE</span>
+                      <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.ember+"30, transparent)",marginLeft:8}}/>
                     </div>
                     {(function(){
                       var lines=[];
@@ -5400,7 +5403,7 @@ export default function MediaOnGas(){
                       // Headline action
                       var scaleCount=0;objBreakdown.forEach(function(o){scaleCount+=o.top5.filter(function(a){return a.results>0;}).length;});
                       if(scaleCount>0)lines.push("Next 14 days: scale the "+scaleCount+" green-tagged creatives by +20% budget, kill the bottom "+totReallocCount+" tail ads, brief "+(refreshCount*4)+" new variants across "+refreshCount+" objective(s) needing refresh. Re-measure on day 14 with a minimum of 3x current volume per winning ad before locking in any permanent reallocation.");
-                      return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.75}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:8,display:"flex",gap:8}}><span style={{color:P.ember,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
+                      return <div style={{fontSize:13.5,color:P.txt,fontFamily:ff,lineHeight:2.1,letterSpacing:0.2,position:"relative"}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:8,display:"flex",gap:8}}><span style={{color:P.ember,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
                     })()}
                   </div>
                 </div>;
