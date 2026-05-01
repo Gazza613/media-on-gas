@@ -35,17 +35,24 @@ function fmtPct(n) {
 }
 
 // Objective classifier that MIRRORS the dashboard's Summary tile logic
-// (App.jsx around line 1387-1392). The dashboard classifies objectives by
-// campaign name only, not Meta's API objective field, and the email MUST
-// produce the same numbers the client sees on the dashboard. Keep this
-// rule set in lockstep with the dashboard.
+// (App.jsx canonical-first classifiers in classifyObjective + Summary
+// objectives4). The dashboard reads the canonical c.objective field set
+// by /api/campaigns FIRST and only falls back to name-pattern parsing
+// when canonical is missing. The email MUST follow the same rule or
+// Follower campaigns whose name doesn't match the strict like-pattern
+// silently bucket as "traffic" and the Followers & Likes tile vanishes.
 function campObjective(c) {
-  var n = (c.campaignName || "").toLowerCase();
-  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0) return "appinstall";
+  var canon = String((c && c.objective) || "").toLowerCase();
+  if (canon === "appinstall") return "appinstall";
+  if (canon === "leads") return "leads";
+  if (canon === "followers") return "followers";
+  if (canon === "landingpage") return "landingpage";
+  var n = String((c && c.campaignName) || "").toLowerCase();
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
-  return "traffic"; // dashboard's default bucket, not surfaced as an outcome tile
+  return "traffic"; // default bucket, not surfaced as an outcome tile
 }
 
 // Aggregate a flat array of campaigns into one summed object + derived metrics.
