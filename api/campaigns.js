@@ -1,5 +1,5 @@
 import { rateLimit } from "./_rateLimit.js";
-import { checkAuth } from "./_auth.js";
+import { checkAuth, filterPagesForPrincipal } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
       var filtered = (cached.data.campaigns || []).filter(function(c) {
         return cIdSet[String(c.campaignId || "")] === true;
       });
-      res.status(200).json({ totalCampaigns: filtered.length, dateFrom: cached.data.dateFrom, dateTo: cached.data.dateTo, campaigns: filtered, pages: cached.data.pages, warnings: cached.data.warnings });
+      res.status(200).json({ totalCampaigns: filtered.length, dateFrom: cached.data.dateFrom, dateTo: cached.data.dateTo, campaigns: filtered, pages: filterPagesForPrincipal(cached.data.pages, pCached), warnings: cached.data.warnings });
     } else {
       res.status(200).json(cached.data);
     }
@@ -983,7 +983,7 @@ export default async function handler(req, res) {
     var filteredCamps = allCampaigns.filter(function(c) {
       return idSet[String(c.campaignId || "")] === true;
     });
-    res.status(200).json({ totalCampaigns: filteredCamps.length, dateFrom: from, dateTo: to, campaigns: filteredCamps, pages: pageData, warnings: warnings });
+    res.status(200).json({ totalCampaigns: filteredCamps.length, dateFrom: from, dateTo: to, campaigns: filteredCamps, pages: filterPagesForPrincipal(pageData, principal), warnings: warnings });
     return;
   }
   res.status(200).json(fullResponse);

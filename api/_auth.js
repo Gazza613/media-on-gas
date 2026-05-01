@@ -130,6 +130,52 @@ export function isAdminOrSuperadmin(principal) {
   return principal.role === "admin" || principal.role === "superadmin";
 }
 
+// Strip the `pages` array on /api/campaigns to only those pages whose
+// name plausibly belongs to one of the allowed campaigns. Without this,
+// a client share-link viewer received the full FB / IG owned-page list
+// across every brand on the platform, which leaked all-clients fan
+// counts via the response payload (the dashboard only DISPLAYED matched
+// pages, but DevTools made the rest readable).
+//
+// Empty allowlist (misconfigured token) returns []. Otherwise keeps any
+// page whose name shares a 4+ char alphanumeric run with any allowed
+// campaign name. Loose intentionally: missing a real match would break
+// the Community tab for a legit client; the cost of an extra page row
+// is just the page's followers_count, not anything PII-grade.
+export function filterPagesForPrincipal(pages, principal) {
+  if (!principal || principal.role !== "client") return pages || [];
+  var p = pages || [];
+  if (p.length === 0) return p;
+  var names = principal.allowedCampaignNames || [];
+  if (names.length === 0) return [];
+  var normalize = function(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " "); };
+  var significant = function(s) {
+    return normalize(s).split(/\s+/).filter(function(w) {
+      // Same stop list as the frontend's autoMatchPage so server-side
+      // filtering doesn't accidentally diverge from what the UI matches.
+      return w.length >= 4 && [
+        "campaign", "facebook", "instagram", "tiktok", "paid", "social",
+        "funnel", "cycle", "leads", "lead", "follower", "like", "appinstall",
+        "traffic", "cold", "warm", "display", "search", "promotion", "promo",
+        "april", "may", "june", "july", "august", "september", "october",
+        "november", "december", "january", "february", "march", "2024", "2025", "2026"
+      ].indexOf(w) < 0;
+    });
+  };
+  var allowedTokens = {};
+  names.forEach(function(n) {
+    significant(n).forEach(function(w) { allowedTokens[w] = true; });
+  });
+  if (Object.keys(allowedTokens).length === 0) return [];
+  return p.filter(function(pg) {
+    var pgTokens = significant(pg.name);
+    for (var i = 0; i < pgTokens.length; i++) {
+      if (allowedTokens[pgTokens[i]]) return true;
+    }
+    return false;
+  });
+}
+
 // Helper for data endpoints: given a campaign id/name and the current principal,
 // decide if the caller is allowed to see it. Admins see everything.
 // Strict matching only, no prefix bypass. Accepts raw and _facebook/_instagram
