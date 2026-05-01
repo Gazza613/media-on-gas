@@ -913,6 +913,10 @@ function AdPreviewModal(props){
 
 // Derive unique client names from campaign account names by stripping
 // trailing platform labels (Meta, Google, TikTok, Facebook, Instagram).
+// For agency accounts (e.g. "GAS Agency") the account name doesn't
+// identify the client, so we extract the client name from the leading
+// portion of campaign names before common delimiters (- | :).
+var AGENCY_NAMES={"gas agency":true,"gas":true};
 function deriveClientNames(campaigns){
   var PLATFORM_SUFFIXES=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
   var seen={};
@@ -921,6 +925,18 @@ function deriveClientNames(campaigns){
     if(!raw)return;
     var clean=raw.replace(PLATFORM_SUFFIXES,"").replace(PLATFORM_SUFFIXES,"").trim();
     if(!clean)return;
+    // Agency account: derive client name from campaign name prefix
+    if(AGENCY_NAMES[clean.toLowerCase()]){
+      var cn=(c.campaignName||"").trim();
+      if(!cn)return;
+      // Take everything before the first delimiter (- | :) as the client name
+      var prefix=cn.split(/\s*[-|:]\s*/)[0].trim();
+      if(prefix){
+        var pk=prefix.toLowerCase();
+        if(!seen[pk])seen[pk]=prefix;
+      }
+      return;
+    }
     var key=clean.toLowerCase();
     if(!seen[key])seen[key]=clean;
   });
@@ -938,6 +954,13 @@ function ShareModal(props){
       if((props.selected||[]).indexOf(c.campaignId)<0)return;
       var raw=(c.accountName||"").trim();
       var clean=raw.replace(PLATFORM_SUFFIXES,"").replace(PLATFORM_SUFFIXES,"").trim().toLowerCase();
+      // Agency account: derive client key from campaign name prefix
+      if(AGENCY_NAMES[clean]){
+        var cn=(c.campaignName||"").trim();
+        var prefix=(cn.split(/\s*[-|:]\s*/)[0]||"").trim().toLowerCase();
+        if(prefix){counts[prefix]=(counts[prefix]||0)+1;}
+        return;
+      }
       if(clean){counts[clean]=(counts[clean]||0)+1;}
     });
     var best="";var bestN=0;
