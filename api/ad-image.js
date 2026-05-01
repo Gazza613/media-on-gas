@@ -80,9 +80,15 @@ async function resolveMetaAdThumbnail(adId, token) {
       if (afs.images[ah].hash) candidateHashes.push(afs.images[ah].hash);
     }
   }
-  // object_story_spec can carry image hashes in link_data or video_data
+  // object_story_spec can carry image hashes in link_data, video_data, or
+  // child_attachments (carousels). Pull the first child's hash as the card thumbnail.
   if (oss.link_data && oss.link_data.image_hash) candidateHashes.push(oss.link_data.image_hash);
   if (oss.video_data && oss.video_data.image_hash) candidateHashes.push(oss.video_data.image_hash);
+  if (oss.link_data && oss.link_data.child_attachments && oss.link_data.child_attachments.length > 0) {
+    oss.link_data.child_attachments.forEach(function(ch) {
+      if (ch.image_hash && candidateHashes.indexOf(ch.image_hash) < 0) candidateHashes.push(ch.image_hash);
+    });
+  }
   if (candidateHashes.length > 0 && accountId) {
     try {
       var hashes = encodeURIComponent(JSON.stringify(candidateHashes));

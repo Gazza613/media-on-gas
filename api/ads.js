@@ -646,6 +646,7 @@ export default async function handler(req, res) {
         if (cr.image_hash) candidateHashes.push(cr.image_hash);
         if (oss.link_data && oss.link_data.image_hash) candidateHashes.push(oss.link_data.image_hash);
         if (oss.video_data && oss.video_data.image_hash) candidateHashes.push(oss.video_data.image_hash);
+        if (oss.link_data && oss.link_data.child_attachments) oss.link_data.child_attachments.forEach(function(ch) { if (ch.image_hash && candidateHashes.indexOf(ch.image_hash) < 0) candidateHashes.push(ch.image_hash); });
         if (afs.images) afs.images.forEach(function(im) { if (im.hash) candidateHashes.push(im.hash); });
         for (var chi = 0; chi < candidateHashes.length && !hashThumb; chi++) {
           hashThumb = hashToUrl[candidateHashes[chi]] || "";
