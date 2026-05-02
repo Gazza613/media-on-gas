@@ -20,6 +20,7 @@ import { rateLimit } from "../_rateLimit.js";
 import {
   checkCreateAuth,
   isAccountAllowed,
+  getCreateMetaToken,
   MAX_DAILY_BUDGET_CENTS,
   ALLOWED_OBJECTIVES,
   META_API_VERSION
@@ -32,8 +33,8 @@ export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 })) return;
 
-  var token = process.env.META_ACCESS_TOKEN;
-  if (!token) { res.status(503).json({ error: "META_ACCESS_TOKEN not set" }); return; }
+  var token = getCreateMetaToken();
+  if (!token) { res.status(503).json({ error: "META_CREATE_TOKEN or META_ACCESS_TOKEN must be set" }); return; }
 
   var body = req.body;
   if (typeof body === "string") {

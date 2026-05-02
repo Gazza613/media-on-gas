@@ -129,3 +129,13 @@ export function isAccountAllowed(accountId) {
   if (id.indexOf("act_") !== 0) id = "act_" + id;
   return getAllowedAccounts().indexOf(id) >= 0;
 }
+
+// Resolve the Meta token used by Create-tab endpoints. Prefers the dedicated
+// META_CREATE_TOKEN when set so the create flow can use a token from a Live
+// (non-dev-mode) Meta app or a System User token, while the rest of the
+// dashboard's read endpoints keep using META_ACCESS_TOKEN unchanged. Falls
+// back to META_ACCESS_TOKEN when META_CREATE_TOKEN isn't configured so the
+// existing single-token deployment still works without changes.
+export function getCreateMetaToken() {
+  return process.env.META_CREATE_TOKEN || process.env.META_ACCESS_TOKEN || "";
+}

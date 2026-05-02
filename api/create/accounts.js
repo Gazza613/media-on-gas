@@ -4,7 +4,7 @@
 // META_ACCESS_TOKEN may have access to many more.
 
 import { rateLimit } from "../_rateLimit.js";
-import { checkCreateAuth, getAllowedAccounts, META_API_VERSION } from "../_createAuth.js";
+import { checkCreateAuth, getAllowedAccounts, getCreateMetaToken, META_API_VERSION } from "../_createAuth.js";
 
 export const config = { maxDuration: 60 };
 
@@ -17,8 +17,8 @@ export default async function handler(req, res) {
     res.status(503).json({ error: "CREATE_TAB_ALLOWED_ACCOUNTS not set" });
     return;
   }
-  var token = process.env.META_ACCESS_TOKEN;
-  if (!token) { res.status(503).json({ error: "META_ACCESS_TOKEN not set" }); return; }
+  var token = getCreateMetaToken();
+  if (!token) { res.status(503).json({ error: "META_CREATE_TOKEN or META_ACCESS_TOKEN must be set" }); return; }
 
   // Hit Meta once and let it tell us the names + currency for each allowed
   // account. We use the user-context endpoint then filter, which is one

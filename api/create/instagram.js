@@ -4,7 +4,7 @@
 // up promote_pages for that account, then asks each page about its IG link.
 
 import { rateLimit } from "../_rateLimit.js";
-import { checkCreateAuth, isAccountAllowed, META_API_VERSION } from "../_createAuth.js";
+import { checkCreateAuth, isAccountAllowed, getCreateMetaToken, META_API_VERSION } from "../_createAuth.js";
 
 export const config = { maxDuration: 60 };
 
@@ -16,8 +16,8 @@ export default async function handler(req, res) {
   if (!accountId) { res.status(400).json({ error: "Missing accountId" }); return; }
   if (!isAccountAllowed(accountId)) { res.status(403).json({ error: "Account not in allowlist" }); return; }
 
-  var token = process.env.META_ACCESS_TOKEN;
-  if (!token) { res.status(503).json({ error: "META_ACCESS_TOKEN not set" }); return; }
+  var token = getCreateMetaToken();
+  if (!token) { res.status(503).json({ error: "META_CREATE_TOKEN or META_ACCESS_TOKEN must be set" }); return; }
 
   try {
     var pgUrl = "https://graph.facebook.com/" + META_API_VERSION + "/" +
