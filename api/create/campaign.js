@@ -56,6 +56,11 @@ export default async function handler(req, res) {
     campForm.set("status", "PAUSED");
     campForm.set("special_ad_categories", JSON.stringify(p.specialAdCategories || []));
     campForm.set("buying_type", "AUCTION");
+    // Meta v25.0 made this mandatory whenever the campaign doesn't carry a
+    // CBO budget. We hold budgets at the ad-set level (one ad set per campaign
+    // in this wizard), so sharing is off — explicit false satisfies the
+    // validator without changing pacing behaviour.
+    campForm.set("is_adset_budget_sharing_enabled", "false");
     campForm.set("access_token", token);
 
     var campRes = await fetch(graphBase + "/" + acct + "/campaigns", {
