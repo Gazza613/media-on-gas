@@ -33,22 +33,37 @@ export default async function handler(req, res) {
       var ad = await ar.json();
       pages = (ad && ad.data) || [];
     }
+    // For ad creatives we want the IG identity that Meta accepts as
+    // instagram_user_id / instagram_actor_id in object_story_spec. Pages
+    // expose two adjacent fields that look interchangeable but aren't:
+    //   - connected_instagram_account: the legacy ads-eligible link, this is
+    //     the one ad creatives actually want.
+    //   - instagram_business_account: the modern Graph IG identity used by
+    //     content APIs. Sometimes set, sometimes not, sometimes the same id
+    //     as connected, sometimes different.
+    // We fetch both and prefer connected_instagram_account when present;
+    // otherwise we fall back to instagram_business_account (better than
+    // showing an empty dropdown — if that id is wrong Meta will reject it
+    // at create time and the wizard surfaces the error).
     var out = [];
     for (var i = 0; i < pages.length; i++) {
       var p = pages[i];
       var iUrl = "https://graph.facebook.com/" + META_API_VERSION + "/" + encodeURIComponent(p.id) +
-                 "?fields=instagram_business_account{id,username,profile_picture_url}&access_token=" +
+                 "?fields=connected_instagram_account{id,username,profile_picture_url},instagram_business_account{id,username,profile_picture_url}&access_token=" +
                  encodeURIComponent(token);
       try {
         var ir = await fetch(iUrl);
         var id = await ir.json();
-        if (id && id.instagram_business_account) {
+        var preferred = (id && id.connected_instagram_account) || (id && id.instagram_business_account) || null;
+        var source = id && id.connected_instagram_account ? "connected" : (id && id.instagram_business_account ? "business" : null);
+        if (preferred) {
           out.push({
-            instagramId: id.instagram_business_account.id,
-            username: id.instagram_business_account.username || "",
-            picture: id.instagram_business_account.profile_picture_url || null,
+            instagramId: preferred.id,
+            username: preferred.username || "",
+            picture: preferred.profile_picture_url || null,
             pageId: p.id,
-            pageName: p.name
+            pageName: p.name,
+            source: source
           });
         }
       } catch (_) {}

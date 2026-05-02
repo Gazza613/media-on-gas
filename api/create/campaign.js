@@ -281,7 +281,10 @@ function buildTargeting(p) {
 function buildCreative(p) {
   var c = p.creative;
   var storySpec = { page_id: p.pageId };
-  if (p.instagramId) storySpec.instagram_actor_id = p.instagramId;
+  // v22+ renamed instagram_actor_id → instagram_user_id in object_story_spec.
+  // The old name still parses but Meta validates the value differently
+  // depending on which field it sees, so the new name is more reliable.
+  if (p.instagramId) storySpec.instagram_user_id = p.instagramId;
 
   if (c.videoId) {
     storySpec.video_data = {
