@@ -105,7 +105,9 @@ export default async function handler(req, res) {
     });
     var adsetData = await adsetRes.json();
     if (!adsetRes.ok || !adsetData.id) {
-      return fail(res, 502, "Ad set create failed (campaign was created, paused)", adsetData, { campaignId: campaignId });
+      return fail(res, 502, "Ad set create failed (campaign was created, paused)", adsetData,
+        { campaignId: campaignId },
+        scrubForm(adsetForm));
     }
     var adsetId = adsetData.id;
 
@@ -126,7 +128,8 @@ export default async function handler(req, res) {
     var crData = await crRes.json();
     if (!crRes.ok || !crData.id) {
       return fail(res, 502, "Ad creative create failed (campaign + adset were created, paused)", crData,
-        { campaignId: campaignId, adsetId: adsetId });
+        { campaignId: campaignId, adsetId: adsetId },
+        scrubForm(creativeForm));
     }
     var creativeId = crData.id;
 
@@ -147,7 +150,8 @@ export default async function handler(req, res) {
     var adData = await adRes.json();
     if (!adRes.ok || !adData.id) {
       return fail(res, 502, "Ad create failed (campaign + adset + creative were created, paused)", adData,
-        { campaignId: campaignId, adsetId: adsetId, creativeId: creativeId });
+        { campaignId: campaignId, adsetId: adsetId, creativeId: creativeId },
+        scrubForm(adForm));
     }
     var adId = adData.id;
 
@@ -186,8 +190,23 @@ export default async function handler(req, res) {
 
 // ---------------------------------------------------------------------------
 
-function fail(res, code, msg, detail, ids) {
-  return res.status(code).json({ error: msg, meta: detail && detail.error || detail || null, partial: ids || null });
+function fail(res, code, msg, detail, ids, sentForm) {
+  return res.status(code).json({
+    error: msg,
+    meta: detail && detail.error || detail || null,
+    partial: ids || null,
+    sent: sentForm || null
+  });
+}
+
+// Pull a URLSearchParams form back into a plain object for echoing in error
+// responses, dropping the access_token so it doesn't bounce through logs or
+// browser DevTools. JSON-stringified fields stay as strings — readable enough.
+function scrubForm(form) {
+  if (!form) return null;
+  var out = {};
+  form.forEach(function(v, k){ if (k !== "access_token") out[k] = v; });
+  return out;
 }
 
 function validate(b) {
@@ -204,6 +223,16 @@ function validate(b) {
 
   var startIso = isoFromDate(b.startDate);
   if (!startIso) return { error: "startDate invalid (YYYY-MM-DD)" };
+  // Meta rejects ad sets whose start_time is already in the past. The wizard
+  // defaults to today which becomes 00:00 UTC = 02:00 SAST — anything later
+  // in the day pushes the request past that. Bump to now+15min when the user
+  // selected today (or earlier in some timezones).
+  var nowMs = Date.now();
+  var startMs = Date.parse(startIso);
+  if (isFinite(startMs) && startMs < nowMs + 5 * 60 * 1000) {
+    var bumped = new Date(nowMs + 15 * 60 * 1000);
+    startIso = bumped.toISOString().replace(/\.\d{3}Z$/, "+0000");
+  }
   var endIso = b.endDate ? isoFromDate(b.endDate, true) : null;
   if (b.endDate && !endIso) return { error: "endDate invalid (YYYY-MM-DD)" };
 
@@ -259,12 +288,16 @@ function isoFromDate(s, endOfDay) {
 function buildTargeting(p) {
   var a = p.audience || {};
   var geos = (a.countries && a.countries.length) ? a.countries : ["ZA"];
+  // targeting_automation.advantage_audience is conditionally accepted in v25.
+  // We omit it entirely unless the user explicitly opted in — the default
+  // audience behaviour is fine and the field tripped a generic code 1 error
+  // on adset create when sent with value 0.
   var t = {
     geo_locations: { countries: geos },
     age_min: a.ageMin || 18,
-    age_max: a.ageMax || 65,
-    targeting_automation: { advantage_audience: a.advantageAudience ? 1 : 0 }
+    age_max: a.ageMax || 65
   };
+  if (a.advantageAudience) t.targeting_automation = { advantage_audience: 1 };
   if (a.genders && a.genders.length) t.genders = a.genders;
   if (a.flexibleSpec) t.flexible_spec = a.flexibleSpec;
 
