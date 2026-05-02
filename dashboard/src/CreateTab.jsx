@@ -154,7 +154,7 @@ function Wizard(props) {
   var ss = useState(0), step = ss[0], setStep = ss[1];
   var subS = useState(false), submitting = subS[0], setSubmitting = subS[1];
   var resS = useState(null), result = resS[0], setResult = resS[1];
-  var errS = useState(""), submitErr = errS[0], setSubmitErr = errS[1];
+  var errS = useState(null), submitErr = errS[0], setSubmitErr = errS[1];
 
   // -------- Wizard state ---------------------------------------------------
   var initial = {
@@ -233,7 +233,7 @@ function Wizard(props) {
   // -------- Submit ---------------------------------------------------------
   var submit = function(){
     if (submitting) return;
-    setSubmitting(true); setSubmitErr("");
+    setSubmitting(true); setSubmitErr(null);
     var payload = {
       accountId: draft.accountId,
       accountName: draft.accountName,
@@ -269,15 +269,15 @@ function Wizard(props) {
       .then(function(x){
         setSubmitting(false);
         if (x.status === 401) { props.onLogout(); return; }
-        if (!x.ok) { setSubmitErr((x.data && x.data.error) || "Submit failed"); return; }
+        if (!x.ok) { setSubmitErr({ status: x.status, body: x.data || { error: "Submit failed" } }); return; }
         setResult(x.data);
       })
-      .catch(function(){ setSubmitting(false); setSubmitErr("Network error. Try again."); });
+      .catch(function(){ setSubmitting(false); setSubmitErr({ status: 0, body: { error: "Network error. Try again." } }); });
   };
 
   // -------- Result screen --------------------------------------------------
   if (result) return <SuccessScreen P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} result={result}
-    onAnother={function(){ setResult(null); setStep(0); setDraft(initial); setSubmitErr(""); }}/>;
+    onAnother={function(){ setResult(null); setStep(0); setDraft(initial); setSubmitErr(null); }}/>;
 
   // -------- Render ---------------------------------------------------------
   return <div>
@@ -303,8 +303,15 @@ function Wizard(props) {
         draft={draft} accounts={accounts} pages={pages} instagrams={instagrams} pixels={pixels}/>}
     </div>
 
-    {submitErr && <div style={{marginTop:18,padding:"12px 16px",background:(P.critical||"#ef4444")+"15",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:10,color:P.critical||"#ef4444",fontSize:12,fontFamily:fm}}>
-      {submitErr}
+    {submitErr && <div style={{marginTop:18,padding:"14px 18px",background:(P.critical||"#ef4444")+"12",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:10,color:P.critical||"#ef4444",fontSize:12,fontFamily:fm,lineHeight:1.6}}>
+      <div style={{fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",fontSize:10,marginBottom:8}}>Create failed (HTTP {submitErr.status})</div>
+      <div style={{color:P.txt,marginBottom:8}}>{submitErr.body && submitErr.body.error}</div>
+      {submitErr.body && submitErr.body.partial && <div style={{color:P.warning||"#fbbf24",marginBottom:8,fontSize:11}}>
+        Partial state created and left PAUSED: {Object.keys(submitErr.body.partial).map(function(k){return k+"="+submitErr.body.partial[k];}).join(", ")}
+      </div>}
+      {submitErr.body && submitErr.body.meta && <pre style={{margin:0,padding:"10px 12px",background:"rgba(0,0,0,0.4)",border:"1px solid "+P.rule,borderRadius:8,color:P.label||P.sub,fontSize:11,fontFamily:fm,whiteSpace:"pre-wrap",wordBreak:"break-word",maxHeight:240,overflow:"auto"}}>
+{JSON.stringify(submitErr.body.meta, null, 2)}
+      </pre>}
     </div>}
 
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:24,padding:"16px 0",borderTop:"1px solid "+P.rule}}>
