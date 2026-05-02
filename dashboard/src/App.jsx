@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 var _v="2.0";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend, LabelList } from "recharts";
+import CreateTab from "./CreateTab.jsx";
 
 // label and caption are the canonical tokens for client-visible secondary
 // text. Hard rule across the dashboard: every label uses P.label (white at
@@ -2705,7 +2706,7 @@ export default function MediaOnGas(){
     // tab state from admin mode cannot leak through.
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)}];
   } else {
-    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)}];
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
   }
   useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
   // Scroll to top whenever the tab changes so each page lands cleanly
@@ -6537,6 +6538,8 @@ export default function MediaOnGas(){
 
           <Insight title="Optimisation Summary" accent={P.warning} icon={Ic.alert(P.warning,16)}>{flags.length} flags generated from selected campaign data. {openFlags} require attention. Review recommendations and take action to maintain optimal performance. Flags refresh when you change dates or campaign selection.</Insight>
         </div>)}
+
+        {tab==="create"&&!isClient&&(<CreateTab apiBase={API} P={P} ff={ff} fm={fm} gFire={gFire} gEmber={gEmber} Ic={Ic} Glass={Glass} SH={SH}/>)}
 
         </>)}
       </div>
