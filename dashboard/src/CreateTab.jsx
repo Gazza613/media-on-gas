@@ -755,19 +755,23 @@ function Step1(props) {
     <Glass accent={P.fb} st={{padding:26,marginBottom:18}}>
       <div style={{fontSize:13,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Engaged community (page fans &amp; followers)</div>
       <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
-        Target the client's existing community. Page fans is a direct API option. Instagram followers requires a Custom Audience built in Ads Manager.
+        Both targeting paths now go through Custom Audiences. Build them once in Ads Manager and they'll surface in the Saved &amp; custom audiences picker above.
+      </div>
+      <div style={{padding:"12px 14px",background:(P.warning||"#fbbf24")+"10",border:"1px solid "+(P.warning||"#fbbf24")+"30",borderLeft:"3px solid "+(P.warning||"#fbbf24"),borderRadius:"0 10px 10px 0",marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:800,color:P.warning||"#fbbf24",letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Heads-up: Meta deprecated direct page-fans targeting (Jan 2026)</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,lineHeight:1.7}}>
+          Connection-based targeting (the old "people who like your Page" filter) was removed by Meta. Submitting a campaign with it now fails with error 1870088.
+        </div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <ToggleRow P={P} fm={fm} accent={P.fb}
-          on={!!(a.targetCommunity && a.targetCommunity.fans)}
-          onToggle={function(){ updateNested("audience", { targetCommunity: Object.assign({}, a.targetCommunity || {}, { fans: !(a.targetCommunity && a.targetCommunity.fans) }) }); }}
-          title="Target Facebook page fans (people who like the page)"
-          sub="Adds the client's selected page (Step 3) as a connections filter. Combine with detailed targeting to hit specifically the audience that already follows them on FB."/>
+          on={false} disabled={true}
+          title="Target Facebook page fans (now via Custom Audience)"
+          sub="In Ads Manager → Audiences → Create custom audience → Facebook Page → People who engaged with your Page (or visited your Page). Once created, it appears in the Saved &amp; custom audiences picker above."/>
         <ToggleRow P={P} fm={fm} accent={P.ig}
-          on={!!(a.targetCommunity && a.targetCommunity.igFollowers)}
-          disabled={true}
-          title="Target Instagram followers (requires a Custom Audience)"
-          sub="Meta has no direct API for IG-follower targeting. In Ads Manager → Audiences → Create custom audience → Instagram account → People who follow your professional account. Once created, it'll appear in the Saved &amp; custom audiences picker above."/>
+          on={false} disabled={true}
+          title="Target Instagram followers (via Custom Audience)"
+          sub="In Ads Manager → Audiences → Create custom audience → Instagram account → People who follow your professional account. Once created, it appears in the Saved &amp; custom audiences picker above."/>
       </div>
     </Glass>
 
@@ -1252,8 +1256,7 @@ function Step6(props) {
       return out;
     })()],
     ["Saved / custom audiences", savedNames.length ? savedNames.join(", ") : "(none)"],
-    ["Engaged community",
-      (draft.audience.targetCommunity && draft.audience.targetCommunity.fans) ? "Page fans only" : "(off)"],
+    ["Engaged community", "via Custom Audience picker (Meta deprecated direct connections)"],
     ["Detailed targeting", (draft.audience.targetingItems && draft.audience.targetingItems.length > 0)
       ? draft.audience.targetingItems.map(function(t){ return t.name + " (" + t.type.replace(/_/g," ") + ")"; }).join(", ")
       : (draft.audience.flexibleSpec ? "(custom JSON)" : "(none)")],

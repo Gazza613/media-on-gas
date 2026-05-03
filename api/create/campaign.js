@@ -508,14 +508,17 @@ function buildTargeting(p) {
   }
   if (caIds.length) t.custom_audiences = caIds;
 
-  // Engaged community: page fans go via connections[] which is a hard
-  // include-only filter ("must be a fan of this page AND match the rest").
-  // For IG followers there is no equivalent connections target — Meta
-  // requires a Custom Audience for that, which the wizard prompts users
-  // to build in Ads Manager and then pick via the Saved Audiences picker.
-  if (a.targetCommunity && a.targetCommunity.fans && p.pageId) {
-    t.connections = [String(p.pageId)];
-  }
+  // Engaged community: connection targeting (page fans, app users, event
+  // attendees) was deprecated by Meta with error_subcode 1870088:
+  // "Connection targeting is being deprecated. Please remove connections
+  // from your campaign to publish your campaign."
+  //
+  // The replacement path is a Custom Audience built from page engagement
+  // (Ads Manager → Audiences → Custom audience → Facebook Page → People who
+  // engaged with your Page). Once built, that CA appears in the wizard's
+  // Saved & custom audiences picker and gets attached via custom_audiences
+  // above. We deliberately do NOT set targeting.connections here even when
+  // the legacy fans toggle is on, so existing drafts don't break.
 
   if (a.flexibleSpec) {
     t.flexible_spec = a.flexibleSpec;
@@ -626,7 +629,8 @@ function summariseAudience(p) {
   bits.push("Age: " + (a.ageMin || 18) + "-" + (a.ageMax || 65));
   if (a.genders && a.genders.length) bits.push("Gender: " + a.genders.join(","));
   if (a.savedAudienceIds && a.savedAudienceIds.length) bits.push("Saved/CA: " + a.savedAudienceIds.length + " selected");
-  if (a.targetCommunity && a.targetCommunity.fans) bits.push("+ Page fans only");
+  // Note: page-fans toggle is a no-op since Meta deprecated connection
+  // targeting. The team is steered to Page-Engagement Custom Audiences instead.
   var pl = p.placement || {};
   bits.push("Placement: " + (pl.mode === "manual" ? "Manual" : "Advantage+"));
   return bits.join(" | ");
