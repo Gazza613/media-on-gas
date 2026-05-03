@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     // operators see the same labels in Create that they see in reports.
     var nameMap = {
       "GAS Marketing Automation": "GAS Marketing (Willowbrook + Internal)",
-      "GAS_MoMo_ZA_V2": "MTN MoMo",
+      "GAS_MoMo_ZA_V2": "MTN MoMo NEW",
       "GAS_MTN_Khava": "MTN Khava",
       "GAS_ConcordCollege": "Concord College",
       "GAS_EdenCollege": "Eden College",
