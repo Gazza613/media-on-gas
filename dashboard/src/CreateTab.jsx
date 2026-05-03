@@ -164,7 +164,7 @@ function Wizard(props) {
     campaignName: "",
     platformMode: "fb_ig",
     pageId: "", instagramId: "",
-    audience: { countries: ["ZA"], ageMin: 18, ageMax: 65, genders: [], advantageAudience: false, flexibleSpec: null },
+    audience: { countries: ["ZA"], ageMin: 18, ageMax: 65, genders: [], advantageAudience: false, targetingItems: [], flexibleSpec: null },
     placement: { mode: "advantage", platforms: ["facebook","instagram"], facebookPositions: ["feed"], instagramPositions: ["stream","story","reels"], devicePlatforms: ["mobile","desktop"] },
     creative: { kind: "image", imageHash: null, videoId: null, headline: "", primaryText: "", description: "", linkUrl: "", callToAction: "LEARN_MORE", filename: null, previewDataUrl: null },
     budgetMode: "daily",
@@ -311,6 +311,7 @@ function Wizard(props) {
       {step === 0 && <Step0 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
         draft={draft} update={update} accounts={accounts}/>}
       {step === 1 && <Step1 P={P} ff={ff} fm={fm} Glass={Glass}
+        apiBase={apiBase} token={token}
         draft={draft} updateNested={updateNested}/>}
       {step === 2 && <Step2 P={P} ff={ff} fm={fm} Glass={Glass}
         draft={draft} updateNested={updateNested}/>}
@@ -456,10 +457,20 @@ function Step0(props) {
 function Step1(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
   var draft = props.draft, updateNested = props.updateNested;
+  var apiBase = props.apiBase, token = props.token;
   var a = draft.audience;
   var toggleGender = function(g){
     var arr = a.genders.indexOf(g) >= 0 ? a.genders.filter(function(x){return x!==g;}) : a.genders.concat([g]);
     updateNested("audience", { genders: arr });
+  };
+  var addItem = function(item){
+    var existing = a.targetingItems || [];
+    if (existing.some(function(x){ return x.id === item.id && x.type === item.type; })) return;
+    updateNested("audience", { targetingItems: existing.concat([item]) });
+  };
+  var removeItem = function(id, type){
+    var existing = a.targetingItems || [];
+    updateNested("audience", { targetingItems: existing.filter(function(x){ return !(x.id === id && x.type === type); }) });
   };
   return <Glass accent={P.cyan} st={{padding:22}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
@@ -489,13 +500,23 @@ function Step1(props) {
       </div>
     </Field>
 
-    <Field label="Detailed targeting JSON (advanced, optional)" fm={fm} P={P}>
+    <Field label="Detailed targeting (interests, behaviors, demographics)" fm={fm} P={P}>
+      <TargetingPicker P={P} ff={ff} fm={fm}
+        apiBase={apiBase} token={token} accountId={draft.accountId}
+        items={a.targetingItems || []} onAdd={addItem} onRemove={removeItem}/>
+    </Field>
+
+    <details style={{marginTop:14}}>
+      <summary style={{fontSize:10,color:P.label||P.sub,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,fontFamily:fm}}>Advanced: raw flexible_spec JSON</summary>
       <textarea value={a.flexibleSpec ? JSON.stringify(a.flexibleSpec, null, 2) : ""} onChange={function(e){
         var v = e.target.value.trim();
         if (!v) { updateNested("audience", { flexibleSpec: null }); return; }
         try { updateNested("audience", { flexibleSpec: JSON.parse(v) }); } catch (_) { /* ignore until valid */ }
-      }} placeholder='[{"interests":[{"id":"6003107902433","name":"Online shopping"}]}]' style={Object.assign({}, inputStyle(P, fm), { minHeight: 90, fontFamily: fm, fontSize: 11 })}/>
-    </Field>
+      }} placeholder='[{"interests":[{"id":"6003107902433","name":"Online shopping"}]}]' style={Object.assign({}, inputStyle(P, fm), { minHeight: 90, fontFamily: fm, fontSize: 11, marginTop: 8 })}/>
+      <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,marginTop:4}}>
+        If set, this overrides the picker selections above. For power users hand-crafting exotic targeting trees.
+      </div>
+    </details>
 
     <div style={{marginTop:14,fontSize:11,color:P.label||P.sub,fontFamily:fm,lineHeight:1.6}}>
       Note: detailed-targeting interest consolidation took effect 6 Jan 2026. New combined interest options replace many legacy ones.
@@ -752,6 +773,9 @@ function Step6(props) {
     ["Page", pageName],
     ["Instagram", igName],
     ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + ", " + draft.audience.countries.join(",") + (draft.audience.genders.length ? (", " + draft.audience.genders.map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
+    ["Detailed targeting", (draft.audience.targetingItems && draft.audience.targetingItems.length > 0)
+      ? draft.audience.targetingItems.map(function(t){ return t.name + " (" + t.type.replace(/_/g," ") + ")"; }).join(", ")
+      : (draft.audience.flexibleSpec ? "(custom JSON)" : "(none)")],
     ["Placement", draft.placement.mode === "advantage" ? "Advantage+" : ("Manual: " + (draft.placement.platforms || []).join(", "))],
     ["Creative", (draft.creative.kind === "image" ? "Image" : "Video") + " — " + draft.creative.headline],
     ["CTA → URL", draft.creative.callToAction.replace(/_/g," ") + " → " + draft.creative.linkUrl],
@@ -833,6 +857,134 @@ function inputStyle(P, fm, extra) {
   }, extra || {});
 }
 function selectStyle(P, fm) { return Object.assign({}, inputStyle(P, fm), { padding: "10px 12px" }); }
+
+// ---------------------------------------------------------------------------
+// TargetingPicker: search-as-you-type from Meta's targeting taxonomy.
+//
+// Hits /api/create/targeting-search with a 250 ms debounce. Selected items
+// render as chips in their type colour (interests / behaviors / demographics
+// each get a distinct accent so the user can scan AND-vs-OR groupings at a
+// glance). Audience size estimates from Meta come back per item — shown
+// faded so power users can pick wider/narrower audiences with intent.
+
+var TARGETING_TYPE_COLORS = {
+  interests: "#A855F7",        // orchid
+  behaviors: "#34D399",        // mint
+  demographics: "#22D3EE",     // cyan
+  work_positions: "#FFAA00",   // solar
+  work_employers: "#FFAA00",
+  education_majors: "#FF6B00", // ember
+  education_schools: "#FF6B00",
+  family_statuses: "#F43F5E",  // rose
+  life_events: "#D946EF",      // fuchsia
+  income: "#34D399"
+};
+
+function TargetingPicker(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
+  var items = props.items || [];
+
+  var qS = useState(""), q = qS[0], setQ = qS[1];
+  var rS = useState({ loading: false, items: [], error: "" }), results = rS[0], setResults = rS[1];
+  var openS = useState(false), open = openS[0], setOpen = openS[1];
+  var classS = useState(""), cls = classS[0], setCls = classS[1];
+
+  // Debounce so we don't hammer Meta's search on every keystroke. 250 ms
+  // strikes the usual balance between responsiveness and request volume.
+  var debounceRef = useRef(null);
+  useEffect(function(){
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q || q.trim().length < 2) {
+      setResults({ loading: false, items: [], error: "" });
+      return;
+    }
+    if (!accountId) {
+      setResults({ loading: false, items: [], error: "Pick an ad account in Step 1 first." });
+      return;
+    }
+    debounceRef.current = setTimeout(function(){
+      setResults({ loading: true, items: [], error: "" });
+      var url = apiBase + "/api/create/targeting-search?accountId=" + encodeURIComponent(accountId) +
+                "&q=" + encodeURIComponent(q) + (cls ? "&class=" + encodeURIComponent(cls) : "");
+      fetch(url, { headers: { "Authorization": "Bearer " + token } })
+        .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+        .then(function(x){
+          if (!x.ok) { setResults({ loading: false, items: [], error: (x.data && x.data.error) || "Search failed" }); return; }
+          setResults({ loading: false, items: x.data.items || [], error: "" });
+        })
+        .catch(function(){ setResults({ loading: false, items: [], error: "Network error" }); });
+    }, 250);
+    return function(){ if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [q, cls, accountId]);
+
+  var fmtAud = function(item){
+    if (!item.audienceSizeLower && !item.audienceSizeUpper) return "";
+    var lo = item.audienceSizeLower || 0, hi = item.audienceSizeUpper || 0;
+    var fmt = function(n){ if (n >= 1e6) return (n/1e6).toFixed(1) + "M"; if (n >= 1e3) return (n/1e3).toFixed(0) + "K"; return String(n); };
+    if (lo && hi) return fmt(lo) + " – " + fmt(hi) + " people";
+    return fmt(hi || lo) + " people";
+  };
+
+  var classChips = [
+    { k: "", n: "All" },
+    { k: "interests", n: "Interests" },
+    { k: "behaviors", n: "Behaviors" },
+    { k: "demographics", n: "Demographics" },
+    { k: "work_positions", n: "Job titles" }
+  ];
+
+  return <div style={{position:"relative"}}>
+    <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+      {classChips.map(function(c){
+        var on = cls === c.k;
+        return <div key={c.k} onClick={function(){ setCls(c.k); }} style={{padding:"4px 10px",border:"1px solid "+(on?P.cyan:P.rule),background:on?P.cyan+"15":"transparent",borderRadius:6,cursor:"pointer",fontSize:10,fontWeight:700,color:on?P.cyan:(P.label||P.sub),fontFamily:fm,letterSpacing:1.2,textTransform:"uppercase"}}>
+          {c.n}
+        </div>;
+      })}
+    </div>
+
+    <input value={q} onChange={function(e){ setQ(e.target.value); setOpen(true); }}
+      onFocus={function(){ setOpen(true); }}
+      placeholder={accountId ? "Type to search interests, behaviors, demographics..." : "Pick an ad account in Step 1 first"}
+      disabled={!accountId}
+      style={inputStyle(P, fm)}/>
+
+    {open && q.trim().length >= 2 && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(20,12,30,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:280,overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+      {results.loading && <div style={{padding:12,fontSize:11,color:P.label||P.sub,fontFamily:fm}}>Searching...</div>}
+      {results.error && <div style={{padding:12,fontSize:11,color:P.critical||"#ef4444",fontFamily:fm}}>{results.error}</div>}
+      {!results.loading && !results.error && results.items.length === 0 && <div style={{padding:12,fontSize:11,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
+      {results.items.map(function(item){
+        var color = TARGETING_TYPE_COLORS[item.type] || P.label;
+        var alreadyAdded = items.some(function(x){ return x.id === item.id && x.type === item.type; });
+        return <div key={item.type + ":" + item.id} onClick={function(){ if (!alreadyAdded) props.onAdd(item); setOpen(false); setQ(""); }}
+          style={{padding:"10px 14px",borderBottom:"1px solid "+P.rule,cursor:alreadyAdded?"default":"pointer",opacity:alreadyAdded?0.5:1,display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+              <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>{item.type.replace(/_/g," ")}</span>
+              <span style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</span>
+            </div>
+            {item.path && <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.path}</div>}
+          </div>
+          <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{alreadyAdded ? "Added" : fmtAud(item)}</div>
+        </div>;
+      })}
+    </div>}
+
+    {items.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+      {items.map(function(item){
+        var color = TARGETING_TYPE_COLORS[item.type] || P.label;
+        return <span key={item.type + ":" + item.id} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:11,color:P.txt,fontFamily:fm}}>
+          <span style={{fontSize:8,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{item.type.replace(/_/g," ")}</span>
+          <span>{item.name}</span>
+          <span onClick={function(){ props.onRemove(item.id, item.type); }} style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,marginLeft:2}}>×</span>
+        </span>;
+      })}
+    </div>}
+
+    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:40}}/>}
+  </div>;
+}
 
 function Pillgrid(props) {
   var P = props.P, fm = props.fm;

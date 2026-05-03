@@ -346,7 +346,27 @@ function buildTargeting(p) {
   };
   if (a.advantageAudience) t.targeting_automation = { advantage_audience: 1 };
   if (a.genders && a.genders.length) t.genders = a.genders;
-  if (a.flexibleSpec) t.flexible_spec = a.flexibleSpec;
+
+  // Detailed targeting comes through as a flat array of {type,id,name} from
+  // the wizard's targeting picker. Group by Meta's flexible_spec keys so
+  // each type lands under the right name (interests, behaviors, …). Items
+  // inside a key are OR'd together; one flexible_spec entry means all keys
+  // are AND'd. Power users can still pass raw flexibleSpec which wins if
+  // both are present (covers anyone hand-crafting an exotic targeting tree).
+  if (a.flexibleSpec) {
+    t.flexible_spec = a.flexibleSpec;
+  } else if (Array.isArray(a.targetingItems) && a.targetingItems.length > 0) {
+    var grouped = {};
+    a.targetingItems.forEach(function(item){
+      if (!item || !item.id || !item.type) return;
+      var key = item.type;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push({ id: String(item.id), name: String(item.name || "") });
+    });
+    if (Object.keys(grouped).length > 0) {
+      t.flexible_spec = [grouped];
+    }
+  }
 
   // Platform mode is the wizard's top-level intent and overrides Placement's
   // publisher_platforms regardless of the manual/Advantage+ choice. fb_only
