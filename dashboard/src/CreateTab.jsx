@@ -10,7 +10,7 @@
 // Ads Manager link. Server is the authority on PAUSED + budget ceiling +
 // allowlist; the UI only mirrors those for nice errors.
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 
 var TOKEN_KEY = "gas_create_token";
 var TOKEN_EXP_KEY = "gas_create_token_exp";
@@ -919,17 +919,61 @@ function inputStyle(P, fm, extra) {
 }
 function selectStyle(P, fm) { return Object.assign({}, inputStyle(P, fm), { padding: "12px 14px" }); }
 
+// Compute a fixed-position popover anchored to a trigger element. The
+// popover escapes any ancestor with overflow:hidden (notably the Glass card
+// which clipped the dropdown before this fix), and auto-flips upward when
+// there isn't enough space below. Returns a style object to spread onto
+// the popover div, or null until the first measurement lands.
+function useAnchoredPopover(triggerRef, open, gap) {
+  var posS = useState(null), pos = posS[0], setPos = posS[1];
+  var px = (typeof gap === "number") ? gap : 6;
+  useLayoutEffect(function(){
+    if (!open) { setPos(null); return; }
+    var update = function(){
+      if (!triggerRef.current) return;
+      var rect = triggerRef.current.getBoundingClientRect();
+      var spaceBelow = window.innerHeight - rect.bottom - 20;
+      var spaceAbove = rect.top - 20;
+      var openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+      var maxH = Math.max(200, Math.min(480, openUp ? spaceAbove : spaceBelow));
+      setPos({
+        position: "fixed",
+        left: rect.left,
+        top: openUp ? null : rect.bottom + px,
+        bottom: openUp ? (window.innerHeight - rect.top + px) : null,
+        width: rect.width,
+        maxHeight: maxH
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return function(){
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+  return pos;
+}
+
 // Custom Select dropdown — replaces native <select> so we can style the open
 // state (native dropdowns inherit OS chrome and ignore most of our CSS, which
-// is where the muddy grey came from). Single-value semantics. Use MultiSelect
-// for arrays.
+// is where the muddy grey came from). Uses fixed positioning so the popover
+// can extend past Glass card boundaries; auto-flips upward when needed.
 function Select(props) {
   var P = props.P, fm = props.fm;
   var openS = useState(false), open = openS[0], setOpen = openS[1];
+  var triggerRef = useRef(null);
+  var pos = useAnchoredPopover(triggerRef, open, 6);
   var current = (props.options || []).find(function(o){ return o.value === props.value; });
   var label = current ? current.label : (props.placeholder || "— Choose —");
+  var popoverStyle = pos ? Object.assign({}, pos, {
+    background: "rgba(15,8,22,0.98)", border: "1px solid " + P.rule,
+    borderRadius: 10, overflowY: "auto", zIndex: 1000,
+    boxShadow: "0 12px 40px rgba(0,0,0,0.6)"
+  }) : null;
   return <div style={{position:"relative"}}>
-    <div onClick={function(){ if (!props.disabled) setOpen(!open); }}
+    <div ref={triggerRef} onClick={function(){ if (!props.disabled) setOpen(!open); }}
       style={Object.assign({}, inputStyle(P, fm), {
         cursor: props.disabled ? "not-allowed" : "pointer",
         opacity: props.disabled ? 0.5 : 1,
@@ -938,7 +982,7 @@ function Select(props) {
       <span style={{color: current ? P.txt : (P.label || P.sub), whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{label}</span>
       <span style={{color: P.label || P.sub, marginLeft: 8, fontSize: 11}}>{open ? "▲" : "▼"}</span>
     </div>
-    {open && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:"min(60vh, 480px)",overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+    {open && popoverStyle && <div style={popoverStyle}>
       {(props.options || []).length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>{props.emptyText || "No options"}</div>}
       {(props.options || []).map(function(o){
         var on = o.value === props.value;
@@ -949,7 +993,7 @@ function Select(props) {
         </div>;
       })}
     </div>}
-    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:40}}/>}
+    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:999}}/>}
   </div>;
 }
 
@@ -960,6 +1004,8 @@ function MultiSelect(props) {
   var P = props.P, fm = props.fm;
   var openS = useState(false), open = openS[0], setOpen = openS[1];
   var qS = useState(""), q = qS[0], setQ = qS[1];
+  var triggerRef = useRef(null);
+  var pos = useAnchoredPopover(triggerRef, open, 6);
   var values = props.value || [];
   var options = props.options || [];
   var filtered = q.trim() ? options.filter(function(o){
@@ -970,8 +1016,13 @@ function MultiSelect(props) {
     props.onChange(next);
   };
   var labelFor = function(v){ var o = options.find(function(x){ return x.value === v; }); return o ? o.label : v; };
+  var popoverStyle = pos ? Object.assign({}, pos, {
+    background: "rgba(15,8,22,0.98)", border: "1px solid " + P.rule,
+    borderRadius: 10, overflowY: "auto", zIndex: 1000,
+    boxShadow: "0 12px 40px rgba(0,0,0,0.6)"
+  }) : null;
   return <div style={{position:"relative"}}>
-    <div onClick={function(){ if (!props.disabled) setOpen(!open); }}
+    <div ref={triggerRef} onClick={function(){ if (!props.disabled) setOpen(!open); }}
       style={Object.assign({}, inputStyle(P, fm), {
         cursor: props.disabled ? "not-allowed" : "pointer",
         minHeight: 48, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center"
@@ -984,8 +1035,8 @@ function MultiSelect(props) {
       })}
       <span style={{marginLeft:"auto",color:P.label||P.sub,fontSize:11}}>{open ? "▲" : "▼"}</span>
     </div>
-    {open && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:"min(60vh, 480px)",overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
-      {props.searchable && <input value={q} onChange={function(e){ setQ(e.target.value); }} placeholder="Search..." style={Object.assign({}, inputStyle(P, fm), { borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, borderBottom: "1px solid " + P.rule })}/>}
+    {open && popoverStyle && <div style={popoverStyle}>
+      {props.searchable && <input value={q} onChange={function(e){ setQ(e.target.value); }} placeholder="Search..." style={Object.assign({}, inputStyle(P, fm), { borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, borderBottom: "1px solid " + P.rule, position: "sticky", top: 0, zIndex: 1 })}/>}
       {filtered.length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
       {filtered.map(function(o){
         var on = values.indexOf(o.value) >= 0;
@@ -996,7 +1047,7 @@ function MultiSelect(props) {
         </div>;
       })}
     </div>}
-    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:40}}/>}
+    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:999}}/>}
   </div>;
 }
 
