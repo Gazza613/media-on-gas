@@ -81,7 +81,11 @@ export default async function handler(req, res) {
     var adsetForm = new URLSearchParams();
     adsetForm.set("name", p.campaignName + " - AdSet");
     adsetForm.set("campaign_id", campaignId);
-    adsetForm.set("daily_budget", String(p.dailyBudgetCents));
+    if (p.budgetMode === "lifetime") {
+      adsetForm.set("lifetime_budget", String(p.lifetimeBudgetCents));
+    } else {
+      adsetForm.set("daily_budget", String(p.dailyBudgetCents));
+    }
     adsetForm.set("billing_event", goal.billing_event);
     adsetForm.set("optimization_goal", goal.optimization_goal);
     adsetForm.set("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
@@ -216,23 +220,46 @@ function validate(b) {
   if (!b.campaignName || String(b.campaignName).length < 3) return { error: "campaignName too short" };
   if (!b.pageId) return { error: "pageId required" };
 
-  var dailyBudgetCents = parseInt(b.dailyBudgetCents, 10);
-  if (!isFinite(dailyBudgetCents) || dailyBudgetCents <= 0) return { error: "dailyBudgetCents must be a positive integer" };
-  if (dailyBudgetCents > MAX_DAILY_BUDGET_CENTS) {
-    return { error: "dailyBudgetCents exceeds R" + (MAX_DAILY_BUDGET_CENTS / 100).toFixed(0) + " ceiling" };
+  // Budget mode: "daily" (default, runs indefinitely or until end_date) OR
+  // "lifetime" (fixed total spend across the date range). Lifetime requires
+  // an explicit end_date and is capped at MAX_DAILY × duration_days so an
+  // accidentally long campaign can't outspend the per-day ceiling in aggregate.
+  var budgetMode = b.budgetMode === "lifetime" ? "lifetime" : "daily";
+  var dailyBudgetCents = 0;
+  var lifetimeBudgetCents = 0;
+
+  if (budgetMode === "daily") {
+    dailyBudgetCents = parseInt(b.dailyBudgetCents, 10);
+    if (!isFinite(dailyBudgetCents) || dailyBudgetCents <= 0) return { error: "dailyBudgetCents must be a positive integer" };
+    if (dailyBudgetCents > MAX_DAILY_BUDGET_CENTS) {
+      return { error: "dailyBudgetCents exceeds R" + (MAX_DAILY_BUDGET_CENTS / 100).toFixed(0) + " ceiling" };
+    }
+  } else {
+    lifetimeBudgetCents = parseInt(b.lifetimeBudgetCents, 10);
+    if (!isFinite(lifetimeBudgetCents) || lifetimeBudgetCents <= 0) return { error: "lifetimeBudgetCents must be a positive integer" };
+    if (!b.endDate) return { error: "endDate required when budgetMode is lifetime" };
+    var lStart = Date.parse(isoFromDate(b.startDate) || "");
+    var lEnd = Date.parse(isoFromDate(b.endDate, true) || "");
+    var days = (isFinite(lStart) && isFinite(lEnd) && lEnd > lStart)
+      ? Math.max(1, Math.ceil((lEnd - lStart) / (24 * 60 * 60 * 1000)))
+      : 1;
+    var lifetimeCeiling = MAX_DAILY_BUDGET_CENTS * days;
+    if (lifetimeBudgetCents > lifetimeCeiling) {
+      return { error: "lifetimeBudgetCents exceeds R" + (lifetimeCeiling / 100).toFixed(0) +
+        " ceiling (R" + (MAX_DAILY_BUDGET_CENTS / 100).toFixed(0) + " × " + days + " days)" };
+    }
   }
 
   var startIso = isoFromDate(b.startDate);
   if (!startIso) return { error: "startDate invalid (YYYY-MM-DD)" };
   // Meta rejects ad sets whose start_time is already in the past. The wizard
-  // defaults to today which becomes 00:00 UTC = 02:00 SAST — anything later
-  // in the day pushes the request past that. Bump to now+15min when the user
-  // selected today (or earlier in some timezones).
+  // dates are interpreted as SAST (Africa/Johannesburg, UTC+2, no DST). When
+  // the user picks today the resolved start is 00:00 SAST; if it's already
+  // later in the day, bump to now + 15 min in SAST so Meta accepts.
   var nowMs = Date.now();
   var startMs = Date.parse(startIso);
   if (isFinite(startMs) && startMs < nowMs + 5 * 60 * 1000) {
-    var bumped = new Date(nowMs + 15 * 60 * 1000);
-    startIso = bumped.toISOString().replace(/\.\d{3}Z$/, "+0000");
+    startIso = formatSastIso(new Date(nowMs + 15 * 60 * 1000));
   }
   var endIso = b.endDate ? isoFromDate(b.endDate, true) : null;
   if (b.endDate && !endIso) return { error: "endDate invalid (YYYY-MM-DD)" };
@@ -260,9 +287,12 @@ function validate(b) {
       pixelId: b.pixelId ? String(b.pixelId) : null,
       conversionEvent: b.conversionEvent ? String(b.conversionEvent) : null,
       urlTags: b.urlTags ? String(b.urlTags) : null,
+      budgetMode: budgetMode,
       dailyBudgetCents: dailyBudgetCents,
+      lifetimeBudgetCents: lifetimeBudgetCents,
       startTimeIso: startIso,
       endTimeIso: endIso,
+      platformMode: ["fb_only", "fb_ig", "ig_only"].indexOf(b.platformMode) >= 0 ? b.platformMode : "fb_ig",
       audience: b.audience || {},
       placement: b.placement || { mode: "advantage" },
       creative: {
@@ -280,10 +310,26 @@ function validate(b) {
 
 function isoFromDate(s, endOfDay) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s || ""))) return null;
-  // Times are interpreted in UTC for Meta; the wizard advertises this as
-  // "campaign start at 00:00 SAST" — but Meta stores in account timezone.
-  // Submitting the date with a Z suffix is the safest neutral option.
-  return s + (endOfDay ? "T23:59:59+0000" : "T00:00:00+0000");
+  // SAST is UTC+2 with no DST. Meta accepts ISO 8601 with explicit offset and
+  // stores times in the account timezone — sending +0200 means the wizard's
+  // "start_date 2026-05-03" becomes 2026-05-03 00:00 SAST, which is what the
+  // user expects when they pick a date in the South African UI.
+  return s + (endOfDay ? "T23:59:59+0200" : "T00:00:00+0200");
+}
+
+// Format a Date as a SAST ISO string with the +0200 offset suffix. Used for
+// auto-bumping past-dated start_times — we add UTC+2 to the wall clock, then
+// format as if the result were already SAST. Avoids needing Intl.DateTimeFormat
+// at the cost of a brittle but tiny string assembly.
+function formatSastIso(date) {
+  var sast = new Date(date.getTime() + 2 * 60 * 60 * 1000);
+  var pad = function(n){ return n < 10 ? "0" + n : "" + n; };
+  return sast.getUTCFullYear() + "-" +
+         pad(sast.getUTCMonth() + 1) + "-" +
+         pad(sast.getUTCDate()) + "T" +
+         pad(sast.getUTCHours()) + ":" +
+         pad(sast.getUTCMinutes()) + ":" +
+         pad(sast.getUTCSeconds()) + "+0200";
 }
 
 function buildTargeting(p) {
@@ -302,8 +348,20 @@ function buildTargeting(p) {
   if (a.genders && a.genders.length) t.genders = a.genders;
   if (a.flexibleSpec) t.flexible_spec = a.flexibleSpec;
 
+  // Platform mode is the wizard's top-level intent and overrides Placement's
+  // publisher_platforms regardless of the manual/Advantage+ choice. fb_only
+  // and ig_only force a single-platform targeting; fb_ig leaves Placement to
+  // do its job (Advantage+ stays auto, manual respects user-selected platforms).
   var pl = p.placement || {};
-  if (pl.mode === "manual") {
+  if (p.platformMode === "fb_only") {
+    t.publisher_platforms = ["facebook"];
+    if (pl.mode === "manual" && pl.facebookPositions) t.facebook_positions = pl.facebookPositions;
+    if (pl.mode === "manual") t.device_platforms = pl.devicePlatforms || ["mobile", "desktop"];
+  } else if (p.platformMode === "ig_only") {
+    t.publisher_platforms = ["instagram"];
+    if (pl.mode === "manual" && pl.instagramPositions) t.instagram_positions = pl.instagramPositions;
+    if (pl.mode === "manual") t.device_platforms = pl.devicePlatforms || ["mobile", "desktop"];
+  } else if (pl.mode === "manual") {
     t.publisher_platforms = pl.platforms || ["facebook", "instagram"];
     if (pl.facebookPositions) t.facebook_positions = pl.facebookPositions;
     if (pl.instagramPositions) t.instagram_positions = pl.instagramPositions;

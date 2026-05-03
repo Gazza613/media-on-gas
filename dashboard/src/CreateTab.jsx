@@ -162,11 +162,14 @@ function Wizard(props) {
     objective: "OUTCOME_TRAFFIC",
     specialAdCategories: [],
     campaignName: "",
+    platformMode: "fb_ig",
     pageId: "", instagramId: "",
     audience: { countries: ["ZA"], ageMin: 18, ageMax: 65, genders: [], advantageAudience: false, flexibleSpec: null },
     placement: { mode: "advantage", platforms: ["facebook","instagram"], facebookPositions: ["feed"], instagramPositions: ["stream","story","reels"], devicePlatforms: ["mobile","desktop"] },
     creative: { kind: "image", imageHash: null, videoId: null, headline: "", primaryText: "", description: "", linkUrl: "", callToAction: "LEARN_MORE", filename: null, previewDataUrl: null },
-    dailyBudgetRand: 200, startDate: todayIso(), endDate: addDaysIso(7),
+    budgetMode: "daily",
+    dailyBudgetRand: 200, lifetimeBudgetRand: 5000,
+    startDate: todayIso(), endDate: addDaysIso(7),
     pixelId: "", conversionEvent: "PURCHASE", urlTags: ""
   };
   var ds = useState(initial), draft = ds[0], setDraft = ds[1];
@@ -221,11 +224,27 @@ function Wizard(props) {
 
   // -------- Per-step validation gates --------------------------------------
   var canAdvance = (function(){
-    if (step === 0) return !!draft.accountId && !!draft.objective && draft.campaignName.trim().length >= 3;
+    if (step === 0) return !!draft.accountId && !!draft.objective && draft.campaignName.trim().length >= 3 && !!draft.platformMode;
     if (step === 1) return draft.audience.ageMin >= 13 && draft.audience.ageMax <= 65 && draft.audience.ageMin < draft.audience.ageMax;
     if (step === 2) return draft.placement.mode === "advantage" || ((draft.placement.platforms || []).length > 0);
-    if (step === 3) return !!(draft.creative.imageHash || draft.creative.videoId) && draft.creative.headline.trim() && draft.creative.primaryText.trim() && draft.creative.linkUrl.trim() && !!draft.pageId;
-    if (step === 4) return draft.dailyBudgetRand > 0 && draft.dailyBudgetRand <= MAX_DAILY_RAND && !!draft.startDate;
+    if (step === 3) {
+      var igRequired = draft.platformMode === "fb_ig" || draft.platformMode === "ig_only";
+      return !!(draft.creative.imageHash || draft.creative.videoId) &&
+             draft.creative.headline.trim() &&
+             draft.creative.primaryText.trim() &&
+             draft.creative.linkUrl.trim() &&
+             !!draft.pageId &&
+             (!igRequired || !!draft.instagramId);
+    }
+    if (step === 4) {
+      if (!draft.startDate) return false;
+      if (draft.budgetMode === "lifetime") {
+        if (!draft.endDate) return false;
+        var days = lifetimeDays(draft.startDate, draft.endDate);
+        return draft.lifetimeBudgetRand > 0 && draft.lifetimeBudgetRand <= MAX_DAILY_RAND * days;
+      }
+      return draft.dailyBudgetRand > 0 && draft.dailyBudgetRand <= MAX_DAILY_RAND;
+    }
     if (step === 5) return true;
     return true;
   })();
@@ -240,6 +259,7 @@ function Wizard(props) {
       objective: draft.objective,
       specialAdCategories: draft.specialAdCategories,
       campaignName: draft.campaignName.trim(),
+      platformMode: draft.platformMode,
       pageId: draft.pageId,
       instagramId: draft.instagramId || null,
       audience: draft.audience,
@@ -253,7 +273,9 @@ function Wizard(props) {
         linkUrl: draft.creative.linkUrl,
         callToAction: draft.creative.callToAction
       },
-      dailyBudgetCents: Math.round(draft.dailyBudgetRand * 100),
+      budgetMode: draft.budgetMode,
+      dailyBudgetCents: draft.budgetMode === "daily" ? Math.round(draft.dailyBudgetRand * 100) : 0,
+      lifetimeBudgetCents: draft.budgetMode === "lifetime" ? Math.round(draft.lifetimeBudgetRand * 100) : 0,
       startDate: draft.startDate,
       endDate: draft.endDate || null,
       pixelId: draft.pixelId || null,
@@ -405,6 +427,26 @@ function Step0(props) {
         Phase 1 only supports standard objectives. Advantage+ Shopping (ASC) and App Campaigns (AAC) are removed in Meta API v25.0+.
       </div>
     </Glass>
+
+    <Glass accent={P.fb} st={{padding:22,marginTop:16}}>
+      <div style={{fontSize:10,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:12,textTransform:"uppercase"}}>Platform</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+        {[
+          { k: "fb_only", n: "Facebook only", sub: "FB feed, stories, reels" },
+          { k: "fb_ig", n: "Facebook + Instagram", sub: "Cross-platform delivery" },
+          { k: "ig_only", n: "Instagram only", sub: "IG feed, stories, reels" }
+        ].map(function(o){
+          var on = draft.platformMode === o.k;
+          return <div key={o.k} onClick={function(){ update({ platformMode: o.k }); }} style={{padding:"14px 16px",border:"1px solid "+(on?P.fb:P.rule),background:on?P.fb+"15":"transparent",borderRadius:10,cursor:"pointer"}}>
+            <div style={{fontSize:13,fontWeight:800,color:on?P.fb:P.txt,fontFamily:ff}}>{o.n}</div>
+            <div style={{fontSize:11,color:P.label||P.sub,fontFamily:fm,marginTop:3}}>{o.sub}</div>
+          </div>;
+        })}
+      </div>
+      <div style={{marginTop:14,fontSize:11,color:P.label||P.sub,fontFamily:fm,lineHeight:1.6}}>
+        Even Instagram-only ads need a Facebook Page (Meta uses it as the actor identity). Pick the page in the Creative step.
+      </div>
+    </Glass>
   </div>;
 }
 
@@ -550,17 +592,20 @@ function Step3(props) {
     rdr.readAsDataURL(file);
   };
 
+  var igRequired = draft.platformMode === "fb_ig" || draft.platformMode === "ig_only";
+  var fbHidden = draft.platformMode === "ig_only"; // page still needed under the hood, but make UI less confusing
+
   return <Glass accent={P.fuchsia} st={{padding:22}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
-      <Field label="Facebook page" fm={fm} P={P}>
+      <Field label={fbHidden ? "Facebook page (required by Meta as actor identity)" : "Facebook page"} fm={fm} P={P}>
         <select value={draft.pageId} onChange={function(e){ update({ pageId: e.target.value }); }} style={selectStyle(P, fm)}>
           <option value="">{pages.loading ? "Loading..." : "— Choose page —"}</option>
           {(pages.items || []).map(function(p){ return <option key={p.pageId} value={p.pageId}>{p.name}</option>; })}
         </select>
       </Field>
-      <Field label="Instagram account (optional)" fm={fm} P={P}>
+      <Field label={igRequired ? "Instagram account (required)" : "Instagram account (optional)"} fm={fm} P={P}>
         <select value={draft.instagramId} onChange={function(e){ update({ instagramId: e.target.value }); }} style={selectStyle(P, fm)}>
-          <option value="">{instagrams.loading ? "Loading..." : "— None / FB-only —"}</option>
+          <option value="">{instagrams.loading ? "Loading..." : (igRequired ? "— Choose Instagram —" : "— None / FB-only —")}</option>
           {(instagrams.items || []).map(function(i){ return <option key={i.instagramId} value={i.instagramId}>@{i.username}</option>; })}
         </select>
       </Field>
@@ -608,22 +653,50 @@ function Step3(props) {
 function Step4(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
   var draft = props.draft, update = props.update;
-  var over = draft.dailyBudgetRand > MAX_DAILY_RAND;
+  var isLifetime = draft.budgetMode === "lifetime";
+  var days = isLifetime ? lifetimeDays(draft.startDate, draft.endDate) : 0;
+  var lifetimeCap = MAX_DAILY_RAND * (days || 1);
+  var dailyOver = draft.dailyBudgetRand > MAX_DAILY_RAND;
+  var lifetimeOver = draft.lifetimeBudgetRand > lifetimeCap;
+
   return <Glass accent={P.solar} st={{padding:22}}>
-    <Field label={"Daily budget (ZAR, max R" + MAX_DAILY_RAND.toLocaleString() + ")"} fm={fm} P={P}>
+    <div style={{fontSize:9,fontWeight:700,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Budget type</div>
+    <div style={{display:"flex",gap:8,marginBottom:18}}>
+      {[{k:"daily",n:"Daily budget"},{k:"lifetime",n:"Lifetime budget"}].map(function(b){
+        var on = draft.budgetMode === b.k;
+        return <div key={b.k} onClick={function(){ update({ budgetMode: b.k }); }} style={{padding:"10px 18px",border:"1px solid "+(on?P.solar:P.rule),background:on?P.solar+"15":"transparent",borderRadius:10,cursor:"pointer",fontSize:11,fontWeight:800,color:on?P.solar:(P.label||P.sub),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>
+          {b.n}
+        </div>;
+      })}
+    </div>
+
+    {!isLifetime && <Field label={"Daily budget (ZAR, max R" + MAX_DAILY_RAND.toLocaleString() + ")"} fm={fm} P={P}>
       <input type="number" min={1} max={MAX_DAILY_RAND} step={50}
         value={draft.dailyBudgetRand}
         onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 0; update({ dailyBudgetRand: Math.max(0, Math.min(MAX_DAILY_RAND, v)) }); }}
-        style={Object.assign({}, inputStyle(P, fm), over ? { borderColor: P.critical || "#ef4444" } : {})}/>
-      {over && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Daily budget cannot exceed R{MAX_DAILY_RAND.toLocaleString()} — server will reject this.</div>}
-    </Field>
+        style={Object.assign({}, inputStyle(P, fm), dailyOver ? { borderColor: P.critical || "#ef4444" } : {})}/>
+      {dailyOver && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Daily budget cannot exceed R{MAX_DAILY_RAND.toLocaleString()} — server will reject this.</div>}
+    </Field>}
+
+    {isLifetime && <Field label={"Lifetime budget (ZAR, max R" + lifetimeCap.toLocaleString() + (days ? " over " + days + " days" : "") + ")"} fm={fm} P={P}>
+      <input type="number" min={1} step={100}
+        value={draft.lifetimeBudgetRand}
+        onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 0; update({ lifetimeBudgetRand: Math.max(0, v) }); }}
+        style={Object.assign({}, inputStyle(P, fm), lifetimeOver ? { borderColor: P.critical || "#ef4444" } : {})}/>
+      {!draft.endDate && <div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:6}}>End date required for a lifetime budget — set one below.</div>}
+      {lifetimeOver && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Lifetime budget cannot exceed R{lifetimeCap.toLocaleString()} (R{MAX_DAILY_RAND.toLocaleString()} × {days} days).</div>}
+    </Field>}
+
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-      <Field label="Start date" fm={fm} P={P}>
+      <Field label="Start date (SAST)" fm={fm} P={P}>
         <input type="date" value={draft.startDate} onChange={function(e){ update({ startDate: e.target.value }); }} style={inputStyle(P, fm)}/>
       </Field>
-      <Field label="End date (optional, blank = open ended)" fm={fm} P={P}>
+      <Field label={isLifetime ? "End date (SAST, required)" : "End date (SAST, optional, blank = open ended)"} fm={fm} P={P}>
         <input type="date" value={draft.endDate} onChange={function(e){ update({ endDate: e.target.value }); }} style={inputStyle(P, fm)}/>
       </Field>
+    </div>
+    <div style={{marginTop:10,fontSize:10,color:P.label||P.sub,fontFamily:fm,lineHeight:1.6}}>
+      Times are interpreted in South African Standard Time (UTC+2). Campaigns starting today auto-bump to "now + 15 min" if the picked time has already passed.
     </div>
   </Glass>;
 }
@@ -666,18 +739,24 @@ function Step6(props) {
   var igName = draft.instagramId ? "@" + ((instagrams.items.find(function(i){return i.instagramId===draft.instagramId;}) || {}).username || "?") : "(none)";
   var pxName = draft.pixelId ? ((pixels.items.find(function(p){return p.pixelId===draft.pixelId;}) || {}).name || draft.pixelId) : "(none)";
 
+  var platformLabel = { fb_only: "Facebook only", fb_ig: "Facebook + Instagram", ig_only: "Instagram only" }[draft.platformMode] || draft.platformMode;
+  var budgetRow = draft.budgetMode === "lifetime"
+    ? ["Lifetime budget", "R" + draft.lifetimeBudgetRand.toLocaleString() + " over " + lifetimeDays(draft.startDate, draft.endDate) + " days"]
+    : ["Daily budget", "R" + draft.dailyBudgetRand.toLocaleString() + (draft.dailyBudgetRand >= MAX_DAILY_RAND ? " (at ceiling)" : "")];
+
   var rows = [
     ["Account", accName],
     ["Objective", draft.objective],
     ["Campaign name", draft.campaignName],
+    ["Platform", platformLabel],
     ["Page", pageName],
     ["Instagram", igName],
     ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + ", " + draft.audience.countries.join(",") + (draft.audience.genders.length ? (", " + draft.audience.genders.map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
     ["Placement", draft.placement.mode === "advantage" ? "Advantage+" : ("Manual: " + (draft.placement.platforms || []).join(", "))],
     ["Creative", (draft.creative.kind === "image" ? "Image" : "Video") + " — " + draft.creative.headline],
     ["CTA → URL", draft.creative.callToAction.replace(/_/g," ") + " → " + draft.creative.linkUrl],
-    ["Daily budget", "R" + draft.dailyBudgetRand.toLocaleString() + (draft.dailyBudgetRand >= MAX_DAILY_RAND ? " (at ceiling)" : "")],
-    ["Schedule", draft.startDate + (draft.endDate ? (" → " + draft.endDate) : " (open-ended)")],
+    budgetRow,
+    ["Schedule (SAST)", draft.startDate + (draft.endDate ? (" → " + draft.endDate) : " (open-ended)")],
     ["Pixel", pxName],
     ["URL params", draft.urlTags || "(none)"]
   ];
@@ -782,3 +861,10 @@ function addDaysIso(n) {
   return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
 }
 function pad(n) { return (n < 10 ? "0" : "") + n; }
+function lifetimeDays(startIso, endIso) {
+  if (!startIso || !endIso) return 0;
+  var s = Date.parse(startIso + "T00:00:00+0200");
+  var e = Date.parse(endIso + "T23:59:59+0200");
+  if (!isFinite(s) || !isFinite(e) || e <= s) return 0;
+  return Math.max(1, Math.ceil((e - s) / (24 * 60 * 60 * 1000)));
+}
