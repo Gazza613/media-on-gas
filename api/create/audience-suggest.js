@@ -18,11 +18,14 @@ import { checkCreateAuth, isAccountAllowed, getCreateMetaToken, META_API_VERSION
 
 export const config = { maxDuration: 60 };
 
-var SYSTEM_PROMPT = "You are a Meta advertising targeting expert. Given a plain-English description of an audience, suggest 5-10 specific Meta targeting terms (interests, behaviors, demographics) that would match that audience. " +
-  "Only suggest terms that genuinely exist in Meta's taxonomy — common interest categories (industries, hobbies, brands, lifestyle topics), well-known behaviors (small business owners, frequent travelers, engaged shoppers), and demographics (parents, married, education level). " +
-  "Do not invent IDs. Output JSON only, no commentary, no markdown. Each item: " +
-  '{"term":"<exact term as it appears in Meta>","type":"interests|behaviors|demographics|work_positions|family_statuses","reason":"<one sentence on why this matches>"}.' +
-  "Return an array of 5-10 items, ordered most relevant first. Prefer broader/well-known terms over niche ones since niche terms often have no Meta match.";
+var SYSTEM_PROMPT = "You are a senior Meta advertising strategist building world-class targeting recommendations. Given a plain-English description of an audience, generate 12-18 Meta targeting terms across all four lever types: Interests, Behaviors, Demographics, and Job Titles (work_positions). " +
+  "Diversify deliberately — do not return 15 interests. Aim for roughly: 6-8 interests (brands, hobbies, lifestyle topics, industry verticals), 3-5 behaviors (purchase behaviors, mobile device use, frequent travelers, business owners, engaged shoppers, technology early adopters), 2-3 demographics (parents, married, education level, household composition, income proxies), 2-3 work_positions (specific job titles relevant to the description). " +
+  "Quality bar: each term must genuinely exist in Meta's targeting taxonomy. Prefer broad, recognisable terms (Meta's combined-interest consolidation collapsed many niche options into parent categories — niche terms often have no Meta match). " +
+  "For South African / African markets, prefer English category names; localise only when the target market explicitly demands it. " +
+  "Reasoning column: one tight sentence per term explaining the strategic angle (intent signal, lookalike heuristic, cross-platform behaviour, etc.) — not just 'matches description'. " +
+  "Output JSON only, no commentary, no markdown fences. Each item: " +
+  '{"term":"<exact term as Meta names it>","type":"interests|behaviors|demographics|work_positions","reason":"<strategic one-liner>"}.' +
+  "Return the array ordered by impact (highest-leverage targets first).";
 
 export default async function handler(req, res) {
   if (!checkCreateAuth(req, res)) return;
@@ -58,7 +61,7 @@ export default async function handler(req, res) {
     var anthropic = new Anthropic({ apiKey: apiKey });
     var response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userMsg }]
     });
@@ -84,12 +87,13 @@ export default async function handler(req, res) {
   }
 
   // ----- Phase 2: resolve each term to a real Meta targeting item -----------
-  // Run lookups in parallel but cap concurrency so we don't fan out 10
-  // simultaneous Meta API calls and trip rate limits.
+  // Run lookups in parallel but cap concurrency so we don't fan out 18
+  // simultaneous Meta API calls and trip rate limits. Higher concurrency
+  // (6) than before since we have more terms to chew through.
   var resolved = [];
   var seen = {};
-  var maxConcurrent = 4;
-  var queue = terms.slice(0, 10).map(function(t){ return t; });
+  var maxConcurrent = 6;
+  var queue = terms.slice(0, 18).map(function(t){ return t; });
   async function worker() {
     while (queue.length > 0) {
       var t = queue.shift();
