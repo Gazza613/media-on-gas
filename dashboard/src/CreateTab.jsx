@@ -1315,19 +1315,22 @@ function LocationPicker(props) {
   var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
   var locations = props.locations || { geographies: [], customLocations: [] };
 
-  var addGeography = function(item){
+  var addGeography = function(item, asExclude){
     var existing = locations.geographies || [];
-    if (existing.some(function(x){ return x.key === item.key && x.type === item.type; })) return;
+    var idx = existing.findIndex(function(x){ return x.key === item.key && x.type === item.type; });
+    if (idx >= 0) {
+      // Already in the list — flip its exclude flag if the user is adding
+      // it from the opposite section (handles the "I want to flip Sandton
+      // from include to exclude" workflow without forcing remove + re-add).
+      if (existing[idx].exclude !== asExclude) {
+        var next = existing.slice();
+        next[idx] = Object.assign({}, next[idx], { exclude: asExclude });
+        props.onChange({ geographies: next, customLocations: locations.customLocations || [] });
+      }
+      return;
+    }
     props.onChange({
-      geographies: existing.concat([Object.assign({}, item, { exclude: false })]),
-      customLocations: locations.customLocations || []
-    });
-  };
-  var toggleGeographyExclude = function(key, type){
-    props.onChange({
-      geographies: (locations.geographies || []).map(function(x){
-        return (x.key === key && x.type === type) ? Object.assign({}, x, { exclude: !x.exclude }) : x;
-      }),
+      geographies: existing.concat([Object.assign({}, item, { exclude: !!asExclude })]),
       customLocations: locations.customLocations || []
     });
   };
@@ -1358,11 +1361,27 @@ function LocationPicker(props) {
     });
   };
 
-  return <div style={{display:"flex",flexDirection:"column",gap:18}}>
+  var includeGeos = (locations.geographies || []).filter(function(g){ return !g.exclude; });
+  var excludeGeos = (locations.geographies || []).filter(function(g){ return !!g.exclude; });
+
+  return <div style={{display:"flex",flexDirection:"column",gap:22}}>
     <GeoSearcher P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} accountId={accountId}
-      geographies={locations.geographies || []} onAdd={addGeography} onRemove={removeGeography} onToggleExclude={toggleGeographyExclude}/>
+      mode="include"
+      title="Include these locations"
+      placeholder="Search countries, regions, cities, suburbs, postal codes..."
+      geographies={includeGeos}
+      onAdd={function(item){ addGeography(item, false); }}
+      onRemove={removeGeography}/>
     <ProximityPinPicker P={P} ff={ff} fm={fm} apiBase={apiBase} token={token}
       pins={locations.customLocations || []} onAdd={addCustom} onRemove={removeCustom} onToggleExclude={toggleCustomExclude}/>
+    <GeoSearcher P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} accountId={accountId}
+      mode="exclude"
+      title="Exclude these locations"
+      hint="Carve out low-value or off-strategy areas from the include set above. Common use: 15 km proximity pin around a store, then exclude two adjacent low-value suburbs from that radius."
+      placeholder="Search areas to EXCLUDE — suburbs, postal codes, regions..."
+      geographies={excludeGeos}
+      onAdd={function(item){ addGeography(item, true); }}
+      onRemove={removeGeography}/>
   </div>;
 }
 
@@ -1386,6 +1405,8 @@ var GEO_TYPE_LABELS = {
 function GeoSearcher(props) {
   var P = props.P, ff = props.ff, fm = props.fm;
   var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
+  var isExclude = props.mode === "exclude";
+  var sectionAccent = isExclude ? (P.critical || "#ef4444") : (P.cyan || "#22D3EE");
   var qS = useState(""), q = qS[0], setQ = qS[1];
   var rS = useState({ loading: false, items: [], error: "" }), results = rS[0], setResults = rS[1];
   var openS = useState(false), open = openS[0], setOpen = openS[1];
@@ -1410,12 +1431,18 @@ function GeoSearcher(props) {
     return function(){ if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [q, accountId]);
 
-  return <div>
-    <div style={{fontSize:11,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Geographic locations</div>
+  var sectionTitle = props.title || (isExclude ? "Exclude these locations" : "Geographic locations");
+  var placeholderText = props.placeholder || (accountId ? "Search countries, regions, cities, suburbs, postal codes..." : "Pick an ad account first");
+
+  return <div style={{padding:"14px 16px",border:"1px solid "+sectionAccent+"30",background:isExclude?"rgba(239,68,68,0.04)":"rgba(34,211,238,0.04)",borderLeft:"3px solid "+sectionAccent,borderRadius:"0 12px 12px 0"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+      <span style={{fontSize:11,fontWeight:800,color:sectionAccent,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>{isExclude ? "🚫 " : "✓ "}{sectionTitle}</span>
+    </div>
+    {props.hint && <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:10}}>{props.hint}</div>}
     <div style={{position:"relative"}}>
       <input value={q} onChange={function(e){ setQ(e.target.value); setOpen(true); }}
         onFocus={function(){ setOpen(true); }}
-        placeholder={accountId ? "Search countries, regions, cities, suburbs, postal codes..." : "Pick an ad account first"}
+        placeholder={placeholderText}
         disabled={!accountId}
         style={inputStyle(P, fm)}/>
       {open && q.trim().length >= 2 && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:280,overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
@@ -1437,25 +1464,21 @@ function GeoSearcher(props) {
               </div>
               <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,marginTop:2}}>{subParts.join(" · ")}</div>
             </div>
-            <span style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{alreadyAdded ? "Added" : "Add"}</span>
+            <span style={{fontSize:10,color:sectionAccent,fontFamily:fm,whiteSpace:"nowrap",fontWeight:800,textTransform:"uppercase",letterSpacing:1}}>{alreadyAdded ? "Already in section" : (isExclude ? "Add to exclude" : "Add to include")}</span>
           </div>;
         })}
       </div>}
       {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:40}}/>}
     </div>
-    {(props.geographies || []).length > 0 && <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12,padding:"12px 14px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10,minHeight:60,maxHeight:200,overflowY:"auto"}}>
+    {(props.geographies || []).length > 0 && <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12,padding:"10px 12px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10,minHeight:50,maxHeight:200,overflowY:"auto"}}>
       {props.geographies.map(function(item){
         var typeColor = GEO_TYPE_COLORS[item.type] || P.label;
-        var excluded = !!item.exclude;
-        var color = excluded ? (P.critical || "#ef4444") : typeColor;
-        return <span key={item.type + ":" + item.key} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:12,color:P.txt,fontFamily:fm,textDecoration:excluded?"line-through":"none"}}>
-          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{excluded ? "EXCLUDE" : (GEO_TYPE_LABELS[item.type] || item.type)}</span>
-          <span style={{textDecoration:"none"}}>{item.name}</span>
+        var color = isExclude ? sectionAccent : typeColor;
+        return <span key={item.type + ":" + item.key} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:12,color:P.txt,fontFamily:fm}}>
+          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{GEO_TYPE_LABELS[item.type] || item.type}</span>
+          <span>{item.name}</span>
           {item.region && <span style={{fontSize:10,color:P.label||P.sub}}>· {item.region}</span>}
-          <span onClick={function(){ props.onToggleExclude(item.key, item.type); }} title={excluded ? "Re-include" : "Exclude this area"} style={{cursor:"pointer",color:color,fontWeight:900,marginLeft:6,fontSize:11,padding:"0 4px",border:"1px solid "+color+"50",borderRadius:4,letterSpacing:1}}>
-            {excluded ? "+" : "−"}
-          </span>
-          <span onClick={function(){ props.onRemove(item.key, item.type); }} style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,fontSize:14}}>×</span>
+          <span onClick={function(){ props.onRemove(item.key, item.type); }} title="Remove" style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,fontSize:14,marginLeft:2}}>×</span>
         </span>;
       })}
     </div>}
