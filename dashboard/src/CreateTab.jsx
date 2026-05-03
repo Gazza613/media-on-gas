@@ -935,12 +935,21 @@ function selectStyle(P, fm) { return Object.assign({}, inputStyle(P, fm), { padd
 // which clipped the dropdown before this fix), and auto-flips upward when
 // there isn't enough space below. Returns a style object to spread onto
 // the popover div, or null until the first measurement lands.
-function useAnchoredPopover(triggerRef, open, gap) {
+//
+// IMPORTANT: this hook measures ONCE on open and on window resize — not on
+// every scroll. Re-measuring on scroll causes flicker / jitter because each
+// measurement is a React re-render. Instead, when the page scrolls outside
+// the popover we close it (standard native <select> behaviour). Scroll
+// events that originate INSIDE the popover (the user paging through a long
+// list) are ignored via the data-popover attribute.
+function useAnchoredPopover(triggerRef, open, opts) {
+  opts = opts || {};
   var posS = useState(null), pos = posS[0], setPos = posS[1];
-  var px = (typeof gap === "number") ? gap : 6;
+  var gap = (typeof opts.gap === "number") ? opts.gap : 6;
+  var onClose = opts.onClose;
   useLayoutEffect(function(){
     if (!open) { setPos(null); return; }
-    var update = function(){
+    var measure = function(){
       if (!triggerRef.current) return;
       var rect = triggerRef.current.getBoundingClientRect();
       var spaceBelow = window.innerHeight - rect.bottom - 20;
@@ -950,18 +959,26 @@ function useAnchoredPopover(triggerRef, open, gap) {
       setPos({
         position: "fixed",
         left: rect.left,
-        top: openUp ? null : rect.bottom + px,
-        bottom: openUp ? (window.innerHeight - rect.top + px) : null,
+        top: openUp ? null : rect.bottom + gap,
+        bottom: openUp ? (window.innerHeight - rect.top + gap) : null,
         width: rect.width,
         maxHeight: maxH
       });
     };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
+    measure();
+    var onResize = function(){ measure(); };
+    var onOuterScroll = function(e){
+      // Scrolls inside the popover itself shouldn't close it. The popover
+      // div carries data-popover="true" so we can detect & ignore them.
+      var t = e.target;
+      if (t && t.closest && t.closest && t.closest('[data-popover="true"]')) return;
+      if (onClose) onClose();
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onOuterScroll, true);
     return function(){
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onOuterScroll, true);
     };
   }, [open]);
   return pos;
@@ -975,7 +992,7 @@ function Select(props) {
   var P = props.P, fm = props.fm;
   var openS = useState(false), open = openS[0], setOpen = openS[1];
   var triggerRef = useRef(null);
-  var pos = useAnchoredPopover(triggerRef, open, 6);
+  var pos = useAnchoredPopover(triggerRef, open, { gap: 6, onClose: function(){ setOpen(false); } });
   var current = (props.options || []).find(function(o){ return o.value === props.value; });
   var label = current ? current.label : (props.placeholder || "— Choose —");
   var popoverStyle = pos ? Object.assign({}, pos, {
@@ -993,7 +1010,7 @@ function Select(props) {
       <span style={{color: current ? P.txt : (P.label || P.sub), whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{label}</span>
       <span style={{color: P.label || P.sub, marginLeft: 8, fontSize: 11}}>{open ? "▲" : "▼"}</span>
     </div>
-    {open && popoverStyle && <div style={popoverStyle}>
+    {open && popoverStyle && <div data-popover="true" style={popoverStyle}>
       {(props.options || []).length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>{props.emptyText || "No options"}</div>}
       {(props.options || []).map(function(o){
         var on = o.value === props.value;
@@ -1016,7 +1033,7 @@ function MultiSelect(props) {
   var openS = useState(false), open = openS[0], setOpen = openS[1];
   var qS = useState(""), q = qS[0], setQ = qS[1];
   var triggerRef = useRef(null);
-  var pos = useAnchoredPopover(triggerRef, open, 6);
+  var pos = useAnchoredPopover(triggerRef, open, { gap: 6, onClose: function(){ setOpen(false); } });
   var values = props.value || [];
   var options = props.options || [];
   var filtered = q.trim() ? options.filter(function(o){
@@ -1046,7 +1063,7 @@ function MultiSelect(props) {
       })}
       <span style={{marginLeft:"auto",color:P.label||P.sub,fontSize:11}}>{open ? "▲" : "▼"}</span>
     </div>
-    {open && popoverStyle && <div style={popoverStyle}>
+    {open && popoverStyle && <div data-popover="true" style={popoverStyle}>
       {props.searchable && <input value={q} onChange={function(e){ setQ(e.target.value); }} placeholder="Search..." style={Object.assign({}, inputStyle(P, fm), { borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, borderBottom: "1px solid " + P.rule, position: "sticky", top: 0, zIndex: 1 })}/>}
       {filtered.length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
       {filtered.map(function(o){
