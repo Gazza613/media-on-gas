@@ -14,7 +14,38 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 
 var TOKEN_KEY = "gas_create_token";
 var TOKEN_EXP_KEY = "gas_create_token_exp";
+var DRAFT_KEY = "gas_create_draft";
+var STEP_KEY = "gas_create_step";
 var MAX_DAILY_RAND = 5000;
+
+// Draft persistence: stash to sessionStorage on every change so a token
+// expiry / accidental reload / re-auth doesn't blow away N minutes of
+// wizard work. The image preview data URL is stripped before saving — it
+// can be megabytes and sessionStorage is capped around 5MB. The hash/id
+// references survive so the user keeps their actual upload, only losing
+// the preview thumbnail until they re-upload.
+function stripDraftForPersist(d) {
+  if (!d || !d.creative) return d;
+  var creative = Object.assign({}, d.creative, { previewDataUrl: null });
+  return Object.assign({}, d, { creative: creative });
+}
+function readSavedDraft(fallback) {
+  try {
+    var raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return fallback;
+    var parsed = JSON.parse(raw);
+    return Object.assign({}, fallback, parsed);
+  } catch (_) { return fallback; }
+}
+function readSavedStep() {
+  try {
+    var s = parseInt(sessionStorage.getItem(STEP_KEY) || "0", 10);
+    return isFinite(s) && s >= 0 && s <= 6 ? s : 0;
+  } catch (_) { return 0; }
+}
+function clearSavedDraft() {
+  try { sessionStorage.removeItem(DRAFT_KEY); sessionStorage.removeItem(STEP_KEY); } catch (_) {}
+}
 
 var OBJECTIVES = [
   { id: "OUTCOME_TRAFFIC",        label: "Traffic",        sub: "Drive clicks to a landing page" },
@@ -151,7 +182,6 @@ function Wizard(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, SH = props.SH;
   var apiBase = props.apiBase, token = props.token;
 
-  var ss = useState(0), step = ss[0], setStep = ss[1];
   var subS = useState(false), submitting = subS[0], setSubmitting = subS[1];
   var resS = useState(null), result = resS[0], setResult = resS[1];
   var errS = useState(null), submitErr = errS[0], setSubmitErr = errS[1];
@@ -178,9 +208,23 @@ function Wizard(props) {
     startDate: todayIso(), endDate: addDaysIso(7),
     pixelId: "", conversionEvent: "PURCHASE", urlTags: ""
   };
-  var ds = useState(initial), draft = ds[0], setDraft = ds[1];
+  // useState lazy initialiser so we only read sessionStorage once on mount.
+  // Restored drafts are merged onto `initial` so any new top-level fields
+  // added after a draft was saved still get sensible defaults.
+  var ds = useState(function(){ return readSavedDraft(initial); }), draft = ds[0], setDraft = ds[1];
+  var ss = useState(function(){ return readSavedStep(); }), step = ss[0], setStep = ss[1];
   var update = function(patch){ setDraft(function(d){ return Object.assign({}, d, patch); }); };
   var updateNested = function(key, patch){ setDraft(function(d){ var v = Object.assign({}, d[key], patch); var out = {}; out[key] = v; return Object.assign({}, d, out); }); };
+
+  // Persist draft + step on every change so re-auth (or accidental reload)
+  // resumes exactly where the user left off. Stripped of the preview data
+  // URL so we don't blow past sessionStorage's ~5 MB cap on large uploads.
+  useEffect(function(){
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(stripDraftForPersist(draft))); } catch (_) {}
+  }, [draft]);
+  useEffect(function(){
+    try { sessionStorage.setItem(STEP_KEY, String(step)); } catch (_) {}
+  }, [step]);
 
   // -------- Reference data (fetched per-account) ---------------------------
   var accS = useState({ loading: true, items: [], error: "" }), accounts = accS[0], setAccounts = accS[1];
@@ -298,6 +342,7 @@ function Wizard(props) {
         setSubmitting(false);
         if (x.status === 401) { props.onLogout(); return; }
         if (!x.ok) { setSubmitErr({ status: x.status, body: x.data || { error: "Submit failed" } }); return; }
+        clearSavedDraft();
         setResult(x.data);
       })
       .catch(function(){ setSubmitting(false); setSubmitErr({ status: 0, body: { error: "Network error. Try again." } }); });
@@ -305,7 +350,7 @@ function Wizard(props) {
 
   // -------- Result screen --------------------------------------------------
   if (result) return <SuccessScreen P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} result={result}
-    onAnother={function(){ setResult(null); setStep(0); setDraft(initial); setSubmitErr(null); }}/>;
+    onAnother={function(){ clearSavedDraft(); setResult(null); setStep(0); setDraft(initial); setSubmitErr(null); }}/>;
 
   // -------- Render ---------------------------------------------------------
   return <div>
