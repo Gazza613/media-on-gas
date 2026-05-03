@@ -4,17 +4,16 @@
 //   1. Validate JWT (checkCreateAuth)
 //   2. Validate accountId is in CREATE_TAB_ALLOWED_ACCOUNTS (server-side, not
 //      just client filtering)
-//   3. Validate daily_budget <= MAX_DAILY_BUDGET_CENTS (R5,000)
+//   3. Validate budget per level (CBO at campaign, ABO at adset) <= ceiling
 //   4. Force status:"PAUSED" at every level — campaign body status is ignored
-//   5. POST campaign → adset → adcreative → ad. Each step is a separate Meta
-//      call; on failure the previous resources stay around as orphan PAUSED
-//      objects (same as Ads Manager does, recoverable via Meta UI).
+//   5. POST campaign → adset → 1..N (creative + ad). On failure the previous
+//      resources stay around as orphan PAUSED objects (same as Ads Manager
+//      does, recoverable via Meta UI).
 //   6. Best-effort Gmail draft to gary@gasmarketing.co.za. If Gmail OAuth env
-//      vars are missing, the draft step is skipped and we still return success
-//      — the campaign exists and is paused, an email is icing.
+//      vars are missing, the draft step is skipped and we still return success.
 //
-// All campaigns created here are PAUSED. To go live, Gary unpauses in Meta
-// Ads Manager. There is no "create live" path in Phase 1.
+// All campaigns created here are PAUSED. To go live, the team unpauses in
+// Meta Ads Manager. There is no "create live" path in Phase 1.
 
 import { rateLimit } from "../_rateLimit.js";
 import {
@@ -51,17 +50,32 @@ export default async function handler(req, res) {
 
   try {
     // ----- 1. Campaign --------------------------------------------------
+    // Budget routing: CBO holds the budget at campaign level and shares it
+    // across (potential future) ad sets. ABO holds budget at the ad set
+    // level and the campaign itself has no budget. The wizard ships one
+    // ad set today, but using the right shape now makes adding more ad
+    // sets later a no-op rather than a re-architecture.
     var campForm = new URLSearchParams();
     campForm.set("name", p.campaignName);
     campForm.set("objective", p.objective);
     campForm.set("status", "PAUSED");
     campForm.set("special_ad_categories", JSON.stringify(p.specialAdCategories || []));
     campForm.set("buying_type", "AUCTION");
-    // Meta v25.0 made this mandatory whenever the campaign doesn't carry a
-    // CBO budget. We hold budgets at the ad-set level (one ad set per campaign
-    // in this wizard), so sharing is off — explicit false satisfies the
-    // validator without changing pacing behaviour.
-    campForm.set("is_adset_budget_sharing_enabled", "false");
+    if (p.funding === "CBO") {
+      if (p.budgetMode === "lifetime") {
+        campForm.set("lifetime_budget", String(p.lifetimeBudgetCents));
+      } else {
+        campForm.set("daily_budget", String(p.dailyBudgetCents));
+      }
+      campForm.set("is_adset_budget_sharing_enabled", "true");
+      // Bid strategy must live at the campaign level when CBO is on, otherwise
+      // Meta rejects with "ad set bid strategy needed for CBO".
+      campForm.set("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
+    } else {
+      // Meta v25 made this mandatory whenever the campaign doesn't carry a
+      // CBO budget. Explicit false satisfies the validator.
+      campForm.set("is_adset_budget_sharing_enabled", "false");
+    }
     campForm.set("access_token", token);
 
     var campRes = await fetch(graphBase + "/" + acct + "/campaigns", {
@@ -71,7 +85,7 @@ export default async function handler(req, res) {
     });
     var campData = await campRes.json();
     if (!campRes.ok || !campData.id) {
-      return fail(res, 502, "Campaign create failed", campData);
+      return fail(res, 502, "Campaign create failed", campData, null, scrubForm(campForm));
     }
     var campaignId = campData.id;
 
@@ -79,16 +93,18 @@ export default async function handler(req, res) {
     var goal = ALLOWED_OBJECTIVES[p.objective];
     var targeting = buildTargeting(p);
     var adsetForm = new URLSearchParams();
-    adsetForm.set("name", p.campaignName + " - AdSet");
+    adsetForm.set("name", p.adsetName);
     adsetForm.set("campaign_id", campaignId);
-    if (p.budgetMode === "lifetime") {
-      adsetForm.set("lifetime_budget", String(p.lifetimeBudgetCents));
-    } else {
-      adsetForm.set("daily_budget", String(p.dailyBudgetCents));
+    if (p.funding === "ABO") {
+      if (p.budgetMode === "lifetime") {
+        adsetForm.set("lifetime_budget", String(p.lifetimeBudgetCents));
+      } else {
+        adsetForm.set("daily_budget", String(p.dailyBudgetCents));
+      }
+      adsetForm.set("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
     }
     adsetForm.set("billing_event", goal.billing_event);
     adsetForm.set("optimization_goal", goal.optimization_goal);
-    adsetForm.set("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
     adsetForm.set("targeting", JSON.stringify(targeting));
     adsetForm.set("start_time", p.startTimeIso);
     if (p.endTimeIso) adsetForm.set("end_time", p.endTimeIso);
@@ -116,58 +132,72 @@ export default async function handler(req, res) {
     }
     var adsetId = adsetData.id;
 
-    // ----- 3. Ad Creative ----------------------------------------------
-    var creativeBody = buildCreative(p);
-    var creativeForm = new URLSearchParams();
-    creativeForm.set("name", p.campaignName + " - Creative");
-    Object.keys(creativeBody).forEach(function(k){
-      creativeForm.set(k, typeof creativeBody[k] === "string" ? creativeBody[k] : JSON.stringify(creativeBody[k]));
-    });
-    creativeForm.set("access_token", token);
-
-    var crRes = await fetch(graphBase + "/" + acct + "/adcreatives", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: creativeForm.toString()
-    });
-    var crData = await crRes.json();
-    if (!crRes.ok || !crData.id) {
-      return fail(res, 502, "Ad creative create failed (campaign + adset were created, paused)", crData,
-        { campaignId: campaignId, adsetId: adsetId },
-        scrubForm(creativeForm));
+    // ----- 3. Creative + Ad (per creative, or one carousel) -------------
+    // Three modes:
+    //   single   → one creative, one ad. Same as old behaviour.
+    //   multi    → N creatives, N ads under the same ad set. Meta will
+    //              rotate / optimise between them.
+    //   carousel → one creative with N child cards, one ad. Each card has
+    //              its own image_hash + headline + link.
+    var creativesPosted = [];   // [{ creativeId, adId, name }]
+    if (p.creativeMode === "carousel") {
+      var carouselBody = buildCarouselCreative(p);
+      var crForm = creativeFormFromBody(carouselBody, p, token, p.creatives[0].adName);
+      var crRes = await fetch(graphBase + "/" + acct + "/adcreatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: crForm.toString()
+      });
+      var crData = await crRes.json();
+      if (!crRes.ok || !crData.id) {
+        return fail(res, 502, "Carousel creative create failed (campaign + adset were created, paused)", crData,
+          { campaignId: campaignId, adsetId: adsetId },
+          scrubForm(crForm));
+      }
+      var ad = await postAd(graphBase, acct, token, p.creatives[0].adName, adsetId, crData.id, p);
+      if (ad.error) {
+        return fail(res, 502, "Ad create failed (carousel creative was created, paused)", ad.detail,
+          { campaignId: campaignId, adsetId: adsetId, creativeId: crData.id },
+          ad.scrubbed);
+      }
+      creativesPosted.push({ creativeId: crData.id, adId: ad.id, name: p.creatives[0].adName });
+    } else {
+      // single OR multi — same loop, just len === 1 for single
+      for (var i = 0; i < p.creatives.length; i++) {
+        var cr = p.creatives[i];
+        var creativeBody = buildSingleCreative(cr, p);
+        var form = creativeFormFromBody(creativeBody, p, token, cr.adName);
+        var res2 = await fetch(graphBase + "/" + acct + "/adcreatives", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: form.toString()
+        });
+        var data2 = await res2.json();
+        if (!res2.ok || !data2.id) {
+          return fail(res, 502, "Creative create failed for ad #" + (i + 1) + " (" + cr.adName + ")", data2,
+            { campaignId: campaignId, adsetId: adsetId, creativesPosted: creativesPosted },
+            scrubForm(form));
+        }
+        var adRes = await postAd(graphBase, acct, token, cr.adName, adsetId, data2.id, p);
+        if (adRes.error) {
+          return fail(res, 502, "Ad create failed for ad #" + (i + 1) + " (" + cr.adName + ")", adRes.detail,
+            { campaignId: campaignId, adsetId: adsetId, creativesPosted: creativesPosted, lastCreativeId: data2.id },
+            adRes.scrubbed);
+        }
+        creativesPosted.push({ creativeId: data2.id, adId: adRes.id, name: cr.adName });
+      }
     }
-    var creativeId = crData.id;
 
-    // ----- 4. Ad --------------------------------------------------------
-    var adForm = new URLSearchParams();
-    adForm.set("name", p.campaignName + " - Ad");
-    adForm.set("adset_id", adsetId);
-    adForm.set("creative", JSON.stringify({ creative_id: creativeId }));
-    adForm.set("status", "PAUSED");
-    adForm.set("access_token", token);
-    if (p.urlTags) adForm.set("tracking_specs", JSON.stringify([]));
-
-    var adRes = await fetch(graphBase + "/" + acct + "/ads", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: adForm.toString()
-    });
-    var adData = await adRes.json();
-    if (!adRes.ok || !adData.id) {
-      return fail(res, 502, "Ad create failed (campaign + adset + creative were created, paused)", adData,
-        { campaignId: campaignId, adsetId: adsetId, creativeId: creativeId },
-        scrubForm(adForm));
-    }
-    var adId = adData.id;
-
-    // ----- 5. Email draft (best-effort) --------------------------------
+    // ----- 4. Email draft (best-effort) --------------------------------
     var draftResult = { skipped: true, reason: "GMAIL_* env vars not set" };
     try {
       draftResult = await tryCreateGmailDraft({
-        campaignId: campaignId, adsetId: adsetId, adId: adId,
+        campaignId: campaignId, adsetId: adsetId,
+        ads: creativesPosted,
         accountId: p.accountId, accountName: p.accountName || p.accountId,
-        campaignName: p.campaignName, objective: p.objective,
-        dailyBudgetCents: p.dailyBudgetCents,
+        campaignName: p.campaignName, adsetName: p.adsetName, objective: p.objective,
+        funding: p.funding, budgetMode: p.budgetMode,
+        dailyBudgetCents: p.dailyBudgetCents, lifetimeBudgetCents: p.lifetimeBudgetCents,
         startTimeIso: p.startTimeIso, endTimeIso: p.endTimeIso,
         audienceSummary: summariseAudience(p)
       });
@@ -179,8 +209,11 @@ export default async function handler(req, res) {
       ok: true,
       campaignId: campaignId,
       adsetId: adsetId,
-      creativeId: creativeId,
-      adId: adId,
+      ads: creativesPosted,
+      // Back-compat fields the existing success screen reads. Kept until the
+      // frontend switches to the ads[] array fully.
+      adId: creativesPosted.length ? creativesPosted[0].adId : null,
+      creativeId: creativesPosted.length ? creativesPosted[0].creativeId : null,
       status: "PAUSED",
       adsManagerUrl: "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" +
                      encodeURIComponent(p.accountId.replace(/^act_/, "")) +
@@ -195,6 +228,44 @@ export default async function handler(req, res) {
 
 // ---------------------------------------------------------------------------
 
+async function postAd(graphBase, acct, token, adName, adsetId, creativeId, p) {
+  var adForm = new URLSearchParams();
+  adForm.set("name", adName);
+  adForm.set("adset_id", adsetId);
+  adForm.set("creative", JSON.stringify({ creative_id: creativeId }));
+  adForm.set("status", "PAUSED");
+  // Multi-advertiser ads default OFF — explicit OPT_OUT so Meta doesn't fall
+  // back to account-level defaults that may have it enabled. Premium brands
+  // get bundled with strangers' ads in Reels carousels otherwise, which is
+  // bad for client perception even if it nudges reach up.
+  if (p.multiAdvertiserAds === false) {
+    adForm.set("contextual_multi_ads", JSON.stringify({ enroll_status: "OPT_OUT" }));
+  }
+  adForm.set("access_token", token);
+  if (p.urlTags) adForm.set("tracking_specs", JSON.stringify([]));
+
+  var r = await fetch(graphBase + "/" + acct + "/ads", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: adForm.toString()
+  });
+  var d = await r.json();
+  if (!r.ok || !d.id) {
+    return { error: true, detail: d, scrubbed: scrubForm(adForm) };
+  }
+  return { id: d.id };
+}
+
+function creativeFormFromBody(body, p, token, name) {
+  var form = new URLSearchParams();
+  form.set("name", name + " - Creative");
+  Object.keys(body).forEach(function(k){
+    form.set(k, typeof body[k] === "string" ? body[k] : JSON.stringify(body[k]));
+  });
+  form.set("access_token", token);
+  return form;
+}
+
 function fail(res, code, msg, detail, ids, sentForm) {
   return res.status(code).json({
     error: msg,
@@ -206,7 +277,7 @@ function fail(res, code, msg, detail, ids, sentForm) {
 
 // Pull a URLSearchParams form back into a plain object for echoing in error
 // responses, dropping the access_token so it doesn't bounce through logs or
-// browser DevTools. JSON-stringified fields stay as strings — readable enough.
+// browser DevTools.
 function scrubForm(form) {
   if (!form) return null;
   var out = {};
@@ -218,12 +289,10 @@ function validate(b) {
   if (!b.accountId || !isAccountAllowed(b.accountId)) return { error: "accountId missing or not in allowlist" };
   if (!ALLOWED_OBJECTIVES[b.objective]) return { error: "objective not allowed for Phase 1" };
   if (!b.campaignName || String(b.campaignName).length < 3) return { error: "campaignName too short" };
+  if (!b.adsetName || String(b.adsetName).length < 3) return { error: "adsetName too short" };
   if (!b.pageId) return { error: "pageId required" };
 
-  // Budget mode: "daily" (default, runs indefinitely or until end_date) OR
-  // "lifetime" (fixed total spend across the date range). Lifetime requires
-  // an explicit end_date and is capped at MAX_DAILY × duration_days so an
-  // accidentally long campaign can't outspend the per-day ceiling in aggregate.
+  var funding = b.funding === "CBO" ? "CBO" : "ABO";
   var budgetMode = b.budgetMode === "lifetime" ? "lifetime" : "daily";
   var dailyBudgetCents = 0;
   var lifetimeBudgetCents = 0;
@@ -252,10 +321,9 @@ function validate(b) {
 
   var startIso = isoFromDate(b.startDate);
   if (!startIso) return { error: "startDate invalid (YYYY-MM-DD)" };
-  // Meta rejects ad sets whose start_time is already in the past. The wizard
-  // dates are interpreted as SAST (Africa/Johannesburg, UTC+2, no DST). When
-  // the user picks today the resolved start is 00:00 SAST; if it's already
-  // later in the day, bump to now + 15 min in SAST so Meta accepts.
+  // Hard-set 08:00 SAST on the picked date. If that 08:00 is already in the
+  // past (e.g. team scheduling at 14:00 for "today"), bump to now + 15 min in
+  // SAST so Meta accepts; otherwise leave it at 08:00 as the team requested.
   var nowMs = Date.now();
   var startMs = Date.parse(startIso);
   if (isFinite(startMs) && startMs < nowMs + 5 * 60 * 1000) {
@@ -264,16 +332,34 @@ function validate(b) {
   var endIso = b.endDate ? isoFromDate(b.endDate, true) : null;
   if (b.endDate && !endIso) return { error: "endDate invalid (YYYY-MM-DD)" };
 
-  // Headline + primary text + URL all required for a link ad. Video upload
-  // path uses videoId; image path uses imageHash. Exactly one of each must
-  // be supplied — Phase 1 is single-creative.
-  if (!b.creative) return { error: "creative missing" };
-  var hasImage = !!b.creative.imageHash;
-  var hasVideo = !!b.creative.videoId;
-  if (hasImage === hasVideo) return { error: "creative.imageHash XOR creative.videoId required" };
-  if (!b.creative.headline) return { error: "creative.headline required" };
-  if (!b.creative.primaryText) return { error: "creative.primaryText required" };
-  if (!b.creative.linkUrl) return { error: "creative.linkUrl required" };
+  // Creative validation. Three modes; per-mode rules differ.
+  var creativeMode = ["single", "multi", "carousel"].indexOf(b.creativeMode) >= 0 ? b.creativeMode : "single";
+  if (!Array.isArray(b.creatives) || b.creatives.length === 0) {
+    return { error: "creatives[] missing — at least one creative required" };
+  }
+  if (creativeMode === "carousel") {
+    if (b.creatives.length < 2) return { error: "carousel needs at least 2 cards" };
+    if (b.creatives.length > 10) return { error: "carousel maximum is 10 cards" };
+  }
+  for (var i = 0; i < b.creatives.length; i++) {
+    var c = b.creatives[i];
+    if (!c) return { error: "creative #" + (i + 1) + " missing" };
+    if (creativeMode === "carousel") {
+      // Each card needs an image_hash, link, name (headline). primaryText/CTA
+      // live at the parent creative level for carousel.
+      if (!c.imageHash) return { error: "carousel card #" + (i + 1) + " missing imageHash" };
+      if (!c.headline) return { error: "carousel card #" + (i + 1) + " missing headline" };
+      if (!c.linkUrl) return { error: "carousel card #" + (i + 1) + " missing linkUrl" };
+    } else {
+      var hasImage = !!c.imageHash;
+      var hasVideo = !!c.videoId;
+      if (hasImage === hasVideo) return { error: "creative #" + (i + 1) + ": imageHash XOR videoId required" };
+      if (!c.headline) return { error: "creative #" + (i + 1) + ": headline required" };
+      if (!c.primaryText) return { error: "creative #" + (i + 1) + ": primaryText required" };
+      if (!c.linkUrl) return { error: "creative #" + (i + 1) + ": linkUrl required" };
+    }
+    if (!c.adName || String(c.adName).length < 3) return { error: "creative #" + (i + 1) + ": adName required" };
+  }
 
   return {
     payload: {
@@ -282,11 +368,13 @@ function validate(b) {
       objective: b.objective,
       specialAdCategories: Array.isArray(b.specialAdCategories) ? b.specialAdCategories : [],
       campaignName: String(b.campaignName).slice(0, 200),
+      adsetName: String(b.adsetName).slice(0, 200),
       pageId: String(b.pageId),
       instagramId: b.instagramId ? String(b.instagramId) : null,
       pixelId: b.pixelId ? String(b.pixelId) : null,
       conversionEvent: b.conversionEvent ? String(b.conversionEvent) : null,
       urlTags: b.urlTags ? String(b.urlTags) : null,
+      funding: funding,
       budgetMode: budgetMode,
       dailyBudgetCents: dailyBudgetCents,
       lifetimeBudgetCents: lifetimeBudgetCents,
@@ -295,32 +383,32 @@ function validate(b) {
       platformMode: ["fb_only", "fb_ig", "ig_only"].indexOf(b.platformMode) >= 0 ? b.platformMode : "fb_ig",
       audience: b.audience || {},
       placement: b.placement || { mode: "advantage" },
-      creative: {
-        imageHash: b.creative.imageHash || null,
-        videoId: b.creative.videoId || null,
-        headline: String(b.creative.headline).slice(0, 200),
-        primaryText: String(b.creative.primaryText).slice(0, 1500),
-        description: b.creative.description ? String(b.creative.description).slice(0, 200) : null,
-        linkUrl: String(b.creative.linkUrl),
-        callToAction: b.creative.callToAction ? String(b.creative.callToAction) : "LEARN_MORE"
-      }
+      multiAdvertiserAds: b.multiAdvertiserAds === true ? true : false,
+      creativeMode: creativeMode,
+      creatives: b.creatives.map(function(c){
+        return {
+          imageHash: c.imageHash || null,
+          videoId: c.videoId || null,
+          headline: String(c.headline || "").slice(0, 200),
+          primaryText: String(c.primaryText || "").slice(0, 1500),
+          description: c.description ? String(c.description).slice(0, 200) : null,
+          linkUrl: String(c.linkUrl || ""),
+          callToAction: c.callToAction ? String(c.callToAction) : "LEARN_MORE",
+          adName: String(c.adName || "").slice(0, 200)
+        };
+      })
     }
   };
 }
 
 function isoFromDate(s, endOfDay) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s || ""))) return null;
-  // SAST is UTC+2 with no DST. Meta accepts ISO 8601 with explicit offset and
-  // stores times in the account timezone — sending +0200 means the wizard's
-  // "start_date 2026-05-03" becomes 2026-05-03 00:00 SAST, which is what the
-  // user expects when they pick a date in the South African UI.
-  return s + (endOfDay ? "T23:59:59+0200" : "T00:00:00+0200");
+  // SAST is UTC+2 with no DST. Hard 08:00 launch on every campaign per team
+  // policy, so the team gets a predictable serving window. End-of-day is
+  // 23:59:59 for lifetime budget windows.
+  return s + (endOfDay ? "T23:59:59+0200" : "T08:00:00+0200");
 }
 
-// Format a Date as a SAST ISO string with the +0200 offset suffix. Used for
-// auto-bumping past-dated start_times — we add UTC+2 to the wall clock, then
-// format as if the result were already SAST. Avoids needing Intl.DateTimeFormat
-// at the cost of a brittle but tiny string assembly.
 function formatSastIso(date) {
   var sast = new Date(date.getTime() + 2 * 60 * 60 * 1000);
   var pad = function(n){ return n < 10 ? "0" + n : "" + n; };
@@ -334,14 +422,6 @@ function formatSastIso(date) {
 
 function buildTargeting(p) {
   var a = p.audience || {};
-  // Geo can come through in two shapes:
-  //   1. Legacy: a.countries = ["ZA","NG"]  (pre-Phase-3 wizard state)
-  //   2. New: a.locations = { geographies: [...], customLocations: [...] }
-  //      where geographies is a mix of countries / regions / cities / zips
-  //      and customLocations holds {lat,lng,radius,unit,addressString}
-  //      pins for proximity-radius targeting.
-  // Either shape resolves to a Meta geo_locations object below. New shape
-  // wins when both are present.
   var geo = {};
   var excludedGeo = {};
   var typeMap = {
@@ -371,24 +451,22 @@ function buildTargeting(p) {
         dest[bucket].push({ key: String(g.key), name: g.name || "" });
       }
     });
-    customLocations.forEach(function(p){
-      var radius = parseFloat(p.radius);
+    customLocations.forEach(function(pin){
+      var radius = parseFloat(pin.radius);
       if (!isFinite(radius) || radius <= 0) radius = 15;
       var entry = {
-        latitude: parseFloat(p.lat),
-        longitude: parseFloat(p.lng),
+        latitude: parseFloat(pin.lat),
+        longitude: parseFloat(pin.lng),
         radius: Math.min(80, Math.max(1, radius)),
-        distance_unit: p.unit === "mile" ? "mile" : "kilometer",
-        address_string: p.addressString ? String(p.addressString).slice(0, 200) : ""
+        distance_unit: pin.unit === "mile" ? "mile" : "kilometer",
+        address_string: pin.addressString ? String(pin.addressString).slice(0, 200) : ""
       };
       if (!isFinite(entry.latitude) || !isFinite(entry.longitude)) return;
-      var dest = p.exclude ? excludedGeo : geo;
+      var dest = pin.exclude ? excludedGeo : geo;
       dest.custom_locations = dest.custom_locations || [];
       dest.custom_locations.push(entry);
     });
   }
-  // Fall back to the legacy countries array (or default ZA) if the new
-  // shape didn't yield anything Meta will accept.
   var hasFinerInclude = (geo.regions && geo.regions.length) ||
                         (geo.cities && geo.cities.length) ||
                         (geo.zips && geo.zips.length) ||
@@ -400,27 +478,15 @@ function buildTargeting(p) {
     var legacyCountries = (a.countries && a.countries.length) ? a.countries : ["ZA"];
     geo.countries = legacyCountries;
   }
-  // Meta rejects geo_locations that contain a country PLUS finer-grained
-  // specifiers (custom_locations, regions, cities, etc.) — overlap error
-  // 1487756 "Some of your locations overlap". The radius IS inside the
-  // country, so the country becomes redundant. Drop the country silently
-  // here so Meta accepts the targeting; the wizard's UI hint warns the
-  // user about this so the silent strip isn't surprising.
   if (hasFinerInclude && geo.countries) {
     delete geo.countries;
   }
 
-  // targeting_automation.advantage_audience is conditionally accepted in v25.
-  // We omit it entirely unless the user explicitly opted in — the default
-  // audience behaviour is fine and the field tripped a generic code 1 error
-  // on adset create when sent with value 0.
   var t = {
     geo_locations: geo,
     age_min: a.ageMin || 18,
     age_max: a.ageMax || 65
   };
-  // Exclude box gets attached only when the user actually marked something
-  // for exclusion. Sending an empty object trips Meta's validator.
   var hasExclusions = Object.keys(excludedGeo).some(function(k){
     var v = excludedGeo[k];
     return Array.isArray(v) ? v.length > 0 : !!v;
@@ -429,12 +495,28 @@ function buildTargeting(p) {
   if (a.advantageAudience) t.targeting_automation = { advantage_audience: 1 };
   if (a.genders && a.genders.length) t.genders = a.genders;
 
-  // Detailed targeting comes through as a flat array of {type,id,name} from
-  // the wizard's targeting picker. Group by Meta's flexible_spec keys so
-  // each type lands under the right name (interests, behaviors, …). Items
-  // inside a key are OR'd together; one flexible_spec entry means all keys
-  // are AND'd. Power users can still pass raw flexibleSpec which wins if
-  // both are present (covers anyone hand-crafting an exotic targeting tree).
+  // Saved + custom audiences both go into targeting.custom_audiences. Meta's
+  // API doesn't distinguish — saved audiences resolve to a saved set of
+  // criteria, custom audiences resolve to a person list, both sit in the
+  // same field once selected.
+  var caIds = [];
+  if (Array.isArray(a.customAudienceIds)) {
+    a.customAudienceIds.forEach(function(id){ if (id) caIds.push({ id: String(id) }); });
+  }
+  if (Array.isArray(a.savedAudienceIds)) {
+    a.savedAudienceIds.forEach(function(id){ if (id) caIds.push({ id: String(id) }); });
+  }
+  if (caIds.length) t.custom_audiences = caIds;
+
+  // Engaged community: page fans go via connections[] which is a hard
+  // include-only filter ("must be a fan of this page AND match the rest").
+  // For IG followers there is no equivalent connections target — Meta
+  // requires a Custom Audience for that, which the wizard prompts users
+  // to build in Ads Manager and then pick via the Saved Audiences picker.
+  if (a.targetCommunity && a.targetCommunity.fans && p.pageId) {
+    t.connections = [String(p.pageId)];
+  }
+
   if (a.flexibleSpec) {
     t.flexible_spec = a.flexibleSpec;
   } else if (Array.isArray(a.targetingItems) && a.targetingItems.length > 0) {
@@ -450,13 +532,11 @@ function buildTargeting(p) {
     }
   }
 
-  // Platform mode is the wizard's top-level intent and overrides Placement's
-  // publisher_platforms regardless of the manual/Advantage+ choice. fb_only
-  // and ig_only force a single-platform targeting; fb_ig leaves Placement to
-  // do its job (Advantage+ stays auto, manual respects user-selected platforms).
-  // Deprecated positions (Meta v25.0+ removed video_feeds) are filtered defensively
-  // here so any cached client state or future deprecations don't break adset
-  // creation. Add new deprecations to DEPRECATED_POSITIONS as Meta evolves.
+  // Defensive position sanitisation for deprecations + ad-creative-format
+  // mismatches. Audience Network rewarded_video requires a video creative;
+  // strip it when the campaign is image-only so the ad set doesn't ship with
+  // a permanently-undeliverable placement that confuses the team.
+  var imageOnly = (p.creatives || []).every(function(c){ return c.imageHash && !c.videoId; });
   var DEPRECATED_POSITIONS = { facebook: ["video_feeds"], instagram: [] };
   var sanitisePositions = function(arr, plat){
     if (!arr) return arr;
@@ -478,15 +558,19 @@ function buildTargeting(p) {
     if (pl.instagramPositions) t.instagram_positions = sanitisePositions(pl.instagramPositions, "instagram");
     t.device_platforms = pl.devicePlatforms || ["mobile", "desktop"];
   }
+
+  // Exclude AN rewarded_video positions when image-only. Only relevant when
+  // Audience Network is in play (manual mode only — Advantage+ handles its
+  // own incompatibilities).
+  if (imageOnly && pl.mode === "manual" && (pl.platforms || []).indexOf("audience_network") >= 0) {
+    t.audience_network_positions = ["classic", "instream_video"]; // omit rewarded_video
+  }
+
   return t;
 }
 
-function buildCreative(p) {
-  var c = p.creative;
+function buildSingleCreative(c, p) {
   var storySpec = { page_id: p.pageId };
-  // v22+ renamed instagram_actor_id → instagram_user_id in object_story_spec.
-  // The old name still parses but Meta validates the value differently
-  // depending on which field it sees, so the new name is more reliable.
   if (p.instagramId) storySpec.instagram_user_id = p.instagramId;
 
   if (c.videoId) {
@@ -509,20 +593,47 @@ function buildCreative(p) {
   return { object_story_spec: storySpec };
 }
 
+function buildCarouselCreative(p) {
+  // Carousel uses a single object_story_spec with link_data.child_attachments[]
+  // — each child is one card. The parent link_data carries the primary text
+  // (message) and the default CTA; cards each carry their own headline,
+  // description, image_hash and link.
+  var first = p.creatives[0];
+  var storySpec = { page_id: p.pageId };
+  if (p.instagramId) storySpec.instagram_user_id = p.instagramId;
+  storySpec.link_data = {
+    link: first.linkUrl,
+    message: first.primaryText,
+    call_to_action: { type: first.callToAction, value: { link: first.linkUrl } },
+    child_attachments: p.creatives.map(function(c){
+      var card = {
+        link: c.linkUrl,
+        image_hash: c.imageHash,
+        name: c.headline,
+        call_to_action: { type: c.callToAction || first.callToAction, value: { link: c.linkUrl } }
+      };
+      if (c.description) card.description = c.description;
+      return card;
+    })
+  };
+  return { object_story_spec: storySpec };
+}
+
 function summariseAudience(p) {
   var a = p.audience || {};
   var bits = [];
-  bits.push("Geo: " + ((a.countries && a.countries.join(",")) || "ZA"));
+  bits.push("Geo: " + ((a.locations && (a.locations.geographies || []).filter(function(g){return !g.exclude;}).map(function(g){return g.name;}).join(",")) || "ZA"));
   bits.push("Age: " + (a.ageMin || 18) + "-" + (a.ageMax || 65));
   if (a.genders && a.genders.length) bits.push("Gender: " + a.genders.join(","));
+  if (a.savedAudienceIds && a.savedAudienceIds.length) bits.push("Saved/CA: " + a.savedAudienceIds.length + " selected");
+  if (a.targetCommunity && a.targetCommunity.fans) bits.push("+ Page fans only");
   var pl = p.placement || {};
   bits.push("Placement: " + (pl.mode === "manual" ? "Manual" : "Advantage+"));
   return bits.join(" | ");
 }
 
 // ---------------------------------------------------------------------------
-// Gmail draft, OAuth refresh-token flow. Returns { ok, draftId } or
-// { skipped, reason }. Never throws — caller wraps in try/catch anyway.
+// Gmail draft, OAuth refresh-token flow.
 async function tryCreateGmailDraft(p) {
   var cid = process.env.GMAIL_CLIENT_ID;
   var secret = process.env.GMAIL_CLIENT_SECRET;
@@ -542,13 +653,22 @@ async function tryCreateGmailDraft(p) {
     return { skipped: true, reason: "Could not refresh Gmail token" };
   }
 
-  var subj = "[CREATE TAB] Campaign created — " + p.campaignName + " — " + p.accountName;
+  var budgetLine = p.budgetMode === "lifetime"
+    ? "Lifetime budget: R" + (p.lifetimeBudgetCents / 100).toFixed(2) + " (" + p.funding + ")"
+    : "Daily budget:    R" + (p.dailyBudgetCents / 100).toFixed(2) + " (" + p.funding + ")";
+
+  var adsBlock = (p.ads || []).map(function(a, i){
+    return "  ad #" + (i + 1) + " (" + a.name + ") = " + a.adId;
+  }).join("\n");
+
+  var subj = "[CREATE TAB] Campaign created, " + p.campaignName + ", " + p.accountName;
   var bodyText =
     "A new campaign was created via the Create tab and is currently PAUSED.\n\n" +
     "Campaign:        " + p.campaignName + "\n" +
+    "Ad set:          " + p.adsetName + "\n" +
     "Account:         " + p.accountName + " (" + p.accountId + ")\n" +
     "Objective:       " + p.objective + "\n" +
-    "Daily budget:    R" + (p.dailyBudgetCents / 100).toFixed(2) + "\n" +
+    budgetLine + "\n" +
     "Start:           " + p.startTimeIso + "\n" +
     "End:             " + (p.endTimeIso || "(no end date)") + "\n" +
     "Audience:        " + p.audienceSummary + "\n" +
@@ -556,7 +676,7 @@ async function tryCreateGmailDraft(p) {
     "IDs:\n" +
     "  campaign_id = " + p.campaignId + "\n" +
     "  adset_id    = " + p.adsetId + "\n" +
-    "  ad_id       = " + p.adId + "\n\n" +
+    adsBlock + "\n\n" +
     "Open in Ads Manager:\n" +
     "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" +
       p.accountId.replace(/^act_/, "") +

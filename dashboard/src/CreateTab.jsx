@@ -1,33 +1,40 @@
-// Create tab — PIN gate + 7-step Meta campaign wizard.
+// Create tab, PIN gate + 7-step Meta campaign wizard.
 //
-// Self-contained module: takes palette/font/icon helpers as props from App.jsx
-// rather than re-importing them, since App.jsx defines those inline. This
-// keeps App.jsx's giant single-file structure intact and means a future
-// re-skin only needs to edit App.jsx's P object.
+// Naming, budget, audience and creative authoring are all shaped by the
+// agency's house standard:
 //
-// All state lives in this component. On submit, the wizard POSTs to
+//   Campaign:  {Client}_{Objective}_{Funding}_{Period}_{Variant}
+//   Ad Set:    {Audience}_{Geo}_{Demo}_{Placement}
+//   Ad:        {Format}_{Concept}_{Version}
+//
+// Most parts auto-derive from wizard state (objective code, funding source,
+// period, demo, placement, format) so the team only types the differentiating
+// bits (client code, variant, audience label, concept, version).
+//
+// State lives in this component. On submit, the wizard POSTs to
 // /api/create/campaign and renders a success screen with the campaign id +
 // Ads Manager link. Server is the authority on PAUSED + budget ceiling +
-// allowlist; the UI only mirrors those for nice errors.
+// allowlist; the UI mirrors those for nice errors.
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 
 var TOKEN_KEY = "gas_create_token";
 var TOKEN_EXP_KEY = "gas_create_token_exp";
-var DRAFT_KEY = "gas_create_draft";
-var STEP_KEY = "gas_create_step";
+var DRAFT_KEY = "gas_create_draft_v2";
+var STEP_KEY = "gas_create_step_v2";
 var MAX_DAILY_RAND = 5000;
 
 // Draft persistence: stash to sessionStorage on every change so a token
 // expiry / accidental reload / re-auth doesn't blow away N minutes of
-// wizard work. The image preview data URL is stripped before saving — it
-// can be megabytes and sessionStorage is capped around 5MB. The hash/id
-// references survive so the user keeps their actual upload, only losing
-// the preview thumbnail until they re-upload.
+// wizard work. Image preview data URLs are stripped before saving (they
+// can be megabytes). Hash/id references survive so the user keeps their
+// actual upload, only losing the preview thumbnail until they re-upload.
 function stripDraftForPersist(d) {
-  if (!d || !d.creative) return d;
-  var creative = Object.assign({}, d.creative, { previewDataUrl: null });
-  return Object.assign({}, d, { creative: creative });
+  if (!d || !Array.isArray(d.creatives)) return d;
+  var creatives = d.creatives.map(function(c){
+    return Object.assign({}, c, { previewDataUrl: null });
+  });
+  return Object.assign({}, d, { creatives: creatives });
 }
 function readSavedDraft(fallback) {
   try {
@@ -48,12 +55,12 @@ function clearSavedDraft() {
 }
 
 var OBJECTIVES = [
-  { id: "OUTCOME_TRAFFIC",        label: "Traffic",        sub: "Drive clicks to a landing page" },
-  { id: "OUTCOME_ENGAGEMENT",     label: "Engagement",     sub: "Likes, comments, post engagement" },
-  { id: "OUTCOME_LEADS",          label: "Leads",          sub: "Lead form or landing page leads" },
-  { id: "OUTCOME_AWARENESS",      label: "Awareness",      sub: "Reach + impression coverage" },
-  { id: "OUTCOME_SALES",          label: "Sales",          sub: "Pixel conversions, requires pixel" },
-  { id: "OUTCOME_APP_PROMOTION",  label: "App Promotion",  sub: "App installs, requires app store URL" }
+  { id: "OUTCOME_TRAFFIC",        label: "Traffic",        sub: "Drive clicks to a landing page",   code: "TRF" },
+  { id: "OUTCOME_ENGAGEMENT",     label: "Engagement",     sub: "Likes, comments, post engagement", code: "ENG" },
+  { id: "OUTCOME_LEADS",          label: "Leads",          sub: "Lead form or landing page leads",  code: "LDS" },
+  { id: "OUTCOME_AWARENESS",      label: "Awareness",      sub: "Reach + impression coverage",      code: "AWR" },
+  { id: "OUTCOME_SALES",          label: "Sales",          sub: "Pixel conversions, requires pixel",code: "SLS" },
+  { id: "OUTCOME_APP_PROMOTION",  label: "App Promotion",  sub: "App installs, requires app store URL", code: "APP" }
 ];
 
 var CTAS = [
@@ -66,28 +73,19 @@ export default function CreateTab(props) {
   var Ic = props.Ic, Glass = props.Glass, SH = props.SH, gFire = props.gFire, gEmber = props.gEmber;
   var apiBase = props.apiBase || "";
 
-  // The create-tab JWT lives ONLY in React state — never persisted to
-  // sessionStorage. This forces the PIN gate every single time the user
-  // navigates to the Create tab, since the App.jsx tab system unmounts
-  // and remounts CreateTab on every visit. Slightly more PIN-typing for
-  // the operator, but the PIN is the last line of defence against
-  // someone walking up to a logged-in dashboard and creating campaigns.
-  // The wizard DRAFT is still persisted (sessionStorage) so re-PINning
-  // resumes the campaign work where it was left.
   var ts = useState(null);
   var token = ts[0], setToken = ts[1];
   var expS = useState(0);
   var exp = expS[0], setExp = expS[1];
 
-  // One-time cleanup: zap any leftover create-tab tokens from the previous
-  // (sessionStorage-backed) implementation. Anyone with a tab still open
-  // from before this deploy would otherwise carry a stale token.
+  // One-time cleanup of any leftover legacy create-tab tokens or v1 drafts.
   useEffect(function(){
-    try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_EXP_KEY); } catch (_) {}
+    try {
+      sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_EXP_KEY);
+      sessionStorage.removeItem("gas_create_draft"); sessionStorage.removeItem("gas_create_step");
+    } catch (_) {}
   }, []);
 
-  // TTL countdown — kicks the user back to the PIN gate when the token's
-  // server-set TTL elapses while they're still on the Create tab.
   useEffect(function(){
     if (!token || !exp) return;
     var msLeft = (exp * 1000) - Date.now();
@@ -177,7 +175,7 @@ var STEP_LABELS = [
   "Creative",
   "Budget & Schedule",
   "Tracking",
-  "Review & Create"
+  "Review & Launch"
 ];
 
 function Wizard(props) {
@@ -193,34 +191,58 @@ function Wizard(props) {
     accountId: "", accountName: "",
     objective: "OUTCOME_TRAFFIC",
     specialAdCategories: [],
-    campaignName: "",
+
+    // Naming convention parts
+    clientCode: "", variant: "",
+
     platformMode: "fb_ig",
-    pageId: "", instagramId: "",
+    pageId: "", pageName: "", instagramId: "",
+
     audience: {
       locations: {
         geographies: [{ key: "ZA", type: "country", name: "South Africa", countryCode: "ZA", countryName: "South Africa" }],
         customLocations: []
       },
-      ageMin: 18, ageMax: 65, genders: [], advantageAudience: false, targetingItems: [], flexibleSpec: null
+      ageMin: 18, ageMax: 65, genders: [], advantageAudience: false,
+      targetingItems: [], flexibleSpec: null,
+      savedAudienceIds: [], customAudienceIds: [],
+      targetCommunity: { fans: false, igFollowers: false },
+      audienceLabel: ""
     },
-    placement: { mode: "advantage", platforms: ["facebook","instagram"], facebookPositions: ["feed"], instagramPositions: ["stream","story","reels"], devicePlatforms: ["mobile","desktop"] },
-    creative: { kind: "image", imageHash: null, videoId: null, headline: "", primaryText: "", description: "", linkUrl: "", callToAction: "LEARN_MORE", filename: null, previewDataUrl: null },
+
+    placement: {
+      mode: "advantage",
+      platforms: ["facebook","instagram"],
+      facebookPositions: ["feed"],
+      instagramPositions: ["stream","story","reels"],
+      devicePlatforms: ["mobile","desktop"]
+    },
+
+    // Creative is now an array. creativeMode = "single" | "multi" | "carousel"
+    creativeMode: "single",
+    multiAdvertiserAds: false,
+    creatives: [emptyCreative()],
+
+    // Budget
+    funding: "ABO",       // CBO | ABO
     budgetMode: "daily",
     dailyBudgetRand: 200, lifetimeBudgetRand: 5000,
+
     startDate: todayIso(), endDate: addDaysIso(7),
     pixelId: "", conversionEvent: "PURCHASE", urlTags: ""
   };
-  // useState lazy initialiser so we only read sessionStorage once on mount.
-  // Restored drafts are merged onto `initial` so any new top-level fields
-  // added after a draft was saved still get sensible defaults.
   var ds = useState(function(){ return readSavedDraft(initial); }), draft = ds[0], setDraft = ds[1];
   var ss = useState(function(){ return readSavedStep(); }), step = ss[0], setStep = ss[1];
   var update = function(patch){ setDraft(function(d){ return Object.assign({}, d, patch); }); };
   var updateNested = function(key, patch){ setDraft(function(d){ var v = Object.assign({}, d[key], patch); var out = {}; out[key] = v; return Object.assign({}, d, out); }); };
+  var updateCreative = function(idx, patch){
+    setDraft(function(d){
+      var arr = (d.creatives || []).slice();
+      arr[idx] = Object.assign({}, arr[idx] || emptyCreative(), patch);
+      return Object.assign({}, d, { creatives: arr });
+    });
+  };
 
-  // Persist draft + step on every change so re-auth (or accidental reload)
-  // resumes exactly where the user left off. Stripped of the preview data
-  // URL so we don't blow past sessionStorage's ~5 MB cap on large uploads.
   useEffect(function(){
     try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(stripDraftForPersist(draft))); } catch (_) {}
   }, [draft]);
@@ -233,6 +255,7 @@ function Wizard(props) {
   var pgS = useState({ loading: false, items: [], error: "" }), pages = pgS[0], setPages = pgS[1];
   var igS = useState({ loading: false, items: [], error: "" }), instagrams = igS[0], setInstagrams = igS[1];
   var pxS = useState({ loading: false, items: [], error: "" }), pixels = pxS[0], setPixels = pxS[1];
+  var saS = useState({ loading: false, items: [], error: "" }), savedAudiences = saS[0], setSavedAudiences = saS[1];
 
   var authedFetch = useRef(function(path, opts){
     opts = opts || {};
@@ -257,6 +280,7 @@ function Wizard(props) {
     setPages({ loading: true, items: [], error: "" });
     setInstagrams({ loading: true, items: [], error: "" });
     setPixels({ loading: true, items: [], error: "" });
+    setSavedAudiences({ loading: true, items: [], error: "" });
 
     authedFetch("/api/create/pages?accountId=" + encodeURIComponent(draft.accountId))
       .then(function(r){ return r.json(); })
@@ -272,21 +296,56 @@ function Wizard(props) {
       .then(function(r){ return r.json(); })
       .then(function(d){ setPixels({ loading: false, items: d.pixels || [], error: d.error || "" }); })
       .catch(function(){ setPixels({ loading: false, items: [], error: "Network error" }); });
+
+    authedFetch("/api/create/saved-audiences?accountId=" + encodeURIComponent(draft.accountId))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ setSavedAudiences({ loading: false, items: d.items || [], error: d.error || "" }); })
+      .catch(function(){ setSavedAudiences({ loading: false, items: [], error: "Network error" }); });
   }, [draft.accountId]);
+
+  // Sync pageName when pageId changes (used in name generation as a fallback)
+  useEffect(function(){
+    if (!draft.pageId) return;
+    var match = (pages.items || []).find(function(p){ return p.pageId === draft.pageId; });
+    if (match && match.name && match.name !== draft.pageName) update({ pageName: match.name });
+  }, [draft.pageId, pages.items]);
+
+  // -------- Generated names (live preview + submit payload) ----------------
+  var generatedCampaignName = composeCampaignName(draft);
+  var generatedAdsetName = composeAdsetName(draft);
 
   // -------- Per-step validation gates --------------------------------------
   var canAdvance = (function(){
-    if (step === 0) return !!draft.accountId && !!draft.objective && draft.campaignName.trim().length >= 3 && !!draft.platformMode;
-    if (step === 1) return draft.audience.ageMin >= 13 && draft.audience.ageMax <= 65 && draft.audience.ageMin < draft.audience.ageMax;
+    if (step === 0) {
+      return !!draft.accountId && !!draft.objective && !!draft.platformMode &&
+             draft.clientCode.trim().length >= 2 && generatedCampaignName.length >= 6;
+    }
+    if (step === 1) {
+      var demoOk = draft.audience.ageMin >= 13 && draft.audience.ageMax <= 65 && draft.audience.ageMin < draft.audience.ageMax;
+      return demoOk && draft.audience.audienceLabel.trim().length >= 2;
+    }
     if (step === 2) return draft.placement.mode === "advantage" || ((draft.placement.platforms || []).length > 0);
     if (step === 3) {
       var igRequired = draft.platformMode === "fb_ig" || draft.platformMode === "ig_only";
-      return !!(draft.creative.imageHash || draft.creative.videoId) &&
-             draft.creative.headline.trim() &&
-             draft.creative.primaryText.trim() &&
-             draft.creative.linkUrl.trim() &&
-             !!draft.pageId &&
-             (!igRequired || !!draft.instagramId);
+      if (!draft.pageId) return false;
+      if (igRequired && !draft.instagramId) return false;
+      var creatives = draft.creatives || [];
+      if (creatives.length === 0) return false;
+      if (draft.creativeMode === "carousel" && creatives.length < 2) return false;
+      // Each creative needs a uploaded asset + headline + primary text + URL + concept + version.
+      // Carousel cards share primaryText (taken from creatives[0]) but each card needs image_hash + headline + URL.
+      for (var i = 0; i < creatives.length; i++) {
+        var c = creatives[i];
+        if (!(c.imageHash || c.videoId)) return false;
+        if (!c.headline.trim()) return false;
+        if (!c.linkUrl.trim()) return false;
+        if (!c.concept.trim()) return false;
+        if (!c.version.trim()) return false;
+        if (draft.creativeMode !== "carousel" && !c.primaryText.trim()) return false;
+      }
+      // Single-mode carousel/single use creatives[0].primaryText as the text.
+      if (draft.creativeMode === "carousel" && !creatives[0].primaryText.trim()) return false;
+      return true;
     }
     if (step === 4) {
       if (!draft.startDate) return false;
@@ -305,26 +364,37 @@ function Wizard(props) {
   var submit = function(){
     if (submitting) return;
     setSubmitting(true); setSubmitErr(null);
+
+    var creativesPayload = (draft.creatives || []).map(function(c, idx){
+      var adName = composeAdName(c, idx, draft);
+      return {
+        imageHash: c.imageHash || null,
+        videoId: c.videoId || null,
+        headline: c.headline,
+        primaryText: c.primaryText,
+        description: c.description,
+        linkUrl: c.linkUrl,
+        callToAction: c.callToAction,
+        adName: adName
+      };
+    });
+
     var payload = {
       accountId: draft.accountId,
       accountName: draft.accountName,
       objective: draft.objective,
       specialAdCategories: draft.specialAdCategories,
-      campaignName: draft.campaignName.trim(),
+      campaignName: generatedCampaignName,
+      adsetName: generatedAdsetName,
       platformMode: draft.platformMode,
       pageId: draft.pageId,
       instagramId: draft.instagramId || null,
       audience: draft.audience,
       placement: draft.placement,
-      creative: {
-        imageHash: draft.creative.imageHash,
-        videoId: draft.creative.videoId,
-        headline: draft.creative.headline,
-        primaryText: draft.creative.primaryText,
-        description: draft.creative.description,
-        linkUrl: draft.creative.linkUrl,
-        callToAction: draft.creative.callToAction
-      },
+      creativeMode: draft.creativeMode,
+      multiAdvertiserAds: draft.multiAdvertiserAds === true,
+      creatives: creativesPayload,
+      funding: draft.funding,
       budgetMode: draft.budgetMode,
       dailyBudgetCents: draft.budgetMode === "daily" ? Math.round(draft.dailyBudgetRand * 100) : 0,
       lifetimeBudgetCents: draft.budgetMode === "lifetime" ? Math.round(draft.lifetimeBudgetRand * 100) : 0,
@@ -356,34 +426,46 @@ function Wizard(props) {
 
   // -------- Render ---------------------------------------------------------
   return <div>
-    <SH icon={Ic.fire(P.ember,20)} title="Create Campaign" sub={"Step " + (step+1) + " of 7 · " + STEP_LABELS[step] + " · PIN-gated, R5,000/day max, all campaigns paused"} accent={P.ember}/>
+    <SH icon={Ic.fire(P.ember,20)} title="Create Campaign" sub={"Step " + (step+1) + " of 7, " + STEP_LABELS[step] + ", PIN-gated, R5,000/day max, all campaigns paused"} accent={P.ember}/>
 
-    <Stepper P={P} fm={fm} step={step}/>
+    <Stepper P={P} fm={fm} Ic={Ic} step={step} onJump={function(target){
+      if (target <= step) setStep(target);
+    }}/>
 
     <div style={{marginTop:20}}>
       {step === 0 && <Step0 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
-        draft={draft} update={update} accounts={accounts}/>}
-      {step === 1 && <Step1 P={P} ff={ff} fm={fm} Glass={Glass}
+        draft={draft} update={update} accounts={accounts}
+        generatedCampaignName={generatedCampaignName}/>}
+      {step === 1 && <Step1 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
         apiBase={apiBase} token={token}
-        draft={draft} updateNested={updateNested}/>}
+        draft={draft} update={update} updateNested={updateNested}
+        savedAudiences={savedAudiences} pages={pages} instagrams={instagrams}
+        generatedAdsetName={generatedAdsetName}/>}
       {step === 2 && <Step2 P={P} ff={ff} fm={fm} Glass={Glass}
-        draft={draft} updateNested={updateNested}/>}
+        draft={draft} updateNested={updateNested}
+        generatedAdsetName={generatedAdsetName}/>}
       {step === 3 && <Step3 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
-        apiBase={apiBase} token={token} draft={draft} update={update} updateNested={updateNested}
+        apiBase={apiBase} token={token} draft={draft} update={update}
+        updateNested={updateNested} updateCreative={updateCreative}
         pages={pages} instagrams={instagrams}/>}
-      {step === 4 && <Step4 P={P} ff={ff} fm={fm} Glass={Glass}
-        draft={draft} update={update}/>}
+      {step === 4 && <Step4 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
+        draft={draft} update={update}
+        generatedCampaignName={generatedCampaignName}
+        generatedAdsetName={generatedAdsetName}/>}
       {step === 5 && <Step5 P={P} ff={ff} fm={fm} Glass={Glass}
         draft={draft} update={update} pixels={pixels}/>}
       {step === 6 && <Step6 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
-        draft={draft} accounts={accounts} pages={pages} instagrams={instagrams} pixels={pixels}/>}
+        draft={draft} accounts={accounts} pages={pages} instagrams={instagrams} pixels={pixels}
+        savedAudiences={savedAudiences}
+        generatedCampaignName={generatedCampaignName}
+        generatedAdsetName={generatedAdsetName}/>}
     </div>
 
     {submitErr && <div style={{marginTop:18,padding:"14px 18px",background:(P.critical||"#ef4444")+"12",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:10,color:P.critical||"#ef4444",fontSize:12,fontFamily:fm,lineHeight:1.6}}>
       <div style={{fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",fontSize:10,marginBottom:8}}>Create failed (HTTP {submitErr.status})</div>
       <div style={{color:P.txt,marginBottom:8}}>{submitErr.body && submitErr.body.error}</div>
       {submitErr.body && submitErr.body.partial && <div style={{color:P.warning||"#fbbf24",marginBottom:8,fontSize:11}}>
-        Partial state created and left PAUSED: {Object.keys(submitErr.body.partial).map(function(k){return k+"="+submitErr.body.partial[k];}).join(", ")}
+        Partial state created and left PAUSED: {Object.keys(submitErr.body.partial).map(function(k){return k+"="+JSON.stringify(submitErr.body.partial[k]);}).join(", ")}
       </div>}
       {submitErr.body && submitErr.body.meta && <pre style={{margin:"0 0 8px",padding:"10px 12px",background:"rgba(0,0,0,0.4)",border:"1px solid "+P.rule,borderRadius:8,color:P.label||P.sub,fontSize:11,fontFamily:fm,whiteSpace:"pre-wrap",wordBreak:"break-word",maxHeight:240,overflow:"auto"}}>
 {JSON.stringify(submitErr.body.meta, null, 2)}
@@ -406,12 +488,12 @@ function Wizard(props) {
           Lock
         </button>
         {step < 6 && <button onClick={function(){ if (canAdvance) setStep(step + 1); }} disabled={!canAdvance}
-          style={{background:canAdvance?"linear-gradient(135deg,#FF3D00,#FF6B00)":P.dim,border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:canAdvance?"pointer":"default"}}>
-          Next
+          style={{background:canAdvance?"linear-gradient(135deg,#FF3D00,#FF6B00)":P.dim,border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:canAdvance?"pointer":"default",boxShadow:canAdvance?"0 6px 20px rgba(249,98,3,0.35)":"none"}}>
+          Next →
         </button>}
         {step === 6 && <button onClick={submit} disabled={submitting}
-          style={{background:submitting?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:submitting?"default":"pointer"}}>
-          {submitting ? "Creating..." : "Create campaign (PAUSED)"}
+          style={{background:submitting?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:submitting?"default":"pointer",boxShadow:submitting?"none":"0 6px 20px rgba(249,98,3,0.35)"}}>
+          {submitting ? "Creating..." : "🚀 Create campaign (PAUSED)"}
         </button>}
       </div>
     </div>
@@ -419,33 +501,89 @@ function Wizard(props) {
 }
 
 // ---------------------------------------------------------------------------
-// Stepper
+// Stepper, with numbered icons + glow on active step. Click jumps backward
+// only (forward is gated by validation in the wizard).
 
 function Stepper(props) {
-  var P = props.P, fm = props.fm, step = props.step;
-  return <div style={{display:"flex",gap:6}}>
+  var P = props.P, fm = props.fm, Ic = props.Ic, step = props.step;
+  return <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
     {STEP_LABELS.map(function(label, i){
       var done = i < step, active = i === step;
-      var bg = active ? "linear-gradient(135deg,#FF3D00,#FF6B00)" : (done ? P.ember + "25" : "transparent");
+      var bg = active ? "linear-gradient(135deg,#FF3D00,#FF6B00)" : (done ? P.ember + "20" : "transparent");
       var border = active ? "1px solid " + P.ember : (done ? "1px solid " + P.ember + "50" : "1px solid " + P.rule);
       var color = active ? "#fff" : (done ? P.ember : (P.label || P.sub));
-      return <div key={label} style={{flex:1,padding:"12px 12px",background:bg,border:border,borderRadius:10,fontSize:11,fontWeight:800,color:color,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",textAlign:"center"}}>
-        {(i+1) + ". " + label}
+      var clickable = i <= step;
+      return <div key={label}
+        onClick={function(){ if (clickable && props.onJump) props.onJump(i); }}
+        style={{
+          flex:1,minWidth:140,padding:"12px 12px",
+          background:bg,border:border,borderRadius:10,
+          fontSize:11,fontWeight:800,color:color,fontFamily:fm,
+          letterSpacing:1.5,textTransform:"uppercase",textAlign:"center",
+          cursor: clickable ? "pointer" : "default",
+          boxShadow: active ? "0 6px 22px rgba(249,98,3,0.35)" : "none",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+          transition:"all 0.18s ease"
+        }}>
+        <span style={{
+          width:20,height:20,borderRadius:"50%",
+          background: active ? "rgba(255,255,255,0.22)" : (done ? P.ember+"35" : "transparent"),
+          border: done ? "1px solid "+P.ember+"60" : (active ? "1px solid rgba(255,255,255,0.35)" : "1px solid "+P.rule),
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:10,fontWeight:900,letterSpacing:0
+        }}>{done ? "✓" : (i + 1)}</span>
+        <span>{label}</span>
       </div>;
     })}
   </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 0: Account & Objective
+// Live name preview, used at the top of the steps that influence naming.
+
+function NamePreview(props) {
+  var P = props.P, fm = props.fm;
+  var accent = props.accent || P.ember;
+  return <div style={{padding:"12px 16px",background:accent+"08",border:"1px solid "+accent+"30",borderLeft:"3px solid "+accent,borderRadius:"0 12px 12px 0",marginBottom:18}}>
+    <div style={{fontSize:9,fontWeight:800,color:accent,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:5}}>
+      {props.label || "Generated name"}
+    </div>
+    <div style={{fontSize:14,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:0.5,wordBreak:"break-all"}}>
+      {props.name || <span style={{color:P.label||P.sub,fontWeight:500}}>(fill in fields below)</span>}
+    </div>
+    {props.parts && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+      {props.parts.map(function(part, i){
+        return <span key={i} style={{padding:"3px 8px",background:"rgba(20,12,30,0.6)",border:"1px dashed "+P.rule,borderRadius:6,fontSize:10,color:part.value?P.txt:(P.dim||P.label),fontFamily:fm,letterSpacing:1}}>
+          <span style={{color:accent,fontWeight:800}}>{part.label}:</span> {part.value || "—"}
+        </span>;
+      })}
+    </div>}
+  </div>;
+}
+
+// ---------------------------------------------------------------------------
+// Step 0: Account & Objective + Campaign-name parts (Client + Variant).
 
 function Step0(props) {
-  var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
+  var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
   var draft = props.draft, update = props.update, accounts = props.accounts;
 
+  var objMatch = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
+  var nameParts = [
+    { label: "Client", value: (draft.clientCode || "").toUpperCase() },
+    { label: "Obj",    value: objMatch ? objMatch.code : "" },
+    { label: "Funding",value: draft.funding },
+    { label: "Period", value: ymCodeFromDate(draft.startDate) },
+    { label: "Variant",value: (draft.variant || "").toUpperCase() }
+  ];
+
   return <div>
+    <NamePreview P={P} fm={fm} accent={P.ember} label="Campaign name (live preview)"
+      name={props.generatedCampaignName} parts={nameParts}/>
+
     <Glass accent={P.ember} st={{padding:26,marginBottom:18}}>
-      <Field label="Ad account" fm={fm} P={P} hint="The Meta ad account to bill and run this campaign on. Only allowlisted accounts appear here.">
+      <div style={{fontSize:13,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,marginBottom:14,textTransform:"uppercase"}}>1. Pick your account</div>
+      <Field label="Ad account" fm={fm} P={P} hint="Only allowlisted Meta ad accounts appear here.">
         {accounts.loading && <div style={{fontSize:13,color:P.label||P.sub,fontFamily:fm}}>Loading accounts...</div>}
         {accounts.error && <div style={{fontSize:13,color:P.critical||"#ef4444",fontFamily:fm}}>{accounts.error}</div>}
         {!accounts.loading && !accounts.error && <Select P={P} fm={fm}
@@ -457,32 +595,46 @@ function Step0(props) {
             update({ accountId: id, accountName: match ? match.name : "" });
           }}/>}
       </Field>
-      <Field label="Campaign name" fm={fm} P={P} hint="Internal name. Suggestion: include client + objective + month, e.g. MoMo · Leads · May 2026.">
-        <input value={draft.campaignName} onChange={function(e){ update({ campaignName: e.target.value }); }}
-          placeholder="MoMo · Leads · May 2026"
-          style={inputStyle(P, fm)}/>
-      </Field>
+    </Glass>
+
+    <Glass accent={P.ember} st={{padding:26,marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>2. Name your campaign</div>
+      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
+        Type the parts. Objective, Funding and Period auto-fill from your other choices. Variant is optional.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="Client code" fm={fm} P={P} hint="3-6 char short code, uppercase. E.g. MOMO, NEDB, GAS.">
+          <input value={draft.clientCode} onChange={function(e){ update({ clientCode: sanitiseNamePart(e.target.value, 8) }); }}
+            placeholder="MOMO"
+            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        </Field>
+        <Field label="Variant (optional)" fm={fm} P={P} hint="Differentiator. E.g. LAUNCH, ALWAYSON, FLASHSALE.">
+          <input value={draft.variant} onChange={function(e){ update({ variant: sanitiseNamePart(e.target.value, 14) }); }}
+            placeholder="LAUNCH"
+            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        </Field>
+      </div>
     </Glass>
 
     <Glass accent={P.orchid} st={{padding:26,marginBottom:18}}>
-      <div style={{fontSize:13,fontWeight:800,color:P.orchid,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Objective</div>
+      <div style={{fontSize:13,fontWeight:800,color:P.orchid,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>3. Objective</div>
       <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>What outcome do you want Meta to optimise toward?</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
         {OBJECTIVES.map(function(o){
           var on = draft.objective === o.id;
-          return <div key={o.id} onClick={function(){ update({ objective: o.id }); }} style={{padding:"16px 18px",border:"1px solid "+(on?P.orchid:P.rule),background:on?P.orchid+"15":"rgba(20,12,30,0.4)",borderRadius:12,cursor:"pointer",transition:"all 0.15s ease"}}>
-            <div style={{fontSize:14,fontWeight:800,color:on?P.orchid:P.txt,fontFamily:ff}}>{o.label}</div>
+          return <div key={o.id} onClick={function(){ update({ objective: o.id }); }} style={{padding:"16px 18px",border:"1px solid "+(on?P.orchid:P.rule),background:on?P.orchid+"15":"rgba(20,12,30,0.4)",borderRadius:12,cursor:"pointer",transition:"all 0.15s ease",position:"relative",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+              <span style={{padding:"2px 8px",background:on?P.orchid+"30":"rgba(20,12,30,0.6)",border:"1px solid "+(on?P.orchid:P.rule),borderRadius:6,fontSize:10,fontWeight:900,color:on?P.orchid:P.txt,fontFamily:fm,letterSpacing:1.5}}>{o.code}</span>
+              <div style={{fontSize:14,fontWeight:800,color:on?P.orchid:P.txt,fontFamily:ff}}>{o.label}</div>
+            </div>
             <div style={{fontSize:12,color:P.label||P.sub,fontFamily:ff,marginTop:4,lineHeight:1.5}}>{o.sub}</div>
           </div>;
         })}
       </div>
-      <div style={{marginTop:18,fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.7}}>
-        Phase 1 supports standard objectives only. Advantage+ Shopping (ASC) and App Campaigns (AAC) were removed in Meta API v25.0+ and will be re-added when Meta releases the v26 replacements.
-      </div>
     </Glass>
 
     <Glass accent={P.fb} st={{padding:26}}>
-      <div style={{fontSize:13,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Platform</div>
+      <div style={{fontSize:13,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>4. Platform</div>
       <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>Where should the ad appear?</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
         {[
@@ -498,19 +650,20 @@ function Step0(props) {
         })}
       </div>
       <div style={{marginTop:14,fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.7}}>
-        Instagram-only ads still need a Facebook Page — Meta uses it as the actor identity even when nothing serves on FB. You'll pick the Page in the Creative step.
+        Instagram-only ads still need a Facebook Page, Meta uses it as the actor identity even when nothing serves on FB.
       </div>
     </Glass>
   </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 1: Audience
+// Step 1: Audience.
 
 function Step1(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
   var draft = props.draft, updateNested = props.updateNested;
   var apiBase = props.apiBase, token = props.token;
+  var savedAudiences = props.savedAudiences || { items: [], loading: false, error: "" };
   var a = draft.audience;
   var toggleGender = function(g){
     var arr = a.genders.indexOf(g) >= 0 ? a.genders.filter(function(x){return x!==g;}) : a.genders.concat([g]);
@@ -525,80 +678,133 @@ function Step1(props) {
     var existing = a.targetingItems || [];
     updateNested("audience", { targetingItems: existing.filter(function(x){ return !(x.id === id && x.type === type); }) });
   };
-  return <Glass accent={P.cyan} st={{padding:26}}>
-    <Field label="Where to advertise" fm={fm} P={P} hint="Pick countries, regions, cities, suburbs or postal codes. Add proximity pins (15 km from this address etc.) for store-radius campaigns. Mix freely — Meta unions everything you add.">
-      <LocationPicker P={P} ff={ff} fm={fm}
-        apiBase={apiBase} token={token} accountId={draft.accountId}
-        locations={a.locations || { geographies: [], customLocations: [] }}
-        onChange={function(next){ updateNested("audience", { locations: next }); }}/>
-    </Field>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:8}}>
-      <Field label="Age min" fm={fm} P={P}>
-        <Select P={P} fm={fm}
-          value={String(a.ageMin)}
-          options={rangeOptions(13, 65)}
-          onChange={function(v){ updateNested("audience", { ageMin: parseInt(v, 10) }); }}/>
+  var nameParts = [
+    { label: "Audience", value: (a.audienceLabel || "").toUpperCase() },
+    { label: "Geo",      value: geoCodeFromLocations(a.locations) },
+    { label: "Demo",     value: demoCode(a.ageMin, a.ageMax, a.genders) },
+    { label: "Placement",value: placementCode(draft.platformMode, draft.placement) }
+  ];
+
+  return <div>
+    <NamePreview P={P} fm={fm} accent={P.cyan} label="Ad set name (live preview)"
+      name={props.generatedAdsetName} parts={nameParts}/>
+
+    <Glass accent={P.cyan} st={{padding:26,marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.cyan,letterSpacing:2,fontFamily:fm,marginBottom:14,textTransform:"uppercase"}}>Audience label</div>
+      <Field label="Short label for this ad set's audience" fm={fm} P={P} hint='E.g. "COLD", "WARM", "LAL1", "FANS", "RTG-CARTABANDON". Goes into the ad-set name.'>
+        <input value={a.audienceLabel} onChange={function(e){ updateNested("audience", { audienceLabel: sanitiseNamePart(e.target.value, 16) }); }}
+          placeholder="COLD"
+          style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
       </Field>
-      <Field label="Age max" fm={fm} P={P}>
-        <Select P={P} fm={fm}
-          value={String(a.ageMax)}
-          options={rangeOptions(13, 65)}
-          onChange={function(v){ updateNested("audience", { ageMax: parseInt(v, 10) }); }}/>
+    </Glass>
+
+    <Glass accent={P.cyan} st={{padding:26,marginBottom:18}}>
+      <Field label="Where to advertise" fm={fm} P={P} hint="Pick countries, regions, cities, suburbs or postal codes. Add proximity pins (15 km from this address etc.) for store-radius campaigns. Mix freely, Meta unions everything you add.">
+        <LocationPicker P={P} ff={ff} fm={fm}
+          apiBase={apiBase} token={token} accountId={draft.accountId}
+          locations={a.locations || { geographies: [], customLocations: [] }}
+          onChange={function(next){ updateNested("audience", { locations: next }); }}/>
       </Field>
-      <Field label="Gender" fm={fm} P={P}>
-        <div style={{display:"flex",gap:8,marginTop:2}}>
-          {[{k:1,n:"Male"},{k:2,n:"Female"}].map(function(g){
-            var on = a.genders.indexOf(g.k) >= 0;
-            return <div key={g.k} onClick={function(){ toggleGender(g.k); }} style={{flex:1,padding:"12px 8px",textAlign:"center",border:"1px solid "+(on?P.cyan:P.rule),background:on?P.cyan+"15":"rgba(20,12,30,0.6)",borderRadius:10,cursor:"pointer",color:on?P.cyan:(P.label||P.sub),fontSize:13,fontWeight:700,fontFamily:fm}}>
-              {g.n}
-            </div>;
-          })}
-        </div>
-        {a.genders.length === 0 && <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:fm,marginTop:6}}>None selected = all genders</div>}
-      </Field>
-    </div>
 
-    <Field label="Describe your ideal customer (optional, AI-assisted)" fm={fm} P={P}
-      hint="Type a plain-English description and we'll suggest matching Meta interests, behaviors and demographics. You can accept or ignore each suggestion.">
-      <AudienceSuggester P={P} ff={ff} fm={fm}
-        apiBase={apiBase} token={token} accountId={draft.accountId}
-        ageMin={a.ageMin} ageMax={a.ageMax}
-        countries={a.countries}
-        existingItems={a.targetingItems || []}
-        onAdd={addItem}/>
-    </Field>
-
-    <Field label="Detailed targeting (interests, behaviors, demographics)" fm={fm} P={P}
-      hint="Search Meta's targeting taxonomy directly. Items inside one type are OR'd; types are AND'd together. Selected items appear as removable chips below.">
-      <TargetingPicker P={P} ff={ff} fm={fm}
-        apiBase={apiBase} token={token} accountId={draft.accountId}
-        items={a.targetingItems || []} onAdd={addItem} onRemove={removeItem}/>
-    </Field>
-
-    <details style={{marginTop:18,padding:"14px 16px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10}}>
-      <summary style={{fontSize:11,color:P.label||P.sub,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,fontFamily:fm}}>For developers: raw flexible_spec JSON</summary>
-      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.7,marginTop:10,marginBottom:8}}>
-        For power users only. If you paste a valid Meta <code style={{background:"rgba(0,0,0,0.4)",padding:"1px 6px",borderRadius:4,fontFamily:fm}}>flexible_spec</code> array here it overrides the picker selections above. Useful for advanced AND/OR groupings (multiple flexible_spec entries) that the picker can't express.
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:8}}>
+        <Field label="Age min" fm={fm} P={P}>
+          <Select P={P} fm={fm}
+            value={String(a.ageMin)}
+            options={rangeOptions(13, 65)}
+            onChange={function(v){ updateNested("audience", { ageMin: parseInt(v, 10) }); }}/>
+        </Field>
+        <Field label="Age max" fm={fm} P={P}>
+          <Select P={P} fm={fm}
+            value={String(a.ageMax)}
+            options={rangeOptions(13, 65)}
+            onChange={function(v){ updateNested("audience", { ageMax: parseInt(v, 10) }); }}/>
+        </Field>
+        <Field label="Gender" fm={fm} P={P}>
+          <div style={{display:"flex",gap:8,marginTop:2}}>
+            {[{k:1,n:"Male"},{k:2,n:"Female"}].map(function(g){
+              var on = a.genders.indexOf(g.k) >= 0;
+              return <div key={g.k} onClick={function(){ toggleGender(g.k); }} style={{flex:1,padding:"12px 8px",textAlign:"center",border:"1px solid "+(on?P.cyan:P.rule),background:on?P.cyan+"15":"rgba(20,12,30,0.6)",borderRadius:10,cursor:"pointer",color:on?P.cyan:(P.label||P.sub),fontSize:13,fontWeight:700,fontFamily:fm}}>
+                {g.n}
+              </div>;
+            })}
+          </div>
+          {a.genders.length === 0 && <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:fm,marginTop:6}}>None selected = all genders</div>}
+        </Field>
       </div>
-      <textarea value={a.flexibleSpec ? JSON.stringify(a.flexibleSpec, null, 2) : ""} onChange={function(e){
-        var v = e.target.value.trim();
-        if (!v) { updateNested("audience", { flexibleSpec: null }); return; }
-        try { updateNested("audience", { flexibleSpec: JSON.parse(v) }); } catch (_) { /* ignore until valid */ }
-      }} placeholder='[{"interests":[{"id":"6003107902433","name":"Online shopping"}]}]' style={Object.assign({}, inputStyle(P, fm), { minHeight: 100, fontFamily: fm, fontSize: 12 })}/>
-    </details>
+    </Glass>
 
-    <div style={{marginTop:18,padding:"14px 16px",background:P.info+"10",border:"1px solid "+P.info+"30",borderLeft:"3px solid "+P.info,borderRadius:"0 10px 10px 0"}}>
+    <Glass accent={P.mint} st={{padding:26,marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.mint,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Saved &amp; custom audiences</div>
+      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
+        Pick audiences you've already built in Ads Manager. Custom audiences (real people) and saved audiences (reusable targeting configs) both surface here. Multi-select, Meta unions them.
+      </div>
+      <SavedAudiencePicker P={P} ff={ff} fm={fm} savedAudiences={savedAudiences}
+        selectedSaved={a.savedAudienceIds || []} selectedCustom={a.customAudienceIds || []}
+        onChange={function(saved, custom){ updateNested("audience", { savedAudienceIds: saved, customAudienceIds: custom }); }}/>
+    </Glass>
+
+    <Glass accent={P.fb} st={{padding:26,marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Engaged community (page fans &amp; followers)</div>
+      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
+        Target the client's existing community. Page fans is a direct API option. Instagram followers requires a Custom Audience built in Ads Manager.
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <ToggleRow P={P} fm={fm} accent={P.fb}
+          on={!!(a.targetCommunity && a.targetCommunity.fans)}
+          onToggle={function(){ updateNested("audience", { targetCommunity: Object.assign({}, a.targetCommunity || {}, { fans: !(a.targetCommunity && a.targetCommunity.fans) }) }); }}
+          title="Target Facebook page fans (people who like the page)"
+          sub="Adds the client's selected page (Step 3) as a connections filter. Combine with detailed targeting to hit specifically the audience that already follows them on FB."/>
+        <ToggleRow P={P} fm={fm} accent={P.ig}
+          on={!!(a.targetCommunity && a.targetCommunity.igFollowers)}
+          disabled={true}
+          title="Target Instagram followers (requires a Custom Audience)"
+          sub="Meta has no direct API for IG-follower targeting. In Ads Manager → Audiences → Create custom audience → Instagram account → People who follow your professional account. Once created, it'll appear in the Saved &amp; custom audiences picker above."/>
+      </div>
+    </Glass>
+
+    <Glass accent={P.cyan} st={{padding:26,marginBottom:18}}>
+      <Field label="Describe your ideal customer (optional, AI-assisted)" fm={fm} P={P}
+        hint="Type a plain-English description and we'll suggest matching Meta interests, behaviors and demographics. Accept or ignore each suggestion.">
+        <AudienceSuggester P={P} ff={ff} fm={fm}
+          apiBase={apiBase} token={token} accountId={draft.accountId}
+          ageMin={a.ageMin} ageMax={a.ageMax}
+          countries={a.countries}
+          existingItems={a.targetingItems || []}
+          onAdd={addItem}/>
+      </Field>
+
+      <Field label="Detailed targeting (interests, behaviors, demographics)" fm={fm} P={P}
+        hint="Search Meta's targeting taxonomy directly. Items inside one type are OR'd; types are AND'd together.">
+        <TargetingPicker P={P} ff={ff} fm={fm}
+          apiBase={apiBase} token={token} accountId={draft.accountId}
+          items={a.targetingItems || []} onAdd={addItem} onRemove={removeItem}/>
+      </Field>
+
+      <details style={{marginTop:18,padding:"14px 16px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10}}>
+        <summary style={{fontSize:11,color:P.label||P.sub,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,fontFamily:fm}}>For developers: raw flexible_spec JSON</summary>
+        <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.7,marginTop:10,marginBottom:8}}>
+          Power users only. A valid Meta <code style={{background:"rgba(0,0,0,0.4)",padding:"1px 6px",borderRadius:4,fontFamily:fm}}>flexible_spec</code> array pasted here overrides the picker selections above.
+        </div>
+        <textarea value={a.flexibleSpec ? JSON.stringify(a.flexibleSpec, null, 2) : ""} onChange={function(e){
+          var v = e.target.value.trim();
+          if (!v) { updateNested("audience", { flexibleSpec: null }); return; }
+          try { updateNested("audience", { flexibleSpec: JSON.parse(v) }); } catch (_) { /* ignore until valid */ }
+        }} placeholder='[{"interests":[{"id":"6003107902433","name":"Online shopping"}]}]' style={Object.assign({}, inputStyle(P, fm), { minHeight: 100, fontFamily: fm, fontSize: 12 })}/>
+      </details>
+    </Glass>
+
+    <div style={{padding:"14px 16px",background:P.info+"10",border:"1px solid "+P.info+"30",borderLeft:"3px solid "+P.info,borderRadius:"0 10px 10px 0"}}>
       <div style={{fontSize:11,fontWeight:800,color:P.info,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Heads-up: Meta interest consolidation, 6 Jan 2026</div>
       <div style={{fontSize:12,color:P.label||P.sub,fontFamily:ff,lineHeight:1.7}}>
-        Meta merged many overlapping interest options into broader combined ones. If a previously-used interest no longer appears in search, it's been folded into a parent — search the parent term and Meta will surface the right replacement. Audience reach estimates also went up across the board because the combined interests pool more users.
+        Meta merged many overlapping interest options into broader combined ones. If a previously-used interest no longer appears in search, it's been folded into a parent, search the parent term and Meta will surface the right replacement.
       </div>
     </div>
-  </Glass>;
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Placement
+// Step 2: Placement.
 
 function Step2(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
@@ -609,52 +815,165 @@ function Step2(props) {
     var next = arr.indexOf(value) >= 0 ? arr.filter(function(x){return x!==value;}) : arr.concat([value]);
     var patch = {}; patch[field] = next; updateNested("placement", patch);
   };
-  return <Glass accent={P.fb} st={{padding:26}}>
-    <div style={{fontSize:13,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Placement strategy</div>
-    <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:16}}>
-      Advantage+ lets Meta decide which feeds, Reels and Stories to serve in. Manual gives you control.
-    </div>
-    <div style={{display:"flex",gap:10,marginBottom:18}}>
-      {["advantage","manual"].map(function(m){
-        var on = pl.mode === m;
-        return <div key={m} onClick={function(){ updateNested("placement", { mode: m }); }} style={{flex:1,padding:"14px 18px",textAlign:"center",border:"1px solid "+(on?P.fb:P.rule),background:on?P.fb+"15":"rgba(20,12,30,0.4)",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:800,color:on?P.fb:(P.label||P.sub),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>
-          {m === "advantage" ? "Advantage+" : "Manual"}
-        </div>;
-      })}
-    </div>
 
-    {pl.mode === "advantage" && <div style={{padding:"18px 22px",background:P.fb+"10",border:"1px solid "+P.fb+"30",borderLeft:"3px solid "+P.fb,borderRadius:"0 12px 12px 0"}}>
-      <div style={{fontSize:11,fontWeight:800,color:P.fb,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:8}}>How Advantage+ works</div>
-      <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.8}}>
-        Meta auto-distributes spend across Feeds, Stories, Reels, Audience Network and Messenger, picking the placements that deliver best for your objective. Your creative gets auto-cropped to fit each placement, but for best quality upload square (1:1) and vertical (9:16) versions of your asset. Phase 3 will let you do that in the wizard.
+  // Detect image-only creative + AN combination so we can warn about rewarded
+  // video placement (which requires a video).
+  var anyVideoCreative = (draft.creatives || []).some(function(c){ return !!c.videoId; });
+  var anSelected = pl.mode === "manual" && (pl.platforms || []).indexOf("audience_network") >= 0;
+  var showRewardedWarning = anSelected && !anyVideoCreative;
+
+  return <div>
+    <NamePreview P={P} fm={fm} accent={P.cyan} label="Ad set name (live preview)"
+      name={props.generatedAdsetName}/>
+
+    <Glass accent={P.fb} st={{padding:26}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.fb,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Placement strategy</div>
+      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:16}}>
+        Advantage+ lets Meta decide which feeds, Reels and Stories to serve in. Manual gives you control.
       </div>
-    </div>}
+      <div style={{display:"flex",gap:10,marginBottom:18}}>
+        {["advantage","manual"].map(function(m){
+          var on = pl.mode === m;
+          return <div key={m} onClick={function(){ updateNested("placement", { mode: m }); }} style={{flex:1,padding:"14px 18px",textAlign:"center",border:"1px solid "+(on?P.fb:P.rule),background:on?P.fb+"15":"rgba(20,12,30,0.4)",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:800,color:on?P.fb:(P.label||P.sub),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>
+            {m === "advantage" ? "Advantage+" : "Manual"}
+          </div>;
+        })}
+      </div>
 
-    {pl.mode === "manual" && <div>
-      <Pillgrid label="Platforms" P={P} fm={fm}
-        options={[{k:"facebook",n:"Facebook"},{k:"instagram",n:"Instagram"},{k:"audience_network",n:"Audience Network"},{k:"messenger",n:"Messenger"}]}
-        selected={pl.platforms || []} onToggle={function(v){ toggle("platforms", v); }}/>
-      <Pillgrid label="Facebook positions" P={P} fm={fm}
-        options={[{k:"feed",n:"Feed"},{k:"facebook_reels",n:"Reels"},{k:"story",n:"Stories"},{k:"marketplace",n:"Marketplace"}]}
-        selected={pl.facebookPositions || []} onToggle={function(v){ toggle("facebookPositions", v); }}/>
-      <Pillgrid label="Instagram positions" P={P} fm={fm}
-        options={[{k:"stream",n:"Feed"},{k:"story",n:"Stories"},{k:"reels",n:"Reels"},{k:"explore",n:"Explore"}]}
-        selected={pl.instagramPositions || []} onToggle={function(v){ toggle("instagramPositions", v); }}/>
-      <Pillgrid label="Devices" P={P} fm={fm}
-        options={[{k:"mobile",n:"Mobile"},{k:"desktop",n:"Desktop"}]}
-        selected={pl.devicePlatforms || []} onToggle={function(v){ toggle("devicePlatforms", v); }}/>
-    </div>}
-  </Glass>;
+      {pl.mode === "advantage" && <div style={{padding:"18px 22px",background:P.fb+"10",border:"1px solid "+P.fb+"30",borderLeft:"3px solid "+P.fb,borderRadius:"0 12px 12px 0"}}>
+        <div style={{fontSize:11,fontWeight:800,color:P.fb,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:8}}>How Advantage+ works</div>
+        <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.8}}>
+          Meta auto-distributes spend across Feeds, Stories, Reels, Audience Network and Messenger, picking the placements that deliver best for your objective. Your creative gets auto-cropped to fit each placement, but for best quality upload square (1:1) and vertical (9:16) versions of your asset.
+        </div>
+      </div>}
+
+      {pl.mode === "manual" && <div>
+        <Pillgrid label="Platforms" P={P} fm={fm}
+          options={[{k:"facebook",n:"Facebook"},{k:"instagram",n:"Instagram"},{k:"audience_network",n:"Audience Network"},{k:"messenger",n:"Messenger"}]}
+          selected={pl.platforms || []} onToggle={function(v){ toggle("platforms", v); }}/>
+        <Pillgrid label="Facebook positions" P={P} fm={fm}
+          options={[{k:"feed",n:"Feed"},{k:"facebook_reels",n:"Reels"},{k:"story",n:"Stories"},{k:"marketplace",n:"Marketplace"}]}
+          selected={pl.facebookPositions || []} onToggle={function(v){ toggle("facebookPositions", v); }}/>
+        <Pillgrid label="Instagram positions" P={P} fm={fm}
+          options={[{k:"stream",n:"Feed"},{k:"story",n:"Stories"},{k:"reels",n:"Reels"},{k:"explore",n:"Explore"}]}
+          selected={pl.instagramPositions || []} onToggle={function(v){ toggle("instagramPositions", v); }}/>
+        <Pillgrid label="Devices" P={P} fm={fm}
+          options={[{k:"mobile",n:"Mobile"},{k:"desktop",n:"Desktop"}]}
+          selected={pl.devicePlatforms || []} onToggle={function(v){ toggle("devicePlatforms", v); }}/>
+      </div>}
+
+      {showRewardedWarning && <div style={{marginTop:18,padding:"14px 16px",background:(P.warning||"#fbbf24")+"12",border:"1px solid "+(P.warning||"#fbbf24")+"40",borderLeft:"3px solid "+(P.warning||"#fbbf24"),borderRadius:"0 12px 12px 0"}}>
+        <div style={{fontSize:11,fontWeight:800,color:P.warning||"#fbbf24",letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Audience Network rewarded video</div>
+        <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.7}}>
+          You've selected Audience Network with image-only creatives. Meta won't deliver to AN rewarded video without a video asset. We'll auto-exclude rewarded video for you so the rest of AN serves normally. To unlock that placement, upload a video on Step 4.
+        </div>
+      </div>}
+    </Glass>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 3: Creative
+// Step 3: Creative. Multi-creative manager + carousel + naming convention.
 
 function Step3(props) {
-  var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
-  var apiBase = props.apiBase, token = props.token, draft = props.draft, update = props.update, updateNested = props.updateNested;
+  var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
+  var apiBase = props.apiBase, token = props.token, draft = props.draft;
+  var update = props.update, updateCreative = props.updateCreative;
   var pages = props.pages, instagrams = props.instagrams;
 
+  var igRequired = draft.platformMode === "fb_ig" || draft.platformMode === "ig_only";
+  var fbHidden = draft.platformMode === "ig_only";
+
+  var modeTabs = [
+    { k: "single",   n: "Single ad",  sub: "1 image or video, 1 ad" },
+    { k: "multi",    n: "Multiple ads", sub: "N creatives, N ads in one ad set, Meta rotates" },
+    { k: "carousel", n: "Carousel",   sub: "1 ad with 2-10 swipeable cards" }
+  ];
+  var creatives = draft.creatives || [];
+
+  var addCreative = function(){
+    update({ creatives: creatives.concat([emptyCreative()]) });
+  };
+  var removeCreative = function(idx){
+    if (creatives.length <= 1) return;
+    var arr = creatives.slice(); arr.splice(idx, 1);
+    update({ creatives: arr });
+  };
+
+  var changeMode = function(m){
+    var nextCreatives = creatives.slice();
+    if (m === "single" && nextCreatives.length > 1) nextCreatives = [nextCreatives[0]];
+    if (m === "carousel" && nextCreatives.length < 2) {
+      while (nextCreatives.length < 2) nextCreatives.push(emptyCreative());
+    }
+    update({ creativeMode: m, creatives: nextCreatives });
+  };
+
+  return <Glass accent={P.fuchsia} st={{padding:26}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:18}}>
+      <Field label={fbHidden ? "Facebook page (Meta requires it as actor identity)" : "Facebook page"} fm={fm} P={P}>
+        <Select P={P} fm={fm}
+          value={draft.pageId}
+          placeholder={pages.loading ? "Loading..." : "— Choose page —"}
+          options={(pages.items || []).map(function(p){ return { value: p.pageId, label: p.name }; })}
+          onChange={function(v){ var match = (pages.items || []).find(function(x){return x.pageId===v;}); update({ pageId: v, pageName: match ? match.name : "" }); }}/>
+      </Field>
+      <Field label={igRequired ? "Instagram account (required)" : "Instagram account (optional)"} fm={fm} P={P}>
+        <Select P={P} fm={fm}
+          value={draft.instagramId}
+          placeholder={instagrams.loading ? "Loading..." : (igRequired ? "— Choose Instagram —" : "— None / FB-only —")}
+          options={[{ value: "", label: "— None —" }].concat((instagrams.items || []).map(function(i){ return { value: i.instagramId, label: "@" + i.username }; }))}
+          onChange={function(v){ update({ instagramId: v }); }}/>
+      </Field>
+    </div>
+
+    <Field label="Ad layout" fm={fm} P={P} hint="Single = one ad. Multiple = N independent ads in this set. Carousel = one ad with multiple swipeable cards.">
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+        {modeTabs.map(function(t){
+          var on = draft.creativeMode === t.k;
+          return <div key={t.k} onClick={function(){ changeMode(t.k); }} style={{padding:"14px 16px",border:"1px solid "+(on?P.fuchsia:P.rule),background:on?P.fuchsia+"15":"rgba(20,12,30,0.6)",borderRadius:10,cursor:"pointer",color:on?P.fuchsia:P.txt,fontFamily:fm}}>
+            <div style={{fontSize:13,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase"}}>{t.n}</div>
+            <div style={{fontSize:11,marginTop:4,color:P.label||P.sub}}>{t.sub}</div>
+          </div>;
+        })}
+      </div>
+    </Field>
+
+    {/* Multi-advertiser ads — explicit OFF reminder, with override */}
+    <div style={{margin:"6px 0 18px",padding:"12px 14px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+      <div>
+        <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>Multi-advertiser ads</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,marginTop:3,lineHeight:1.5}}>OFF by default. Keeps your client's ad from being grouped with other advertisers in Reels/Feed carousels. Toggle ON only for low-cost reach plays.</div>
+      </div>
+      <div onClick={function(){ update({ multiAdvertiserAds: !draft.multiAdvertiserAds }); }}
+        style={{width:46,height:24,borderRadius:12,background:draft.multiAdvertiserAds?"linear-gradient(135deg,#FF3D00,#FF6B00)":P.dim,position:"relative",cursor:"pointer",flexShrink:0,transition:"background 0.2s"}}>
+        <div style={{position:"absolute",top:2,left:draft.multiAdvertiserAds?24:2,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+      </div>
+    </div>
+
+    {/* Per-creative cards */}
+    {creatives.map(function(c, idx){
+      var adName = composeAdName(c, idx, draft);
+      return <CreativeCard key={idx} idx={idx} creative={c} P={P} ff={ff} fm={fm}
+        creativeMode={draft.creativeMode}
+        accountId={draft.accountId} apiBase={apiBase} token={token}
+        adName={adName}
+        onChange={function(patch){ updateCreative(idx, patch); }}
+        onRemove={creatives.length > 1 ? function(){ removeCreative(idx); } : null}
+        sharedPrimaryText={draft.creativeMode === "carousel" && idx > 0 ? creatives[0].primaryText : null}/>;
+    })}
+
+    {(draft.creativeMode === "multi" || draft.creativeMode === "carousel") && creatives.length < (draft.creativeMode === "carousel" ? 10 : 6) && <button onClick={addCreative}
+      style={{width:"100%",marginTop:6,background:"transparent",border:"1px dashed "+P.fuchsia+"60",borderRadius:10,padding:"14px 0",color:P.fuchsia,fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:"pointer",textTransform:"uppercase"}}>
+      + Add another {draft.creativeMode === "carousel" ? "card" : "creative"}
+    </button>}
+  </Glass>;
+}
+
+function CreativeCard(props) {
+  var P = props.P, ff = props.ff, fm = props.fm, c = props.creative;
+  var idx = props.idx, creativeMode = props.creativeMode;
+  var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
   var fileRef = useRef(null);
   var upS = useState({ uploading: false, error: "" }), uploadState = upS[0], setUploadState = upS[1];
 
@@ -671,7 +990,7 @@ function Step3(props) {
       fetch(apiBase + "/api/create/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-        body: JSON.stringify({ kind: kind, accountId: draft.accountId, filename: file.name, mimeType: file.type, dataB64: b64 })
+        body: JSON.stringify({ kind: kind, accountId: accountId, filename: file.name, mimeType: file.type, dataB64: b64 })
       })
         .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
         .then(function(x){
@@ -679,7 +998,7 @@ function Step3(props) {
             setUploadState({ uploading: false, error: (x.data && x.data.error) || "Upload failed" });
             return;
           }
-          updateNested("creative", {
+          props.onChange({
             kind: x.data.kind,
             imageHash: x.data.imageHash || null,
             videoId: x.data.videoId || null,
@@ -693,91 +1012,86 @@ function Step3(props) {
     rdr.readAsDataURL(file);
   };
 
-  var igRequired = draft.platformMode === "fb_ig" || draft.platformMode === "ig_only";
-  var fbHidden = draft.platformMode === "ig_only"; // page still needed under the hood, but make UI less confusing
+  var carouselCard = creativeMode === "carousel";
+  var hidePrimary = carouselCard && idx > 0; // carousel cards 2..N don't have their own primary text
 
-  // Asset kind picker — three tabs above the file input. Determines what the
-  // browser file picker accepts (image/*, image/gif, video/*) and what label
-  // we show for the upload state.
-  var kindTabs = [
-    { k: "image", n: "Image", accept: "image/png,image/jpeg,image/webp", hint: "PNG / JPG / WebP, square 1080×1080 ideal" },
-    { k: "gif", n: "GIF", accept: "image/gif", hint: "GIF, max ~3 MB. Auto-converts to MP4 for Reels." },
-    { k: "video", n: "Video", accept: "video/mp4,video/quicktime", hint: "MP4 / MOV. 9:16 vertical for Reels & Stories." }
-  ];
-  var activeKind = draft.creative.kind || "image";
-  var activeAccept = (kindTabs.find(function(k){ return k.k === activeKind; }) || kindTabs[0]).accept;
-  var activeHint = (kindTabs.find(function(k){ return k.k === activeKind; }) || kindTabs[0]).hint;
+  // What we'll push to Meta as the asset format. For carousel, only image_hash is allowed at the card level.
+  var allowedAccept = carouselCard ? "image/png,image/jpeg,image/webp" : "image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime";
 
-  return <Glass accent={P.fuchsia} st={{padding:26}}>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
-      <Field label={fbHidden ? "Facebook page (Meta requires it as actor identity)" : "Facebook page"} fm={fm} P={P}>
-        <Select P={P} fm={fm}
-          value={draft.pageId}
-          placeholder={pages.loading ? "Loading..." : "— Choose page —"}
-          options={(pages.items || []).map(function(p){ return { value: p.pageId, label: p.name }; })}
-          onChange={function(v){ update({ pageId: v }); }}/>
-      </Field>
-      <Field label={igRequired ? "Instagram account (required)" : "Instagram account (optional)"} fm={fm} P={P}>
-        <Select P={P} fm={fm}
-          value={draft.instagramId}
-          placeholder={instagrams.loading ? "Loading..." : (igRequired ? "— Choose Instagram —" : "— None / FB-only —")}
-          options={[{ value: "", label: "— None —" }].concat((instagrams.items || []).map(function(i){ return { value: i.instagramId, label: "@" + i.username }; }))}
-          onChange={function(v){ update({ instagramId: v }); }}/>
-      </Field>
+  return <div style={{padding:"18px 20px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:14,marginBottom:14,position:"relative"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{padding:"4px 12px",background:P.fuchsia+"25",border:"1px solid "+P.fuchsia+"50",borderRadius:8,fontSize:10,fontWeight:900,color:P.fuchsia,fontFamily:fm,letterSpacing:2}}>
+          {carouselCard ? "CARD #" + (idx + 1) : "AD #" + (idx + 1)}
+        </span>
+        <span style={{fontSize:12,color:P.label||P.sub,fontFamily:fm,letterSpacing:0.5}}>
+          → <span style={{color:P.txt,fontWeight:700}}>{props.adName}</span>
+        </span>
+      </div>
+      {props.onRemove && <button onClick={props.onRemove} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"4px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
+        Remove
+      </button>}
     </div>
 
-    <Field label="Creative type" fm={fm} P={P}>
-      <div style={{display:"flex",gap:8}}>
-        {kindTabs.map(function(t){
-          var on = activeKind === t.k;
-          return <div key={t.k} onClick={function(){ updateNested("creative", { kind: t.k, imageHash: null, videoId: null, filename: null, previewDataUrl: null }); setUploadState({ uploading: false, error: "" }); }}
-            style={{flex:1,padding:"14px 16px",textAlign:"center",border:"1px solid "+(on?P.fuchsia:P.rule),background:on?P.fuchsia+"15":"rgba(20,12,30,0.6)",borderRadius:10,cursor:"pointer",color:on?P.fuchsia:(P.label||P.sub),fontSize:13,fontWeight:800,fontFamily:fm,letterSpacing:1.2,textTransform:"uppercase"}}>
-            {t.n}
-          </div>;
-        })}
-      </div>
-    </Field>
-
-    <Field label="Upload asset" fm={fm} P={P} hint={activeHint + " · Max ~3 MB. Larger video uploads coming in Phase 3."}>
-      <input ref={fileRef} type="file" accept={activeAccept} onChange={onFile} disabled={!draft.accountId || uploadState.uploading}
+    <Field label="Upload asset" fm={fm} P={P} hint={carouselCard ? "Image only for carousel cards. PNG / JPG / WebP, square 1080×1080 ideal." : "Image (PNG/JPG/WebP/GIF) or Video (MP4/MOV). Max ~3 MB."}>
+      <input ref={fileRef} type="file" accept={allowedAccept} onChange={onFile} disabled={!accountId || uploadState.uploading}
         style={Object.assign({}, inputStyle(P, fm), { padding: "12px 14px", fontSize: 13 })}/>
       {uploadState.uploading && <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm,marginTop:8}}>Uploading to Meta...</div>}
       {uploadState.error && <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm,marginTop:8}}>{uploadState.error}</div>}
-      {(draft.creative.imageHash || draft.creative.videoId) && <div style={{marginTop:12,padding:"12px 16px",background:P.mint+"12",border:"1px solid "+P.mint+"40",borderRadius:10,fontSize:12,color:P.mint,fontFamily:fm}}>
-        ✓ Uploaded: {draft.creative.filename}
+      {(c.imageHash || c.videoId) && <div style={{marginTop:12,padding:"10px 14px",background:P.mint+"12",border:"1px solid "+P.mint+"40",borderRadius:10,fontSize:12,color:P.mint,fontFamily:fm}}>
+        ✓ Uploaded: {c.filename} ({c.videoId ? "video" : "image"})
       </div>}
-      {draft.creative.previewDataUrl && <img src={draft.creative.previewDataUrl} alt="" style={{marginTop:12,maxWidth:280,borderRadius:10,border:"1px solid "+P.rule}}/>}
+      {c.previewDataUrl && <img src={c.previewDataUrl} alt="" style={{marginTop:12,maxWidth:240,borderRadius:10,border:"1px solid "+P.rule}}/>}
     </Field>
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-      <Field label="Headline" fm={fm} P={P} hint="The bold line above your primary text. Max 200 characters.">
-        <input value={draft.creative.headline} onChange={function(e){ updateNested("creative", { headline: e.target.value }); }} maxLength={200} style={inputStyle(P, fm)}/>
+      <Field label="Headline" fm={fm} P={P} hint="Bold line above primary text. Max 200 chars.">
+        <input value={c.headline} onChange={function(e){ props.onChange({ headline: e.target.value }); }} maxLength={200} style={inputStyle(P, fm)}/>
       </Field>
       <Field label="Call to action button" fm={fm} P={P}>
         <Select P={P} fm={fm}
-          value={draft.creative.callToAction}
-          options={CTAS.map(function(c){ return { value: c, label: c.replace(/_/g," ") }; })}
-          onChange={function(v){ updateNested("creative", { callToAction: v }); }}/>
+          value={c.callToAction}
+          options={CTAS.map(function(x){ return { value: x, label: x.replace(/_/g," ") }; })}
+          onChange={function(v){ props.onChange({ callToAction: v }); }}/>
       </Field>
     </div>
 
-    <Field label="Primary text" fm={fm} P={P} hint="The main body of the ad. Max 1,500 characters. First 125 show before 'See more' on most placements.">
-      <textarea value={draft.creative.primaryText} onChange={function(e){ updateNested("creative", { primaryText: e.target.value }); }} maxLength={1500} style={Object.assign({}, inputStyle(P, fm), { minHeight: 110 })}/>
-    </Field>
+    {!hidePrimary && <Field label={carouselCard ? "Primary text (used for the whole carousel)" : "Primary text"} fm={fm} P={P} hint="Main body of the ad. Max 1,500 chars. First 125 show before 'See more' on most placements.">
+      <textarea value={c.primaryText} onChange={function(e){ props.onChange({ primaryText: e.target.value }); }} maxLength={1500} style={Object.assign({}, inputStyle(P, fm), { minHeight: 90 })}/>
+    </Field>}
+    {hidePrimary && <div style={{padding:"10px 14px",background:"rgba(20,12,30,0.6)",border:"1px solid "+P.rule,borderRadius:10,fontSize:11,color:P.label||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:18}}>
+      Carousel ads share one primary text across all cards (set on card #1 above).
+    </div>}
 
     <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
-      <Field label="Destination URL" fm={fm} P={P} hint="Where users land when they click the CTA. Include https://">
-        <input value={draft.creative.linkUrl} onChange={function(e){ updateNested("creative", { linkUrl: e.target.value }); }} placeholder="https://..." style={inputStyle(P, fm)}/>
+      <Field label="Destination URL" fm={fm} P={P} hint="Where users land when they tap the CTA. Include https://">
+        <input value={c.linkUrl} onChange={function(e){ props.onChange({ linkUrl: e.target.value }); }} placeholder="https://..." style={inputStyle(P, fm)}/>
       </Field>
       <Field label="Description (optional)" fm={fm} P={P} hint="Sub-line under the headline on some placements.">
-        <input value={draft.creative.description} onChange={function(e){ updateNested("creative", { description: e.target.value }); }} maxLength={200} style={inputStyle(P, fm)}/>
+        <input value={c.description} onChange={function(e){ props.onChange({ description: e.target.value }); }} maxLength={200} style={inputStyle(P, fm)}/>
       </Field>
     </div>
-  </Glass>;
+
+    <div style={{marginTop:14,padding:"12px 14px",background:P.fuchsia+"08",border:"1px solid "+P.fuchsia+"30",borderRadius:10}}>
+      <div style={{fontSize:10,fontWeight:800,color:P.fuchsia,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Ad name parts</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Field label="Concept" fm={fm} P={P} hint="Short label. E.g. HEROIMAGE, TESTIMONIAL, OFFER15PCT">
+          <input value={c.concept} onChange={function(e){ props.onChange({ concept: sanitiseNamePart(e.target.value, 18) }); }}
+            placeholder="HEROIMAGE"
+            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        </Field>
+        <Field label="Version" fm={fm} P={P} hint="V01, V02, A, B, etc.">
+          <input value={c.version} onChange={function(e){ props.onChange({ version: sanitiseNamePart(e.target.value, 6) }); }}
+            placeholder="V01"
+            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        </Field>
+      </div>
+    </div>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 4: Budget & Schedule
+// Step 4: Budget & Schedule, with CBO/ABO toggle.
 
 function Step4(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
@@ -788,80 +1102,107 @@ function Step4(props) {
   var dailyOver = draft.dailyBudgetRand > MAX_DAILY_RAND;
   var lifetimeOver = draft.lifetimeBudgetRand > lifetimeCap;
 
-  return <Glass accent={P.solar} st={{padding:22}}>
-    <div style={{fontSize:9,fontWeight:700,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Budget type</div>
-    <div style={{display:"flex",gap:8,marginBottom:18}}>
-      {[{k:"daily",n:"Daily budget"},{k:"lifetime",n:"Lifetime budget"}].map(function(b){
-        var on = draft.budgetMode === b.k;
-        return <div key={b.k} onClick={function(){ update({ budgetMode: b.k }); }} style={{padding:"10px 18px",border:"1px solid "+(on?P.solar:P.rule),background:on?P.solar+"15":"transparent",borderRadius:10,cursor:"pointer",fontSize:11,fontWeight:800,color:on?P.solar:(P.label||P.sub),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>
-          {b.n}
-        </div>;
-      })}
-    </div>
+  return <div>
+    <NamePreview P={P} fm={fm} accent={P.solar} label="Name preview"
+      name={props.generatedCampaignName + "  ·  " + props.generatedAdsetName}/>
 
-    {!isLifetime && <Field label={"Daily budget (ZAR, max R" + MAX_DAILY_RAND.toLocaleString() + ")"} fm={fm} P={P}>
-      <input type="number" min={1} max={MAX_DAILY_RAND} step={50}
-        value={draft.dailyBudgetRand}
-        onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 0; update({ dailyBudgetRand: Math.max(0, Math.min(MAX_DAILY_RAND, v)) }); }}
-        style={Object.assign({}, inputStyle(P, fm), dailyOver ? { borderColor: P.critical || "#ef4444" } : {})}/>
-      {dailyOver && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Daily budget cannot exceed R{MAX_DAILY_RAND.toLocaleString()} — server will reject this.</div>}
-    </Field>}
+    <Glass accent={P.solar} st={{padding:24,marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.solar,letterSpacing:2,fontFamily:fm,marginBottom:8,textTransform:"uppercase"}}>Where the budget lives</div>
+      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
+        CBO holds the budget at campaign level and shares it across ad sets, Meta auto-redistributes spend toward the best performers. ABO holds budget per ad set, locking spend to that audience.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:18}}>
+        {[
+          { k: "ABO", n: "ABO", sub: "Ad set budget, fixed spend per audience" },
+          { k: "CBO", n: "CBO", sub: "Campaign budget, Meta optimises across ad sets" }
+        ].map(function(o){
+          var on = draft.funding === o.k;
+          return <div key={o.k} onClick={function(){ update({ funding: o.k }); }} style={{padding:"16px 18px",border:"1px solid "+(on?P.solar:P.rule),background:on?P.solar+"15":"rgba(20,12,30,0.4)",borderRadius:12,cursor:"pointer"}}>
+            <div style={{fontSize:18,fontWeight:900,color:on?P.solar:P.txt,fontFamily:fm,letterSpacing:2}}>{o.n}</div>
+            <div style={{fontSize:12,color:P.label||P.sub,fontFamily:ff,marginTop:4,lineHeight:1.5}}>{o.sub}</div>
+          </div>;
+        })}
+      </div>
 
-    {isLifetime && <Field label={"Lifetime budget (ZAR, max R" + lifetimeCap.toLocaleString() + (days ? " over " + days + " days" : "") + ")"} fm={fm} P={P}>
-      <input type="number" min={1} step={100}
-        value={draft.lifetimeBudgetRand}
-        onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 0; update({ lifetimeBudgetRand: Math.max(0, v) }); }}
-        style={Object.assign({}, inputStyle(P, fm), lifetimeOver ? { borderColor: P.critical || "#ef4444" } : {})}/>
-      {!draft.endDate && <div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:6}}>End date required for a lifetime budget — set one below.</div>}
-      {lifetimeOver && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Lifetime budget cannot exceed R{lifetimeCap.toLocaleString()} (R{MAX_DAILY_RAND.toLocaleString()} × {days} days).</div>}
-    </Field>}
+      <div style={{fontSize:9,fontWeight:700,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Budget type</div>
+      <div style={{display:"flex",gap:8,marginBottom:18}}>
+        {[{k:"daily",n:"Daily budget"},{k:"lifetime",n:"Lifetime budget"}].map(function(b){
+          var on = draft.budgetMode === b.k;
+          return <div key={b.k} onClick={function(){ update({ budgetMode: b.k }); }} style={{padding:"10px 18px",border:"1px solid "+(on?P.solar:P.rule),background:on?P.solar+"15":"transparent",borderRadius:10,cursor:"pointer",fontSize:11,fontWeight:800,color:on?P.solar:(P.label||P.sub),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>
+            {b.n}
+          </div>;
+        })}
+      </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-      <Field label="Start date (SAST)" fm={fm} P={P}>
-        <input type="date" value={draft.startDate} onChange={function(e){ update({ startDate: e.target.value }); }} style={inputStyle(P, fm)}/>
-      </Field>
-      <Field label={isLifetime ? "End date (SAST, required)" : "End date (SAST, optional, blank = open ended)"} fm={fm} P={P}>
-        <input type="date" value={draft.endDate} onChange={function(e){ update({ endDate: e.target.value }); }} style={inputStyle(P, fm)}/>
-      </Field>
-    </div>
-    <div style={{marginTop:10,fontSize:10,color:P.label||P.sub,fontFamily:fm,lineHeight:1.6}}>
-      Times are interpreted in South African Standard Time (UTC+2). Campaigns starting today auto-bump to "now + 15 min" if the picked time has already passed.
-    </div>
-  </Glass>;
+      {!isLifetime && <Field label={"Daily budget (ZAR, max R" + MAX_DAILY_RAND.toLocaleString() + ")"} fm={fm} P={P}
+        hint={draft.funding === "CBO" ? "Spent at campaign level, Meta routes to ad sets." : "Spent at ad-set level, fixed for this audience."}>
+        <input type="number" min={1} max={MAX_DAILY_RAND} step={50}
+          value={draft.dailyBudgetRand}
+          onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 0; update({ dailyBudgetRand: Math.max(0, Math.min(MAX_DAILY_RAND, v)) }); }}
+          style={Object.assign({}, inputStyle(P, fm), dailyOver ? { borderColor: P.critical || "#ef4444" } : {})}/>
+        {dailyOver && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Daily budget cannot exceed R{MAX_DAILY_RAND.toLocaleString()}, server will reject this.</div>}
+      </Field>}
+
+      {isLifetime && <Field label={"Lifetime budget (ZAR, max R" + lifetimeCap.toLocaleString() + (days ? " over " + days + " days" : "") + ")"} fm={fm} P={P}>
+        <input type="number" min={1} step={100}
+          value={draft.lifetimeBudgetRand}
+          onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 0; update({ lifetimeBudgetRand: Math.max(0, v) }); }}
+          style={Object.assign({}, inputStyle(P, fm), lifetimeOver ? { borderColor: P.critical || "#ef4444" } : {})}/>
+        {!draft.endDate && <div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:6}}>End date required for a lifetime budget.</div>}
+        {lifetimeOver && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>Lifetime budget cannot exceed R{lifetimeCap.toLocaleString()} (R{MAX_DAILY_RAND.toLocaleString()} × {days} days).</div>}
+      </Field>}
+    </Glass>
+
+    <Glass accent={P.solar} st={{padding:24}}>
+      <div style={{fontSize:13,fontWeight:800,color:P.solar,letterSpacing:2,fontFamily:fm,marginBottom:14,textTransform:"uppercase"}}>Schedule</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Field label="Start date (SAST, 08:00 launch)" fm={fm} P={P} hint="All campaigns launch at 08:00 SAST on the chosen date.">
+          <input type="date" value={draft.startDate} onChange={function(e){ update({ startDate: e.target.value }); }} style={inputStyle(P, fm)}/>
+        </Field>
+        <Field label={isLifetime ? "End date (SAST, required)" : "End date (SAST, optional, blank = open ended)"} fm={fm} P={P}>
+          <input type="date" value={draft.endDate} onChange={function(e){ update({ endDate: e.target.value }); }} style={inputStyle(P, fm)}/>
+        </Field>
+      </div>
+      <div style={{marginTop:12,padding:"10px 14px",background:P.solar+"08",border:"1px solid "+P.solar+"30",borderLeft:"3px solid "+P.solar,borderRadius:"0 10px 10px 0",fontSize:11,color:P.label||P.sub,fontFamily:fm,lineHeight:1.7}}>
+        Hard launch time: <strong style={{color:P.txt}}>08:00 SAST</strong> on {draft.startDate || "—"}. If 08:00 has already passed today the start auto-bumps to "now + 15 min".
+      </div>
+    </Glass>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 5: Tracking
+// Step 5: Tracking.
 
 function Step5(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
   var draft = props.draft, update = props.update, pixels = props.pixels;
   return <Glass accent={P.mint} st={{padding:26}}>
-    <Field label="Pixel" fm={fm} P={P} hint="Optional. Required only for the Sales objective. The pixel measures conversions on your site.">
+    <Field label="Pixel" fm={fm} P={P} hint="Optional. Required only for the Sales objective.">
       <Select P={P} fm={fm}
         value={draft.pixelId}
         placeholder={pixels.loading ? "Loading..." : "— No pixel —"}
         options={[{ value: "", label: "— No pixel —" }].concat((pixels.items || []).map(function(p){ return { value: p.pixelId, label: p.name }; }))}
         onChange={function(v){ update({ pixelId: v }); }}/>
     </Field>
-    {draft.objective === "OUTCOME_SALES" && <Field label="Conversion event" fm={fm} P={P} hint="Which event Meta optimizes toward. Should match an event your pixel actually fires.">
+    {draft.objective === "OUTCOME_SALES" && <Field label="Conversion event" fm={fm} P={P} hint="Should match an event your pixel actually fires.">
       <Select P={P} fm={fm}
         value={draft.conversionEvent}
         options={["PURCHASE","ADD_TO_CART","INITIATE_CHECKOUT","LEAD","COMPLETE_REGISTRATION","ADD_PAYMENT_INFO"].map(function(c){ return { value: c, label: c.replace(/_/g," ") }; })}
         onChange={function(v){ update({ conversionEvent: v }); }}/>
     </Field>}
-    <Field label="URL parameters" fm={fm} P={P} hint="Optional. Appended to the destination URL so you can track in Google Analytics or similar. No leading ? — we'll add it.">
+    <Field label="URL parameters" fm={fm} P={P} hint="Optional. Appended to the destination URL. No leading ? — we'll add it.">
       <input value={draft.urlTags} onChange={function(e){ update({ urlTags: e.target.value }); }} placeholder="utm_source=fb&utm_medium=paid&utm_campaign=may26" style={inputStyle(P, fm)}/>
     </Field>
   </Glass>;
 }
 
 // ---------------------------------------------------------------------------
-// Step 6: Review
+// Step 6: Review.
 
 function Step6(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
   var draft = props.draft, accounts = props.accounts, pages = props.pages, instagrams = props.instagrams, pixels = props.pixels;
+  var savedAudiences = props.savedAudiences || { items: [] };
 
   var accName = (accounts.items.find(function(a){return a.accountId===draft.accountId;}) || {}).name || draft.accountId;
   var pageName = (pages.items.find(function(p){return p.pageId===draft.pageId;}) || {}).name || draft.pageId;
@@ -869,14 +1210,20 @@ function Step6(props) {
   var pxName = draft.pixelId ? ((pixels.items.find(function(p){return p.pixelId===draft.pixelId;}) || {}).name || draft.pixelId) : "(none)";
 
   var platformLabel = { fb_only: "Facebook only", fb_ig: "Facebook + Instagram", ig_only: "Instagram only" }[draft.platformMode] || draft.platformMode;
-  var budgetRow = draft.budgetMode === "lifetime"
-    ? ["Lifetime budget", "R" + draft.lifetimeBudgetRand.toLocaleString() + " over " + lifetimeDays(draft.startDate, draft.endDate) + " days"]
-    : ["Daily budget", "R" + draft.dailyBudgetRand.toLocaleString() + (draft.dailyBudgetRand >= MAX_DAILY_RAND ? " (at ceiling)" : "")];
+  var budgetLabel = draft.budgetMode === "lifetime"
+    ? "R" + draft.lifetimeBudgetRand.toLocaleString() + " lifetime over " + lifetimeDays(draft.startDate, draft.endDate) + " days (" + draft.funding + ")"
+    : "R" + draft.dailyBudgetRand.toLocaleString() + "/day (" + draft.funding + ")" + (draft.dailyBudgetRand >= MAX_DAILY_RAND ? " (at ceiling)" : "");
+
+  var savedNames = (draft.audience.savedAudienceIds || []).concat(draft.audience.customAudienceIds || []).map(function(id){
+    var match = (savedAudiences.items || []).find(function(x){ return x.id === id; });
+    return match ? (match.kind === "custom" ? "[CA] " : "[SA] ") + match.name : id;
+  });
 
   var rows = [
     ["Account", accName],
-    ["Objective", draft.objective],
-    ["Campaign name", draft.campaignName],
+    ["Campaign name", props.generatedCampaignName],
+    ["Ad set name", props.generatedAdsetName],
+    ["Objective", draft.objective + " (" + ((OBJECTIVES.find(function(o){return o.id===draft.objective;})||{}).code || "?") + ")"],
     ["Platform", platformLabel],
     ["Page", pageName],
     ["Instagram", igName],
@@ -896,26 +1243,39 @@ function Step6(props) {
       if (excludeParts.length) out += "  ·  EXCLUDED: " + excludeParts.join(", ");
       return out;
     })()],
+    ["Saved / custom audiences", savedNames.length ? savedNames.join(", ") : "(none)"],
+    ["Engaged community",
+      (draft.audience.targetCommunity && draft.audience.targetCommunity.fans) ? "Page fans only" : "(off)"],
     ["Detailed targeting", (draft.audience.targetingItems && draft.audience.targetingItems.length > 0)
       ? draft.audience.targetingItems.map(function(t){ return t.name + " (" + t.type.replace(/_/g," ") + ")"; }).join(", ")
       : (draft.audience.flexibleSpec ? "(custom JSON)" : "(none)")],
     ["Placement", draft.placement.mode === "advantage" ? "Advantage+" : ("Manual: " + (draft.placement.platforms || []).join(", "))],
-    ["Creative", (draft.creative.kind === "image" ? "Image" : "Video") + " — " + draft.creative.headline],
-    ["CTA → URL", draft.creative.callToAction.replace(/_/g," ") + " → " + draft.creative.linkUrl],
-    budgetRow,
-    ["Schedule (SAST)", draft.startDate + (draft.endDate ? (" → " + draft.endDate) : " (open-ended)")],
-    ["Pixel", pxName],
-    ["URL params", draft.urlTags || "(none)"]
+    ["Creative mode", draft.creativeMode],
+    ["Multi-advertiser ads", draft.multiAdvertiserAds ? "ON (opt-in)" : "OFF"]
   ];
+
+  // Per-ad rows
+  (draft.creatives || []).forEach(function(c, i){
+    var adName = composeAdName(c, i, draft);
+    rows.push([
+      "Ad #" + (i + 1),
+      adName + "  ·  " + (c.videoId ? "video" : "image") + "  ·  " + c.callToAction.replace(/_/g," ") + " → " + c.linkUrl
+    ]);
+  });
+
+  rows.push(["Budget", budgetLabel]);
+  rows.push(["Schedule (SAST 08:00)", draft.startDate + (draft.endDate ? (" → " + draft.endDate) : " (open-ended)")]);
+  rows.push(["Pixel", pxName]);
+  rows.push(["URL params", draft.urlTags || "(none)"]);
 
   return <Glass accent={P.ember} st={{padding:22}}>
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
       {Ic.bolt(P.ember,16)}
-      <span style={{fontSize:11,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Review and create</span>
+      <span style={{fontSize:11,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Review and launch</span>
     </div>
     <div style={{borderTop:"1px solid "+P.rule}}>
       {rows.map(function(r, i){
-        return <div key={i} style={{display:"grid",gridTemplateColumns:"170px 1fr",gap:10,padding:"10px 4px",borderBottom:"1px solid "+P.rule}}>
+        return <div key={i} style={{display:"grid",gridTemplateColumns:"190px 1fr",gap:10,padding:"10px 4px",borderBottom:"1px solid "+P.rule}}>
           <div style={{fontSize:10,fontWeight:700,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>{r[0]}</div>
           <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.5,wordBreak:"break-word"}}>{r[1]}</div>
         </div>;
@@ -925,9 +1285,9 @@ function Step6(props) {
       <div style={{fontSize:11,color:P.mint,fontFamily:fm,fontWeight:800,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>Safe by default</div>
       <ul style={{margin:0,padding:"0 0 0 20px",fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.9}}>
         <li>Every campaign is created <strong>paused</strong>. Nothing serves until you review and unpause in Ads Manager.</li>
-        <li>Daily budgets are capped at <strong>R{MAX_DAILY_RAND.toLocaleString()}/day</strong>. Lifetime budgets are capped at R{MAX_DAILY_RAND.toLocaleString()} × campaign duration. The cap is enforced server-side, not just in the UI.</li>
+        <li>Daily budgets are capped at <strong>R{MAX_DAILY_RAND.toLocaleString()}/day</strong>. Lifetime budgets at R{MAX_DAILY_RAND.toLocaleString()} × campaign duration. Enforced server-side.</li>
         <li>Only allowlisted ad accounts can be used to create campaigns from this tab.</li>
-        <li>An email summary is drafted in Gary's Gmail inbox (when Gmail OAuth is configured) so the team has a record of every campaign created.</li>
+        <li>An email summary is drafted in Gary's Gmail inbox so the team has a record of every campaign created.</li>
       </ul>
     </div>
   </Glass>;
@@ -938,6 +1298,7 @@ function Step6(props) {
 
 function SuccessScreen(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, result = props.result;
+  var ads = result.ads || (result.adId ? [{ adId: result.adId, name: "Ad" }] : []);
   return <div>
     <Glass accent={P.mint} st={{padding:28}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
@@ -950,8 +1311,10 @@ function SuccessScreen(props) {
       <div style={{fontFamily:fm,fontSize:11,color:P.label||P.sub,lineHeight:2}}>
         <div>campaign_id: <span style={{color:P.txt}}>{result.campaignId}</span></div>
         <div>adset_id: <span style={{color:P.txt}}>{result.adsetId}</span></div>
-        <div>ad_id: <span style={{color:P.txt}}>{result.adId}</span></div>
-        <div>email_draft: <span style={{color:P.txt}}>{result.emailDraft && result.emailDraft.ok ? ("created (" + result.emailDraft.draftId + ")") : ("skipped — " + ((result.emailDraft && result.emailDraft.reason) || "unknown"))}</span></div>
+        {ads.map(function(a, i){
+          return <div key={i}>ad #{i+1} ({a.name}): <span style={{color:P.txt}}>{a.adId}</span></div>;
+        })}
+        <div>email_draft: <span style={{color:P.txt}}>{result.emailDraft && result.emailDraft.ok ? ("created (" + result.emailDraft.draftId + ")") : ("skipped, " + ((result.emailDraft && result.emailDraft.reason) || "unknown"))}</span></div>
       </div>
       <div style={{marginTop:20,display:"flex",gap:10}}>
         <a href={result.adsManagerUrl} target="_blank" rel="noreferrer" style={{background:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 22px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:"pointer",textDecoration:"none"}}>
@@ -985,18 +1348,7 @@ function inputStyle(P, fm, extra) {
 }
 function selectStyle(P, fm) { return Object.assign({}, inputStyle(P, fm), { padding: "12px 14px" }); }
 
-// Compute a fixed-position popover anchored to a trigger element. The
-// popover escapes any ancestor with overflow:hidden (notably the Glass card
-// which clipped the dropdown before this fix), and auto-flips upward when
-// there isn't enough space below. Returns a style object to spread onto
-// the popover div, or null until the first measurement lands.
-//
-// IMPORTANT: this hook measures ONCE on open and on window resize — not on
-// every scroll. Re-measuring on scroll causes flicker / jitter because each
-// measurement is a React re-render. Instead, when the page scrolls outside
-// the popover we close it (standard native <select> behaviour). Scroll
-// events that originate INSIDE the popover (the user paging through a long
-// list) are ignored via the data-popover attribute.
+// Compute a fixed-position popover anchored to a trigger element.
 function useAnchoredPopover(triggerRef, open, opts) {
   opts = opts || {};
   var posS = useState(null), pos = posS[0], setPos = posS[1];
@@ -1023,8 +1375,6 @@ function useAnchoredPopover(triggerRef, open, opts) {
     measure();
     var onResize = function(){ measure(); };
     var onOuterScroll = function(e){
-      // Scrolls inside the popover itself shouldn't close it. The popover
-      // div carries data-popover="true" so we can detect & ignore them.
       var t = e.target;
       if (t && t.closest && t.closest && t.closest('[data-popover="true"]')) return;
       if (onClose) onClose();
@@ -1039,10 +1389,6 @@ function useAnchoredPopover(triggerRef, open, opts) {
   return pos;
 }
 
-// Custom Select dropdown — replaces native <select> so we can style the open
-// state (native dropdowns inherit OS chrome and ignore most of our CSS, which
-// is where the muddy grey came from). Uses fixed positioning so the popover
-// can extend past Glass card boundaries; auto-flips upward when needed.
 function Select(props) {
   var P = props.P, fm = props.fm;
   var openS = useState(false), open = openS[0], setOpen = openS[1];
@@ -1080,92 +1426,89 @@ function Select(props) {
   </div>;
 }
 
-// Custom MultiSelect with optional search — used for countries (where the
-// list is long and search-by-name is essential). Selected items render as
-// chips above the input. Click chip × to remove.
-function MultiSelect(props) {
-  var P = props.P, fm = props.fm;
-  var openS = useState(false), open = openS[0], setOpen = openS[1];
-  var qS = useState(""), q = qS[0], setQ = qS[1];
-  var triggerRef = useRef(null);
-  var pos = useAnchoredPopover(triggerRef, open, { gap: 6, onClose: function(){ setOpen(false); } });
-  var values = props.value || [];
-  var options = props.options || [];
-  var filtered = q.trim() ? options.filter(function(o){
-    return o.label.toLowerCase().indexOf(q.toLowerCase()) >= 0 || o.value.toLowerCase().indexOf(q.toLowerCase()) >= 0;
-  }) : options;
-  var toggle = function(v){
-    var next = values.indexOf(v) >= 0 ? values.filter(function(x){ return x !== v; }) : values.concat([v]);
-    props.onChange(next);
-  };
-  var labelFor = function(v){ var o = options.find(function(x){ return x.value === v; }); return o ? o.label : v; };
-  var popoverStyle = pos ? Object.assign({}, pos, {
-    background: "rgba(15,8,22,0.98)", border: "1px solid " + P.rule,
-    borderRadius: 10, overflowY: "auto", zIndex: 1000,
-    boxShadow: "0 12px 40px rgba(0,0,0,0.6)"
-  }) : null;
-  return <div style={{position:"relative"}}>
-    <div ref={triggerRef} onClick={function(){ if (!props.disabled) setOpen(!open); }}
-      style={Object.assign({}, inputStyle(P, fm), {
-        cursor: props.disabled ? "not-allowed" : "pointer",
-        minHeight: 48, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center"
-      })}>
-      {values.length === 0 && <span style={{color:P.label||P.sub}}>{props.placeholder || "— Choose —"}</span>}
-      {values.map(function(v){
-        return <span key={v} onClick={function(e){ e.stopPropagation(); toggle(v); }} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",background:P.ember+"20",border:"1px solid "+P.ember+"50",borderRadius:6,fontSize:12,color:P.txt,fontFamily:fm,cursor:"pointer"}}>
-          {labelFor(v)} <span style={{color:P.ember,fontWeight:900}}>×</span>
-        </span>;
-      })}
-      <span style={{marginLeft:"auto",color:P.label||P.sub,fontSize:11}}>{open ? "▲" : "▼"}</span>
+// Toggle row — used for Engaged Community switches.
+function ToggleRow(props) {
+  var P = props.P, fm = props.fm, accent = props.accent || P.ember;
+  var on = !!props.on, disabled = !!props.disabled;
+  return <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,padding:"12px 14px",background:"rgba(20,12,30,0.5)",border:"1px solid "+(on?accent+"50":P.rule),borderRadius:10,opacity:disabled?0.7:1}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:0.5,marginBottom:4}}>{props.title}</div>
+      <div style={{fontSize:11,color:P.label||P.sub,fontFamily:"inherit",lineHeight:1.6}}>{props.sub}</div>
     </div>
-    {open && popoverStyle && <div data-popover="true" style={popoverStyle}>
-      {props.searchable && <input value={q} onChange={function(e){ setQ(e.target.value); }} placeholder="Search..." style={Object.assign({}, inputStyle(P, fm), { borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, borderBottom: "1px solid " + P.rule, position: "sticky", top: 0, zIndex: 1 })}/>}
-      {filtered.length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
-      {filtered.map(function(o){
-        var on = values.indexOf(o.value) >= 0;
-        return <div key={o.value} onClick={function(){ toggle(o.value); }}
-          style={{padding:"10px 16px",cursor:"pointer",borderBottom:"1px solid "+P.rule,background:on?P.ember+"15":"transparent",color:on?P.ember:P.txt,fontSize:13,fontFamily:fm,display:"flex",justifyContent:"space-between",gap:10}}>
-          <span style={{fontWeight:on?700:500}}>{o.label}</span>
-          {on && <span style={{color:P.ember,fontWeight:900}}>✓</span>}
-        </div>;
-      })}
-    </div>}
-    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:999}}/>}
+    <div onClick={function(){ if (!disabled && props.onToggle) props.onToggle(); }}
+      style={{width:46,height:24,borderRadius:12,background:on?"linear-gradient(135deg,"+accent+","+accent+"99)":P.dim,position:"relative",cursor:disabled?"not-allowed":"pointer",flexShrink:0,transition:"background 0.2s"}}>
+      <div style={{position:"absolute",top:2,left:on?24:2,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+    </div>
   </div>;
 }
 
-// ISO 3166-1 alpha-2 country list, alphabetical by name. Used by the country
-// MultiSelect on Step 1. Subset of common Meta-supported markets — Meta accepts
-// most but a few (sanctioned regions etc.) are excluded server-side anyway.
-var COUNTRIES = [
-  { value: "AF", label: "Afghanistan" }, { value: "AL", label: "Albania" }, { value: "DZ", label: "Algeria" },
-  { value: "AR", label: "Argentina" }, { value: "AU", label: "Australia" }, { value: "AT", label: "Austria" },
-  { value: "BD", label: "Bangladesh" }, { value: "BE", label: "Belgium" }, { value: "BR", label: "Brazil" },
-  { value: "BG", label: "Bulgaria" }, { value: "CA", label: "Canada" }, { value: "CL", label: "Chile" },
-  { value: "CN", label: "China" }, { value: "CO", label: "Colombia" }, { value: "HR", label: "Croatia" },
-  { value: "CZ", label: "Czechia" }, { value: "DK", label: "Denmark" }, { value: "EG", label: "Egypt" },
-  { value: "EE", label: "Estonia" }, { value: "ET", label: "Ethiopia" }, { value: "FI", label: "Finland" },
-  { value: "FR", label: "France" }, { value: "DE", label: "Germany" }, { value: "GH", label: "Ghana" },
-  { value: "GR", label: "Greece" }, { value: "HK", label: "Hong Kong" }, { value: "HU", label: "Hungary" },
-  { value: "IS", label: "Iceland" }, { value: "IN", label: "India" }, { value: "ID", label: "Indonesia" },
-  { value: "IE", label: "Ireland" }, { value: "IL", label: "Israel" }, { value: "IT", label: "Italy" },
-  { value: "JP", label: "Japan" }, { value: "KE", label: "Kenya" }, { value: "KR", label: "Korea, South" },
-  { value: "LV", label: "Latvia" }, { value: "LT", label: "Lithuania" }, { value: "LU", label: "Luxembourg" },
-  { value: "MY", label: "Malaysia" }, { value: "MX", label: "Mexico" }, { value: "MA", label: "Morocco" },
-  { value: "MZ", label: "Mozambique" }, { value: "NA", label: "Namibia" }, { value: "NL", label: "Netherlands" },
-  { value: "NZ", label: "New Zealand" }, { value: "NG", label: "Nigeria" }, { value: "NO", label: "Norway" },
-  { value: "PK", label: "Pakistan" }, { value: "PE", label: "Peru" }, { value: "PH", label: "Philippines" },
-  { value: "PL", label: "Poland" }, { value: "PT", label: "Portugal" }, { value: "RO", label: "Romania" },
-  { value: "SA", label: "Saudi Arabia" }, { value: "SG", label: "Singapore" }, { value: "SK", label: "Slovakia" },
-  { value: "SI", label: "Slovenia" }, { value: "ZA", label: "South Africa" }, { value: "ES", label: "Spain" },
-  { value: "SE", label: "Sweden" }, { value: "CH", label: "Switzerland" }, { value: "TW", label: "Taiwan" },
-  { value: "TZ", label: "Tanzania" }, { value: "TH", label: "Thailand" }, { value: "TR", label: "Türkiye" },
-  { value: "UG", label: "Uganda" }, { value: "UA", label: "Ukraine" }, { value: "AE", label: "United Arab Emirates" },
-  { value: "GB", label: "United Kingdom" }, { value: "US", label: "United States" }, { value: "VN", label: "Vietnam" },
-  { value: "ZM", label: "Zambia" }, { value: "ZW", label: "Zimbabwe" }
-];
+// Saved + custom audiences picker. Lists everything for the account in two
+// groups, click a row to toggle. Multi-select.
+function SavedAudiencePicker(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var sa = props.savedAudiences;
+  var saved = props.selectedSaved || [], custom = props.selectedCustom || [];
 
-// Range helper for age dropdowns (13–65, Meta's hard limits)
+  if (sa.loading) return <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm}}>Loading audiences...</div>;
+  if (sa.error) return <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm}}>{sa.error}</div>;
+  if (!sa.items || sa.items.length === 0) return <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm,padding:"10px 14px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:10}}>No saved or custom audiences for this account yet. Build them in Ads Manager → Audiences and they'll appear here.</div>;
+
+  var custItems = sa.items.filter(function(x){ return x.kind === "custom"; });
+  var savedItems = sa.items.filter(function(x){ return x.kind === "saved"; });
+
+  var toggle = function(id, kind){
+    if (kind === "custom") {
+      var next = custom.indexOf(id) >= 0 ? custom.filter(function(x){ return x !== id; }) : custom.concat([id]);
+      props.onChange(saved, next);
+    } else {
+      var next2 = saved.indexOf(id) >= 0 ? saved.filter(function(x){ return x !== id; }) : saved.concat([id]);
+      props.onChange(next2, custom);
+    }
+  };
+
+  var fmtSize = function(item){
+    if (!item.sizeLower && !item.sizeUpper) return "";
+    var lo = item.sizeLower || 0, hi = item.sizeUpper || 0;
+    var fmt = function(n){ if (n >= 1e6) return (n/1e6).toFixed(1) + "M"; if (n >= 1e3) return (n/1e3).toFixed(0) + "K"; return String(n); };
+    if (lo && hi) return fmt(lo) + "–" + fmt(hi);
+    return "~" + fmt(hi || lo);
+  };
+
+  var renderItem = function(item){
+    var on = (item.kind === "custom" ? custom : saved).indexOf(item.id) >= 0;
+    var color = item.kind === "custom" ? P.mint : P.cyan;
+    return <div key={item.kind + ":" + item.id} onClick={function(){ toggle(item.id, item.kind); }}
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",border:"1px solid "+(on?color+"50":P.rule),background:on?color+"15":"rgba(20,12,30,0.4)",borderRadius:8,marginBottom:6}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1.2,textTransform:"uppercase",fontFamily:fm}}>{item.kind === "custom" ? (item.subtype || "CUSTOM") : "SAVED"}</span>
+          <span style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</span>
+        </div>
+        {item.sentence && <div style={{fontSize:10,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.sentence}</div>}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        {fmtSize(item) && <span style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{fmtSize(item)}</span>}
+        {on && <span style={{color:color,fontWeight:900,fontSize:14}}>✓</span>}
+      </div>
+    </div>;
+  };
+
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    {custItems.length > 0 && <div>
+      <div style={{fontSize:10,fontWeight:800,color:P.mint,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Custom audiences ({custItems.length})</div>
+      {custItems.map(renderItem)}
+    </div>}
+    {savedItems.length > 0 && <div>
+      <div style={{fontSize:10,fontWeight:800,color:P.cyan,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Saved audiences ({savedItems.length})</div>
+      {savedItems.map(renderItem)}
+    </div>}
+  </div>;
+}
+
+// ISO 3166-1 country list — kept for compatibility with any consumers that
+// import the COUNTRIES symbol; the wizard itself uses location-search instead.
+var COUNTRIES = [];
+
 function rangeOptions(min, max) {
   var out = [];
   for (var i = min; i <= max; i++) out.push({ value: String(i), label: String(i) });
@@ -1173,25 +1516,13 @@ function rangeOptions(min, max) {
 }
 
 // ---------------------------------------------------------------------------
-// TargetingPicker: search-as-you-type from Meta's targeting taxonomy.
-//
-// Hits /api/create/targeting-search with a 250 ms debounce. Selected items
-// render as chips in their type colour (interests / behaviors / demographics
-// each get a distinct accent so the user can scan AND-vs-OR groupings at a
-// glance). Audience size estimates from Meta come back per item — shown
-// faded so power users can pick wider/narrower audiences with intent.
+// TargetingPicker
 
 var TARGETING_TYPE_COLORS = {
-  interests: "#A855F7",        // orchid
-  behaviors: "#34D399",        // mint
-  demographics: "#22D3EE",     // cyan
-  work_positions: "#FFAA00",   // solar
-  work_employers: "#FFAA00",
-  education_majors: "#FF6B00", // ember
-  education_schools: "#FF6B00",
-  family_statuses: "#F43F5E",  // rose
-  life_events: "#D946EF",      // fuchsia
-  income: "#34D399"
+  interests: "#A855F7", behaviors: "#34D399", demographics: "#22D3EE",
+  work_positions: "#FFAA00", work_employers: "#FFAA00",
+  education_majors: "#FF6B00", education_schools: "#FF6B00",
+  family_statuses: "#F43F5E", life_events: "#D946EF", income: "#34D399"
 };
 
 function TargetingPicker(props) {
@@ -1204,8 +1535,6 @@ function TargetingPicker(props) {
   var openS = useState(false), open = openS[0], setOpen = openS[1];
   var classS = useState(""), cls = classS[0], setCls = classS[1];
 
-  // Debounce so we don't hammer Meta's search on every keystroke. 250 ms
-  // strikes the usual balance between responsiveness and request volume.
   var debounceRef = useRef(null);
   useEffect(function(){
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1300,16 +1629,7 @@ function TargetingPicker(props) {
   </div>;
 }
 
-// LocationPicker: rich location targeting. Two parallel pickers stacked:
-//   - Geographic locations: search-as-you-type across countries, regions,
-//     cities, suburbs (subcities), neighborhoods, postal codes. Multi-select
-//     chips with country flag prefix where useful.
-//   - Proximity radius pins: type an address (or "lat, lng" coordinates),
-//     resolve via /api/create/geocode, set a radius (1-80 km), add as a
-//     pin. Multiple pins supported — Meta unions them at the adset level.
-//
-// The combined output is { geographies: [...], customLocations: [...] }
-// which the campaign endpoint converts to Meta's geo_locations shape.
+// LocationPicker
 function LocationPicker(props) {
   var P = props.P, ff = props.ff, fm = props.fm;
   var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
@@ -1319,9 +1639,6 @@ function LocationPicker(props) {
     var existing = locations.geographies || [];
     var idx = existing.findIndex(function(x){ return x.key === item.key && x.type === item.type; });
     if (idx >= 0) {
-      // Already in the list — flip its exclude flag if the user is adding
-      // it from the opposite section (handles the "I want to flip Sandton
-      // from include to exclude" workflow without forcing remove + re-add).
       if (existing[idx].exclude !== asExclude) {
         var next = existing.slice();
         next[idx] = Object.assign({}, next[idx], { exclude: asExclude });
@@ -1369,7 +1686,7 @@ function LocationPicker(props) {
       mode="include"
       title="Include these locations"
       hint={(includeGeos.some(function(g){ return g.type === "country"; }) && (locations.customLocations || []).filter(function(p){ return !p.exclude; }).length > 0)
-        ? "Tip: a country plus a proximity radius pin overlap. Meta will reject the country and serve only inside your pin's radius — remove the country chip if you want country-wide reach to be your fallback, or keep it and accept the radius narrows it."
+        ? "Tip: a country plus a proximity radius pin overlap. Meta will reject the country and serve only inside your pin's radius, remove the country chip if you want country-wide reach to be your fallback."
         : null}
       placeholder="Search countries, regions, cities, suburbs, postal codes..."
       geographies={includeGeos}
@@ -1380,8 +1697,8 @@ function LocationPicker(props) {
     <GeoSearcher P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} accountId={accountId}
       mode="exclude"
       title="Exclude these locations"
-      hint="Carve out low-value or off-strategy areas from the include set above. Common use: 15 km proximity pin around a store, then exclude two adjacent low-value suburbs from that radius."
-      placeholder="Search areas to EXCLUDE — suburbs, postal codes, regions..."
+      hint="Carve out low-value or off-strategy areas from the include set above."
+      placeholder="Search areas to EXCLUDE, suburbs, postal codes, regions..."
       geographies={excludeGeos}
       onAdd={function(item){ addGeography(item, true); }}
       onRemove={removeGeography}/>
@@ -1389,15 +1706,9 @@ function LocationPicker(props) {
 }
 
 var GEO_TYPE_COLORS = {
-  country: "#34D399",        // mint
-  region: "#22D3EE",         // cyan
-  city: "#A855F7",           // orchid
-  subcity: "#D946EF",        // fuchsia
-  neighborhood: "#FF6B00",   // ember
-  zip: "#FFAA00",            // solar
-  country_group: "#34D399",
-  geo_market: "#22D3EE",
-  electoral_district: "#7C3AED"
+  country: "#34D399", region: "#22D3EE", city: "#A855F7", subcity: "#D946EF",
+  neighborhood: "#FF6B00", zip: "#FFAA00", country_group: "#34D399",
+  geo_market: "#22D3EE", electoral_district: "#7C3AED"
 };
 var GEO_TYPE_LABELS = {
   country: "Country", region: "Region", city: "City", subcity: "Suburb",
@@ -1499,7 +1810,6 @@ function ProximityPinPicker(props) {
     var query = q.trim();
     if (!query) return;
     setResults({ loading: true, results: [], error: "" });
-    // Detect "lat, lng" coordinate paste pattern and skip the geocoder.
     var coordMatch = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
     if (coordMatch) {
       var lat = parseFloat(coordMatch[1]), lng = parseFloat(coordMatch[2]);
@@ -1530,7 +1840,7 @@ function ProximityPinPicker(props) {
   return <div>
     <div style={{fontSize:11,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Proximity radius (pins)</div>
     <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:10}}>
-      Type a store address, suburb, or "latitude, longitude" coordinates. Pick a result, set the radius, click Add. Each pin is independent — Meta will serve in any of the radii you add.
+      Type a store address, suburb, or "latitude, longitude" coordinates. Pick a result, set the radius, click Add. Each pin is independent, Meta serves in any of the radii you add.
     </div>
     <div style={{display:"flex",gap:8,marginBottom:10}}>
       <input value={q} onChange={function(e){ setQ(e.target.value); }}
@@ -1581,10 +1891,6 @@ function ProximityPinPicker(props) {
   </div>;
 }
 
-// AudienceSuggester: natural-language audience description → Claude generates
-// candidate Meta targeting terms → server resolves each to a real Meta ID via
-// targetingsearch → wizard shows suggestions with Add buttons. Eliminates the
-// "I don't know what to type into the targeting search" cold start.
 function AudienceSuggester(props) {
   var P = props.P, ff = props.ff, fm = props.fm;
   var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
@@ -1673,6 +1979,139 @@ function Pillgrid(props) {
       })}
     </div>
   </div>;
+}
+
+// ---------------------------------------------------------------------------
+// Naming convention helpers
+
+function emptyCreative() {
+  return {
+    kind: "image",
+    imageHash: null, videoId: null,
+    headline: "", primaryText: "", description: "",
+    linkUrl: "", callToAction: "LEARN_MORE",
+    filename: null, previewDataUrl: null,
+    concept: "", version: "V01"
+  };
+}
+
+// Sanitise a single name part: uppercase, allow only A-Z 0-9 dash, strip
+// underscores so they don't confuse the joiner, trim length.
+function sanitiseNamePart(s, maxLen) {
+  s = String(s || "").replace(/[^a-zA-Z0-9-]/g, "").toUpperCase();
+  if (typeof maxLen === "number") s = s.slice(0, maxLen);
+  return s;
+}
+
+function ymCodeFromDate(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  return iso.slice(0, 4) + iso.slice(5, 7);
+}
+
+// Geo code derived from the include locations. Picks the most specific
+// non-country bucket (city/suburb beats region beats country). For pure
+// country picks, returns ZA (or 1st country code). For radius pins,
+// returns RADIUS{km}KM. For a mix, returns MULTI.
+function geoCodeFromLocations(loc) {
+  if (!loc) return "";
+  var includeGeos = (loc.geographies || []).filter(function(g){ return !g.exclude; });
+  var includePins = (loc.customLocations || []).filter(function(p){ return !p.exclude; });
+
+  var cities = includeGeos.filter(function(g){ return g.type === "city" || g.type === "subcity" || g.type === "neighborhood"; });
+  var regions = includeGeos.filter(function(g){ return g.type === "region"; });
+  var countries = includeGeos.filter(function(g){ return g.type === "country"; });
+  var totalIncludes = includeGeos.length + includePins.length;
+
+  if (totalIncludes === 0) return "";
+  if (totalIncludes > 1 && (cities.length + regions.length + includePins.length) > 1) return "MULTI";
+
+  if (cities.length === 1 && regions.length + countries.length + includePins.length === 0) {
+    return shortCity(cities[0].name);
+  }
+  if (regions.length === 1 && cities.length + countries.length + includePins.length === 0) {
+    return sanitiseNamePart(regions[0].name, 8);
+  }
+  if (countries.length === 1 && cities.length + regions.length + includePins.length === 0) {
+    return countries[0].key || "";
+  }
+  if (includePins.length === 1 && cities.length + regions.length + countries.length === 0) {
+    return "RADIUS" + Math.round(includePins[0].radius || 0) + "KM";
+  }
+  return "MULTI";
+}
+
+// Map common ZA city names to 3-letter codes for naming convention. Anything
+// not on this list falls back to the first 4 letters uppercased.
+function shortCity(name) {
+  var s = String(name || "").trim();
+  var map = {
+    "Johannesburg": "JHB", "Sandton": "JHB", "Randburg": "JHB", "Roodepoort": "JHB",
+    "Cape Town": "CPT", "Bellville": "CPT", "Stellenbosch": "STB",
+    "Durban": "DBN", "Umhlanga": "DBN",
+    "Pretoria": "PTA", "Centurion": "PTA",
+    "Port Elizabeth": "PE", "Gqeberha": "PE",
+    "Bloemfontein": "BFN", "East London": "EL"
+  };
+  if (map[s]) return map[s];
+  return sanitiseNamePart(s, 6);
+}
+
+function demoCode(ageMin, ageMax, genders) {
+  var g = (!genders || genders.length === 0 || genders.length === 2) ? "A" : (genders[0] === 1 ? "M" : "F");
+  return (ageMin || 18) + "-" + (ageMax || 65) + g;
+}
+
+function placementCode(platformMode, placement) {
+  if (!placement || placement.mode === "advantage") return "ADV";
+  if (platformMode === "fb_only") return "FB";
+  if (platformMode === "ig_only") return "IG";
+  if (platformMode === "fb_ig") return "FBIG";
+  return "MANUAL";
+}
+
+function formatCode(c) {
+  if (c.videoId) return "VID";
+  if (c.imageHash && c.filename && /\.gif$/i.test(c.filename)) return "GIF";
+  return "IMG";
+}
+
+// Compose campaign name: {Client}_{Obj}_{Funding}_{Period}_{Variant}
+function composeCampaignName(draft) {
+  var obj = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
+  var parts = [
+    sanitiseNamePart(draft.clientCode, 8),
+    obj ? obj.code : "",
+    draft.funding || "",
+    ymCodeFromDate(draft.startDate),
+    sanitiseNamePart(draft.variant, 14)
+  ].filter(Boolean);
+  return parts.join("_");
+}
+
+// Compose ad-set name: {Audience}_{Geo}_{Demo}_{Placement}
+function composeAdsetName(draft) {
+  var a = draft.audience || {};
+  var parts = [
+    sanitiseNamePart(a.audienceLabel, 16),
+    geoCodeFromLocations(a.locations),
+    demoCode(a.ageMin, a.ageMax, a.genders),
+    placementCode(draft.platformMode, draft.placement)
+  ].filter(Boolean);
+  return parts.join("_");
+}
+
+// Compose ad name: {Format}_{Concept}_{Version} — for carousel mode the same
+// rule applies but we use card #1 as the canonical ad name.
+function composeAdName(creative, idx, draft) {
+  var fmt;
+  if (draft.creativeMode === "carousel") fmt = "CAR";
+  else fmt = formatCode(creative);
+  var parts = [
+    fmt,
+    sanitiseNamePart(creative.concept, 18),
+    sanitiseNamePart(creative.version, 6)
+  ].filter(Boolean);
+  return parts.join("_");
 }
 
 // ---------------------------------------------------------------------------
