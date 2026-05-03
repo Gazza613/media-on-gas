@@ -1457,12 +1457,14 @@ function SavedAudiencePicker(props) {
   var sa = props.savedAudiences;
   var saved = props.selectedSaved || [], custom = props.selectedCustom || [];
 
+  var openS = useState(false), open = openS[0], setOpen = openS[1];
+  var qS = useState(""), q = qS[0], setQ = qS[1];
+  var triggerRef = useRef(null);
+  var pos = useAnchoredPopover(triggerRef, open, { gap: 6, onClose: function(){ setOpen(false); } });
+
   if (sa.loading) return <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm}}>Loading audiences...</div>;
   if (sa.error) return <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm}}>{sa.error}</div>;
   if (!sa.items || sa.items.length === 0) return <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm,padding:"10px 14px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:10}}>No saved or custom audiences for this account yet. Build them in Ads Manager → Audiences and they'll appear here.</div>;
-
-  var custItems = sa.items.filter(function(x){ return x.kind === "custom"; });
-  var savedItems = sa.items.filter(function(x){ return x.kind === "saved"; });
 
   var toggle = function(id, kind){
     if (kind === "custom") {
@@ -1473,6 +1475,7 @@ function SavedAudiencePicker(props) {
       props.onChange(next2, custom);
     }
   };
+  var clearAll = function(){ props.onChange([], []); };
 
   var fmtSize = function(item){
     if (!item.sizeLower && !item.sizeUpper) return "";
@@ -1482,34 +1485,106 @@ function SavedAudiencePicker(props) {
     return "~" + fmt(hi || lo);
   };
 
-  var renderItem = function(item){
+  var totalSelected = saved.length + custom.length;
+  var selectedItems = sa.items.filter(function(x){
+    return (x.kind === "custom" ? custom : saved).indexOf(x.id) >= 0;
+  });
+
+  var query = q.trim().toLowerCase();
+  var matches = sa.items.filter(function(x){
+    if (!query) return true;
+    return (x.name || "").toLowerCase().indexOf(query) >= 0 ||
+           (x.sentence || "").toLowerCase().indexOf(query) >= 0 ||
+           (x.subtype || "").toLowerCase().indexOf(query) >= 0;
+  });
+  var custItems = matches.filter(function(x){ return x.kind === "custom"; });
+  var savedItems = matches.filter(function(x){ return x.kind === "saved"; });
+
+  var popoverStyle = pos ? Object.assign({}, pos, {
+    background: "rgba(15,8,22,0.98)", border: "1px solid " + P.rule,
+    borderRadius: 10, overflowY: "auto", zIndex: 1000,
+    boxShadow: "0 12px 40px rgba(0,0,0,0.6)"
+  }) : null;
+
+  var renderRow = function(item){
     var on = (item.kind === "custom" ? custom : saved).indexOf(item.id) >= 0;
     var color = item.kind === "custom" ? P.mint : P.cyan;
-    return <div key={item.kind + ":" + item.id} onClick={function(){ toggle(item.id, item.kind); }}
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",border:"1px solid "+(on?color+"50":P.rule),background:on?color+"15":"rgba(20,12,30,0.4)",borderRadius:8,marginBottom:6}}>
+    return <div key={item.kind + ":" + item.id}
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid "+P.rule,background:on?color+"10":"transparent"}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
           <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1.2,textTransform:"uppercase",fontFamily:fm}}>{item.kind === "custom" ? (item.subtype || "CUSTOM") : "SAVED"}</span>
           <span style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</span>
         </div>
         {item.sentence && <div style={{fontSize:10,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.sentence}</div>}
+        {fmtSize(item) && <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,marginTop:2}}>{fmtSize(item)} people</div>}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        {fmtSize(item) && <span style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{fmtSize(item)}</span>}
-        {on && <span style={{color:color,fontWeight:900,fontSize:14}}>✓</span>}
-      </div>
+      <button onClick={function(e){ e.stopPropagation(); toggle(item.id, item.kind); }}
+        style={{flexShrink:0,background:on?color+"25":"transparent",border:"1px solid "+(on?color+"60":P.rule),borderRadius:8,padding:"6px 14px",color:on?color:(P.label||P.sub),fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+        {on ? "Selected ✓" : "Select"}
+      </button>
     </div>;
   };
 
-  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
-    {custItems.length > 0 && <div>
-      <div style={{fontSize:10,fontWeight:800,color:P.mint,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Custom audiences ({custItems.length})</div>
-      {custItems.map(renderItem)}
+  return <div style={{position:"relative"}}>
+    {/* Trigger */}
+    <div ref={triggerRef} onClick={function(){ setOpen(!open); }}
+      style={Object.assign({}, inputStyle(P, fm), {
+        cursor: "pointer", display: "flex", alignItems: "center",
+        justifyContent: "space-between", minHeight: 48
+      })}>
+      <span style={{color: totalSelected > 0 ? P.txt : (P.label || P.sub), whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+        {totalSelected === 0
+          ? "— Pick saved or custom audiences —"
+          : totalSelected + " audience" + (totalSelected === 1 ? "" : "s") + " selected"}
+      </span>
+      <span style={{color: P.label || P.sub, marginLeft: 8, fontSize: 11}}>{open ? "▲" : "▼"}</span>
+    </div>
+
+    {/* Selected chips, shown below the trigger when any selection exists */}
+    {selectedItems.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+      {selectedItems.map(function(item){
+        var color = item.kind === "custom" ? P.mint : P.cyan;
+        return <span key={item.kind + ":" + item.id} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"5px 10px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:12,color:P.txt,fontFamily:fm}}>
+          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{item.kind === "custom" ? "CA" : "SA"}</span>
+          <span style={{maxWidth:240,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</span>
+          <span onClick={function(e){ e.stopPropagation(); toggle(item.id, item.kind); }}
+            style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,marginLeft:2,fontSize:14}}>×</span>
+        </span>;
+      })}
+      {totalSelected > 1 && <span onClick={clearAll}
+        style={{display:"inline-flex",alignItems:"center",padding:"5px 10px",border:"1px dashed "+(P.critical||"#ef4444")+"60",borderRadius:8,fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase",cursor:"pointer"}}>
+        Clear all
+      </span>}
     </div>}
-    {savedItems.length > 0 && <div>
-      <div style={{fontSize:10,fontWeight:800,color:P.cyan,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Saved audiences ({savedItems.length})</div>
-      {savedItems.map(renderItem)}
+
+    {/* Popover */}
+    {open && popoverStyle && <div data-popover="true" style={popoverStyle}>
+      <input value={q} onChange={function(e){ setQ(e.target.value); }}
+        placeholder="Search audiences..." autoFocus
+        style={{boxSizing:"border-box",width:"100%",background:"rgba(20,12,30,0.85)",border:"none",borderBottom:"1px solid "+P.rule,padding:"12px 16px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",position:"sticky",top:0,zIndex:1}}/>
+      {matches.length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
+      {custItems.length > 0 && <div>
+        <div style={{padding:"10px 14px 6px",fontSize:9,fontWeight:800,color:P.mint,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",position:"sticky",top:42,background:"rgba(15,8,22,0.98)",zIndex:1}}>
+          Custom audiences ({custItems.length})
+        </div>
+        {custItems.map(renderRow)}
+      </div>}
+      {savedItems.length > 0 && <div>
+        <div style={{padding:"10px 14px 6px",fontSize:9,fontWeight:800,color:P.cyan,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",position:"sticky",top:42,background:"rgba(15,8,22,0.98)",zIndex:1}}>
+          Saved audiences ({savedItems.length})
+        </div>
+        {savedItems.map(renderRow)}
+      </div>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderTop:"1px solid "+P.rule,background:"rgba(20,12,30,0.85)",position:"sticky",bottom:0}}>
+        <span style={{fontSize:11,color:P.label||P.sub,fontFamily:fm}}>{totalSelected} selected</span>
+        <button onClick={function(){ setOpen(false); }}
+          style={{background:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:8,padding:"6px 16px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
+          Done
+        </button>
+      </div>
     </div>}
+    {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:999}}/>}
   </div>;
 }
 
