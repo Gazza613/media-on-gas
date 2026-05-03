@@ -1368,6 +1368,9 @@ function LocationPicker(props) {
     <GeoSearcher P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} accountId={accountId}
       mode="include"
       title="Include these locations"
+      hint={(includeGeos.some(function(g){ return g.type === "country"; }) && (locations.customLocations || []).filter(function(p){ return !p.exclude; }).length > 0)
+        ? "Tip: a country plus a proximity radius pin overlap. Meta will reject the country and serve only inside your pin's radius — remove the country chip if you want country-wide reach to be your fallback, or keep it and accept the radius narrows it."
+        : null}
       placeholder="Search countries, regions, cities, suburbs, postal codes..."
       geographies={includeGeos}
       onAdd={function(item){ addGeography(item, false); }}

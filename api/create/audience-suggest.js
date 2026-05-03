@@ -132,6 +132,21 @@ export default async function handler(req, res) {
   // Run lookups in parallel but cap concurrency so we don't fan out 18
   // simultaneous Meta API calls and trip rate limits. Higher concurrency
   // (6) than before since we have more terms to chew through.
+  //
+  // Meta's income/demographic taxonomy is country-specific — entries are
+  // tagged like "Household income: top 25-50% of ZIP codes (US)". When the
+  // user is targeting SA we drop any item whose name explicitly mentions
+  // another country, since serving "US ZIP code top 25%" on a ZA audience
+  // is meaningless. The check is by parenthesised country code at the end
+  // of the name; we keep an allow-set of the campaign's targeted markets.
+  var allowedCountryTags = (countries.length ? countries : ["ZA"]).map(function(c){ return String(c).toUpperCase(); });
+  var countryTagPattern = /\(([A-Z]{2})\)\s*$/;
+  var isCountryMismatched = function(item){
+    if (!item || !item.name) return false;
+    var m = item.name.match(countryTagPattern);
+    if (!m) return false;
+    return allowedCountryTags.indexOf(m[1]) < 0;
+  };
   var resolved = [];
   var seen = {};
   var maxConcurrent = 6;
@@ -146,7 +161,14 @@ export default async function handler(req, res) {
       try {
         var r = await fetch(url);
         var data = await r.json();
-        var match = (data && data.data && data.data[0]) || null;
+        // Some Meta terms have multiple matches with country-specific
+        // suffixes (US/UK/etc.). Walk the top-3 results and pick the
+        // first one that isn't tagged for a country outside our targeting.
+        var matches = (data && data.data) || [];
+        var match = null;
+        for (var mi = 0; mi < matches.length; mi++) {
+          if (!isCountryMismatched(matches[mi])) { match = matches[mi]; break; }
+        }
         if (!match) continue;
         var key = match.type + ":" + match.id;
         if (seen[key]) continue;

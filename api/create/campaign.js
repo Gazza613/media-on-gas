@@ -389,16 +389,25 @@ function buildTargeting(p) {
   }
   // Fall back to the legacy countries array (or default ZA) if the new
   // shape didn't yield anything Meta will accept.
-  var hasAnyGeo = (geo.countries && geo.countries.length) ||
-                  (geo.regions && geo.regions.length) ||
-                  (geo.cities && geo.cities.length) ||
-                  (geo.zips && geo.zips.length) ||
-                  (geo.subcities && geo.subcities.length) ||
-                  (geo.neighborhoods && geo.neighborhoods.length) ||
-                  (geo.custom_locations && geo.custom_locations.length);
+  var hasFinerInclude = (geo.regions && geo.regions.length) ||
+                        (geo.cities && geo.cities.length) ||
+                        (geo.zips && geo.zips.length) ||
+                        (geo.subcities && geo.subcities.length) ||
+                        (geo.neighborhoods && geo.neighborhoods.length) ||
+                        (geo.custom_locations && geo.custom_locations.length);
+  var hasAnyGeo = (geo.countries && geo.countries.length) || hasFinerInclude;
   if (!hasAnyGeo) {
     var legacyCountries = (a.countries && a.countries.length) ? a.countries : ["ZA"];
     geo.countries = legacyCountries;
+  }
+  // Meta rejects geo_locations that contain a country PLUS finer-grained
+  // specifiers (custom_locations, regions, cities, etc.) — overlap error
+  // 1487756 "Some of your locations overlap". The radius IS inside the
+  // country, so the country becomes redundant. Drop the country silently
+  // here so Meta accepts the targeting; the wizard's UI hint warns the
+  // user about this so the silent strip isn't surprising.
+  if (hasFinerInclude && geo.countries) {
+    delete geo.countries;
   }
 
   // targeting_automation.advantage_audience is conditionally accepted in v25.
