@@ -938,14 +938,14 @@ function Select(props) {
       <span style={{color: current ? P.txt : (P.label || P.sub), whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{label}</span>
       <span style={{color: P.label || P.sub, marginLeft: 8, fontSize: 11}}>{open ? "▲" : "▼"}</span>
     </div>
-    {open && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:280,overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+    {open && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:"min(60vh, 480px)",overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
       {(props.options || []).length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>{props.emptyText || "No options"}</div>}
       {(props.options || []).map(function(o){
         var on = o.value === props.value;
         return <div key={o.value} onClick={function(){ props.onChange(o.value); setOpen(false); }}
-          style={{padding:"12px 16px",cursor:"pointer",borderBottom:"1px solid "+P.rule,background:on?P.ember+"15":"transparent",color:on?P.ember:P.txt,fontSize:13,fontFamily:fm}}>
-          <div style={{fontWeight:on?800:500}}>{o.label}</div>
-          {o.sub && <div style={{fontSize:11,color:P.label||P.sub,marginTop:2}}>{o.sub}</div>}
+          style={{padding:"10px 16px",cursor:"pointer",borderBottom:"1px solid "+P.rule,background:on?P.ember+"15":"transparent",color:on?P.ember:P.txt,fontSize:13,fontFamily:fm,display:"flex",alignItems:"baseline",gap:10}}>
+          <div style={{fontWeight:on?800:500,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.label}</div>
+          {o.sub && <div style={{fontSize:11,color:P.label||P.sub,whiteSpace:"nowrap"}}>{o.sub}</div>}
         </div>;
       })}
     </div>}
@@ -984,7 +984,7 @@ function MultiSelect(props) {
       })}
       <span style={{marginLeft:"auto",color:P.label||P.sub,fontSize:11}}>{open ? "▲" : "▼"}</span>
     </div>
-    {open && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:320,overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+    {open && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:"min(60vh, 480px)",overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
       {props.searchable && <input value={q} onChange={function(e){ setQ(e.target.value); }} placeholder="Search..." style={Object.assign({}, inputStyle(P, fm), { borderRadius: 0, borderTop: 0, borderLeft: 0, borderRight: 0, borderBottom: "1px solid " + P.rule })}/>}
       {filtered.length === 0 && <div style={{padding:14,fontSize:12,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
       {filtered.map(function(o){
