@@ -343,45 +343,49 @@ function buildTargeting(p) {
   // Either shape resolves to a Meta geo_locations object below. New shape
   // wins when both are present.
   var geo = {};
+  var excludedGeo = {};
+  var typeMap = {
+    country: "countries",
+    country_group: "country_groups",
+    region: "regions",
+    city: "cities",
+    subcity: "subcities",
+    neighborhood: "neighborhoods",
+    zip: "zips",
+    geo_market: "geo_markets",
+    electoral_district: "electoral_districts"
+  };
   if (a.locations && (a.locations.geographies || a.locations.customLocations)) {
     var geographies = a.locations.geographies || [];
     var customLocations = a.locations.customLocations || [];
     geographies.forEach(function(g){
       if (!g || !g.key) return;
-      var typeMap = {
-        country: "countries",
-        country_group: "country_groups",
-        region: "regions",
-        city: "cities",
-        subcity: "subcities",
-        neighborhood: "neighborhoods",
-        zip: "zips",
-        geo_market: "geo_markets",
-        electoral_district: "electoral_districts"
-      };
       var bucket = typeMap[g.type];
       if (!bucket) return;
+      var dest = g.exclude ? excludedGeo : geo;
       if (bucket === "countries") {
-        geo.countries = geo.countries || [];
-        geo.countries.push(g.key);
+        dest.countries = dest.countries || [];
+        dest.countries.push(g.key);
       } else {
-        geo[bucket] = geo[bucket] || [];
-        geo[bucket].push({ key: String(g.key), name: g.name || "" });
+        dest[bucket] = dest[bucket] || [];
+        dest[bucket].push({ key: String(g.key), name: g.name || "" });
       }
     });
-    if (customLocations.length > 0) {
-      geo.custom_locations = customLocations.map(function(p){
-        var radius = parseFloat(p.radius);
-        if (!isFinite(radius) || radius <= 0) radius = 15;
-        return {
-          latitude: parseFloat(p.lat),
-          longitude: parseFloat(p.lng),
-          radius: Math.min(80, Math.max(1, radius)),
-          distance_unit: p.unit === "mile" ? "mile" : "kilometer",
-          address_string: p.addressString ? String(p.addressString).slice(0, 200) : ""
-        };
-      }).filter(function(c){ return isFinite(c.latitude) && isFinite(c.longitude); });
-    }
+    customLocations.forEach(function(p){
+      var radius = parseFloat(p.radius);
+      if (!isFinite(radius) || radius <= 0) radius = 15;
+      var entry = {
+        latitude: parseFloat(p.lat),
+        longitude: parseFloat(p.lng),
+        radius: Math.min(80, Math.max(1, radius)),
+        distance_unit: p.unit === "mile" ? "mile" : "kilometer",
+        address_string: p.addressString ? String(p.addressString).slice(0, 200) : ""
+      };
+      if (!isFinite(entry.latitude) || !isFinite(entry.longitude)) return;
+      var dest = p.exclude ? excludedGeo : geo;
+      dest.custom_locations = dest.custom_locations || [];
+      dest.custom_locations.push(entry);
+    });
   }
   // Fall back to the legacy countries array (or default ZA) if the new
   // shape didn't yield anything Meta will accept.
@@ -406,6 +410,13 @@ function buildTargeting(p) {
     age_min: a.ageMin || 18,
     age_max: a.ageMax || 65
   };
+  // Exclude box gets attached only when the user actually marked something
+  // for exclusion. Sending an empty object trips Meta's validator.
+  var hasExclusions = Object.keys(excludedGeo).some(function(k){
+    var v = excludedGeo[k];
+    return Array.isArray(v) ? v.length > 0 : !!v;
+  });
+  if (hasExclusions) t.excluded_geo_locations = excludedGeo;
   if (a.advantageAudience) t.targeting_automation = { advantage_audience: 1 };
   if (a.genders && a.genders.length) t.genders = a.genders;
 

@@ -836,10 +836,18 @@ function Step6(props) {
     ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + (draft.audience.genders.length ? (", " + draft.audience.genders.map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
     ["Locations", (function(){
       var loc = draft.audience.locations || {};
-      var parts = [];
-      (loc.geographies || []).forEach(function(g){ parts.push(g.name + (g.region ? " (" + g.region + ")" : "")); });
-      (loc.customLocations || []).forEach(function(p){ parts.push("📍 " + (p.label || p.addressString) + " (" + p.radius + " km)"); });
-      return parts.length ? parts.join(", ") : "(none)";
+      var includeParts = [], excludeParts = [];
+      (loc.geographies || []).forEach(function(g){
+        var s = g.name + (g.region ? " (" + g.region + ")" : "");
+        (g.exclude ? excludeParts : includeParts).push(s);
+      });
+      (loc.customLocations || []).forEach(function(p){
+        var s = (p.exclude ? "🚫 " : "📍 ") + (p.label || p.addressString) + " (" + p.radius + " km)";
+        (p.exclude ? excludeParts : includeParts).push(s);
+      });
+      var out = includeParts.length ? includeParts.join(", ") : "(none)";
+      if (excludeParts.length) out += "  ·  EXCLUDED: " + excludeParts.join(", ");
+      return out;
     })()],
     ["Detailed targeting", (draft.audience.targetingItems && draft.audience.targetingItems.length > 0)
       ? draft.audience.targetingItems.map(function(t){ return t.name + " (" + t.type.replace(/_/g," ") + ")"; }).join(", ")
@@ -1264,7 +1272,15 @@ function LocationPicker(props) {
     var existing = locations.geographies || [];
     if (existing.some(function(x){ return x.key === item.key && x.type === item.type; })) return;
     props.onChange({
-      geographies: existing.concat([item]),
+      geographies: existing.concat([Object.assign({}, item, { exclude: false })]),
+      customLocations: locations.customLocations || []
+    });
+  };
+  var toggleGeographyExclude = function(key, type){
+    props.onChange({
+      geographies: (locations.geographies || []).map(function(x){
+        return (x.key === key && x.type === type) ? Object.assign({}, x, { exclude: !x.exclude }) : x;
+      }),
       customLocations: locations.customLocations || []
     });
   };
@@ -1277,8 +1293,14 @@ function LocationPicker(props) {
   var addCustom = function(pin){
     props.onChange({
       geographies: locations.geographies || [],
-      customLocations: (locations.customLocations || []).concat([pin])
+      customLocations: (locations.customLocations || []).concat([Object.assign({}, pin, { exclude: false })])
     });
+  };
+  var toggleCustomExclude = function(idx){
+    var arr = (locations.customLocations || []).map(function(p, i){
+      return i === idx ? Object.assign({}, p, { exclude: !p.exclude }) : p;
+    });
+    props.onChange({ geographies: locations.geographies || [], customLocations: arr });
   };
   var removeCustom = function(idx){
     var arr = (locations.customLocations || []).slice();
@@ -1291,9 +1313,9 @@ function LocationPicker(props) {
 
   return <div style={{display:"flex",flexDirection:"column",gap:18}}>
     <GeoSearcher P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} accountId={accountId}
-      geographies={locations.geographies || []} onAdd={addGeography} onRemove={removeGeography}/>
+      geographies={locations.geographies || []} onAdd={addGeography} onRemove={removeGeography} onToggleExclude={toggleGeographyExclude}/>
     <ProximityPinPicker P={P} ff={ff} fm={fm} apiBase={apiBase} token={token}
-      pins={locations.customLocations || []} onAdd={addCustom} onRemove={removeCustom}/>
+      pins={locations.customLocations || []} onAdd={addCustom} onRemove={removeCustom} onToggleExclude={toggleCustomExclude}/>
   </div>;
 }
 
@@ -1376,12 +1398,17 @@ function GeoSearcher(props) {
     </div>
     {(props.geographies || []).length > 0 && <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12,padding:"12px 14px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10,minHeight:60,maxHeight:200,overflowY:"auto"}}>
       {props.geographies.map(function(item){
-        var color = GEO_TYPE_COLORS[item.type] || P.label;
-        return <span key={item.type + ":" + item.key} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:12,color:P.txt,fontFamily:fm}}>
-          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{GEO_TYPE_LABELS[item.type] || item.type}</span>
-          <span>{item.name}</span>
+        var typeColor = GEO_TYPE_COLORS[item.type] || P.label;
+        var excluded = !!item.exclude;
+        var color = excluded ? (P.critical || "#ef4444") : typeColor;
+        return <span key={item.type + ":" + item.key} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:12,color:P.txt,fontFamily:fm,textDecoration:excluded?"line-through":"none"}}>
+          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{excluded ? "EXCLUDE" : (GEO_TYPE_LABELS[item.type] || item.type)}</span>
+          <span style={{textDecoration:"none"}}>{item.name}</span>
           {item.region && <span style={{fontSize:10,color:P.label||P.sub}}>· {item.region}</span>}
-          <span onClick={function(){ props.onRemove(item.key, item.type); }} style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,marginLeft:2,fontSize:14}}>×</span>
+          <span onClick={function(){ props.onToggleExclude(item.key, item.type); }} title={excluded ? "Re-include" : "Exclude this area"} style={{cursor:"pointer",color:color,fontWeight:900,marginLeft:6,fontSize:11,padding:"0 4px",border:"1px solid "+color+"50",borderRadius:4,letterSpacing:1}}>
+            {excluded ? "+" : "−"}
+          </span>
+          <span onClick={function(){ props.onRemove(item.key, item.type); }} style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,fontSize:14}}>×</span>
         </span>;
       })}
     </div>}
@@ -1462,13 +1489,18 @@ function ProximityPinPicker(props) {
     </div>}
     {(props.pins || []).length > 0 && <div style={{display:"flex",flexDirection:"column",gap:8}}>
       {props.pins.map(function(p, idx){
-        return <div key={idx} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 14px",border:"1px solid "+P.ember+"40",background:P.ember+"10",borderRadius:10}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>📍 {p.label || p.addressString}</div>
+        var excluded = !!p.exclude;
+        var c = excluded ? (P.critical || "#ef4444") : P.ember;
+        return <div key={idx} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 14px",border:"1px solid "+c+"40",background:c+"10",borderRadius:10}}>
+          <div style={{flex:1,minWidth:0,textDecoration:excluded?"line-through":"none"}}>
+            <div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{excluded ? "🚫" : "📍"} {p.label || p.addressString}</div>
             <div style={{fontSize:11,color:P.label||P.sub,fontFamily:fm,marginTop:2}}>
-              {p.radius} {p.unit === "mile" ? "mi" : "km"} radius · {parseFloat(p.lat).toFixed(5)}, {parseFloat(p.lng).toFixed(5)}
+              {excluded ? "EXCLUDED · " : ""}{p.radius} {p.unit === "mile" ? "mi" : "km"} radius · {parseFloat(p.lat).toFixed(5)}, {parseFloat(p.lng).toFixed(5)}
             </div>
           </div>
+          <span onClick={function(){ props.onToggleExclude(idx); }} title={excluded ? "Re-include" : "Exclude this radius"} style={{cursor:"pointer",color:c,fontWeight:900,fontSize:11,padding:"4px 10px",border:"1px solid "+c+"50",borderRadius:6,letterSpacing:1,textTransform:"uppercase"}}>
+            {excluded ? "Include" : "Exclude"}
+          </span>
           <span onClick={function(){ props.onRemove(idx); }} style={{cursor:"pointer",color:P.critical||"#ef4444",fontWeight:900,fontSize:18,padding:"0 6px"}}>×</span>
         </div>;
       })}

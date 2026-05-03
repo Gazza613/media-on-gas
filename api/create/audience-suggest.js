@@ -42,6 +42,15 @@ var SYSTEM_PROMPT =
 "RIGHT: HNWIs are identified by behaviour patterns + lifestyle proxies, not just stated interest.\n" +
 "GOOD: Luxury goods, Rolex, Patek Philippe, IWC (specific brands signal real intent); Frequent international travelers, Premium credit card users (behaviors); Higher household income brackets (demographics).\n\n" +
 
+"INPUT: \"shoppers of high-end clothing fashion retail (in-store, not online)\"\n" +
+"WRONG: Campaign manager, Marketing director, generic management job titles. Job titles are NEARLY ALWAYS THE WRONG LEVER FOR PURE B2C SHOPPER AUDIENCES — \"mid-to-senior management = luxury spender\" is a tenuous chain when much sharper behaviour and brand signals exist.\n" +
+"RIGHT: For B2C luxury shoppers, lead with brand interests (the specific luxury fashion houses they buy), then engagement / spending behaviours, then income-proxy demographics. Skip work_positions entirely OR limit to ONE income-bracket title at most.\n" +
+"GOOD: Gucci, Louis Vuitton, Prada, Burberry, Hugo Boss, Hermès, Christian Dior, Chanel, Tom Ford (interests — specific luxury brands signal real category buyers); Engaged Shoppers, Premium credit card users, Frequent international travelers (behaviors — actual purchase signal not just intent); Higher household income tier, Affluent (demographics — income proxies).\n\n" +
+
+"## Critical rule on B2B vs B2C and work_positions\n" +
+"B2B audiences (\"agency owners\", \"startup founders\", \"HR directors\", \"procurement managers\", \"CFOs of SMEs\") → work_positions IS the primary lever. Lead with the right decision-maker title.\n" +
+"B2C consumer / shopper / lifestyle audiences (\"luxury shoppers\", \"new mothers\", \"runners\", \"wine enthusiasts\", \"first-home buyers\") → work_positions IS USUALLY THE WRONG LEVER. Only include a work_position if it functions specifically as an income proxy (e.g. \"Doctor\" for premium-medical-supply audiences) AND is materially better than the demographics+behaviors options. When in doubt, OMIT work_positions for consumer audiences and use the saved slots on more interests/behaviors instead.\n\n" +
+
 "### Your output rules\n\n" +
 "1. Generate 12-18 terms across all four lever types: Interests, Behaviors, Demographics, work_positions (Job titles).\n" +
 "2. Aim for roughly: 5-7 interests (brands, industry verticals, hobbies, content publishers), 3-5 behaviors (purchase patterns, device/platform behaviour, business-owner signals, lifestyle proxies), 2-3 demographics (parents, married, education, income proxies, household composition), 2-4 work_positions (the ACTUAL roles of the people described — typically decision-maker titles for B2B audiences).\n" +
