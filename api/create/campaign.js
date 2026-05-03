@@ -372,19 +372,28 @@ function buildTargeting(p) {
   // publisher_platforms regardless of the manual/Advantage+ choice. fb_only
   // and ig_only force a single-platform targeting; fb_ig leaves Placement to
   // do its job (Advantage+ stays auto, manual respects user-selected platforms).
+  // Deprecated positions (Meta v25.0+ removed video_feeds) are filtered defensively
+  // here so any cached client state or future deprecations don't break adset
+  // creation. Add new deprecations to DEPRECATED_POSITIONS as Meta evolves.
+  var DEPRECATED_POSITIONS = { facebook: ["video_feeds"], instagram: [] };
+  var sanitisePositions = function(arr, plat){
+    if (!arr) return arr;
+    var dep = DEPRECATED_POSITIONS[plat] || [];
+    return arr.filter(function(x){ return dep.indexOf(x) < 0; });
+  };
   var pl = p.placement || {};
   if (p.platformMode === "fb_only") {
     t.publisher_platforms = ["facebook"];
-    if (pl.mode === "manual" && pl.facebookPositions) t.facebook_positions = pl.facebookPositions;
+    if (pl.mode === "manual" && pl.facebookPositions) t.facebook_positions = sanitisePositions(pl.facebookPositions, "facebook");
     if (pl.mode === "manual") t.device_platforms = pl.devicePlatforms || ["mobile", "desktop"];
   } else if (p.platformMode === "ig_only") {
     t.publisher_platforms = ["instagram"];
-    if (pl.mode === "manual" && pl.instagramPositions) t.instagram_positions = pl.instagramPositions;
+    if (pl.mode === "manual" && pl.instagramPositions) t.instagram_positions = sanitisePositions(pl.instagramPositions, "instagram");
     if (pl.mode === "manual") t.device_platforms = pl.devicePlatforms || ["mobile", "desktop"];
   } else if (pl.mode === "manual") {
     t.publisher_platforms = pl.platforms || ["facebook", "instagram"];
-    if (pl.facebookPositions) t.facebook_positions = pl.facebookPositions;
-    if (pl.instagramPositions) t.instagram_positions = pl.instagramPositions;
+    if (pl.facebookPositions) t.facebook_positions = sanitisePositions(pl.facebookPositions, "facebook");
+    if (pl.instagramPositions) t.instagram_positions = sanitisePositions(pl.instagramPositions, "instagram");
     t.device_platforms = pl.devicePlatforms || ["mobile", "desktop"];
   }
   return t;

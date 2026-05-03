@@ -584,7 +584,7 @@ function Step2(props) {
         options={[{k:"facebook",n:"Facebook"},{k:"instagram",n:"Instagram"},{k:"audience_network",n:"Audience Network"},{k:"messenger",n:"Messenger"}]}
         selected={pl.platforms || []} onToggle={function(v){ toggle("platforms", v); }}/>
       <Pillgrid label="Facebook positions" P={P} fm={fm}
-        options={[{k:"feed",n:"Feed"},{k:"facebook_reels",n:"Reels"},{k:"video_feeds",n:"Video Feeds"},{k:"story",n:"Stories"},{k:"marketplace",n:"Marketplace"}]}
+        options={[{k:"feed",n:"Feed"},{k:"facebook_reels",n:"Reels"},{k:"story",n:"Stories"},{k:"marketplace",n:"Marketplace"}]}
         selected={pl.facebookPositions || []} onToggle={function(v){ toggle("facebookPositions", v); }}/>
       <Pillgrid label="Instagram positions" P={P} fm={fm}
         options={[{k:"stream",n:"Feed"},{k:"story",n:"Stories"},{k:"reels",n:"Reels"},{k:"explore",n:"Explore"}]}
