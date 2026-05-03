@@ -248,6 +248,14 @@ function Wizard(props) {
   }, [draft]);
   useEffect(function(){
     try { sessionStorage.setItem(STEP_KEY, String(step)); } catch (_) {}
+    // Scroll the page back to the top whenever the step changes so the team
+    // lands on the new step's heading instead of being mid-way down the
+    // previous step's form. Smooth-scroll for a less jarring transition.
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch (_) {
+      window.scrollTo(0, 0);
+    }
   }, [step]);
 
   // -------- Reference data (fetched per-account) ---------------------------
