@@ -8,7 +8,7 @@
 import crypto from "crypto";
 
 export var MAX_DAILY_BUDGET_CENTS = 500000;       // R5,000 hard ceiling. Code change + PR to raise.
-export var CREATE_TOKEN_TTL_SECONDS = 15 * 60;
+export var CREATE_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 export var META_API_VERSION = "v25.0";
 
 export var ALLOWED_OBJECTIVES = {
