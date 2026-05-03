@@ -61,48 +61,50 @@ var CTAS = [
   "CONTACT_US","GET_QUOTE","GET_OFFER","APPLY_NOW","ORDER_NOW","WATCH_MORE"
 ];
 
-function readSavedToken() {
-  try {
-    var t = sessionStorage.getItem(TOKEN_KEY);
-    var e = parseInt(sessionStorage.getItem(TOKEN_EXP_KEY) || "0", 10);
-    if (!t) return null;
-    if (e && Date.now() / 1000 >= e) {
-      sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_EXP_KEY);
-      return null;
-    }
-    return t;
-  } catch (_) { return null; }
-}
-
 export default function CreateTab(props) {
   var P = props.P, ff = props.ff, fm = props.fm;
   var Ic = props.Ic, Glass = props.Glass, SH = props.SH, gFire = props.gFire, gEmber = props.gEmber;
   var apiBase = props.apiBase || "";
 
-  var ts = useState(readSavedToken());
+  // The create-tab JWT lives ONLY in React state — never persisted to
+  // sessionStorage. This forces the PIN gate every single time the user
+  // navigates to the Create tab, since the App.jsx tab system unmounts
+  // and remounts CreateTab on every visit. Slightly more PIN-typing for
+  // the operator, but the PIN is the last line of defence against
+  // someone walking up to a logged-in dashboard and creating campaigns.
+  // The wizard DRAFT is still persisted (sessionStorage) so re-PINning
+  // resumes the campaign work where it was left.
+  var ts = useState(null);
   var token = ts[0], setToken = ts[1];
+  var expS = useState(0);
+  var exp = expS[0], setExp = expS[1];
 
-  // Auto-evict the token when its 15-min TTL expires while the tab is open.
+  // One-time cleanup: zap any leftover create-tab tokens from the previous
+  // (sessionStorage-backed) implementation. Anyone with a tab still open
+  // from before this deploy would otherwise carry a stale token.
   useEffect(function(){
-    if (!token) return;
-    var exp = parseInt(sessionStorage.getItem(TOKEN_EXP_KEY) || "0", 10);
-    if (!exp) return;
+    try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_EXP_KEY); } catch (_) {}
+  }, []);
+
+  // TTL countdown — kicks the user back to the PIN gate when the token's
+  // server-set TTL elapses while they're still on the Create tab.
+  useEffect(function(){
+    if (!token || !exp) return;
     var msLeft = (exp * 1000) - Date.now();
-    if (msLeft <= 0) { setToken(null); return; }
-    var timer = setTimeout(function(){ setToken(null); }, msLeft + 250);
+    if (msLeft <= 0) { setToken(null); setExp(0); return; }
+    var timer = setTimeout(function(){ setToken(null); setExp(0); }, msLeft + 250);
     return function(){ clearTimeout(timer); };
-  }, [token]);
+  }, [token, exp]);
 
   if (!token) return <PinGate P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} apiBase={apiBase}
     onAuthed={function(t, ttlSec){
-      sessionStorage.setItem(TOKEN_KEY, t);
-      sessionStorage.setItem(TOKEN_EXP_KEY, String(Math.floor(Date.now() / 1000) + (ttlSec || 900)));
       setToken(t);
+      setExp(Math.floor(Date.now() / 1000) + (ttlSec || 7200));
     }}/>;
 
   return <Wizard P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} SH={SH} gFire={gFire} gEmber={gEmber}
     apiBase={apiBase} token={token}
-    onLogout={function(){ sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_EXP_KEY); setToken(null); }}/>;
+    onLogout={function(){ setToken(null); setExp(0); }}/>;
 }
 
 // ---------------------------------------------------------------------------
