@@ -334,13 +334,75 @@ function formatSastIso(date) {
 
 function buildTargeting(p) {
   var a = p.audience || {};
-  var geos = (a.countries && a.countries.length) ? a.countries : ["ZA"];
+  // Geo can come through in two shapes:
+  //   1. Legacy: a.countries = ["ZA","NG"]  (pre-Phase-3 wizard state)
+  //   2. New: a.locations = { geographies: [...], customLocations: [...] }
+  //      where geographies is a mix of countries / regions / cities / zips
+  //      and customLocations holds {lat,lng,radius,unit,addressString}
+  //      pins for proximity-radius targeting.
+  // Either shape resolves to a Meta geo_locations object below. New shape
+  // wins when both are present.
+  var geo = {};
+  if (a.locations && (a.locations.geographies || a.locations.customLocations)) {
+    var geographies = a.locations.geographies || [];
+    var customLocations = a.locations.customLocations || [];
+    geographies.forEach(function(g){
+      if (!g || !g.key) return;
+      var typeMap = {
+        country: "countries",
+        country_group: "country_groups",
+        region: "regions",
+        city: "cities",
+        subcity: "subcities",
+        neighborhood: "neighborhoods",
+        zip: "zips",
+        geo_market: "geo_markets",
+        electoral_district: "electoral_districts"
+      };
+      var bucket = typeMap[g.type];
+      if (!bucket) return;
+      if (bucket === "countries") {
+        geo.countries = geo.countries || [];
+        geo.countries.push(g.key);
+      } else {
+        geo[bucket] = geo[bucket] || [];
+        geo[bucket].push({ key: String(g.key), name: g.name || "" });
+      }
+    });
+    if (customLocations.length > 0) {
+      geo.custom_locations = customLocations.map(function(p){
+        var radius = parseFloat(p.radius);
+        if (!isFinite(radius) || radius <= 0) radius = 15;
+        return {
+          latitude: parseFloat(p.lat),
+          longitude: parseFloat(p.lng),
+          radius: Math.min(80, Math.max(1, radius)),
+          distance_unit: p.unit === "mile" ? "mile" : "kilometer",
+          address_string: p.addressString ? String(p.addressString).slice(0, 200) : ""
+        };
+      }).filter(function(c){ return isFinite(c.latitude) && isFinite(c.longitude); });
+    }
+  }
+  // Fall back to the legacy countries array (or default ZA) if the new
+  // shape didn't yield anything Meta will accept.
+  var hasAnyGeo = (geo.countries && geo.countries.length) ||
+                  (geo.regions && geo.regions.length) ||
+                  (geo.cities && geo.cities.length) ||
+                  (geo.zips && geo.zips.length) ||
+                  (geo.subcities && geo.subcities.length) ||
+                  (geo.neighborhoods && geo.neighborhoods.length) ||
+                  (geo.custom_locations && geo.custom_locations.length);
+  if (!hasAnyGeo) {
+    var legacyCountries = (a.countries && a.countries.length) ? a.countries : ["ZA"];
+    geo.countries = legacyCountries;
+  }
+
   // targeting_automation.advantage_audience is conditionally accepted in v25.
   // We omit it entirely unless the user explicitly opted in — the default
   // audience behaviour is fine and the field tripped a generic code 1 error
   // on adset create when sent with value 0.
   var t = {
-    geo_locations: { countries: geos },
+    geo_locations: geo,
     age_min: a.ageMin || 18,
     age_max: a.ageMax || 65
   };

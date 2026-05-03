@@ -164,7 +164,13 @@ function Wizard(props) {
     campaignName: "",
     platformMode: "fb_ig",
     pageId: "", instagramId: "",
-    audience: { countries: ["ZA"], ageMin: 18, ageMax: 65, genders: [], advantageAudience: false, targetingItems: [], flexibleSpec: null },
+    audience: {
+      locations: {
+        geographies: [{ key: "ZA", type: "country", name: "South Africa", countryCode: "ZA", countryName: "South Africa" }],
+        customLocations: []
+      },
+      ageMin: 18, ageMax: 65, genders: [], advantageAudience: false, targetingItems: [], flexibleSpec: null
+    },
     placement: { mode: "advantage", platforms: ["facebook","instagram"], facebookPositions: ["feed"], instagramPositions: ["stream","story","reels"], devicePlatforms: ["mobile","desktop"] },
     creative: { kind: "image", imageHash: null, videoId: null, headline: "", primaryText: "", description: "", linkUrl: "", callToAction: "LEARN_MORE", filename: null, previewDataUrl: null },
     budgetMode: "daily",
@@ -473,13 +479,11 @@ function Step1(props) {
     updateNested("audience", { targetingItems: existing.filter(function(x){ return !(x.id === id && x.type === type); }) });
   };
   return <Glass accent={P.cyan} st={{padding:26}}>
-    <Field label="Countries" fm={fm} P={P} hint="Pick one or more markets. Search by name. Defaults to South Africa.">
-      <MultiSelect P={P} fm={fm}
-        value={a.countries}
-        options={COUNTRIES}
-        searchable={true}
-        placeholder="— Choose countries —"
-        onChange={function(next){ updateNested("audience", { countries: next }); }}/>
+    <Field label="Where to advertise" fm={fm} P={P} hint="Pick countries, regions, cities, suburbs or postal codes. Add proximity pins (15 km from this address etc.) for store-radius campaigns. Mix freely — Meta unions everything you add.">
+      <LocationPicker P={P} ff={ff} fm={fm}
+        apiBase={apiBase} token={token} accountId={draft.accountId}
+        locations={a.locations || { geographies: [], customLocations: [] }}
+        onChange={function(next){ updateNested("audience", { locations: next }); }}/>
     </Field>
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:8}}>
@@ -829,7 +833,14 @@ function Step6(props) {
     ["Platform", platformLabel],
     ["Page", pageName],
     ["Instagram", igName],
-    ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + ", " + draft.audience.countries.join(",") + (draft.audience.genders.length ? (", " + draft.audience.genders.map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
+    ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + (draft.audience.genders.length ? (", " + draft.audience.genders.map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
+    ["Locations", (function(){
+      var loc = draft.audience.locations || {};
+      var parts = [];
+      (loc.geographies || []).forEach(function(g){ parts.push(g.name + (g.region ? " (" + g.region + ")" : "")); });
+      (loc.customLocations || []).forEach(function(p){ parts.push("📍 " + (p.label || p.addressString) + " (" + p.radius + " km)"); });
+      return parts.length ? parts.join(", ") : "(none)";
+    })()],
     ["Detailed targeting", (draft.audience.targetingItems && draft.audience.targetingItems.length > 0)
       ? draft.audience.targetingItems.map(function(t){ return t.name + " (" + t.type.replace(/_/g," ") + ")"; }).join(", ")
       : (draft.audience.flexibleSpec ? "(custom JSON)" : "(none)")],
@@ -1214,6 +1225,237 @@ function TargetingPicker(props) {
     </div>}
 
     {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:40}}/>}
+  </div>;
+}
+
+// LocationPicker: rich location targeting. Two parallel pickers stacked:
+//   - Geographic locations: search-as-you-type across countries, regions,
+//     cities, suburbs (subcities), neighborhoods, postal codes. Multi-select
+//     chips with country flag prefix where useful.
+//   - Proximity radius pins: type an address (or "lat, lng" coordinates),
+//     resolve via /api/create/geocode, set a radius (1-80 km), add as a
+//     pin. Multiple pins supported — Meta unions them at the adset level.
+//
+// The combined output is { geographies: [...], customLocations: [...] }
+// which the campaign endpoint converts to Meta's geo_locations shape.
+function LocationPicker(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
+  var locations = props.locations || { geographies: [], customLocations: [] };
+
+  var addGeography = function(item){
+    var existing = locations.geographies || [];
+    if (existing.some(function(x){ return x.key === item.key && x.type === item.type; })) return;
+    props.onChange({
+      geographies: existing.concat([item]),
+      customLocations: locations.customLocations || []
+    });
+  };
+  var removeGeography = function(key, type){
+    props.onChange({
+      geographies: (locations.geographies || []).filter(function(x){ return !(x.key === key && x.type === type); }),
+      customLocations: locations.customLocations || []
+    });
+  };
+  var addCustom = function(pin){
+    props.onChange({
+      geographies: locations.geographies || [],
+      customLocations: (locations.customLocations || []).concat([pin])
+    });
+  };
+  var removeCustom = function(idx){
+    var arr = (locations.customLocations || []).slice();
+    arr.splice(idx, 1);
+    props.onChange({
+      geographies: locations.geographies || [],
+      customLocations: arr
+    });
+  };
+
+  return <div style={{display:"flex",flexDirection:"column",gap:18}}>
+    <GeoSearcher P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} accountId={accountId}
+      geographies={locations.geographies || []} onAdd={addGeography} onRemove={removeGeography}/>
+    <ProximityPinPicker P={P} ff={ff} fm={fm} apiBase={apiBase} token={token}
+      pins={locations.customLocations || []} onAdd={addCustom} onRemove={removeCustom}/>
+  </div>;
+}
+
+var GEO_TYPE_COLORS = {
+  country: "#34D399",        // mint
+  region: "#22D3EE",         // cyan
+  city: "#A855F7",           // orchid
+  subcity: "#D946EF",        // fuchsia
+  neighborhood: "#FF6B00",   // ember
+  zip: "#FFAA00",            // solar
+  country_group: "#34D399",
+  geo_market: "#22D3EE",
+  electoral_district: "#7C3AED"
+};
+var GEO_TYPE_LABELS = {
+  country: "Country", region: "Region", city: "City", subcity: "Suburb",
+  neighborhood: "Neighborhood", zip: "Postal", country_group: "Region group",
+  geo_market: "DMA", electoral_district: "District"
+};
+
+function GeoSearcher(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
+  var qS = useState(""), q = qS[0], setQ = qS[1];
+  var rS = useState({ loading: false, items: [], error: "" }), results = rS[0], setResults = rS[1];
+  var openS = useState(false), open = openS[0], setOpen = openS[1];
+  var debounceRef = useRef(null);
+
+  useEffect(function(){
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q || q.trim().length < 2) { setResults({ loading: false, items: [], error: "" }); return; }
+    if (!accountId) { setResults({ loading: false, items: [], error: "Pick an ad account first" }); return; }
+    debounceRef.current = setTimeout(function(){
+      setResults({ loading: true, items: [], error: "" });
+      fetch(apiBase + "/api/create/location-search?accountId=" + encodeURIComponent(accountId) + "&q=" + encodeURIComponent(q), {
+        headers: { "Authorization": "Bearer " + token }
+      })
+        .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+        .then(function(x){
+          if (!x.ok) { setResults({ loading: false, items: [], error: (x.data && x.data.error) || "Search failed" }); return; }
+          setResults({ loading: false, items: x.data.items || [], error: "" });
+        })
+        .catch(function(){ setResults({ loading: false, items: [], error: "Network error" }); });
+    }, 250);
+    return function(){ if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [q, accountId]);
+
+  return <div>
+    <div style={{fontSize:11,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Geographic locations</div>
+    <div style={{position:"relative"}}>
+      <input value={q} onChange={function(e){ setQ(e.target.value); setOpen(true); }}
+        onFocus={function(){ setOpen(true); }}
+        placeholder={accountId ? "Search countries, regions, cities, suburbs, postal codes..." : "Pick an ad account first"}
+        disabled={!accountId}
+        style={inputStyle(P, fm)}/>
+      {open && q.trim().length >= 2 && <div style={{position:"absolute",left:0,right:0,top:"100%",marginTop:4,background:"rgba(15,8,22,0.98)",border:"1px solid "+P.rule,borderRadius:10,maxHeight:280,overflowY:"auto",zIndex:50,boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+        {results.loading && <div style={{padding:12,fontSize:11,color:P.label||P.sub,fontFamily:fm}}>Searching...</div>}
+        {results.error && <div style={{padding:12,fontSize:11,color:P.critical||"#ef4444",fontFamily:fm}}>{results.error}</div>}
+        {!results.loading && !results.error && results.items.length === 0 && <div style={{padding:12,fontSize:11,color:P.label||P.sub,fontFamily:fm}}>No matches.</div>}
+        {results.items.map(function(item){
+          var color = GEO_TYPE_COLORS[item.type] || P.label;
+          var alreadyAdded = (props.geographies || []).some(function(x){ return x.key === item.key && x.type === item.type; });
+          var subParts = [GEO_TYPE_LABELS[item.type] || item.type];
+          if (item.region) subParts.push(item.region);
+          if (item.countryName) subParts.push(item.countryName);
+          return <div key={item.type + ":" + item.key} onClick={function(){ if (!alreadyAdded) props.onAdd(item); setOpen(false); setQ(""); }}
+            style={{padding:"10px 14px",borderBottom:"1px solid "+P.rule,cursor:alreadyAdded?"default":"pointer",opacity:alreadyAdded?0.5:1,display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>{GEO_TYPE_LABELS[item.type] || item.type}</span>
+                <span style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</span>
+              </div>
+              <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,marginTop:2}}>{subParts.join(" · ")}</div>
+            </div>
+            <span style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap"}}>{alreadyAdded ? "Added" : "Add"}</span>
+          </div>;
+        })}
+      </div>}
+      {open && <div onClick={function(){ setOpen(false); }} style={{position:"fixed",inset:0,zIndex:40}}/>}
+    </div>
+    {(props.geographies || []).length > 0 && <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12,padding:"12px 14px",background:"rgba(20,12,30,0.4)",border:"1px solid "+P.rule,borderRadius:10,minHeight:60,maxHeight:200,overflowY:"auto"}}>
+      {props.geographies.map(function(item){
+        var color = GEO_TYPE_COLORS[item.type] || P.label;
+        return <span key={item.type + ":" + item.key} style={{display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",border:"1px solid "+color+"50",background:color+"15",borderRadius:8,fontSize:12,color:P.txt,fontFamily:fm}}>
+          <span style={{fontSize:9,fontWeight:800,color:color,letterSpacing:1,textTransform:"uppercase"}}>{GEO_TYPE_LABELS[item.type] || item.type}</span>
+          <span>{item.name}</span>
+          {item.region && <span style={{fontSize:10,color:P.label||P.sub}}>· {item.region}</span>}
+          <span onClick={function(){ props.onRemove(item.key, item.type); }} style={{cursor:"pointer",color:P.label||P.sub,fontWeight:900,marginLeft:2,fontSize:14}}>×</span>
+        </span>;
+      })}
+    </div>}
+  </div>;
+}
+
+function ProximityPinPicker(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var apiBase = props.apiBase, token = props.token;
+  var qS = useState(""), q = qS[0], setQ = qS[1];
+  var rS = useState({ loading: false, results: [], error: "" }), results = rS[0], setResults = rS[1];
+  var radiusS = useState(15), radius = radiusS[0], setRadius = radiusS[1];
+
+  var search = function(){
+    var query = q.trim();
+    if (!query) return;
+    setResults({ loading: true, results: [], error: "" });
+    // Detect "lat, lng" coordinate paste pattern and skip the geocoder.
+    var coordMatch = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (coordMatch) {
+      var lat = parseFloat(coordMatch[1]), lng = parseFloat(coordMatch[2]);
+      setResults({ loading: false, results: [{ lat: lat, lng: lng, displayName: lat.toFixed(5) + ", " + lng.toFixed(5), types: ["coordinates"] }], error: "" });
+      return;
+    }
+    fetch(apiBase + "/api/create/geocode?q=" + encodeURIComponent(query), {
+      headers: { "Authorization": "Bearer " + token }
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setResults({ loading: false, results: [], error: (x.data && x.data.error) || "Geocode failed" }); return; }
+        setResults({ loading: false, results: x.data.results || [], error: "" });
+      })
+      .catch(function(){ setResults({ loading: false, results: [], error: "Network error" }); });
+  };
+
+  var addPin = function(r){
+    props.onAdd({
+      lat: r.lat, lng: r.lng,
+      radius: radius, unit: "kilometer",
+      addressString: r.displayName,
+      label: r.displayName
+    });
+    setQ(""); setResults({ loading: false, results: [], error: "" });
+  };
+
+  return <div>
+    <div style={{fontSize:11,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Proximity radius (pins)</div>
+    <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:10}}>
+      Type a store address, suburb, or "latitude, longitude" coordinates. Pick a result, set the radius, click Add. Each pin is independent — Meta will serve in any of the radii you add.
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <input value={q} onChange={function(e){ setQ(e.target.value); }}
+        onKeyDown={function(e){ if (e.key === "Enter") { e.preventDefault(); search(); } }}
+        placeholder='e.g. "47 Sandton Drive, Sandton" or "-26.1076, 28.0567"'
+        style={Object.assign({}, inputStyle(P, fm), { flex: 1 })}/>
+      <input type="number" min={1} max={80} value={radius}
+        onChange={function(e){ var v = parseInt(e.target.value, 10); if (!isFinite(v)) v = 15; setRadius(Math.min(80, Math.max(1, v))); }}
+        style={Object.assign({}, inputStyle(P, fm), { width: 80, textAlign: "center" })}/>
+      <span style={{alignSelf:"center",color:P.label||P.sub,fontSize:11,fontFamily:fm}}>km</span>
+      <button onClick={search} disabled={!q.trim() || results.loading}
+        style={{background:!q.trim()||results.loading?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"0 22px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:1.5,cursor:!q.trim()||results.loading?"default":"pointer"}}>
+        {results.loading ? "Searching..." : "Find"}
+      </button>
+    </div>
+    {results.error && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginBottom:8}}>{results.error}</div>}
+    {results.results.length > 0 && <div style={{marginBottom:10,padding:"10px 12px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:10}}>
+      {results.results.map(function(r, i){
+        return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"8px 4px",borderBottom: i < results.results.length - 1 ? "1px solid " + P.rule : "none"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.displayName}</div>
+            <div style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,marginTop:2}}>{r.lat.toFixed(5)}, {r.lng.toFixed(5)}</div>
+          </div>
+          <button onClick={function(){ addPin(r); }} style={{background:P.ember+"20",border:"1px solid "+P.ember+"50",borderRadius:8,padding:"6px 14px",color:P.ember,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+            Add {radius}km
+          </button>
+        </div>;
+      })}
+    </div>}
+    {(props.pins || []).length > 0 && <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {props.pins.map(function(p, idx){
+        return <div key={idx} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 14px",border:"1px solid "+P.ember+"40",background:P.ember+"10",borderRadius:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>📍 {p.label || p.addressString}</div>
+            <div style={{fontSize:11,color:P.label||P.sub,fontFamily:fm,marginTop:2}}>
+              {p.radius} {p.unit === "mile" ? "mi" : "km"} radius · {parseFloat(p.lat).toFixed(5)}, {parseFloat(p.lng).toFixed(5)}
+            </div>
+          </div>
+          <span onClick={function(){ props.onRemove(idx); }} style={{cursor:"pointer",color:P.critical||"#ef4444",fontWeight:900,fontSize:18,padding:"0 6px"}}>×</span>
+        </div>;
+      })}
+    </div>}
   </div>;
 }
 
