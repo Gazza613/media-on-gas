@@ -3936,20 +3936,46 @@ export default function MediaOnGas(){
               return (plat||"")+"::"+s;
             };
             if(compareMode!=="off"&&compareCampaigns&&compareCampaigns.length>0){
-              var cmpIdSet={};
-              var cmpTplSet={};
-              sel.forEach(function(c){
-                var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
-                cmpIdSet[raw]=true;cmpIdSet[c.campaignId]=true;
-                var tk=templateKey(c.campaignName,c.platform);
-                if(tk)cmpTplSet[tk]=true;
-              });
-              var cmpSel=compareCampaigns.filter(function(c){
-                var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
-                if(cmpIdSet[raw]||cmpIdSet[c.campaignId])return true;
-                var tk=templateKey(c.campaignName,c.platform);
-                return tk&&cmpTplSet[tk];
-              });
+              // Build the prior-period match set. Two modes:
+              //
+              //   1. Whole-client mode (sel covers >=80% of the campaigns
+              //      with activity in the current period): the user is
+              //      effectively viewing the full client. Compare client
+              //      totals to client totals — DON'T filter the prior pool
+              //      by current-selection IDs. Otherwise relaunched-each-
+              //      month campaigns (different IDs / slightly renamed)
+              //      drop from the prior pool while their successors stay
+              //      in the current pool, producing misleading 800%+
+              //      deltas where the real client MoM is closer to a
+              //      single-digit percentage.
+              //
+              //   2. Narrowed mode (sel <80% of activity): the user has
+              //      explicitly chosen a subset (e.g. only LEADS
+              //      campaigns). Honour that by filtering the prior pool
+              //      to ID + templateKey matches so the comparison stays
+              //      like-for-like at the campaign level.
+              var activeNow=campaigns.filter(function(c){return parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0;}).length;
+              var coverageRatio=activeNow>0?(sel.length/activeNow):1;
+              var wholeClientMode=coverageRatio>=0.8;
+              var cmpSel;
+              if(wholeClientMode){
+                cmpSel=compareCampaigns;
+              }else{
+                var cmpIdSet={};
+                var cmpTplSet={};
+                sel.forEach(function(c){
+                  var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+                  cmpIdSet[raw]=true;cmpIdSet[c.campaignId]=true;
+                  var tk=templateKey(c.campaignName,c.platform);
+                  if(tk)cmpTplSet[tk]=true;
+                });
+                cmpSel=compareCampaigns.filter(function(c){
+                  var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+                  if(cmpIdSet[raw]||cmpIdSet[c.campaignId])return true;
+                  var tk=templateKey(c.campaignName,c.platform);
+                  return tk&&cmpTplSet[tk];
+                });
+              }
               var cSpend=0,cImps=0,cClicks=0,cReach=0;
               cmpSel.forEach(function(c){cSpend+=parseFloat(c.spend||0);cImps+=parseFloat(c.impressions||0);cClicks+=parseFloat(c.clicks||0);cReach+=parseFloat(c.reach||0);});
               var cObj={};
@@ -3991,7 +4017,7 @@ export default function MediaOnGas(){
                 sel.forEach(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");if(!curByRaw[raw])curByRaw[raw]={name:c.campaignName,spend:0,clicks:0,imps:0};curByRaw[raw].spend+=parseFloat(c.spend||0);curByRaw[raw].clicks+=parseFloat(c.clicks||0);curByRaw[raw].imps+=parseFloat(c.impressions||0);});
                 var perCampaign=Object.keys(curByRaw).map(function(raw){var cur=curByRaw[raw];var prev=priorByRaw[raw]||{spend:0,clicks:0,imps:0};return{campaign:cur.name,current_spend:cur.spend,prior_spend:prev.spend,current_clicks:cur.clicks,prior_clicks:prev.clicks,spendDelta:prev.spend>0?((cur.spend-prev.spend)/prev.spend*100).toFixed(2)+"%":(cur.spend>0?"NEW":"0")};}).sort(function(a,b){return b.current_spend-a.current_spend;});
                 var priorOnlyIds=Object.keys(priorByRaw).filter(function(raw){return !curByRaw[raw];});
-                console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,currentCampaigns:Object.keys(curByRaw).length,priorCampaigns:Object.keys(priorByRaw).length,priorOnlyCampaigns:priorOnlyIds.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks},perCampaign:perCampaign},null,2));
+                console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,scope:wholeClientMode?"whole-client":"matched-only",coverageRatio:coverageRatio.toFixed(2),currentCampaigns:Object.keys(curByRaw).length,priorCampaigns:Object.keys(priorByRaw).length,priorOnlyCampaigns:priorOnlyIds.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks},perCampaign:perCampaign},null,2));
               }catch(_){}
             }
             // Inline delta chip. Returns a small coloured chip next to a
