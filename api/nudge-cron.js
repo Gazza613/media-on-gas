@@ -4,6 +4,7 @@ import { readEmailLog } from "./_audit.js";
 import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain } from "./_clientIdentity.js";
 import { listUsers, normalizeEmail, isSuperadminEmail } from "./_users.js";
 import { getSession } from "./auth.js";
+import { timingSafeStrEqual } from "./_createAuth.js";
 
 // Daily cron: finds every client whose last report was sent more than 7
 // days ago and emails the account manager a quirky nudge, BCCing Gary.
@@ -222,7 +223,10 @@ function groupByClient(entries, teamEmailSet) {
 export default async function handler(req, res) {
   var cronSecret = process.env.CRON_SECRET || "";
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
-  var isCron = cronSecret && authHeader === "Bearer " + cronSecret;
+  // Constant-time compare so the cron secret cannot be glimpsed via
+  // response-time differences. timingSafeStrEqual returns false for any
+  // length mismatch without leaking that info.
+  var isCron = !!(cronSecret && timingSafeStrEqual(authHeader, "Bearer " + cronSecret));
   var isManual = false;
 
   if (!isCron) {

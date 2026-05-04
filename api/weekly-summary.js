@@ -3,6 +3,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog, readUsageEvents } from "./_audit.js";
 import { registeredDomain, clientIdentity, displayNameFromIdentity } from "./_clientIdentity.js";
 import { listUsers, normalizeEmail } from "./_users.js";
+import { timingSafeStrEqual } from "./_createAuth.js";
 
 // Weekly management summary email. Fires every Friday at 8am UTC via
 // Vercel cron. Covers the previous 7 days of:
@@ -19,6 +20,45 @@ var TEAM_DOMAIN = "gasmarketing.co.za";
 
 function escapeHtml(s) {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Tiny inline Redis client. Keeps this file self-contained so the
+// idempotency check below doesn't introduce a new import surface.
+function getRedisCreds() {
+  var url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
+  var token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
+  if (!url || !token) return null;
+  return { url: url.replace(/\/$/, ""), token: token };
+}
+async function redisSetIfAbsent(key, ttlSeconds) {
+  var creds = getRedisCreds();
+  if (!creds) return null; // signal "no Redis, fail-open"
+  try {
+    var r = await fetch(creds.url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + creds.token, "Content-Type": "application/json" },
+      body: JSON.stringify(["SET", key, String(Date.now()), "NX", "EX", String(ttlSeconds)])
+    });
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d && d.result === "OK"; // true = key was set (we're first), false = already there
+  } catch (_) { return null; }
+}
+
+// Friday-of-the-week ISO key for idempotency. Computes the Friday that
+// the summary covers (today if cron fires on Friday, last Friday otherwise).
+// Two cron firings on the same Friday land on the same key; SETNX ensures
+// only the first one wins. 7-day TTL keeps the key around long enough
+// that a delayed retry can't slip through.
+function fridayKey() {
+  var d = new Date();
+  // 5 = Friday in JS getDay() (Sun=0). If today isn't Friday, walk back
+  // to the previous Friday so a Saturday retry doesn't bump the key.
+  var diff = (d.getDay() + 7 - 5) % 7;
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  var pad = function(n){ return n < 10 ? "0" + n : "" + n; };
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
 function isTeamEmail(addr) {
@@ -232,7 +272,9 @@ function buildHtml(opts) {
 export default async function handler(req, res) {
   var cronSecret = process.env.CRON_SECRET || "";
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
-  var isCron = cronSecret && authHeader === "Bearer " + cronSecret;
+  // Constant-time compare so the cron secret cannot be glimpsed via
+  // response-time differences.
+  var isCron = !!(cronSecret && timingSafeStrEqual(authHeader, "Bearer " + cronSecret));
 
   if (!isCron) {
     if (!(await rateLimit(req, res, { maxPerMin: 6, maxPerHour: 20 }))) return;
@@ -409,7 +451,11 @@ export default async function handler(req, res) {
     var status = adoptionScore >= 70 ? "ACTIVE" : adoptionScore >= 30 ? "MODERATE" : login.logins > 0 ? "LOW" : "INACTIVE";
     var statusColor = status === "ACTIVE" ? "#34D399" : status === "MODERATE" ? "#FBBF24" : status === "LOW" ? "#F96203" : "#FF3D00";
     return {
-      name: u.name || em.split("@")[0],
+      // Defensive: a corrupted user row with both name AND email missing
+      // would have crashed the cron with TypeError on null.split(). The
+      // String() coerce + final fallback keep the report rendering even
+      // when the user record is broken.
+      name: u.name || (em ? String(em).split("@")[0] : "") || "User",
       email: em,
       role: u.role || "admin",
       logins: login.logins,
@@ -495,6 +541,25 @@ export default async function handler(req, res) {
     host: "smtp.gmail.com", port: 465, secure: true,
     auth: { user: gmailUser, pass: gmailPass }
   });
+
+  // Idempotency guard. Vercel cron can occasionally fire twice on the
+  // same schedule (transient retries on infrastructure errors). Without
+  // this, Gary + Sam would receive two identical summary emails. SETNX
+  // on a Friday-of-week key ensures only the first invocation wins.
+  // Manual triggers (?dryRun=1 or admin x-api-key) skip the guard so an
+  // operator can re-send if the original Friday email never arrived.
+  if (isCron) {
+    var dedupKey = "weekly-summary:sent:" + fridayKey();
+    var firstFire = await redisSetIfAbsent(dedupKey, 7 * 24 * 60 * 60);
+    if (firstFire === false) {
+      // Key already existed; a previous invocation already sent the email.
+      res.status(200).json({ ok: true, deduped: true, key: dedupKey, weekLabel: weekLabel });
+      return;
+    }
+    // firstFire === null: Redis unreachable, fail-open and send anyway.
+    // Two-emails risk during a Redis outage is acceptable vs. dropping
+    // the summary entirely.
+  }
 
   try {
     await transporter.sendMail({

@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { fetchWithTimeout } from "./_fetchTimeout.js";
+import { timingSafeStrEqual } from "./_createAuth.js";
 
 // Admin-only reconciliation endpoint. For a given date range, it pulls the
 // ground-truth campaign-level aggregate from each platform's API directly
@@ -26,13 +27,22 @@ var META_ACCOUNTS = [
 ];
 
 function pct(source, dash) {
-  var s = parseFloat(source || 0);
-  var d = parseFloat(dash || 0);
+  var s = parseFloat(source);
+  var d = parseFloat(dash);
+  // NaN means the upstream value never parsed (platform returned "N/A" or
+  // a localised number, etc.). Coerce only when EXPLICITLY missing
+  // (null/undefined). Keep NaN distinct so statusOf can render an
+  // "unknown" status instead of treating NaN as a 0% delta or, worse,
+  // letting NaN > 5 collapse to false and miscolour the row green.
+  if (source === null || source === undefined) s = 0;
+  if (dash === null || dash === undefined) d = 0;
+  if (!isFinite(s) || !isFinite(d)) return null;
   if (s === 0 && d === 0) return 0;
   if (s === 0) return 100;
   return ((d - s) / s) * 100;
 }
 function statusOf(deltaPct) {
+  if (deltaPct === null || !isFinite(deltaPct)) return "unknown";
   var a = Math.abs(deltaPct);
   if (a <= 1) return "green";
   if (a <= 5) return "yellow";
@@ -524,7 +534,9 @@ export default async function handler(req, res) {
   // anything else on this short-circuit path.
   var cronSecret = process.env.CRON_SECRET || "";
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
-  var isCron = cronSecret && authHeader === "Bearer " + cronSecret;
+  // Constant-time compare so the cron secret cannot be glimpsed via
+  // response-time differences.
+  var isCron = !!(cronSecret && timingSafeStrEqual(authHeader, "Bearer " + cronSecret));
 
   if (isCron) {
     req.authPrincipal = { role: "admin" };

@@ -64,7 +64,13 @@ export default async function handler(req, res) {
       var ir = await fetch(imgUrl, { method: "POST", body: fd });
       var idata = await ir.json();
       if (!ir.ok || !idata || !idata.images) {
-        res.status(502).json({ error: "Meta image upload failed", detail: idata && idata.error || idata });
+        // Log the raw Meta error server-side for triage, but return a
+        // generic message to the client. Meta error envelopes can include
+        // platform internals (subcodes, fbtrace_id, internal stack
+        // breadcrumbs) that don't belong in a response body the team UI
+        // surfaces verbatim.
+        console.error("[create/upload] Meta image rejected:", JSON.stringify(idata && idata.error || idata));
+        res.status(502).json({ error: "Meta image upload failed" });
         return;
       }
       // Meta keys the response by filename. Pull the first hash.
@@ -82,7 +88,9 @@ export default async function handler(req, res) {
     var vr = await fetch(vidUrl, { method: "POST", body: fd });
     var vdata = await vr.json();
     if (!vr.ok || !vdata || !vdata.id) {
-      res.status(502).json({ error: "Meta video upload failed", detail: vdata && vdata.error || vdata });
+      // See note above: log full Meta detail server-side, return generic.
+      console.error("[create/upload] Meta video rejected:", JSON.stringify(vdata && vdata.error || vdata));
+      res.status(502).json({ error: "Meta video upload failed" });
       return;
     }
     res.status(200).json({ kind: "video", videoId: vdata.id });
