@@ -5414,7 +5414,16 @@ export default function MediaOnGas(){
               return <tr key={ad.adId+"_"+sec.key+"_row_"+rank} style={{background:idx%2===0?"rgba(0,0,0,0.18)":"transparent"}}>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:800,color:P.label}}>{"#"+rank}</td>
                 <td style={{padding:"8px 10px",border:"1px solid "+P.rule}}>
-                  {hasThumb(ad)?<div onClick={function(){setPreviewAd(ad);}} style={{cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:6,display:"block"}} onError={function(e){e.target.parentNode.style.display="none";}}/></div>:<div style={{width:48,height:48,background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</div>}
+                  {/* Gradient + platform watermark always renders underneath
+                      so brand-new ads (under ~10 impressions) that Meta
+                      hasn't yet cached a creative thumbnail for don't show
+                      a black void. The image layers on top and only hides
+                      itself (not the parent) on error, so the placeholder
+                      shows through. */}
+                  <div onClick={hasThumb(ad)?function(){setPreviewAd(ad);}:undefined} style={{position:"relative",width:48,height:48,borderRadius:6,overflow:"hidden",background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",display:"flex",alignItems:"center",justifyContent:"center",cursor:hasThumb(ad)?"pointer":"default"}}>
+                    <span style={{color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</span>
+                    {hasThumb(ad)&&<img src={thumbFor(ad)} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>}
+                  </div>
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.adName}>{ad.adName}</div>
