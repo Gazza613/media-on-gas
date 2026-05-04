@@ -4676,29 +4676,39 @@ export default function MediaOnGas(){
                       </div>
                     </div>
                   </div>}
-                  {rows.map(function(r){
-                    var pct=maxVal>0?(r.value/maxVal*100):0;
-                    var ppParts=[];
-                    if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
-                    if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
-                    if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
-                    var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.caption,margin:"0 4px"}}>·</span>);parted.push(n);});
-                    return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
-                        <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{r.label}</div>
-                          <div style={{fontSize:9,fontFamily:fm,marginTop:2}}>{parted}</div>
-                        </div>
-                      </div>
-                      <div style={{flex:1,height:20,background:"rgba(0,0,0,0.4)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
-                        <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+r.color+"cc,"+r.color+"ff)",borderRadius:10,color:r.color,animation:"barFill 0.8s ease-out, pulseBar 2.8s ease-in-out infinite",transition:"width 0.6s ease-out"}}></div>
-                      </div>
-                      <div style={{minWidth:84,textAlign:"right",flexShrink:0}}>
-                        <div style={{fontSize:20,fontWeight:900,color:r.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmt(r.value)}</div>
-                      </div>
-                    </div>;
-                  })}
+                  {/* ChartReveal gates the bar mount on intersection so the
+                      barFill keyframe (width:0 -> target width) fires when
+                      the team scrolls to Brand Pulse, not on initial Summary
+                      load when the section is offscreen. Each row gets a
+                      small per-row stagger via animationDelay so the bars
+                      cascade in top-to-bottom rather than firing in unison. */}
+                  <ChartReveal>
+                    <div>
+                      {rows.map(function(r,idx){
+                        var pct=maxVal>0?(r.value/maxVal*100):0;
+                        var ppParts=[];
+                        if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
+                        if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
+                        if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
+                        var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.caption,margin:"0 4px"}}>·</span>);parted.push(n);});
+                        return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
+                            <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{r.label}</div>
+                              <div style={{fontSize:9,fontFamily:fm,marginTop:2}}>{parted}</div>
+                            </div>
+                          </div>
+                          <div style={{flex:1,height:20,background:"rgba(0,0,0,0.4)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
+                            <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+r.color+"cc,"+r.color+"ff)",borderRadius:10,color:r.color,animation:"barFill 0.9s cubic-bezier(0.22,1,0.36,1) both, pulseBar 2.8s ease-in-out infinite",animationDelay:(idx*60)+"ms, "+(900+idx*60)+"ms",transition:"width 0.6s ease-out"}}></div>
+                          </div>
+                          <div style={{minWidth:84,textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:20,fontWeight:900,color:r.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmt(r.value)}</div>
+                          </div>
+                        </div>;
+                      })}
+                    </div>
+                  </ChartReveal>
                 </div>;
               })()}
 
@@ -6710,29 +6720,39 @@ export default function MediaOnGas(){
                         </div>
                       </div>
                     </div>}
-                    {rows.map(function(r){
-                      var pct=maxVal>0?(r.value/maxVal*100):0;
-                      var ppParts=[];
-                      if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
-                      if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
-                      if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
-                      var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.caption,margin:"0 4px"}}>·</span>);parted.push(n);});
-                      return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
-                        <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
-                          <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
-                          <div style={{minWidth:0}}>
-                            <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{r.label}</div>
-                            <div style={{fontSize:9,fontFamily:fm,marginTop:2}}>{parted}</div>
-                          </div>
-                        </div>
-                        <div style={{flex:1,height:20,background:"rgba(0,0,0,0.4)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
-                          <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+r.color+"cc,"+r.color+"ff)",borderRadius:10,color:r.color,animation:"barFill 0.8s ease-out, pulseBar 2.8s ease-in-out infinite",transition:"width 0.6s ease-out"}}></div>
-                        </div>
-                        <div style={{minWidth:84,textAlign:"right",flexShrink:0}}>
-                          <div style={{fontSize:20,fontWeight:900,color:r.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmt(r.value)}</div>
-                        </div>
-                      </div>;
-                    })}
+                    {/* Same scroll-into-view animation pattern as the
+                        Engagement-tab Brand Pulse on the Summary view: the
+                        bar mounts fresh when the section enters the
+                        viewport, so the barFill keyframe (width:0 -> target)
+                        plays as the team reaches the section. Per-row
+                        animationDelay cascades them top-to-bottom. */}
+                    <ChartReveal>
+                      <div>
+                        {rows.map(function(r,idx){
+                          var pct=maxVal>0?(r.value/maxVal*100):0;
+                          var ppParts=[];
+                          if(r.perPlat.FB>0)ppParts.push(<span key="fb" style={{color:P.fb}}>FB {fmt(r.perPlat.FB)}</span>);
+                          if(r.perPlat.IG>0)ppParts.push(<span key="ig" style={{color:P.ig}}>IG {fmt(r.perPlat.IG)}</span>);
+                          if(r.perPlat.TT>0)ppParts.push(<span key="tt" style={{color:P.tt}}>TT {fmt(r.perPlat.TT)}</span>);
+                          var parted=[];ppParts.forEach(function(n,i){if(i>0)parted.push(<span key={"s"+i} style={{color:P.caption,margin:"0 4px"}}>·</span>);parted.push(n);});
+                          return <div key={r.key} style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+                            <div style={{display:"flex",alignItems:"center",gap:10,width:210,flexShrink:0}}>
+                              <div style={{width:36,height:36,borderRadius:"50%",background:r.color+"18",border:"1px solid "+r.color+"45",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.icon}</div>
+                              <div style={{minWidth:0}}>
+                                <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{r.label}</div>
+                                <div style={{fontSize:9,fontFamily:fm,marginTop:2}}>{parted}</div>
+                              </div>
+                            </div>
+                            <div style={{flex:1,height:20,background:"rgba(0,0,0,0.4)",borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
+                              <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+r.color+"cc,"+r.color+"ff)",borderRadius:10,color:r.color,animation:"barFill 0.9s cubic-bezier(0.22,1,0.36,1) both, pulseBar 2.8s ease-in-out infinite",animationDelay:(idx*60)+"ms, "+(900+idx*60)+"ms",transition:"width 0.6s ease-out"}}></div>
+                            </div>
+                            <div style={{minWidth:84,textAlign:"right",flexShrink:0}}>
+                              <div style={{fontSize:20,fontWeight:900,color:r.color,fontFamily:fm,lineHeight:1,letterSpacing:-0.5}}>{fmt(r.value)}</div>
+                            </div>
+                          </div>;
+                        })}
+                      </div>
+                    </ChartReveal>
                   </div>;
                 })()}
                 <Insight title="Community Growth Analysis" accent={P.mint} icon={Ic.users(P.mint,16)}>{(function(){var p=[];if(totalEarned===0&&grandTotal===0){return "No community data available for the selected campaigns.";}if(grandTotal>0){p.push("The brand\'s total social community stands at "+fmt(grandTotal)+" members across Facebook, Instagram, and TikTok.");}if(totalEarned>0){p.push("During the selected period, the community grew by "+fmt(totalEarned)+" new members with "+fR(totalSpend)+" invested at a blended cost of "+fR(totalSpend/totalEarned)+" per new member.");}if(fbTotal>0){p.push("Facebook leads with "+fmt(fbTotal)+" total page likes"+(fbEarned>0?", adding "+fmt(fbEarned)+" new likes at "+fR(fbSpend/fbEarned)+" cost per follower during this period":"")+". Each page like permanently increases organic News Feed distribution.");}if(igTotal>0){p.push("Instagram has "+fmt(igTotal)+" total followers"+(igEarned>0?", growing by "+fmt(igEarned)+" followers during this period. This figure represents total profile growth, organic and paid combined, as Meta does not attribute the follow action directly to paid campaigns":"")+". Instagram followers directly increase Stories, Reels, and Feed visibility.");}if(ttEarned>0){p.push("TikTok has "+fmt(ttTotal)+" total followers, growing by "+fmt(ttEarned)+" new follows this period at "+fR(ttSpend/ttEarned)+" cost per follow. Each TikTok follower feeds into the For You page recommendation engine, amplifying organic reach.");}return p.join(" ");})()}</Insight>
