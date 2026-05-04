@@ -5973,20 +5973,12 @@ export default function MediaOnGas(){
                         <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Spend Allocation by Objective</div>
                         <ChartReveal><ResponsiveContainer width="100%" height={220}>
                           <PieChart margin={{top:6,right:6,bottom:6,left:6}}>
-                            {/* Labels turned off so leader-lined percentages don't
-                                bleed past the 220px container into the next
-                                section. The custom chip legend underneath shows
-                                the same percentages plus the rand value, so the
-                                in-chart labels were redundant anyway. */}
                             <Pie data={donutData} cx="50%" cy="50%" outerRadius={78} innerRadius={44} paddingAngle={3} dataKey="value" stroke="none" label={false} labelLine={false}>
                               {donutData.map(function(entry,idx){return <Cell key={idx} fill={entry.color}/>;})}
                             </Pie>
                             <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                           </PieChart>
                         </ResponsiveContainer></ChartReveal>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center",marginTop:8,paddingTop:8,borderTop:"1px solid "+P.rule+"40"}}>
-                          {donutData.map(function(d){var pct=grandSpend>0?(d.value/grandSpend*100).toFixed(2):"0.00";return <div key={d.name} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.85)",whiteSpace:"nowrap"}}><span style={{width:9,height:9,borderRadius:"50%",background:d.color,flexShrink:0}}></span>{d.name}: {fR(d.value)} ({pct}%)</div>;})}
-                        </div>
                       </div>
                       <div>
                         <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Cost Per Result by Objective</div>
@@ -6003,6 +5995,15 @@ export default function MediaOnGas(){
                           </BarChart>
                         </ResponsiveContainer></ChartReveal>
                       </div>
+                    </div>
+                    {/* Legend moved out of the donut's half-column so it can
+                        span the full panel width. With 3+ objectives the chips
+                        used to wrap inside the half-column, leaving the donut
+                        column visibly taller than the cost-chart column and
+                        creating an L-shaped gap. Full-width fits all chips on
+                        one line and keeps the panel rectangular. */}
+                    <div style={{display:"flex",flexWrap:"wrap",gap:14,justifyContent:"center",marginTop:14,paddingTop:14,borderTop:"1px solid "+P.rule+"40"}}>
+                      {donutData.map(function(d){var pct=grandSpend>0?(d.value/grandSpend*100).toFixed(2):"0.00";return <div key={d.name} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontFamily:fm,color:"rgba(255,251,248,0.85)",whiteSpace:"nowrap"}}><span style={{width:10,height:10,borderRadius:"50%",background:d.color,flexShrink:0}}></span>{d.name}: {fR(d.value)} ({pct}%)</div>;})}
                     </div>
                   </div>;
                 })()}
