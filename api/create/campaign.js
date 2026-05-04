@@ -523,12 +523,42 @@ function buildTargeting(p) {
   if (a.flexibleSpec) {
     t.flexible_spec = a.flexibleSpec;
   } else if (Array.isArray(a.targetingItems) && a.targetingItems.length > 0) {
+    // Meta's flexible_spec is a mixed schema. Most types take a list of
+    // {id,name} objects (interests, behaviors, work_positions, life_events,
+    // family_statuses, ...). A handful take a raw integer array of IDs only:
+    //
+    //   relationship_statuses, education_statuses, interested_in,
+    //   home_ownership, home_type, home_value, household_composition,
+    //   income, office_type, politics, generation
+    //
+    // Posting an object array under one of those keys returns Meta error
+    // 1885097 ("Type Mismatch, integer expected"). The wizard's targeting
+    // search returns everything as {id,name}, so the fix is server-side:
+    // convert just those keys to integer arrays before submit.
+    var INT_ONLY_KEYS = {
+      relationship_statuses: 1,
+      education_statuses: 1,
+      interested_in: 1,
+      home_ownership: 1,
+      home_type: 1,
+      home_value: 1,
+      household_composition: 1,
+      income: 1,
+      office_type: 1,
+      politics: 1,
+      generation: 1
+    };
     var grouped = {};
     a.targetingItems.forEach(function(item){
       if (!item || !item.id || !item.type) return;
       var key = item.type;
       if (!grouped[key]) grouped[key] = [];
-      grouped[key].push({ id: String(item.id), name: String(item.name || "") });
+      if (INT_ONLY_KEYS[key]) {
+        var n = parseInt(item.id, 10);
+        if (isFinite(n)) grouped[key].push(n);
+      } else {
+        grouped[key].push({ id: String(item.id), name: String(item.name || "") });
+      }
     });
     if (Object.keys(grouped).length > 0) {
       t.flexible_spec = [grouped];
