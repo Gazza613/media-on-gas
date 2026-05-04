@@ -4902,7 +4902,12 @@ export default function MediaOnGas(){
                         <span>{fR(ad.spend)}</span>
                         <span>{ad.ctr.toFixed(2)+"% CTR"}</span>
                       </div>
-                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:objAccent,border:"none",borderRadius:5,color:textOnAccent(objAccent),fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
+                      {/* CTA uses the PLATFORM colour (Facebook blue,
+                          Instagram pink, TikTok teal, Google green, YouTube
+                          red) so the button reads as "open this ad on its
+                          platform". Earlier version used the objective
+                          colour, which broke the visual cue. */}
+                      <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"6px 8px",background:pgAccent,border:"none",borderRadius:5,color:textOnAccent(pgAccent),fontSize:9,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1,cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",boxShadow:"0 2px 6px "+pgAccent+"40"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                     </div>
                   </div>;
                 };
