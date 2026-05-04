@@ -73,26 +73,27 @@ function mapTikTokObjective(ttObj) {
 // Rules (case-insensitive, substring match anywhere in the name):
 //   contains "carousel"           -> CAROUSEL
 //   contains "static"             -> STATIC
-//   contains "mp4" / "video" /
-//   "gif"                          -> MP4    (gif is treated as a video)
+//   contains "gif" / "mixed"      -> GIF   (mixed is the team's term for
+//                                            an animated gif visual, often
+//                                            on TikTok)
+//   contains "mp4" / "video"      -> MP4
 //
-// Conflict resolution by priority: carousel beats static beats video.
-// A name like "Carousel Static Video" hits CAROUSEL because that's the
-// most specific format claim. In practice the team's naming standard
-// only puts ONE format token per name so this is academic.
+// Conflict resolution by priority: carousel > static > gif/mixed > video.
+// A name like "Mixed Video" lands on GIF because the "mixed" descriptor
+// outranks "video" — the team treats mixed-asset ads as gifs, not mp4s.
 //
 // Hint is AUTHORITATIVE in the format pipeline below: if the name carries
-// a recognised tag, the structural detection is ignored entirely. This is
-// a deliberate change from earlier upgrade-only behaviour because the
-// team confirmed the naming convention is the source of truth.
+// a recognised tag, the structural detection is ignored entirely. The
+// team's naming convention is the source of truth.
 //
-// Returns "MP4" | "CAROUSEL" | "STATIC" | "" (no recognised tag).
+// Returns "CAROUSEL" | "STATIC" | "GIF" | "MP4" | "" (no recognised tag).
 function formatHintFromAdName(name) {
   if (!name) return "";
   var s = String(name).toLowerCase();
   if (s.indexOf("carousel") >= 0) return "CAROUSEL";
   if (s.indexOf("static") >= 0) return "STATIC";
-  if (s.indexOf("mp4") >= 0 || s.indexOf("video") >= 0 || s.indexOf("gif") >= 0) return "MP4";
+  if (s.indexOf("gif") >= 0 || s.indexOf("mixed") >= 0) return "GIF";
+  if (s.indexOf("mp4") >= 0 || s.indexOf("video") >= 0) return "MP4";
   return "";
 }
 
@@ -847,10 +848,10 @@ export default async function handler(req, res) {
             var afsVideos = (afs.videos && afs.videos.length) || 0;
             var afsImages = (afs.images && afs.images.length) || 0;
             if (afsVideos > 0 && afsImages === 0) return "MP4";
-            // .gif URL with no name tag also gets the MP4 treatment per
-            // the team's rule (a gif IS a video ad in their book).
+            // .gif URL with no name tag → GIF. Distinct from MP4 because
+            // the team labels gifs separately on the dashboard.
             var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
-            if (url.indexOf(".gif") >= 0) return "MP4";
+            if (url.indexOf(".gif") >= 0) return "GIF";
             if (afsImages >= 1) return "STATIC";
             if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
             return ot;
