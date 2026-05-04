@@ -2,7 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 export default async function handler(req, res) {
-  if (!rateLimit(req, res)) return;
+  if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
   if (!validateDates(req, res)) return;
   // Admin-only, this endpoint enumerates every Meta page + IG business account

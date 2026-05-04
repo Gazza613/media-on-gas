@@ -5,7 +5,7 @@ import { listUsers, setUserActive, isSuperadminEmail, normalizeEmail, getUser } 
 // Superadmin-only. GET -> list all users. POST -> revoke/restore an account.
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 30, maxPerHour: 300 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 30, maxPerHour: 300 }))) return;
 
   var token = req.headers["x-session-token"] || "";
   var session = await getSession(token);

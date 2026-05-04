@@ -105,7 +105,7 @@ function buildInviteHtml(opts) {
 }
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 30 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 10, maxPerHour: 30 }))) return;
   if (req.method !== "POST") { res.status(405).json({ error: "POST only" }); return; }
 
   // Superadmin-only gate.

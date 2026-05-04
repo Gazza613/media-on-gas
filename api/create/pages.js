@@ -10,7 +10,7 @@ export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   if (!checkCreateAuth(req, res)) return;
-  if (!rateLimit(req, res, { maxPerMin: 30 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 30 }))) return;
 
   var accountId = String(req.query.accountId || "").trim();
   if (!accountId) { res.status(400).json({ error: "Missing accountId" }); return; }

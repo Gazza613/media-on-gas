@@ -112,7 +112,7 @@ var ANTI_HALLUCINATION_RULES = [
 ].join("\n");
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 8, maxPerHour: 30 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 8, maxPerHour: 30 }))) return;
   if (!(await checkAuth(req, res))) return;
   if (req.method !== "POST") {
     res.status(405).json({ error: "POST only" });

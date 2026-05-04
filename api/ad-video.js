@@ -165,7 +165,7 @@ async function resolveTikTokVideo(videoId, advId, token) {
 }
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 120, maxPerHour: 1000 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 120, maxPerHour: 1000 }))) return;
   if (!(await checkAuth(req, res))) return;
 
   var platform = String(req.query.platform || "").toLowerCase();

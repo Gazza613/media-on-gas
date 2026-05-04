@@ -226,7 +226,7 @@ export default async function handler(req, res) {
   var isManual = false;
 
   if (!isCron) {
-    if (!rateLimit(req, res, { maxPerMin: 6, maxPerHour: 30 })) return;
+    if (!(await rateLimit(req, res, { maxPerMin: 6, maxPerHour: 30 }))) return;
     // Two manual-trigger paths:
     //
     //   1. x-api-key matching DASHBOARD_API_KEY — for any dashboard page that

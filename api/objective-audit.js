@@ -264,7 +264,7 @@ async function fetchGoogle(activeFrom, activeTo) {
 }
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 100 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 10, maxPerHour: 100 }))) return;
   if (!(await checkAuth(req, res))) return;
   if (!req.authPrincipal || req.authPrincipal.role !== "admin" && req.authPrincipal.role !== "superadmin") {
     res.status(403).json({ error: "Admin-only" });

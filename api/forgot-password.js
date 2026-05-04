@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   setCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "POST only" }); return; }
-  if (!rateLimit(req, res, { maxPerMin: 5, maxPerHour: 20 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 5, maxPerHour: 20 }))) return;
 
   var body = req.body || {};
   var email = normalizeEmail(body.email);

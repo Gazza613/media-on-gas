@@ -45,7 +45,7 @@ export async function getSessionRole(token) {
 export default async function handler(req, res) {
   setAuthCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 }))) return;
 
   // Make sure Gary's superadmin row is provisioned. No-op after the first
   // successful bootstrap.

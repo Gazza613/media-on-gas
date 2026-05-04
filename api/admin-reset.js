@@ -25,7 +25,7 @@ import { buildResetHtml, buildResetText, buildAuditHtml } from "./_resetEmail.js
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "POST only" }); return; }
-  if (!rateLimit(req, res, { maxPerMin: 30, maxPerHour: 200 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 30, maxPerHour: 200 }))) return;
 
   // Superadmin gate.
   var token = req.headers["x-session-token"] || "";

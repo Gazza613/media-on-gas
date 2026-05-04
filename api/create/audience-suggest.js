@@ -66,7 +66,7 @@ var SYSTEM_PROMPT =
 export default async function handler(req, res) {
   if (!checkCreateAuth(req, res)) return;
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
-  if (!rateLimit(req, res, { maxPerMin: 20 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 20 }))) return;
 
   var apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) { res.status(503).json({ error: "Audience suggester not configured (ANTHROPIC_API_KEY missing)" }); return; }

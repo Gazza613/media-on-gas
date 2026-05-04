@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
+import { fetchWithTimeout } from "./_fetchTimeout.js";
 
 // Admin-only reconciliation endpoint. For a given date range, it pulls the
 // ground-truth campaign-level aggregate from each platform's API directly
@@ -58,8 +59,14 @@ function canonicalObjective(rawMetaObj, campaignName) {
   return "landingpage";
 }
 
-// Source-of-truth fetches per platform, aggregated at campaign level
-async function fetchMetaTruth(token, from, to) {
+// Source-of-truth fetches per platform, aggregated at campaign level.
+// Each fetch* function pushes a description into the shared `warnings`
+// array on partial / hard failure so the response surfaces "this account
+// errored, the green ticks below don't include it" rather than silently
+// dropping the rows. Every external fetch is wrapped with fetchWithTimeout
+// so a single hung platform call can't stall the whole reconcile.
+async function fetchMetaTruth(token, from, to, warnings) {
+  warnings = warnings || [];
   var out = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
     try {
@@ -73,26 +80,39 @@ async function fetchMetaTruth(token, from, to) {
         var oGuard = 0;
         while (oNext && oGuard < 10) {
           oGuard++;
-          var oR = await fetch(oNext);
+          var oR = await fetchWithTimeout(oNext);
           if (!oR.ok) break;
           var oD = await oR.json();
           if (oD.data) oD.data.forEach(function(c) { objMap[c.id] = c.objective || ""; });
           oNext = oD.paging && oD.paging.next ? oD.paging.next : null;
         }
-      } catch (_) { /* non-fatal, falls back to name-based detection */ }
+      } catch (oErr) {
+        // Objective-map miss is non-fatal — the canonical-objective helper
+        // falls back to name-based detection. We still surface a soft
+        // warning so the team knows a transient hiccup happened.
+        warnings.push({ source: "Meta", account: acc.name, stage: "objective-map", error: String(oErr && oErr.message || oErr) });
+      }
 
       var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&time_range={\"since\":\"" + from + "\",\"until\":\"" + to + "\"}&limit=500&access_token=" + token;
       // Follow pagination so large accounts (>500 campaigns) aren't truncated.
       var allRows = [];
       var next = url;
       var guard = 0;
+      var stoppedShort = false;
       while (next && guard < 10) {
         guard++;
-        var r = await fetch(next);
-        if (!r.ok) break;
+        var r = await fetchWithTimeout(next);
+        if (!r.ok) {
+          warnings.push({ source: "Meta", account: acc.name, stage: "insights", error: "http-" + r.status, atPage: guard });
+          stoppedShort = true;
+          break;
+        }
         var d = await r.json();
         if (d.data) allRows = allRows.concat(d.data);
         next = d.paging && d.paging.next ? d.paging.next : null;
+      }
+      if (next && guard >= 10 && !stoppedShort) {
+        warnings.push({ source: "Meta", account: acc.name, stage: "pagination-truncated", note: "more than 5,000 campaigns; raise the page guard" });
       }
       allRows.forEach(function(row) {
         var actions = {};
@@ -126,12 +146,18 @@ async function fetchMetaTruth(token, from, to) {
           appInstalls: appInstalls
         });
       });
-    } catch (_) {}
+    } catch (mErr) {
+      // Hard failure — surface the account that errored rather than
+      // silently returning zero rows for it. The reconcile UI will mark
+      // it as missing data.
+      warnings.push({ source: "Meta", account: acc.name, stage: "fetch-truth", error: String(mErr && mErr.message || mErr) });
+    }
   }));
   return out;
 }
 
-async function fetchTikTokTruth(token, advId, from, to) {
+async function fetchTikTokTruth(token, advId, from, to, warnings) {
+  warnings = warnings || [];
   try {
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
     var metrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes"]));
@@ -139,15 +165,23 @@ async function fetchTikTokTruth(token, advId, from, to) {
     // Follow TikTok pagination via page_info.total_page.
     var all = [];
     var page = 1;
+    var stoppedShort = false;
     while (page < 10) {
-      var r = await fetch(base + "&page=" + page, { headers: { "Access-Token": token } });
-      if (!r.ok) break;
+      var r = await fetchWithTimeout(base + "&page=" + page, { headers: { "Access-Token": token } });
+      if (!r.ok) {
+        warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "report", error: "http-" + r.status, atPage: page });
+        stoppedShort = true;
+        break;
+      }
       var d = await r.json();
       var list = (d.data || {}).list || [];
       all = all.concat(list);
       var totalPage = (d.data && d.data.page_info && d.data.page_info.total_page) || 1;
       if (page >= totalPage) break;
       page++;
+    }
+    if (page >= 10 && !stoppedShort) {
+      warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "pagination-truncated", note: "more than 5,000 campaigns; raise the page guard" });
     }
     return all.map(function(row) {
       var m = row.metrics || {};
@@ -165,10 +199,14 @@ async function fetchTikTokTruth(token, advId, from, to) {
         appInstalls: 0
       };
     });
-  } catch (_) { return []; }
+  } catch (ttErr) {
+    warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "fetch-truth", error: String(ttErr && ttErr.message || ttErr) });
+    return [];
+  }
 }
 
-async function fetchGoogleTruth(from, to) {
+async function fetchGoogleTruth(from, to, warnings) {
+  warnings = warnings || [];
   try {
     var cid = process.env.GOOGLE_ADS_CLIENT_ID;
     var cs = process.env.GOOGLE_ADS_CLIENT_SECRET;
@@ -176,28 +214,42 @@ async function fetchGoogleTruth(from, to) {
     var dt = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     var mg = process.env.GOOGLE_ADS_MANAGER_ID;
     var customer = "9587382256";
-    if (!cid || !rt || !dt) return [];
-    var tok = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "client_id=" + cid + "&client_secret=" + cs + "&refresh_token=" + rt + "&grant_type=refresh_token" });
+    if (!cid || !rt || !dt) {
+      warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "config", error: "GOOGLE_ADS_* env vars not set" });
+      return [];
+    }
+    var tok = await fetchWithTimeout("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "client_id=" + cid + "&client_secret=" + cs + "&refresh_token=" + rt + "&grant_type=refresh_token" });
     var tokD = await tok.json();
-    if (!tokD.access_token) return [];
+    if (!tokD.access_token) {
+      warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "oauth-refresh", error: "no access_token in response" });
+      return [];
+    }
     var q = "SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
     // Follow nextPageToken pagination for accounts exceeding a single page.
     var rows = [];
     var pageToken = null;
     var gGuard = 0;
+    var gStoppedShort = false;
     do {
       gGuard++;
       var body = pageToken ? { query: q, pageToken: pageToken } : { query: q };
-      var r = await fetch("https://googleads.googleapis.com/v21/customers/" + customer + "/googleAds:search", {
+      var r = await fetchWithTimeout("https://googleads.googleapis.com/v21/customers/" + customer + "/googleAds:search", {
         method: "POST",
         headers: { "Authorization": "Bearer " + tokD.access_token, "developer-token": dt, "login-customer-id": mg, "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      if (r.status !== 200) break;
+      if (!r.ok) {
+        warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "search", error: "http-" + r.status, atPage: gGuard });
+        gStoppedShort = true;
+        break;
+      }
       var d = await r.json();
       if (d.results) rows = rows.concat(d.results);
       pageToken = d.nextPageToken || null;
     } while (pageToken && gGuard < 20);
+    if (pageToken && gGuard >= 20 && !gStoppedShort) {
+      warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "pagination-truncated", note: "more than 20 pages; raise the guard" });
+    }
     var byId = {};
     rows.forEach(function(row) {
       var id = String(row.campaign.id || "");
@@ -231,7 +283,10 @@ async function fetchGoogleTruth(from, to) {
         appInstalls: 0
       };
     });
-  } catch (_) { return []; }
+  } catch (gErr) {
+    warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "fetch-truth", error: String(gErr && gErr.message || gErr) });
+    return [];
+  }
 }
 
 // Ad-level sums per raw campaign id. If ads API drops rows (Meta's
@@ -474,7 +529,7 @@ export default async function handler(req, res) {
   if (isCron) {
     req.authPrincipal = { role: "admin" };
   } else {
-    if (!rateLimit(req, res, { maxPerMin: 6, maxPerHour: 50 })) return;
+    if (!(await rateLimit(req, res, { maxPerMin: 6, maxPerHour: 50 }))) return;
     if (!(await checkAuth(req, res))) return;
     if (!req.authPrincipal || req.authPrincipal.role !== "admin" && req.authPrincipal.role !== "superadmin") {
       res.status(403).json({ error: "Admin-only" });
@@ -493,15 +548,22 @@ export default async function handler(req, res) {
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
 
+  // Warnings list is mutated by every platform fetch helper. If a partial
+  // failure happens (account-level Meta error, TikTok rate limit, Google
+  // OAuth refresh fail) the helper pushes a record so the response can
+  // surface it instead of silently returning empty rows for that platform.
+  var warnings = [];
   var results = await Promise.all([
-    metaToken ? fetchMetaTruth(metaToken, from, to) : Promise.resolve([]),
-    ttToken && ttAdvId ? fetchTikTokTruth(ttToken, ttAdvId, from, to) : Promise.resolve([]),
-    fetchGoogleTruth(from, to),
+    metaToken ? fetchMetaTruth(metaToken, from, to, warnings) : Promise.resolve([]),
+    ttToken && ttAdvId ? fetchTikTokTruth(ttToken, ttAdvId, from, to, warnings) : Promise.resolve([]),
+    fetchGoogleTruth(from, to, warnings),
     fetchDashboardNumbers(req, from, to),
     fetchAdSumsByCampaign(req, from, to),
     fetchAdsetSumsByCampaign(req, from, to),
     fetchTimeseriesTotals(req, from, to)
   ]);
+  if (!metaToken) warnings.push({ source: "Meta", stage: "config", error: "META_ACCESS_TOKEN env var not set" });
+  if (!ttToken || !ttAdvId) warnings.push({ source: "TikTok", stage: "config", error: "TIKTOK_ACCESS_TOKEN or TIKTOK_ADVERTISER_ID env var not set" });
   var metaTruth = results[0], ttTruth = results[1], gTruth = results[2], dashRows = results[3];
   var adSums = results[4], adsetSums = results[5], tsTotals = results[6];
   var sourceRows = metaTruth.concat(ttTruth).concat(gTruth);
@@ -564,6 +626,10 @@ export default async function handler(req, res) {
     checkedAt: new Date().toISOString(),
     summary: summary,
     rows: reconciled,
-    alert: alertResult
+    alert: alertResult,
+    // Surface partial-fetch failures to the caller so the dashboard can
+    // banner "Meta account X errored, the green ticks below don't include
+    // it" rather than silently showing zero rows for that account.
+    warnings: warnings
   });
 }

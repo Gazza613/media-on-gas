@@ -19,7 +19,7 @@ export const config = { maxDuration: 30 };
 export default async function handler(req, res) {
   if (!checkCreateAuth(req, res)) return;
   if (req.method !== "GET") { res.status(405).json({ error: "Method not allowed" }); return; }
-  if (!rateLimit(req, res, { maxPerMin: 60 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 60 }))) return;
 
   var token = getCreateMetaToken();
   if (!token) { res.status(503).json({ error: "META_CREATE_TOKEN or META_ACCESS_TOKEN must be set" }); return; }

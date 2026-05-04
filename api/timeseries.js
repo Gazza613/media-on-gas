@@ -46,7 +46,7 @@ function addTo(seriesMap, platform, objective, bucket, metrics) {
 }
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res)) return;
+  if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
   if (!validateDates(req, res)) return;
 

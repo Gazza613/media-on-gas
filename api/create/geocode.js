@@ -18,7 +18,7 @@ export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   if (!checkCreateAuth(req, res)) return;
-  if (!rateLimit(req, res, { maxPerMin: 30 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 30 }))) return;
 
   var q = String(req.query.q || "").trim();
   if (!q || q.length < 3) { res.status(200).json({ results: [] }); return; }

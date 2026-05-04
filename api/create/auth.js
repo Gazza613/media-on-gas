@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   setCreateCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
-  if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 }))) return;
 
   if (!process.env.CREATE_TAB_PIN_HASH || !process.env.CREATE_TAB_JWT_SECRET) {
     res.status(503).json({ error: "Create tab not configured. Set CREATE_TAB_PIN_HASH and CREATE_TAB_JWT_SECRET." });

@@ -56,7 +56,7 @@ async function resolveToken(token) {
 export default async function handler(req, res) {
   setCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  if (!rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 }))) return;
 
   if (req.method === "GET") {
     var token = String(req.query.token || "").trim();

@@ -1,7 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 export default async function handler(req, res) {
-  if (!rateLimit(req, res)) return;
+  if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
   const clients = [
     {

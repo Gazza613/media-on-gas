@@ -7,7 +7,7 @@ import { issueToken } from "./_jwt.js";
 // so the downstream data endpoints can enforce scope server-side.
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 20, maxPerHour: 200 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 20, maxPerHour: 200 }))) return;
   if (!(await checkAuth(req, res))) return;
   // Only admins can issue client tokens
   if (!req.authPrincipal || req.authPrincipal.role !== "admin" && req.authPrincipal.role !== "superadmin") {

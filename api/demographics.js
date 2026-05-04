@@ -755,7 +755,7 @@ async function fetchGoogleDemo(from, to) {
 }
 
 export default async function handler(req, res) {
-  if (!rateLimit(req, res, { maxPerMin: 30, maxPerHour: 200 })) return;
+  if (!(await rateLimit(req, res, { maxPerMin: 30, maxPerHour: 200 }))) return;
   if (!(await checkAuth(req, res))) return;
 
   var from = String(req.query.from || "").trim();
