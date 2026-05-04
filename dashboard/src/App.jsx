@@ -2721,11 +2721,17 @@ export default function MediaOnGas(){
   // up anything shipped since their last login. Client share-link views are
   // excluded — the token there is the auth and expires on its own schedule,
   // idle-logging them out would be hostile.
+  // showIdleLogout drives the friendly "coffee break" modal that appears
+  // when the team idle timer fires. handleLogout still clears the session
+  // immediately (so the dashboard behind the modal flips to the login
+  // screen), but the modal stays on top so the user understands what just
+  // happened rather than being silently dumped on the login screen.
+  var idleLogoutS=useState(false),showIdleLogout=idleLogoutS[0],setShowIdleLogout=idleLogoutS[1];
   useEffect(function(){
     if(!session||isClient)return;
     var IDLE_MS=15*60*1000;
     var timer=null;
-    var doLogout=function(){logSessionEnd("idle");handleLogout();};
+    var doLogout=function(){logSessionEnd("idle");handleLogout();setShowIdleLogout(true);};
     var resetIdle=function(){if(timer)clearTimeout(timer);timer=setTimeout(doLogout,IDLE_MS);};
     var events=["mousemove","mousedown","keydown","scroll","touchstart","wheel"];
     events.forEach(function(e){window.addEventListener(e,resetIdle,{passive:true});});
@@ -2934,7 +2940,24 @@ export default function MediaOnGas(){
   // Lives outside the session check so new invitees reach the form even
   // though they are not yet authenticated.
   if(window.location.pathname.indexOf("/signup")===0)return(<SignupScreen/>);
-  if(!session&&!viewToken)return(<LoginScreen onLogin={handleLogin}/>);
+  if(!session&&!viewToken)return(<>
+    <LoginScreen onLogin={handleLogin}/>
+    {/* Coffee-break modal sits over the login screen when the team's
+        15-minute idle timer fires. Tells the user "we logged you out
+        because you stepped away" instead of silently dumping them on
+        the login screen. Same visual language as the client share-link
+        idle nudge so the dashboard speaks one voice. */}
+    {showIdleLogout&&<div style={{position:"fixed",inset:0,zIndex:2200,background:"rgba(6,2,14,0.78)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
+      <div style={{width:440,maxWidth:"94vw",background:"linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%)",border:"1px solid rgba(249,98,3,0.35)",borderRadius:18,padding:"30px 30px 24px",boxShadow:"0 30px 80px rgba(0,0,0,0.65),0 0 60px rgba(249,98,3,0.18)",textAlign:"center",animation:"gasEnter 0.45s cubic-bezier(0.2,0.8,0.2,1) both"}}>
+        <div style={{fontSize:42,marginBottom:8}}>{"☕"}</div>
+        <div style={{fontSize:11,color:P.ember,letterSpacing:3,fontWeight:800,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>You stepped away</div>
+        <div style={{fontSize:16,color:P.txt,fontFamily:ff,lineHeight:1.5,fontWeight:700,marginBottom:10}}>The dashboard took a 15 minute coffee break.</div>
+        <div style={{fontSize:13,color:"rgba(255,251,248,0.78)",fontFamily:ff,lineHeight:1.7,marginBottom:22}}>We logged you out for security. Sign in again to pick up where you left off, the dashboard remembers your tab and date range.</div>
+        <button onClick={function(){setShowIdleLogout(false);}} style={{background:gEmber,border:"none",borderRadius:10,padding:"13px 28px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2.5,boxShadow:"0 6px 20px rgba(249,98,3,0.35)",textTransform:"uppercase"}}>Sign in again</button>
+        <div style={{marginTop:16,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5,lineHeight:1.6}}>Idle logout fires after 15 minutes of no mouse, scroll or keyboard activity. Lock your laptop when you step away to keep the dashboard safe.</div>
+      </div>
+    </div>}
+  </>);
 
   // Shared demographic blocks. Populated by the IIFE rendered near the top of
   // the main content area (before any tab conditional JSX) so both the
