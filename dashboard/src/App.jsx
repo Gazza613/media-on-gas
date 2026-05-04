@@ -3034,6 +3034,7 @@ export default function MediaOnGas(){
             // still used for distribution (which age, which province, which
             // device) but the displayed "total X" values come from sel.
             var authImps=0,authClicks=0,authObj=0,authSpend=0;
+            var authObjFollowersRaw=0; // per-campaign follower contribution, replaced below by earnedTotal
             var authPlat={Facebook:{imp:0,clk:0,spend:0,obj:0},Instagram:{imp:0,clk:0,spend:0,obj:0},TikTok:{imp:0,clk:0,spend:0,obj:0},Google:{imp:0,clk:0,spend:0,obj:0}};
             var mapPlatform=function(p){if(p==="Google Display"||p==="YouTube"||p==="Google Search"||p==="Google Ads")return "Google";if(p==="Meta")return "Facebook";return p;};
             sel.forEach(function(c){
@@ -3042,9 +3043,36 @@ export default function MediaOnGas(){
               var spd=parseFloat(c.spend||0);
               var obj=objectiveValueFor(c);
               authImps+=imp;authClicks+=clk;authSpend+=spd;authObj+=obj;
+              if(classifyObjective(c)==="Followers")authObjFollowersRaw+=obj;
               var k=mapPlatform(c.platform);
               if(authPlat[k]){authPlat[k].imp+=imp;authPlat[k].clk+=clk;authPlat[k].spend+=spd;authPlat[k].obj+=obj;}
             });
+
+            // Summary applies a page-metadata override for Followers because
+            // per-campaign camp.follows under-counts IG (Meta doesn't reliably
+            // attribute follows to paid campaigns) and over-counts FB (post
+            // reactions get folded into pageLikes for OUTCOME_ENGAGEMENT
+            // campaigns). The page-metadata earnedTotal is the truth Community
+            // Growth uses too. Mirror it here so the Demographics OBJECTIVE
+            // tile reconciles with Summary's TOTAL OBJECTIVE RESULTS row.
+            var demoMatchedPages=[];var demoMatchedIds={};
+            for(var ds=0;ds<sel.length;ds++){
+              var dBest=null;var dSc=0;
+              for(var dp=0;dp<pages.length;dp++){
+                var dScore=autoMatchPage(sel[ds].campaignName,pages[dp].name);
+                if(dScore>dSc){dSc=dScore;dBest=pages[dp];}
+              }
+              if(dBest&&dSc>=2&&!demoMatchedIds[dBest.id]){demoMatchedPages.push(dBest);demoMatchedIds[dBest.id]=true;}
+            }
+            var demoIgGrowth=0;
+            demoMatchedPages.forEach(function(mp){
+              if(mp.instagram_business_account)demoIgGrowth+=parseFloat(mp.instagram_business_account.follower_growth||0);
+            });
+            var demoTtE=0;sel.forEach(function(c){if(c.platform==="TikTok")demoTtE+=parseFloat(c.follows||0);});
+            var demoEarnedTotal=parseFloat(m.pageLikes||0)+demoIgGrowth+demoTtE;
+            if(demoEarnedTotal>0){
+              authObj=authObj-authObjFollowersRaw+demoEarnedTotal;
+            }
             // stageTotal / stageSpend now return AUTHORITATIVE values, so every
             // section header and the KPI strip reconcile with Summary. Chart
             // cell values still come from breakdown sums (see agRows etc).
