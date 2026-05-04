@@ -2,7 +2,8 @@ import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog } from "./_audit.js";
 import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain } from "./_clientIdentity.js";
-import { listUsers, normalizeEmail } from "./_users.js";
+import { listUsers, normalizeEmail, isSuperadminEmail } from "./_users.js";
+import { getSession } from "./auth.js";
 
 // Daily cron: finds every client whose last report was sent more than 7
 // days ago and emails the account manager a quirky nudge, BCCing Gary.
@@ -226,10 +227,29 @@ export default async function handler(req, res) {
 
   if (!isCron) {
     if (!rateLimit(req, res, { maxPerMin: 6, maxPerHour: 30 })) return;
-    // Allow an admin to trigger manually from the dashboard.
+    // Two manual-trigger paths:
+    //
+    //   1. x-api-key matching DASHBOARD_API_KEY — for any dashboard page that
+    //      already passes the static API key (legacy admin tools).
+    //   2. x-session-token from a logged-in SUPERADMIN — used by the
+    //      Settings -> Reconcile pane "Reset SLA Baseline" button so the
+    //      static API key never has to ship in the frontend bundle.
+    //
+    // Either path is sufficient. Both rate-limit identically.
     var apiKey = req.headers["x-api-key"] || req.query.api_key || "";
     var expectedKey = process.env.DASHBOARD_API_KEY || "";
-    if (!apiKey || !expectedKey || apiKey !== expectedKey) {
+    var keyOk = apiKey && expectedKey && apiKey === expectedKey;
+    var sessionOk = false;
+    if (!keyOk) {
+      var sessionToken = req.headers["x-session-token"] || "";
+      if (sessionToken) {
+        try {
+          var sess = await getSession(sessionToken);
+          if (sess && isSuperadminEmail(sess.email)) sessionOk = true;
+        } catch (_) {}
+      }
+    }
+    if (!keyOk && !sessionOk) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }

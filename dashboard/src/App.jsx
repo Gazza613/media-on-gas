@@ -1533,6 +1533,35 @@ function CampaignAuditModal(props){
   var recQuery=useState("");
   var recStatusFilter=useState("all");
 
+  // SLA-baseline reset state. Drives the inline "Reset SLA Baseline" panel
+  // in the Reconcile pane. Default baseline is today's date; the operator
+  // can pick any historic date (e.g. when historic gaps are flooding the
+  // SLA watcher with daily nudges and the team wants a fresh start).
+  var slaPanelOpen=useState(false);
+  var slaBaseline=useState(function(){
+    var d=new Date();
+    var pad=function(n){return String(n).padStart(2,"0");};
+    return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  });
+  var slaBusy=useState(false);
+  var slaResult=useState(null);
+  var slaErr=useState("");
+  var resetSlaBaseline=function(){
+    if(slaBusy[0])return;
+    var dateStr=slaBaseline[0];
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){slaErr[1]("Pick a valid date (YYYY-MM-DD).");return;}
+    if(!window.confirm("Reset SLA nudge baseline to "+dateStr+"?\n\nEvery client whose last report was sent before this date will be treated as if they sent on this date. Daily nudges for historic gaps will stop until 7 days past the new baseline."))return;
+    slaBusy[1](true);slaErr[1]("");slaResult[1](null);
+    fetch(props.apiBase+"/api/nudge-cron?reset=1&baseline="+encodeURIComponent(dateStr),{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        slaBusy[1](false);
+        if(r.status===200&&r.data&&r.data.ok){slaResult[1](r.data);}
+        else{slaErr[1]((r.data&&r.data.error)||"Reset failed");}
+      })
+      .catch(function(){slaBusy[1](false);slaErr[1]("Connection error");});
+  };
+
   // Usage state
   var usageEvents=useState([]);
   var usageLoading=useState(false);
@@ -1669,6 +1698,7 @@ function CampaignAuditModal(props){
           {view[0]==="audit"&&<button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.caption:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(false);}} disabled={recLoading[0]||recSending[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recLoading[0]?"RUNNING...":"RE-RUN"}</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(true);}} disabled={recLoading[0]||recSending[0]} title="Run check + email Gary if any deltas found" style={{background:recSending[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recSending[0]?"SENDING...":"CHECK + ALERT"}</button>}
+          {view[0]==="reconcile"&&props.isSuperadmin&&<button onClick={function(){slaPanelOpen[1](!slaPanelOpen[0]);slaErr[1]("");slaResult[1](null);}} title="Reset the SLA nudge baseline so historic gaps stop firing daily reminder emails to AMs" style={{background:slaPanelOpen[0]?P.solar+"20":"transparent",border:"1px solid "+P.solar+"60",borderRadius:10,padding:"8px 14px",color:P.solar,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>SLA NUDGES</button>}
           {view[0]==="usage"&&<button onClick={loadUsage} disabled={usageLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:usageLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{usageLoading[0]?"LOADING...":"REFRESH"}</button>}
           <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -1677,6 +1707,26 @@ function CampaignAuditModal(props){
       </div>
       {view[0]==="audit"&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Rounding up your campaigns from every platform, they scatter…":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
       {view[0]==="reconcile"&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Ground truth from Meta / TikTok / Google APIs compared to what the dashboard computes for <strong style={{color:P.ember}}>{props.dateFrom}</strong> to <strong style={{color:P.ember}}>{props.dateTo}</strong>. Green = delta less than 1%, yellow = 1 to 5%, red = more than 5%.{recSent[0]?<span style={{color:P.mint,marginLeft:10}}>{recSent[0]}</span>:null}</div>}
+      {view[0]==="reconcile"&&slaPanelOpen[0]&&props.isSuperadmin&&<div style={{marginBottom:14,padding:"14px 16px",background:P.solar+"08",border:"1px solid "+P.solar+"30",borderLeft:"3px solid "+P.solar,borderRadius:"0 12px 12px 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontSize:11,fontWeight:800,color:P.solar,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Reset SLA Nudge Baseline</span>
+          <button onClick={function(){slaPanelOpen[1](false);slaErr[1]("");slaResult[1](null);}} style={{marginLeft:"auto",background:"transparent",border:"none",color:P.label,fontSize:14,cursor:"pointer",padding:0}}>×</button>
+        </div>
+        <div style={{fontSize:11,color:P.label,fontFamily:ff,lineHeight:1.7,marginBottom:12}}>
+          The SLA watcher emails the AM (and BCC's Gary) once a day per client whose last report is more than 7 days old. Historic gaps fire daily until a fresh report goes out. Resetting the baseline treats every client as if they last sent on the chosen date, so AMs only get nudged for gaps that open up <em>after</em> the baseline.
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+          <label style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Baseline date</label>
+          <input type="date" value={slaBaseline[0]} onChange={function(e){slaBaseline[1](e.target.value);}} disabled={slaBusy[0]} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"7px 10px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",colorScheme:"dark"}}/>
+          <button onClick={resetSlaBaseline} disabled={slaBusy[0]||!slaBaseline[0]} style={{background:slaBusy[0]||!slaBaseline[0]?"#555":"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:8,padding:"7px 16px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:slaBusy[0]?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{slaBusy[0]?"Resetting...":"Apply Reset"}</button>
+        </div>
+        {slaErr[0]&&<div style={{fontSize:11,color:P.critical,fontFamily:fm,marginTop:8}}>{slaErr[0]}</div>}
+        {slaResult[0]&&<div style={{marginTop:10,padding:"10px 12px",background:P.mint+"10",border:"1px solid "+P.mint+"40",borderRadius:8,fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>
+          <div style={{color:P.mint,fontWeight:800,marginBottom:4}}>✓ Baseline set</div>
+          <div>Anchor: <strong>{slaResult[0].baseline}</strong></div>
+          <div>Earliest possible nudge: <strong>{slaResult[0].nextNudgeAfter}</strong></div>
+        </div>}
+      </div>}
       {view[0]==="audit"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         <select value={platFilter[0]} onChange={function(e){platFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
