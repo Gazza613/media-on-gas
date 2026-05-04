@@ -3995,7 +3995,19 @@ export default function MediaOnGas(){
                 cObj[obj].spend+=parseFloat(camp.spend||0);
                 var r=0;
                 if(obj==="Leads")r=parseFloat(camp.leads||0);
-                else if(obj==="Followers & Likes")r=parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+                else if(obj==="Followers & Likes"){
+                  r=parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+                  // Mirror the current-period IG-growth fallback so a
+                  // Followers comparison stays apples-to-apples. Without
+                  // this, IG follower campaigns that don't surface a
+                  // pageLikes/follows count in the prior payload show as
+                  // zero results in April and the May tile renders "NEW"
+                  // instead of a real delta.
+                  if(r===0&&camp.platform==="Instagram"){
+                    var igFL=findIgGrowth(camp.campaignName,pages);
+                    if(igFL>0)r=igFL;
+                  }
+                }
                 else r=parseFloat(camp.clicks||0);
                 cObj[obj].results+=r;
               });
