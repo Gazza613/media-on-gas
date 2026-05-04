@@ -165,7 +165,9 @@ async function resolveTikTokVideo(videoId, advId, token) {
 }
 
 export default async function handler(req, res) {
-  if (!(await rateLimit(req, res, { maxPerMin: 120, maxPerHour: 1000 }))) return;
+  // Match ad-image's generous limit. A single Top Ads page can fire dozens
+  // of these per load when video previews resolve, and refreshes accumulate.
+  if (!(await rateLimit(req, res, { maxPerMin: 600, maxPerHour: 6000 }))) return;
   if (!(await checkAuth(req, res))) return;
 
   var platform = String(req.query.platform || "").toLowerCase();

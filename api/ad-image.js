@@ -182,7 +182,12 @@ async function resolveTikTokAdImage(adId, advId, token) {
 }
 
 export default async function handler(req, res) {
-  if (!(await rateLimit(req, res, { maxPerMin: 240, maxPerHour: 2000 }))) return;
+  // Generous limit: a single dashboard page can render 50-80 ad tiles, all
+  // firing this proxy on mount. With multiple refreshes and tab switches a
+  // legit user can easily clear 300+ requests in a minute. Cap kept high
+  // enough that real usage never trips it; still tight enough to stop a
+  // scraper from hot-fetching every ad image in a tight loop.
+  if (!(await rateLimit(req, res, { maxPerMin: 600, maxPerHour: 6000 }))) return;
   if (!(await checkAuth(req, res))) return;
 
   var platform = String(req.query.platform || "").toLowerCase();
