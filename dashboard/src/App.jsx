@@ -4803,6 +4803,7 @@ export default function MediaOnGas(){
                   var ff2=(f||"STATIC").toUpperCase();
                   if(ff2==="MP4"||ff2==="VIDEO")return{label:"VIDEO",color:P.rose};
                   if(ff2==="CAROUSEL")return{label:"CAROUSEL",color:P.orchid};
+                  if(ff2==="MIXED")return{label:"MIXED",color:P.fuchsia};
                   if(ff2==="GIF")return{label:"GIF",color:P.warning};
                   if(ff2==="RESPONSIVE")return{label:"RESPONSIVE",color:P.blaze};
                   if(ff2==="TEXT")return{label:"TEXT",color:P.caption};
@@ -5061,7 +5062,7 @@ export default function MediaOnGas(){
                   var scored=fAds.filter(function(a){return a.impressions>=5000;}).slice().sort(function(a,b){if(b.ctr!==a.ctr)return b.ctr-a.ctr;return b.clicks-a.clicks;});
                   if(scored.length===0)return "Creative performance is still gathering meaningful impression volume across "+fAds.length+" ads. Insights will sharpen as data accumulates.";
                   var top3=scored.slice(0,3);
-                  var fmtOf=function(f){var u=(f||"").toUpperCase();return u==="MP4"||u==="VIDEO"?"video":u==="CAROUSEL"?"carousel":u==="GIF"?"animated":"static image";};
+                  var fmtOf=function(f){var u=(f||"").toUpperCase();return u==="MP4"||u==="VIDEO"?"video":u==="CAROUSEL"?"carousel":u==="MIXED"?"mixed-asset":u==="GIF"?"animated":"static image";};
                   var lines=[];
                   // Opening: frames the portfolio, not a "only 3 work" read
                   lines.push("Across "+fAds.length+" active creatives, a broader portfolio is working to deliver consistent volume and keep the audience engaged without fatigue. Within that mix, three standouts are delivering especially strong engagement this period and offer the clearest signals about what the audience responds to.");
@@ -5330,6 +5331,7 @@ export default function MediaOnGas(){
               var ff=(f||"STATIC").toUpperCase();
               if(ff==="MP4"||ff==="VIDEO")return{label:"VIDEO",color:P.rose};
               if(ff==="CAROUSEL")return{label:"CAROUSEL",color:P.orchid};
+              if(ff==="MIXED")return{label:"MIXED",color:P.fuchsia};
               if(ff==="GIF")return{label:"GIF",color:P.warning};
               if(ff==="RESPONSIVE")return{label:"RESPONSIVE",color:P.blaze};
               if(ff==="TEXT")return{label:"TEXT",color:P.caption};

@@ -71,24 +71,28 @@ function mapTikTokObjective(ttObj) {
 // untangle from the API payload alone.
 //
 // Rules (case-insensitive, substring match anywhere in the name):
-//   contains "carousel" / "mixed" -> CAROUSEL  (mixed = team's descriptor
-//                                                for a multi-asset
-//                                                carousel ad)
+//   contains "carousel"           -> CAROUSEL
+//   contains "mixed"              -> MIXED   (multi-asset DCO that isn't
+//                                              strictly a carousel; team
+//                                              wants this as its own
+//                                              classification, not folded
+//                                              into CAROUSEL)
 //   contains "static"             -> STATIC
 //   contains "gif"                -> GIF
 //   contains "mp4" / "video"      -> MP4
 //
-// Conflict resolution by priority: carousel/mixed > static > gif > video.
+// Conflict resolution by priority: carousel > mixed > static > gif > video.
 //
 // Hint is AUTHORITATIVE in the format pipeline below: if the name carries
 // a recognised tag, the structural detection is ignored entirely. The
 // team's naming convention is the source of truth.
 //
-// Returns "CAROUSEL" | "STATIC" | "GIF" | "MP4" | "" (no recognised tag).
+// Returns "CAROUSEL" | "MIXED" | "STATIC" | "GIF" | "MP4" | "" (no tag).
 function formatHintFromAdName(name) {
   if (!name) return "";
   var s = String(name).toLowerCase();
-  if (s.indexOf("carousel") >= 0 || s.indexOf("mixed") >= 0) return "CAROUSEL";
+  if (s.indexOf("carousel") >= 0) return "CAROUSEL";
+  if (s.indexOf("mixed") >= 0) return "MIXED";
   if (s.indexOf("static") >= 0) return "STATIC";
   if (s.indexOf("gif") >= 0) return "GIF";
   if (s.indexOf("mp4") >= 0 || s.indexOf("video") >= 0) return "MP4";
