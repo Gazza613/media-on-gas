@@ -380,7 +380,8 @@ function Reveal(props){
   );
 }
 
-// ChartReveal: lightweight intersection gate for Recharts containers.
+// ChartReveal: lightweight intersection gate for Recharts containers AND
+// CSS-based bar fills.
 //
 // Recharts' built-in Bar / Pie animation runs on first mount (~1500 ms,
 // bars grow bottom-to-top, pies sweep). When charts mount on initial
@@ -389,14 +390,30 @@ function Reveal(props){
 // mounting the chart subtree until the container scrolls into view, so the
 // Recharts mount animation fires exactly when the team hits the section.
 //
+// For CSS bars (age/province/etc. — not Recharts), the same delayed mount
+// triggers the global @keyframes barGrowH / barGrowV animations defined
+// alongside the component. Anywhere a bar fill div uses
+// `animation:"barGrowH 0.9s cubic-bezier(0.22,1,0.36,1) both"` the bar will
+// grow from width:0 to its inline width when ChartReveal first mounts it.
+//
 // Unlike Reveal, ChartReveal does NOT add an opacity/translate transition,
 // so it can sit safely inside an existing <Reveal> wrap without a competing
-// fade animation. The placeholder div takes width:100% so the chart slot
-// holds its column position before the chart renders.
+// fade animation.
+var __chartRevealKeyframesInjected=false;
+function injectChartRevealKeyframes(){
+  if(__chartRevealKeyframesInjected)return;
+  if(typeof document==="undefined")return;
+  __chartRevealKeyframesInjected=true;
+  var style=document.createElement("style");
+  style.setAttribute("data-gas-chart-keyframes","1");
+  style.textContent="@keyframes barGrowH{from{width:0}}@keyframes barGrowV{from{height:0}}";
+  document.head.appendChild(style);
+}
 function ChartReveal(props){
   var ref=useRef(null);
   var ss=useState(false),shown=ss[0],setShown=ss[1];
   var rs=useState(false),reduced=rs[0],setReduced=rs[1];
+  useEffect(function(){injectChartRevealKeyframes();},[]);
   useEffect(function(){
     if(typeof window==="undefined"||!window.matchMedia)return;
     var mq=window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -3101,7 +3118,7 @@ export default function MediaOnGas(){
               var knownSum=all.reduce(function(s,r){return s+r.val;},0);
               var max=all.length?all[0].val:0;
               var medal=function(i,hasVal){if(!hasVal)return "#3d2f5a";return i===0?"#FFD700":i===1?"#E0E0E0":i===2?"#CD7F32":stage.warm;};
-              return <div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%",display:"flex",flexDirection:"column"}}>
+              return <ChartReveal><div style={{background:"linear-gradient(145deg,#1a1028,#120a1f)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.08)",height:"100%",display:"flex",flexDirection:"column"}}>
                 <div style={{marginBottom:12,paddingBottom:8,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
                   <div style={{fontSize:10,color:"#fff",fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginBottom:2}}>{stage.label} by Province</div>
                   <div style={{fontSize:9,color:stage.accent,fontFamily:fm,letterSpacing:0.8,fontWeight:700}}>Share of tagged provincial {stage.label.toLowerCase()}, sums to 100%</div>
@@ -3123,12 +3140,12 @@ export default function MediaOnGas(){
                     <span style={{color:hasVal?col:"#5c4f72",fontWeight:900,fontSize:14,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{hasVal?share.toFixed(2)+"%":"0%"}</span>
                   </div>
                   <div style={{height:6,marginLeft:38,background:"rgba(255,255,255,0.04)",borderRadius:3,overflow:"hidden"}}>
-                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",transition:"width 0.6s ease"}}></div>
+                    <div style={{width:(hasVal?pct:2)+"%",height:"100%",background:hasVal?"linear-gradient(90deg,"+stage.cool+"aa,"+col+"ee)":"rgba(255,255,255,0.06)",borderRadius:3,boxShadow:hasVal?"0 0 8px "+col+"55":"none",animation:"barGrowH 0.9s cubic-bezier(0.22,1,0.36,1) both",animationDelay:(i*40)+"ms",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
                 </div>
                 {knownSum===0&&<div style={{marginTop:14,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.label,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No {stage.label.toLowerCase()} recorded at province level for the selected campaigns and period.</div>}
-              </div>;
+              </div></ChartReveal>;
             };
 
             // Horizontal bar renderer — shares computed against the tagged
@@ -3139,16 +3156,16 @@ export default function MediaOnGas(){
               agData.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
               var knownSum=ageOrder.reduce(function(s,a){return s+sums[a];},0);
               var max=0;ageOrder.forEach(function(a){if(sums[a]>max)max=sums[a];});
-              return <div style={{padding:"6px 0"}}>
+              return <ChartReveal><div style={{padding:"6px 0"}}>
                 {ageOrder.map(function(a){var v=sums[a];var pct=max>0?(v/max)*100:0;var share=knownSum>0?(v/knownSum*100):0;var tip=a+" — "+share.toFixed(2)+"% share of tagged "+stage.label.toLowerCase();return <div key={a} title={tip} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{width:60,fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,textAlign:"right"}}>{a}</div>
                   <div style={{flex:1,height:22,background:"rgba(0,0,0,0.35)",borderRadius:11,overflow:"hidden",border:"1px solid "+P.rule,position:"relative"}}>
-                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",transition:"width 0.8s ease"}}></div>
+                    <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+stage.accentDeep+"cc,"+stage.accent+"ff)",borderRadius:11,boxShadow:"inset 0 1px 2px rgba(255,255,255,0.15)",animation:"barGrowH 1s cubic-bezier(0.22,1,0.36,1) both",transition:"width 0.8s ease"}}></div>
                     {v>0&&<div style={{position:"absolute",top:0,right:10,height:"100%",display:"flex",alignItems:"center",fontSize:11,fontWeight:900,color:P.txt,fontFamily:fm,textShadow:"0 1px 3px rgba(0,0,0,0.85)"}}>{share.toFixed(2)+"%"}</div>}
                   </div>
                 </div>;})}
                 {knownSum===0&&<div style={{marginTop:10,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px dashed rgba(255,255,255,0.12)",borderRadius:10,fontSize:10.5,color:P.label,fontFamily:fm,lineHeight:1.6,textAlign:"center"}}>No age-tagged {stage.label.toLowerCase()} for this period.</div>}
-              </div>;
+              </div></ChartReveal>;
             };
 
             // Gender donut (no Unknown). Uses Recharts PieChart.
