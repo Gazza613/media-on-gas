@@ -6086,9 +6086,9 @@ export default function MediaOnGas(){
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
                       <div>
                         <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Spend Allocation by Objective</div>
-                        <ChartReveal><ResponsiveContainer width="100%" height={220}>
-                          <PieChart margin={{top:6,right:6,bottom:6,left:6}}>
-                            <Pie data={donutData} cx="50%" cy="50%" outerRadius={78} innerRadius={44} paddingAngle={3} dataKey="value" stroke="none" label={false} labelLine={false}>
+                        <ChartReveal><ResponsiveContainer width="100%" height={260}>
+                          <PieChart margin={{top:10,right:10,bottom:10,left:10}}>
+                            <Pie data={donutData} cx="50%" cy="50%" outerRadius={62} innerRadius={34} paddingAngle={3} dataKey="value" stroke="none" label={function(e){var radius=62+18;var rad=Math.PI/180;var x2=e.cx+radius*Math.cos(-e.midAngle*rad);var y2=e.cy+radius*Math.sin(-e.midAngle*rad);var pct=grandSpend>0?(e.value/grandSpend*100).toFixed(2):"0.00";return <text x={x2} y={y2} textAnchor={x2>e.cx?"start":"end"} dominantBaseline="central" style={{fontSize:10,fontFamily:fm,fontWeight:700,fill:e.payload.color||P.txt}}>{pct+"%"}</text>;}} labelLine={{stroke:P.label,strokeWidth:1}}>
                               {donutData.map(function(entry,idx){return <Cell key={idx} fill={entry.color}/>;})}
                             </Pie>
                             <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
@@ -6097,11 +6097,11 @@ export default function MediaOnGas(){
                       </div>
                       <div>
                         <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Cost Per Result by Objective</div>
-                        <ChartReveal><ResponsiveContainer width="100%" height={220}>
-                          <BarChart data={costData} layout="vertical" margin={{left:0,right:90,top:6,bottom:6}}>
+                        <ChartReveal><ResponsiveContainer width="100%" height={260}>
+                          <BarChart data={costData} layout="vertical" margin={{left:8,right:90,top:6,bottom:6}}>
                             <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
                             <XAxis type="number" tick={{fontSize:10,fill:"rgba(255,255,255,0.55)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return "R"+v.toFixed(v<10?2:0);}}/>
-                            <YAxis dataKey="name" type="category" tick={{fontSize:11,fill:P.txt,fontFamily:fm,fontWeight:700}} stroke="transparent" width={130}/>
+                            <YAxis dataKey="name" type="category" tick={{fontSize:11,fill:P.txt,fontFamily:fm,fontWeight:700}} stroke="transparent" width={170}/>
                             <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                             <Bar dataKey="Cost" radius={[0,6,6,0]} barSize={24}>
                               {costData.map(function(entry,idx){return <Cell key={idx} fill={entry.color}/>;})}
