@@ -71,16 +71,14 @@ function mapTikTokObjective(ttObj) {
 // untangle from the API payload alone.
 //
 // Rules (case-insensitive, substring match anywhere in the name):
-//   contains "carousel"           -> CAROUSEL
+//   contains "carousel" / "mixed" -> CAROUSEL  (mixed = team's descriptor
+//                                                for a multi-asset
+//                                                carousel ad)
 //   contains "static"             -> STATIC
-//   contains "gif" / "mixed"      -> GIF   (mixed is the team's term for
-//                                            an animated gif visual, often
-//                                            on TikTok)
+//   contains "gif"                -> GIF
 //   contains "mp4" / "video"      -> MP4
 //
-// Conflict resolution by priority: carousel > static > gif/mixed > video.
-// A name like "Mixed Video" lands on GIF because the "mixed" descriptor
-// outranks "video" — the team treats mixed-asset ads as gifs, not mp4s.
+// Conflict resolution by priority: carousel/mixed > static > gif > video.
 //
 // Hint is AUTHORITATIVE in the format pipeline below: if the name carries
 // a recognised tag, the structural detection is ignored entirely. The
@@ -90,9 +88,9 @@ function mapTikTokObjective(ttObj) {
 function formatHintFromAdName(name) {
   if (!name) return "";
   var s = String(name).toLowerCase();
-  if (s.indexOf("carousel") >= 0) return "CAROUSEL";
+  if (s.indexOf("carousel") >= 0 || s.indexOf("mixed") >= 0) return "CAROUSEL";
   if (s.indexOf("static") >= 0) return "STATIC";
-  if (s.indexOf("gif") >= 0 || s.indexOf("mixed") >= 0) return "GIF";
+  if (s.indexOf("gif") >= 0) return "GIF";
   if (s.indexOf("mp4") >= 0 || s.indexOf("video") >= 0) return "MP4";
   return "";
 }
