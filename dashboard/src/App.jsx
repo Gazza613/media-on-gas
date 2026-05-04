@@ -2755,13 +2755,17 @@ export default function MediaOnGas(){
   // Comparison data fetch. Only runs when compareMode is on. Reuses the
   // same /api/campaigns endpoint for the prior date range so the existing
   // 5-minute response cache makes the second toggle of the same period
-  // instant. Clears compareCampaigns on 'off' so the Summary deltas
-  // disappear immediately.
+  // instant. Clears compareCampaigns on every mode change so the Summary
+  // deltas don't keep rendering stale values from the previous mode while
+  // the new range is in flight (the perceived bug: toggling MoM -> WoW
+  // looked frozen because compareCampaigns still held the MoM pool until
+  // WoW data arrived; OFF -> WoW worked because OFF cleared first).
   useEffect(function(){
     if(!isAuthed())return;
     if(compareMode==="off"){setCompareCampaigns([]);return;}
     var range=computeComparisonRange(df,dt,compareMode);
     if(!range)return;
+    setCompareCampaigns([]);
     var cancelled=false;
     var h=authHeaders();
     fetch(API+"/api/campaigns?from="+range.from+"&to="+range.to,{headers:h})
