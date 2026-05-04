@@ -64,6 +64,38 @@ function mapTikTokObjective(ttObj) {
   return null;
 }
 
+// Format hint from the team's pipe-delimited ad-name convention.
+//
+// Naming standard (Willowbrook / GAS Marketing house style):
+//   <Client> | <Format> | <Concept> | <Date>
+//   e.g. "Willowbrook | MP4 Video | Friends knitting | 14042026"
+//
+// The structural detection (asset_feed_spec / object_story_spec / post
+// attachments) misclassifies certain Dynamic / Flexible Creative ads as
+// STATIC because the creative payload carries both image and video
+// variants. When the structural signal is STATIC but the team has tagged
+// the ad as a video or carousel in its name, the name wins. Conservative:
+// we never DOWNGRADE an MP4 / CAROUSEL structural signal to STATIC based
+// on the name, because structural detection is reliable in those cases.
+//
+// Tokens are matched as whole pipe-delimited segments (case-insensitive,
+// trimmed) so the word "video" buried in a campaign concept doesn't
+// accidentally upgrade an actual static ad to MP4.
+//
+// Returns "MP4" | "CAROUSEL" | "STATIC" | "" (no recognised tag).
+function formatHintFromAdName(name) {
+  if (!name) return "";
+  var parts = String(name).split("|");
+  for (var i = 0; i < parts.length; i++) {
+    var t = String(parts[i] || "").trim().toLowerCase();
+    if (!t) continue;
+    if (t === "mp4" || t === "mp4 video" || t === "video") return "MP4";
+    if (t === "carousel") return "CAROUSEL";
+    if (t === "static" || /^static\s*\d+$/.test(t)) return "STATIC";
+  }
+  return "";
+}
+
 export default async function handler(req, res) {
   if (!rateLimit(req, res)) return;
   if (!(await checkAuth(req, res))) return;
@@ -791,31 +823,46 @@ export default async function handler(req, res) {
           thumbnail: thumb,
           previewUrl: preview,
           format: (function(){
-            if (cr.video_id) return "MP4";
-            var ot = (cr.object_type || "").toUpperCase();
-            if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
-            if (ot === "VIDEO") return "MP4";
-            // object_story_spec: explicit video/carousel signals from the post itself
-            var oss = cr.object_story_spec || {};
-            if (oss.video_data) return "MP4";
-            if (oss.link_data) {
-              if (oss.link_data.child_attachments && oss.link_data.child_attachments.length > 1) return "CAROUSEL";
-              if (oss.link_data.video_id) return "MP4";
+            // Compute structural format first using every signal Meta gives us.
+            var structural = (function(){
+              if (cr.video_id) return "MP4";
+              var ot = (cr.object_type || "").toUpperCase();
+              if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
+              if (ot === "VIDEO") return "MP4";
+              // object_story_spec: explicit video/carousel signals from the post itself
+              var oss = cr.object_story_spec || {};
+              if (oss.video_data) return "MP4";
+              if (oss.link_data) {
+                if (oss.link_data.child_attachments && oss.link_data.child_attachments.length > 1) return "CAROUSEL";
+                if (oss.link_data.video_id) return "MP4";
+              }
+              // Infer from post attachment shape (SHARE / empty object_type)
+              var postType = sid ? storyToType[sid] : "";
+              if (postType) return postType;
+              // Dynamic Creative / Flexible ads: asset_feed_spec holds *variants*. Having videos AND images
+              // means Meta picks per impression, treat as ambiguous (fall through to STATIC). Videos-only → MP4.
+              var afs = cr.asset_feed_spec || {};
+              var afsVideos = (afs.videos && afs.videos.length) || 0;
+              var afsImages = (afs.images && afs.images.length) || 0;
+              if (afsVideos > 0 && afsImages === 0) return "MP4";
+              var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
+              if (url.indexOf(".gif") >= 0) return "GIF";
+              if (afsImages >= 1) return "STATIC";
+              if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
+              return ot;
+            })();
+            // Ad-name tiebreaker. The team's "<Client> | <Format> | …"
+            // naming convention is the human-authored truth. When the
+            // structural signal would have said STATIC (almost always
+            // because of Dynamic Creative variants tripping the detector),
+            // upgrade to whatever the name segment says. Never DOWNGRADE
+            // MP4 / CAROUSEL based on the name, since structural detection
+            // is reliable in those directions.
+            if (structural === "STATIC") {
+              var hint = formatHintFromAdName(ins.ad_name || "");
+              if (hint === "MP4" || hint === "CAROUSEL") return hint;
             }
-            // Infer from post attachment shape (SHARE / empty object_type)
-            var postType = sid ? storyToType[sid] : "";
-            if (postType) return postType;
-            // Dynamic Creative / Flexible ads: asset_feed_spec holds *variants*. Having videos AND images
-            // means Meta picks per impression, treat as ambiguous (fall through to STATIC). Videos-only → MP4.
-            var afs = cr.asset_feed_spec || {};
-            var afsVideos = (afs.videos && afs.videos.length) || 0;
-            var afsImages = (afs.images && afs.images.length) || 0;
-            if (afsVideos > 0 && afsImages === 0) return "MP4";
-            var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
-            if (url.indexOf(".gif") >= 0) return "GIF";
-            if (afsImages >= 1) return "STATIC";
-            if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
-            return ot;
+            return structural;
           })(),
           spend: ins.spend,
           impressions: ins.impressions,
