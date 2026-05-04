@@ -4377,9 +4377,18 @@ export default function MediaOnGas(){
                       <span style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2}}>{"SPEND TO DATE: "+fR(computed.totalSpend)}</span>
                       <span style={{fontSize:11,fontWeight:700,color:pacePct>90?P.rose:pacePct>60?P.solar:P.mint,fontFamily:fm,letterSpacing:2}}>{"DAY "+elapsedDays+" OF "+totalDays2+" ("+pacePct+"%)"}</span>
                     </div>
+                    {/* Local keyframes so the slow grow-from-zero works
+                        even before any ChartReveal has mounted on the page.
+                        Budget Pacing sits at the top of Summary, above the
+                        platform donuts where ChartReveal usually injects the
+                        global keyframes. 1.6s makes the growth deliberate
+                        and noticeable on landing. The marker line's
+                        opacity is delayed so it appears precisely as the
+                        bar reaches its final width. */}
+                    <style>{"@keyframes pacingBarGrow{from{width:0}}@keyframes pacingMarkerFade{from{opacity:0}to{opacity:0.6}}"}</style>
                     <div style={{position:"relative",height:44,background:"rgba(0,0,0,0.3)",borderRadius:12,overflow:"hidden",border:"1px solid "+P.rule}}>
-                      <div style={{position:"absolute",left:0,top:0,bottom:0,width:pacePct+"%",background:"linear-gradient(90deg,"+P.ember+","+P.solar+")",borderRadius:12,transition:"width 0.6s ease"}}/>
-                      <div style={{position:"absolute",left:pacePct+"%",top:-2,bottom:-2,width:2,background:P.txt,opacity:0.6,zIndex:2}}/>
+                      <div style={{position:"absolute",left:0,top:0,bottom:0,width:pacePct+"%",background:"linear-gradient(90deg,"+P.ember+","+P.solar+")",borderRadius:12,animation:"pacingBarGrow 1.6s cubic-bezier(0.22,1,0.36,1) both",transition:"width 0.6s ease"}}/>
+                      <div style={{position:"absolute",left:pacePct+"%",top:-2,bottom:-2,width:2,background:P.txt,opacity:0.6,zIndex:2,animation:"pacingMarkerFade 0.5s ease 1.4s both"}}/>
                       <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:3}}><span style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,textShadow:"0 1px 6px rgba(0,0,0,0.9)"}}>{fR(computed.totalSpend)+" spent, projecting "+fR(projSpend)}</span></div>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}><span style={{fontSize:10,color:P.label,fontFamily:fm}}>{df}</span><span style={{fontSize:10,color:P.label,fontFamily:fm}}>{dt}</span></div>
