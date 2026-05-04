@@ -5944,15 +5944,20 @@ export default function MediaOnGas(){
                       <div>
                         <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Spend Allocation by Objective</div>
                         <ChartReveal><ResponsiveContainer width="100%" height={220}>
-                          <PieChart>
-                            <Pie data={donutData} cx="50%" cy="50%" outerRadius={78} innerRadius={44} paddingAngle={3} dataKey="value" stroke="none" label={function(entry){var pct=grandSpend>0?(entry.value/grandSpend*100).toFixed(2):0;return pct>=5?pct+"%":"";}} labelStyle={{fontSize:10,fontFamily:fm,fill:P.txt,fontWeight:700}}>
+                          <PieChart margin={{top:6,right:6,bottom:6,left:6}}>
+                            {/* Labels turned off so leader-lined percentages don't
+                                bleed past the 220px container into the next
+                                section. The custom chip legend underneath shows
+                                the same percentages plus the rand value, so the
+                                in-chart labels were redundant anyway. */}
+                            <Pie data={donutData} cx="50%" cy="50%" outerRadius={78} innerRadius={44} paddingAngle={3} dataKey="value" stroke="none" label={false} labelLine={false}>
                               {donutData.map(function(entry,idx){return <Cell key={idx} fill={entry.color}/>;})}
                             </Pie>
                             <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                           </PieChart>
                         </ResponsiveContainer></ChartReveal>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center",marginTop:4}}>
-                          {donutData.map(function(d){var pct=grandSpend>0?(d.value/grandSpend*100).toFixed(2):"0.00";return <div key={d.name} style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.85)"}}><span style={{width:9,height:9,borderRadius:"50%",background:d.color}}></span>{d.name}: {fR(d.value)} ({pct}%)</div>;})}
+                        <div style={{display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center",marginTop:8,paddingTop:8,borderTop:"1px solid "+P.rule+"40"}}>
+                          {donutData.map(function(d){var pct=grandSpend>0?(d.value/grandSpend*100).toFixed(2):"0.00";return <div key={d.name} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,fontFamily:fm,color:"rgba(255,251,248,0.85)",whiteSpace:"nowrap"}}><span style={{width:9,height:9,borderRadius:"50%",background:d.color,flexShrink:0}}></span>{d.name}: {fR(d.value)} ({pct}%)</div>;})}
                         </div>
                       </div>
                       <div>
