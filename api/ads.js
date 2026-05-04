@@ -64,35 +64,35 @@ function mapTikTokObjective(ttObj) {
   return null;
 }
 
-// Format hint from the team's pipe-delimited ad-name convention.
+// Format hint from the ad name. The team's naming convention tags the
+// format inside the ad name itself; we trust that as the source of truth
+// because Meta / TikTok / Google's structural detection misclassifies
+// Dynamic Creative and other multi-asset ads in ways that are hard to
+// untangle from the API payload alone.
 //
-// Naming standard (Willowbrook / GAS Marketing house style):
-//   <Client> | <Format> | <Concept> | <Date>
-//   e.g. "Willowbrook | MP4 Video | Friends knitting | 14042026"
+// Rules (case-insensitive, substring match anywhere in the name):
+//   contains "carousel"           -> CAROUSEL
+//   contains "static"             -> STATIC
+//   contains "mp4" / "video" /
+//   "gif"                          -> MP4    (gif is treated as a video)
 //
-// The structural detection (asset_feed_spec / object_story_spec / post
-// attachments) misclassifies certain Dynamic / Flexible Creative ads as
-// STATIC because the creative payload carries both image and video
-// variants. When the structural signal is STATIC but the team has tagged
-// the ad as a video or carousel in its name, the name wins. Conservative:
-// we never DOWNGRADE an MP4 / CAROUSEL structural signal to STATIC based
-// on the name, because structural detection is reliable in those cases.
+// Conflict resolution by priority: carousel beats static beats video.
+// A name like "Carousel Static Video" hits CAROUSEL because that's the
+// most specific format claim. In practice the team's naming standard
+// only puts ONE format token per name so this is academic.
 //
-// Tokens are matched as whole pipe-delimited segments (case-insensitive,
-// trimmed) so the word "video" buried in a campaign concept doesn't
-// accidentally upgrade an actual static ad to MP4.
+// Hint is AUTHORITATIVE in the format pipeline below: if the name carries
+// a recognised tag, the structural detection is ignored entirely. This is
+// a deliberate change from earlier upgrade-only behaviour because the
+// team confirmed the naming convention is the source of truth.
 //
 // Returns "MP4" | "CAROUSEL" | "STATIC" | "" (no recognised tag).
 function formatHintFromAdName(name) {
   if (!name) return "";
-  var parts = String(name).split("|");
-  for (var i = 0; i < parts.length; i++) {
-    var t = String(parts[i] || "").trim().toLowerCase();
-    if (!t) continue;
-    if (t === "mp4" || t === "mp4 video" || t === "video") return "MP4";
-    if (t === "carousel") return "CAROUSEL";
-    if (t === "static" || /^static\s*\d+$/.test(t)) return "STATIC";
-  }
+  var s = String(name).toLowerCase();
+  if (s.indexOf("carousel") >= 0) return "CAROUSEL";
+  if (s.indexOf("static") >= 0) return "STATIC";
+  if (s.indexOf("mp4") >= 0 || s.indexOf("video") >= 0 || s.indexOf("gif") >= 0) return "MP4";
   return "";
 }
 
@@ -823,46 +823,37 @@ export default async function handler(req, res) {
           thumbnail: thumb,
           previewUrl: preview,
           format: (function(){
-            // Compute structural format first using every signal Meta gives us.
-            var structural = (function(){
-              if (cr.video_id) return "MP4";
-              var ot = (cr.object_type || "").toUpperCase();
-              if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
-              if (ot === "VIDEO") return "MP4";
-              // object_story_spec: explicit video/carousel signals from the post itself
-              var oss = cr.object_story_spec || {};
-              if (oss.video_data) return "MP4";
-              if (oss.link_data) {
-                if (oss.link_data.child_attachments && oss.link_data.child_attachments.length > 1) return "CAROUSEL";
-                if (oss.link_data.video_id) return "MP4";
-              }
-              // Infer from post attachment shape (SHARE / empty object_type)
-              var postType = sid ? storyToType[sid] : "";
-              if (postType) return postType;
-              // Dynamic Creative / Flexible ads: asset_feed_spec holds *variants*. Having videos AND images
-              // means Meta picks per impression, treat as ambiguous (fall through to STATIC). Videos-only → MP4.
-              var afs = cr.asset_feed_spec || {};
-              var afsVideos = (afs.videos && afs.videos.length) || 0;
-              var afsImages = (afs.images && afs.images.length) || 0;
-              if (afsVideos > 0 && afsImages === 0) return "MP4";
-              var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
-              if (url.indexOf(".gif") >= 0) return "GIF";
-              if (afsImages >= 1) return "STATIC";
-              if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
-              return ot;
-            })();
-            // Ad-name tiebreaker. The team's "<Client> | <Format> | …"
-            // naming convention is the human-authored truth. When the
-            // structural signal would have said STATIC (almost always
-            // because of Dynamic Creative variants tripping the detector),
-            // upgrade to whatever the name segment says. Never DOWNGRADE
-            // MP4 / CAROUSEL based on the name, since structural detection
-            // is reliable in those directions.
-            if (structural === "STATIC") {
-              var hint = formatHintFromAdName(ins.ad_name || "");
-              if (hint === "MP4" || hint === "CAROUSEL") return hint;
+            // Ad-name tag wins. The team's naming convention puts the
+            // format directly in the name ("Static", "MP4 Video", "GIF",
+            // "Carousel"), and that's the human-authored source of truth.
+            // Only fall through to structural detection when no tag is
+            // present in the name.
+            var hint = formatHintFromAdName(ins.ad_name || "");
+            if (hint) return hint;
+            // No name tag — derive from creative payload.
+            if (cr.video_id) return "MP4";
+            var ot = (cr.object_type || "").toUpperCase();
+            if (ot === "MULTI_SHARE" || ot === "CAROUSEL") return "CAROUSEL";
+            if (ot === "VIDEO") return "MP4";
+            var oss = cr.object_story_spec || {};
+            if (oss.video_data) return "MP4";
+            if (oss.link_data) {
+              if (oss.link_data.child_attachments && oss.link_data.child_attachments.length > 1) return "CAROUSEL";
+              if (oss.link_data.video_id) return "MP4";
             }
-            return structural;
+            var postType = sid ? storyToType[sid] : "";
+            if (postType) return postType;
+            var afs = cr.asset_feed_spec || {};
+            var afsVideos = (afs.videos && afs.videos.length) || 0;
+            var afsImages = (afs.images && afs.images.length) || 0;
+            if (afsVideos > 0 && afsImages === 0) return "MP4";
+            // .gif URL with no name tag also gets the MP4 treatment per
+            // the team's rule (a gif IS a video ad in their book).
+            var url = (cr.image_url || cr.thumbnail_url || "").toLowerCase();
+            if (url.indexOf(".gif") >= 0) return "MP4";
+            if (afsImages >= 1) return "STATIC";
+            if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
+            return ot;
           })(),
           spend: ins.spend,
           impressions: ins.impressions,
@@ -1064,7 +1055,14 @@ export default async function handler(req, res) {
             adName: mt.ad_name,
             thumbnail: video.video_cover_url || video.poster_url || firstImgInfo.image_url || firstImgInfo.url || "",
             previewUrl: video.preview_url || ("https://ads.tiktok.com/i18n/perf/creation?aadvid=" + ttAdvId),
-            format: ad.video_id ? "MP4" : (ad.image_ids && ad.image_ids.length > 1 ? "CAROUSEL" : "STATIC"),
+            // Ad-name tag wins (same rule as Meta path). TikTok's video_id
+            // / image_ids check is the structural fallback when the name
+            // carries no recognised format token.
+            format: (function(){
+              var ttHint = formatHintFromAdName(mt.ad_name || "");
+              if (ttHint) return ttHint;
+              return ad.video_id ? "MP4" : (ad.image_ids && ad.image_ids.length > 1 ? "CAROUSEL" : "STATIC");
+            })(),
             spend: ttSpend,
             impressions: ttImps,
             clicks: ttClicks,
@@ -1356,7 +1354,10 @@ export default async function handler(req, res) {
               })(),
               thumbnail: thumb,
               previewUrl: preview,
-              format: format,
+              // Same name-tag-wins rule. Google's structural detection
+              // is type-based and usually right, but if the team puts a
+              // recognised tag in the ad name we honour it.
+              format: (function(){ var gHint = formatHintFromAdName(ad.name || ""); return gHint || format; })(),
               spend: sp,
               impressions: imps,
               clicks: clk,
