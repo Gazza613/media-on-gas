@@ -184,6 +184,42 @@ export async function consumeInvite(token) {
   await redisCmd(["DEL", "invite:" + token]);
 }
 
+// ─── Password reset tokens ─────────────────────────────────────────
+// Separate keyspace from invites so an invite token can never be used to
+// reset an existing account's password (and vice versa). Reset tokens have
+// a tighter 1-hour TTL since the only proof of identity is email control,
+// and the token is always one-time-use.
+//
+// Redis: reset:<token> → { token, email, requestedBy, kind, createdAt, expiresAt }
+//   requestedBy = "self"   (came from /api/forgot-password)
+//   requestedBy = <email>  (came from /api/admin-reset, superadmin's email)
+export var RESET_TTL_SEC = 60 * 60; // 1 hour
+
+export async function createResetToken(email, requestedBy) {
+  var token = generateToken();
+  var record = {
+    token: token,
+    email: normalizeEmail(email),
+    requestedBy: requestedBy === "self" ? "self" : normalizeEmail(requestedBy || "self"),
+    kind: "reset",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + RESET_TTL_SEC * 1000).toISOString()
+  };
+  await redisCmd(["SET", "reset:" + token, JSON.stringify(record), "EX", String(RESET_TTL_SEC)]);
+  return record;
+}
+
+export async function getResetToken(token) {
+  if (!token) return null;
+  var r = await redisCmd(["GET", "reset:" + token]);
+  if (!r || !r.result) return null;
+  try { return JSON.parse(r.result); } catch (_) { return null; }
+}
+
+export async function consumeResetToken(token) {
+  await redisCmd(["DEL", "reset:" + token]);
+}
+
 // Bootstrap: ensure Gary's superadmin row exists. On first run, seed from
 // DASHBOARD_PASSWORD env var so he can log in immediately. Afterwards Gary
 // can rotate the password via the standard accept-invite flow on himself

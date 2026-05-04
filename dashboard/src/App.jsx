@@ -210,7 +210,7 @@ function SignupScreen(props){
           <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
         </div>
         <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{color:"#FF3D00"}}>GAS</span></div>
-        <div style={{fontSize:10,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>Team Invitation</div>
+        <div style={{fontSize:10,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,fontWeight:600}}>{invite&&invite.kind==="reset"?"Password Reset":"Team Invitation"}</div>
       </div>
       <div style={{background:"rgba(30,18,50,0.5)",border:"1px solid "+P.rule,borderRadius:16,padding:28,backdropFilter:"blur(24px)"}}>
         {loading&&<div style={{textAlign:"center",color:P.label,fontFamily:fm,fontSize:12,letterSpacing:2}}>Dusting off your invite…</div>}
@@ -219,17 +219,17 @@ function SignupScreen(props){
           <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.6}}>Ask <span style={{color:P.ember}}>gary@gasmarketing.co.za</span> for a fresh invitation.</div>
         </div>}
         {!loading&&invite&&!done&&<>
-          <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,textAlign:"center"}}>Set your password</div>
-          <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>Welcome <span style={{color:P.ember,fontWeight:800}}>{invite.name||invite.email}</span><div style={{fontSize:11,color:P.label,marginTop:4}}>{invite.email}</div></div>
-          <input type="password" placeholder="Choose a password (8+ chars)" value={pw} onChange={function(e){setPw(e.target.value);setErr("");}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:12,letterSpacing:2}}/>
+          <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:10,textAlign:"center"}}>{invite.kind==="reset"?"Choose a new password":"Set your password"}</div>
+          <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.6,marginBottom:18,textAlign:"center"}}>{invite.kind==="reset"?"Welcome back":"Welcome"} <span style={{color:P.ember,fontWeight:800}}>{invite.name||invite.email}</span><div style={{fontSize:11,color:P.label,marginTop:4}}>{invite.email}</div></div>
+          <input type="password" placeholder={invite.kind==="reset"?"New password (8+ chars)":"Choose a password (8+ chars)"} value={pw} onChange={function(e){setPw(e.target.value);setErr("");}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:12,letterSpacing:2}}/>
           <input type="password" placeholder="Confirm password" value={pw2} onChange={function(e){setPw2(e.target.value);setErr("");}} onKeyDown={function(e){if(e.key==="Enter")submit();}} autoComplete="new-password" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"14px 16px",color:P.txt,fontSize:14,fontFamily:fm,outline:"none",marginBottom:16,letterSpacing:2}}/>
           {err&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12,textAlign:"center"}}>{err}</div>}
-          <button onClick={submit} disabled={busy} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2}}>{busy?"SETTING PASSWORD...":"ACCEPT & ACTIVATE"}</button>
+          <button onClick={submit} disabled={busy} style={{width:"100%",background:busy?"#555":gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:2}}>{busy?(invite.kind==="reset"?"UPDATING...":"SETTING PASSWORD..."):(invite.kind==="reset"?"UPDATE PASSWORD":"ACCEPT & ACTIVATE")}</button>
         </>}
         {done&&<div style={{textAlign:"center"}}>
           <div style={{fontSize:36,marginBottom:10,color:P.mint}}>{"✓"}</div>
-          <div style={{fontSize:14,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>Account Ready</div>
-          <div style={{fontSize:12,color:P.label,fontFamily:ff,marginBottom:20,lineHeight:1.6}}>Password set. Sign in with your email and new password.</div>
+          <div style={{fontSize:14,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",fontWeight:800,marginBottom:8}}>{invite&&invite.kind==="reset"?"Password Updated":"Account Ready"}</div>
+          <div style={{fontSize:12,color:P.label,fontFamily:ff,marginBottom:20,lineHeight:1.6}}>{invite&&invite.kind==="reset"?"Sign in with your email and new password.":"Password set. Sign in with your email and new password."}</div>
           <button onClick={function(){window.location.href="/";}} style={{width:"100%",background:gEmber,border:"none",borderRadius:10,padding:"14px 24px",color:"#fff",fontSize:13,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:2}}>GO TO SIGN IN</button>
         </div>}
       </div>
@@ -242,6 +242,24 @@ function LoginScreen(props){
   var em=useState(""),email=em[0],setEmail=em[1];
   var ps=useState(""),pw=ps[0],setPw=ps[1];
   var ls=useState(false),busy=ls[0],setBusy=ls[1];
+  // Forgot-password sub-flow lives on the same screen, toggled in place
+  // so the user keeps the visual context (logo, ambient flares) instead
+  // of being thrown to a separate route.
+  var fpS=useState(false),showForgot=fpS[0],setShowForgot=fpS[1];
+  var feS=useState(""),fpEmail=feS[0],setFpEmail=feS[1];
+  var fbS=useState(false),fpBusy=fbS[0],setFpBusy=fbS[1];
+  var fdS=useState(false),fpDone=fdS[0],setFpDone=fdS[1];
+  var feeS=useState(""),fpErr=feeS[0],setFpErr=feeS[1];
+  var sendForgot=function(){
+    if(!fpEmail.trim()){setFpErr("Enter your email");return;}
+    setFpBusy(true);setFpErr("");
+    fetch(API+"/api/forgot-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:fpEmail.trim().toLowerCase()})})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(){setFpBusy(false);setFpDone(true);})
+      .catch(function(){setFpBusy(false);setFpDone(true);});
+    // We always claim success even on network error — match the server's
+    // intentional opacity. The user can retry if their inbox stays empty.
+  };
   var handleLogin=function(){
     if(!email){setLoginErr("Enter your email");return;}
     if(!pw){setLoginErr("Enter your password");return;}
@@ -306,6 +324,26 @@ function LoginScreen(props){
               each pass feels continuous rather than popping at the edges */}
           {!busy&&<span style={{position:"absolute",top:0,left:0,width:"32%",height:"100%",background:"linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.08) 20%,rgba(255,255,255,0.45) 50%,rgba(255,255,255,0.08) 80%,transparent 100%)",animation:"gasBtnSheenFast 5.5s cubic-bezier(0.45,0.05,0.55,0.95) infinite",pointerEvents:"none",willChange:"transform,opacity"}}/>}
         </button>
+        {!showForgot&&<div style={{textAlign:"center",marginTop:14}}>
+          <button type="button" onClick={function(){setShowForgot(true);setFpEmail(email||"");setFpDone(false);setFpErr("");}} style={{background:"transparent",border:"none",color:P.ember,fontSize:11,fontFamily:fm,letterSpacing:2,fontWeight:700,cursor:"pointer",textTransform:"uppercase"}}>Forgot password?</button>
+        </div>}
+        {showForgot&&<div style={{marginTop:18,paddingTop:18,borderTop:"1px solid rgba(168,85,247,0.18)"}}>
+          <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:2.5,fontWeight:800,textTransform:"uppercase",marginBottom:8,textAlign:"center"}}>Reset Password</div>
+          {!fpDone?<>
+            <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.7,marginBottom:12,textAlign:"center"}}>Enter your account email and we'll send you a one-time link to choose a new password.</div>
+            <input type="email" placeholder="Your work email" value={fpEmail} onChange={function(e){setFpEmail(e.target.value);setFpErr("");}} onKeyDown={function(e){if(e.key==="Enter")sendForgot();}} autoComplete="username" style={{width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 14px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none",marginBottom:10,letterSpacing:1}}/>
+            {fpErr&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:10,textAlign:"center"}}>{fpErr}</div>}
+            <div style={{display:"flex",gap:8}}>
+              <button type="button" onClick={function(){setShowForgot(false);setFpErr("");}} style={{flex:1,background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"11px 0",color:"rgba(255,251,248,0.72)",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:2,textTransform:"uppercase"}}>Back</button>
+              <button type="button" onClick={sendForgot} disabled={fpBusy||!fpEmail.trim()} style={{flex:2,background:fpBusy||!fpEmail.trim()?"#555":gEmber,border:"none",borderRadius:10,padding:"11px 0",color:"#fff",fontSize:11,fontWeight:900,fontFamily:fm,cursor:fpBusy||!fpEmail.trim()?"wait":"pointer",letterSpacing:2,textTransform:"uppercase"}}>{fpBusy?"Sending":"Send Reset Link"}</button>
+            </div>
+          </>:<div style={{textAlign:"center",padding:"6px 0 4px"}}>
+            <div style={{fontSize:36,marginBottom:6,color:P.mint,lineHeight:1}}>{"✓"}</div>
+            <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.7,marginBottom:14}}>If <strong style={{color:P.ember}}>{fpEmail}</strong> matches an active account you'll receive a reset link in the next minute. Check your inbox (and spam).</div>
+            <div style={{fontSize:10,color:"rgba(255,251,248,0.55)",fontFamily:fm,letterSpacing:1.5,lineHeight:1.7,marginBottom:14}}>Link expires in 1 hour. One-time use.</div>
+            <button type="button" onClick={function(){setShowForgot(false);}} style={{width:"100%",background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"11px 0",color:"rgba(255,251,248,0.72)",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:2,textTransform:"uppercase"}}>Back to sign in</button>
+          </div>}
+        </div>}
         <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:1,marginTop:16,textAlign:"center",lineHeight:1.7}}>Access is by invitation only.<br/>Contact <span style={{color:P.ember,fontWeight:700}}>grow@gasmarketing.co.za</span> to request access.</div>
       </div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:26,fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:700,animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.45s both"}}>
@@ -1541,6 +1579,27 @@ function CampaignAuditModal(props){
       .then(function(d){if(d.ok)loadTeam();else teamErr[1](d.error||"Action failed");})
       .catch(function(){teamErr[1]("Connection error");});
   };
+  // Admin-triggered password reset. Mints a 1h reset token + emails the
+  // target user. Returns the resetUrl too so the admin can copy it into
+  // Slack as a fallback for inboxes that delay or filter the email.
+  var adminResetUser=function(email){
+    if(!window.confirm("Send a password reset link to "+email+"?\n\nA one-time reset link will be emailed to them and shown to you so you can also share it via Slack."))return;
+    inviteNote[1]("");teamErr[1]("");
+    fetch(props.apiBase+"/api/admin-reset",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({email:email})})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        if(r.status===200&&r.data&&r.data.ok){
+          var msg="Reset link sent to "+r.data.email+(r.data.emailSent?" (emailed)":" (email failed; copy the link below).")+"\nLink: "+r.data.resetUrl;
+          inviteNote[1](msg);
+          // Also drop the link onto the clipboard for one-click sharing.
+          try{if(navigator&&navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(r.data.resetUrl);}catch(_){/*ignore*/}
+          loadTeam();
+        }else{
+          teamErr[1]((r.data&&r.data.error)||"Reset failed");
+        }
+      })
+      .catch(function(){teamErr[1]("Connection error");});
+  };
 
   var load=function(){
     loading[1](true);err[1]("");
@@ -1902,7 +1961,13 @@ function CampaignAuditModal(props){
                       <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(u.createdAt)}</td>
                       <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(u.lastLogin)}</td>
                       <td style={Object.assign({},cell,{textAlign:"right"})}>
-                        {canToggle?<button onClick={function(){toggleUser(u.email,u.active);}} style={{background:u.active?"transparent":P.mint+"15",border:"1px solid "+(u.active?P.critical+"60":P.mint+"60"),borderRadius:6,padding:"4px 12px",color:u.active?P.critical:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{u.active?"REVOKE":"RESTORE"}</button>:<span style={{color:P.caption,fontSize:10}}>-</span>}
+                        <div style={{display:"inline-flex",gap:6,alignItems:"center",justifyContent:"flex-end"}}>
+                          {/* Reset password — only for active accounts that have already activated.
+                              Pending invites should be re-sent, not reset; revoked accounts must be
+                              restored first. Superadmin self-resets via the login screen. */}
+                          {u.role!=="superadmin"&&u.active&&u.status==="active"&&<button onClick={function(){adminResetUser(u.email);}} title="Send a password reset link" style={{background:"transparent",border:"1px solid "+P.solar+"60",borderRadius:6,padding:"4px 10px",color:P.solar,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>RESET</button>}
+                          {canToggle?<button onClick={function(){toggleUser(u.email,u.active);}} style={{background:u.active?"transparent":P.mint+"15",border:"1px solid "+(u.active?P.critical+"60":P.mint+"60"),borderRadius:6,padding:"4px 12px",color:u.active?P.critical:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{u.active?"REVOKE":"RESTORE"}</button>:<span style={{color:P.caption,fontSize:10}}>-</span>}
+                        </div>
                       </td>
                     </tr>;
                   })}
