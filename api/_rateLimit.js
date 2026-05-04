@@ -27,24 +27,37 @@ function getIp(req) {
     (req.socket && req.socket.remoteAddress) || "unknown";
 }
 
+// Scope the rate-limit counter by IP + route + method.
+//
+// Earlier version keyed only by IP, so all endpoints shared a single
+// counter — a normal page load (campaigns, ads, demographics, timeseries,
+// audit, ...) burnt through any tight per-endpoint limit in seconds. Now
+// each (IP, METHOD path) pair has its own counter. Login POSTs stay
+// separate from session-check GETs, which stay separate from /api/ads
+// fetches, etc., so legitimate dashboard usage cannot starve the
+// auth-endpoint budget.
+function getScope(req) {
+  var path = String(req.url || "").split("?")[0] || "/";
+  var method = String(req.method || "GET").toUpperCase();
+  return method + ":" + path;
+}
+
 export async function rateLimit(req, res, opts) {
   var maxPerMin = (opts && opts.maxPerMin) || 60;
   var maxPerHour = (opts && opts.maxPerHour) || 500;
   var ip = getIp(req);
+  var scope = getScope(req);
   var now = Date.now();
 
   var allowed;
   try {
-    allowed = await rateLimitRedisIncr(ip, now, maxPerMin, maxPerHour);
+    allowed = await rateLimitRedisIncr(ip, scope, now, maxPerMin, maxPerHour);
   } catch (_) {
     allowed = null; // signal "Redis unavailable, use fallback"
   }
 
-  // Fail-open with in-memory fallback if Redis is unreachable. We still
-  // get some protection from the in-memory counter against a single
-  // hot-instance burst, and the Redis outage will ring a different alarm.
   if (allowed === null) {
-    allowed = rateLimitMemoryFallback(ip, now, maxPerMin, maxPerHour);
+    allowed = rateLimitMemoryFallback(ip, scope, now, maxPerMin, maxPerHour);
   }
 
   if (!allowed) {

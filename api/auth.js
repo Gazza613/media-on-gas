@@ -45,7 +45,16 @@ export async function getSessionRole(token) {
 export default async function handler(req, res) {
   setAuthCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  if (!(await rateLimit(req, res, { maxPerMin: 10, maxPerHour: 60 }))) return;
+  // Tighter limit for POST (login attempts, brute-force-attractive) than for
+  // GET (session validation, fires on every page load + every tab refresh
+  // through the validateSession effect, so a single user normally generates
+  // dozens of GETs per hour). Splitting the limit avoids legitimate users
+  // hitting "Too many requests" just by reloading the dashboard while an
+  // attacker still has a tight ceiling on actual sign-in attempts.
+  var authOpts = req.method === "POST"
+    ? { maxPerMin: 10, maxPerHour: 60 }
+    : { maxPerMin: 60, maxPerHour: 600 };
+  if (!(await rateLimit(req, res, authOpts))) return;
 
   // Make sure Gary's superadmin row is provisioned. No-op after the first
   // successful bootstrap.

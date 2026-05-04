@@ -40,11 +40,15 @@ async function redisCmd(args, timeoutMs) {
 // have to be under their cap for the request to be allowed. Returns true
 // when allowed, false when limited. Throws on Redis errors so the caller
 // can fall back.
-export async function rateLimitRedisIncr(ip, nowMs, maxPerMin, maxPerHour) {
+// scope is "<METHOD>:<path>" so each endpoint gets its own counter per IP.
+// Without scope a single dashboard mount (which fan-fetches campaigns +
+// ads + demographics + timeseries) eats the auth endpoint's quota in one
+// go, locking the user out of /api/auth for the rest of the hour.
+export async function rateLimitRedisIncr(ip, scope, nowMs, maxPerMin, maxPerHour) {
   var minuteWindow = Math.floor(nowMs / 60000);
   var hourWindow = Math.floor(nowMs / 3600000);
-  var minuteKey = "rl:m:" + ip + ":" + minuteWindow;
-  var hourKey = "rl:h:" + ip + ":" + hourWindow;
+  var minuteKey = "rl:m:" + ip + ":" + scope + ":" + minuteWindow;
+  var hourKey = "rl:h:" + ip + ":" + scope + ":" + hourWindow;
 
   // Two pipelined INCR + EXPIRE pairs. Upstash supports the [["INCR",k],["EXPIRE",k,...]]
   // multi-command pipeline format via the bulk POST endpoint. Falling back to
@@ -71,7 +75,7 @@ var memStore = {};
 var memLastCleanup = Date.now();
 var MEM_CLEANUP_INTERVAL = 5 * 60 * 1000;
 
-export function rateLimitMemoryFallback(ip, nowMs, maxPerMin, maxPerHour) {
+export function rateLimitMemoryFallback(ip, scope, nowMs, maxPerMin, maxPerHour) {
   if (nowMs - memLastCleanup > MEM_CLEANUP_INTERVAL) {
     memLastCleanup = nowMs;
     var hourAgo = nowMs - 3600000;
@@ -80,13 +84,16 @@ export function rateLimitMemoryFallback(ip, nowMs, maxPerMin, maxPerHour) {
       if (memStore[k].length === 0) delete memStore[k];
     });
   }
-  if (!memStore[ip]) memStore[ip] = [];
-  memStore[ip].push(nowMs);
+  // Same key shape as Redis: ip + scope. Mirrors the route+method scoping
+  // so the in-memory fail-open path is consistent with Redis.
+  var key = ip + "|" + scope;
+  if (!memStore[key]) memStore[key] = [];
+  memStore[key].push(nowMs);
   var minuteAgo = nowMs - 60000;
   var hourAgo2 = nowMs - 3600000;
   var inMin = 0, inHour = 0;
-  for (var i = memStore[ip].length - 1; i >= 0; i--) {
-    var t = memStore[ip][i];
+  for (var i = memStore[key].length - 1; i >= 0; i--) {
+    var t = memStore[key][i];
     if (t < hourAgo2) break;
     inHour++;
     if (t > minuteAgo) inMin++;
