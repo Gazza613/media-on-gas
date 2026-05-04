@@ -238,14 +238,47 @@ export default async function handler(req, res) {
 
   var dryRun = req.query.dryRun === "1" || req.query.dry === "1";
 
-  // ?reset=1 — set a baseline date in Redis. All clients are treated as
-  // if they last sent on this date, so the SLA counter restarts from now.
-  // The first nudges will fire SLA_DAYS + BUFFER_HOURS after the reset.
+  // ?reset=1[&baseline=YYYY-MM-DD] — set a baseline date in Redis. All
+  // clients are treated as if they last sent on this date, so the SLA
+  // counter restarts from there. The first nudges will fire SLA_DAYS +
+  // BUFFER_HOURS after the baseline. With no &baseline= the reset uses
+  // "now" (the original behaviour). With &baseline=2026-05-01 the
+  // baseline is anchored at midnight UTC of that date so historic gaps
+  // before the chosen day stop generating nudges.
   var BASELINE_KEY = "nudge:baseline";
   if (req.query.reset === "1") {
-    var baselineIso = new Date().toISOString();
+    var baselineIso;
+    var explicit = String(req.query.baseline || "").trim();
+    if (explicit) {
+      // Accept YYYY-MM-DD or any ISO 8601 string. Anchor bare dates at
+      // 00:00 UTC so the SLA window is unambiguous regardless of the
+      // server's local timezone.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(explicit)) {
+        baselineIso = explicit + "T00:00:00.000Z";
+      } else {
+        var parsed = Date.parse(explicit);
+        if (!isFinite(parsed)) {
+          res.status(400).json({ error: "baseline must be YYYY-MM-DD or ISO 8601, got: " + explicit });
+          return;
+        }
+        baselineIso = new Date(parsed).toISOString();
+      }
+    } else {
+      baselineIso = new Date().toISOString();
+    }
     await redisCmd(["SET", BASELINE_KEY, baselineIso]);
-    res.status(200).json({ ok: true, action: "reset", baseline: baselineIso, nextNudgeAfter: SLA_DAYS + " days + " + BUFFER_HOURS + "h from now" });
+    var anchorMs = Date.parse(baselineIso);
+    var msPerDay = 24 * 60 * 60 * 1000;
+    var firstNudgeMs = anchorMs + SLA_DAYS * msPerDay + BUFFER_HOURS * 60 * 60 * 1000;
+    res.status(200).json({
+      ok: true,
+      action: "reset",
+      baseline: baselineIso,
+      nextNudgeAfter: new Date(firstNudgeMs).toISOString(),
+      explanation: explicit
+        ? "Clients with last-send before " + baselineIso + " will be treated as if they sent on that date. First nudge possible from " + new Date(firstNudgeMs).toISOString() + "."
+        : SLA_DAYS + " days + " + BUFFER_HOURS + "h from now"
+    });
     return;
   }
 
