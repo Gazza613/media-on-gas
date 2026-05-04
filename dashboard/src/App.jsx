@@ -2599,7 +2599,7 @@ export default function MediaOnGas(){
     // Hard refresh on login. The token is already in sessionStorage (the login
     // screen writes it before calling this), so the next boot auto-authenticates
     // via the session-restore effect. Reloading guarantees returning users
-    // (often logged out by the 5-minute idle timer below) pick up any JS/CSS
+    // (often logged out by the 15-minute idle timer below) pick up any JS/CSS
     // shipped since their last login — Vercel serves index.html with
     // cache-control: no-cache, so the reload always pulls the latest bundle.
     // Client share-link viewers never call this path.
@@ -2666,14 +2666,14 @@ export default function MediaOnGas(){
     return !!(ad.adId&&(pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0||pLow.indexOf("tiktok")>=0));
   };
 
-  // Idle logout: 5 minutes of no activity ends an admin or team-member session.
+  // Idle logout: 15 minutes of no activity ends an admin or team-member session.
   // On the next login, handleLogin does a hard reload so returning users pick
   // up anything shipped since their last login. Client share-link views are
   // excluded — the token there is the auth and expires on its own schedule,
   // idle-logging them out would be hostile.
   useEffect(function(){
     if(!session||isClient)return;
-    var IDLE_MS=5*60*1000;
+    var IDLE_MS=15*60*1000;
     var timer=null;
     var doLogout=function(){logSessionEnd("idle");handleLogout();};
     var resetIdle=function(){if(timer)clearTimeout(timer);timer=setTimeout(doLogout,IDLE_MS);};
