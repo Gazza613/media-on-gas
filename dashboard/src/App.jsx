@@ -3936,6 +3936,17 @@ export default function MediaOnGas(){
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
             <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
+            {/* LIVE indicator. Subtle breathing chip that signals to the
+                team the data on screen is current (refreshed on every page
+                load via the platform APIs, not a stale snapshot). The
+                two-layer animation, dot pulse + halo glow + chip border
+                breath, reads as "alive" without being distracting. */}
+            <div title="Live data, refreshed from Meta / TikTok / Google every time you load or refresh this page" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px 4px 8px",borderRadius:999,border:"1px solid rgba(74,222,128,0.30)",background:"rgba(74,222,128,0.05)",fontFamily:fm,animation:"liveChipBreath 2.4s ease-in-out infinite"}}>
+              <span style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:8,height:8}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:"#4ade80",animation:"liveDotPulse 2.4s ease-in-out infinite, liveDotGlow 2.4s ease-in-out infinite"}}/>
+              </span>
+              <span style={{fontSize:9.5,fontWeight:800,color:"#4ade80",letterSpacing:2.5,textTransform:"uppercase"}}>Live</span>
+            </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,14)} {selected.length} Campaigns</button>}
