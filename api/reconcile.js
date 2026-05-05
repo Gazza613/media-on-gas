@@ -54,18 +54,23 @@ function statusOf(deltaPct) {
 // the source-of-truth doesn't treat post reactions on a Lead Gen campaign
 // as followers, which is what the dashboard (after the "like" fix) no
 // longer does.
+// Name-first classification, the team's naming convention is
+// AUTHORITATIVE for objective. Mirrors api/campaigns.js + api/ads.js +
+// api/timeseries.js. Lead/POS matching tightened to require word-
+// boundary patterns so substring false-positives cannot occur.
 function canonicalObjective(rawMetaObj, campaignName) {
+  var n = (campaignName || "").toLowerCase();
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
+  if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
+  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
+  // No name tag — fall back to Meta's API objective.
   var o = String(rawMetaObj || "").toUpperCase();
   if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
   if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
   if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
   if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
   if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
-  var n = (campaignName || "").toLowerCase();
-  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
-  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
-  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
-  if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
   return "landingpage";
 }
 

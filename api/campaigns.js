@@ -12,6 +12,11 @@ var metaAccounts = [
 
 // Shared name-based objective fallback for cross-platform rows (TikTok,
 // Google, scheduled-but-no-metrics). Mirrors api/ads.js detectObjective.
+// Name-based objective detection. Returns "unknown" when the campaign
+// name has no recognised tag — caller is expected to fall back to the
+// platform API objective in that case. Lead/POS matching is tightened
+// to require word-boundary patterns so substring false-positives cannot
+// occur (e.g. "PaidSocial" must never be classified as a Lead campaign).
 function objectiveFromName(name) {
   var n = (name || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0
@@ -21,7 +26,7 @@ function objectiveFromName(name) {
       || n.indexOf("app_download") >= 0 || n.indexOf("app download") >= 0 || n.indexOf("uac") >= 0
       || n.indexOf("googleapp") >= 0 || n.indexOf("google_app") >= 0 || n.indexOf("google app") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
-  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
   // "unknown" is distinct from "landingpage" so the frontend can drop
   // it from Objective Highlights rather than inflating Landing Page.
@@ -292,15 +297,22 @@ export default async function handler(req, res) {
           // name detection.
           var rawMetaObj = String((campaignInfo[c.campaign_id] || {}).objective || "").toUpperCase();
           var isFbPlacement = platName === "Facebook";
+          // Name-first classification, the team's naming convention is
+          // authoritative. Examples it correctly resolves: a Home Loans
+          // campaign Meta classifies as LEAD_GENERATION but the team
+          // tagged "_Traffic_" stays Landing Page; a "_Like_" campaign
+          // Meta classifies as OUTCOME_ENGAGEMENT stays Followers. Falls
+          // back to Meta's API objective when the name carries no tag.
           var canonObj = (function() {
+            var fromName = objectiveFromName(c.campaign_name || "");
+            if (fromName && fromName !== "unknown") return fromName;
             var o = rawMetaObj;
             if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
             if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
             if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
             if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
             if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
-            // Name-based fallback mirrors ads.js detectObjective().
-            return objectiveFromName(c.campaign_name || "");
+            return "unknown";
           })();
 
           var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0, reactionsTotal = 0;

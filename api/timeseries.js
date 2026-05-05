@@ -12,13 +12,22 @@ var metaAccounts = [
   { name: "GAS Agency", id: "act_542990539806888" }
 ];
 
+// Name-based objective detection. Returns null when the campaign name
+// has no recognised tag — caller is expected to fall back to the
+// platform API objective in that case. The team's naming convention is
+// AUTHORITATIVE for objective: e.g. a campaign named
+// "PaidSocial_Traffic_..." should be classified Landing Page even when
+// Meta's underlying objective is LEAD_GENERATION (Home Loan Traffic
+// campaigns are configured as Lead Gen on Meta but the team treats them
+// as traffic). Lead/POS matching is tightened to require word-boundary
+// patterns so substring false-positives cannot occur.
 function detectObjective(campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
-  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
-  return "landingpage";
+  return null;
 }
 function mapMetaObjective(o) { if (!o) return null; o = String(o).toUpperCase(); if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall"; if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads"; if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers"; if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage"; if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads"; return null; }
 function mapTikTokObjective(o) { if (!o) return null; o = String(o).toUpperCase(); if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "appinstall"; if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "leads"; if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "followers"; if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "landingpage"; return null; }
@@ -139,7 +148,13 @@ export default async function handler(req, res) {
         metaAllRows.forEach(function(row) {
           var platform = tsMapPub(row.publisher_platform);
           if (!platform) return;
-          var objective = mapMetaObjective(campObjMap[row.campaign_id]) || detectObjective(row.campaign_name);
+          // Name-first classification — the team's naming convention is
+          // authoritative. Falls back to Meta's API objective when the
+          // name has no recognised tag, then to "landingpage" as the
+          // safe default. Stops Lead-Gen-on-Meta campaigns the team has
+          // tagged as "_Traffic_" from being miscounted as leads in the
+          // trendline.
+          var objective = detectObjective(row.campaign_name) || mapMetaObjective(campObjMap[row.campaign_id]) || "landingpage";
           var bucket = row.date_start;
           var spend = parseFloat(row.spend || 0);
           var imps = parseInt(row.impressions || 0);
@@ -212,7 +227,7 @@ export default async function handler(req, res) {
           var day = (rawDay + "").split(" ")[0].split("T")[0];
           if (!day) return;
           var bucket = bucketKey(day, granularity);
-          var objective = mapTikTokObjective(ttCampObjMap[String(d.campaign_id || "")]) || detectObjective(m.campaign_name);
+          var objective = detectObjective(m.campaign_name) || mapTikTokObjective(ttCampObjMap[String(d.campaign_id || "")]) || "landingpage";
           var spend = parseFloat(m.spend || 0);
           var imps = parseInt(m.impressions || 0);
           var clk = parseInt(m.clicks || 0);
@@ -269,7 +284,7 @@ export default async function handler(req, res) {
             var gPlatform = chType === "VIDEO" || (r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0 ? "YouTube" : chType === "SEARCH" ? "Google Search" : chType === "PERFORMANCE_MAX" ? "Performance Max" : chType === "DEMAND_GEN" || chType === "DISCOVERY" ? "Demand Gen" : "Google Display";
             // Roll all Google sub-platforms into "Google" for the matrix to keep it readable
             var bucketPlat = "Google";
-            var objective = detectObjective(r.campaign.name);
+            var objective = detectObjective(r.campaign.name) || "landingpage";
             var spend = parseFloat(r.metrics.costMicros || 0) / 1000000;
             var imps = parseInt(r.metrics.impressions || 0);
             var clk = parseInt(r.metrics.clicks || 0);

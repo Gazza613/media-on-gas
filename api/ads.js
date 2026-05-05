@@ -34,13 +34,18 @@ var metaAccounts = [
   { name: "GAS Agency", id: "act_542990539806888" }
 ];
 
+// Name-based objective detection. Returns null when no tag is present
+// so the caller can fall back to the platform API objective. The team's
+// naming convention is AUTHORITATIVE for objective. Lead/POS matching
+// is tightened to require word-boundary patterns so substring false-
+// positives cannot occur.
 function detectObjective(campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
-  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "leads";
+  if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
-  return "landingpage";
+  return null;
 }
 
 function mapMetaObjective(metaObj) {
@@ -743,7 +748,9 @@ export default async function handler(req, res) {
         // "like" action (post reactions vs. page likes, see below).
         var rawMetaObj = campObjMap[ins.campaign_id] || "";
         var apiObj = mapMetaObjective(rawMetaObj);
-        var objective = apiObj || detectObjective(ins.campaign_name);
+        // Name-first classification, the team's tag is authoritative.
+        // Falls back to Meta's API objective then to "landingpage".
+        var objective = detectObjective(ins.campaign_name) || apiObj || "landingpage";
         var isFbPlacement = pub === "facebook" || pub === "audience_network" || pub === "messenger" || pub === "oculus";
 
         var leads = 0, installs = 0, pageLikes = 0, reactionLikes = 0, follows = 0;
@@ -1038,7 +1045,8 @@ export default async function handler(req, res) {
           var ttImps = parseInt(mt.impressions || 0);
           var ttClicks = parseInt(mt.clicks || 0);
           var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
-          var ttObjective = ttApiObj || detectObjective(mt.campaign_name);
+          // Name-first classification, mirrors the Meta block above.
+          var ttObjective = detectObjective(mt.campaign_name) || ttApiObj || "landingpage";
           var ttResCount, ttResType;
           // TikTok "likes" metric = video hearts (engagement), NOT follows.
           // Only count actual follows for the Followers objective. Bundling
@@ -1324,8 +1332,10 @@ export default async function handler(req, res) {
             var gPlace = gPlatform === "YouTube" ? "YouTube" : gPlatform === "Google Search" ? "Search" : gPlatform === "Performance Max" ? "Pmax" : gPlatform === "Demand Gen" ? "Demand" : "Display";
             var gConv = Math.round(parseFloat(r.metrics.conversions || 0));
             var nameObj = detectObjective(r.campaign.name);
-            // Channel sub-type can hint at app campaigns
-            var gObjective = (chSubType.indexOf("APP") >= 0 || chSubType.indexOf("APP_INSTALL") >= 0) ? "appinstall" : nameObj;
+            // Channel sub-type can hint at app campaigns. detectObjective
+            // now returns null when no name tag is present, so fall back
+            // to "landingpage" as the safe default for Google rows.
+            var gObjective = (chSubType.indexOf("APP") >= 0 || chSubType.indexOf("APP_INSTALL") >= 0) ? "appinstall" : (nameObj || "landingpage");
             var gResCount, gResType;
             if (gConv > 0) { gResCount = gConv; gResType = gObjective === "leads" ? "leads" : gObjective === "appinstall" ? "installs" : "conversions"; }
             else if (gObjective === "appinstall") { gResCount = clk; gResType = "store_clicks"; }
