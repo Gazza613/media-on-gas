@@ -89,52 +89,82 @@ var COLOR_RANK = { green: 0, yellow: 1, orange: 2, red: 3 };
 function worse(a, b) { return COLOR_RANK[a] >= COLOR_RANK[b] ? a : b; }
 
 // Disposition decision. Reads yesterday's row + the 7-day aggregate row,
-// returns a colour, a status tag, and the reason strings the email will
-// surface. Keep this pure — it's the bit Gary will iterate on, so we want
-// it readable without scrolling through fetch logic.
+// returns a colour, a status tag, FLAGS (problems driving the disposition,
+// rendered red), WINS (improvements vs baseline, rendered green), and
+// CONTEXT (informational notes like thin-sample / baselining).
+//
+// Hard rules that override any deviation logic:
+//   1. Zero results on R100+ spend, on a result objective → ACTION (no
+//      thin-sample mercy: spending money for nothing is failure regardless
+//      of sample size or campaign age).
+//   2. Sub-7-day-old campaigns flag BASELINING but still get a red ACTION
+//      if rule 1 fires — a Day-1 campaign burning R1k/day with zero
+//      installs needs to be flagged immediately, not 6 days from now.
 function dispositionFor(yesterday, baseline, baselineDays, ageDays) {
-  // BASELINING — campaign younger than 7 days. Show numbers but suppress
-  // deviation flags entirely. Both POS campaigns will be here for their
-  // first week of life.
-  if (ageDays !== null && ageDays < 7) {
-    return {
-      color: "yellow",
-      tag: "BASELINING",
-      reasons: ["Day " + (ageDays + 1) + " of 7, establishing baseline"]
-    };
-  }
-
+  var spendY = parseFloat(yesterday.spend || 0);
   var rmY = resultMetricFor(yesterday);
   var rmB = baseline ? resultMetricFor(baseline) : null;
   var sample7d = rmB ? rmB.value : 0;
 
+  // Result-driving objectives (App Install, Leads, Follows + Likes) where
+  // zero results on material spend is a critical failure regardless of
+  // anything else. Traffic/Click campaigns are excluded — for those, the
+  // "result" is clicks and 0 clicks on R100 is rare enough that it's
+  // already covered by the deviation logic below.
+  var ZERO_RESULT_FLOOR = 100; // R100 — anything spending more than this without a single result is on fire
+  var isResultObjective = rmY.kind === "Installs" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes";
+  if (isResultObjective && rmY.value === 0 && spendY >= ZERO_RESULT_FLOOR) {
+    return {
+      color: "red",
+      tag: "ACTION",
+      flags: ["Zero " + rmY.kind.toLowerCase() + " on " + fmtR(spendY) + " spend yesterday"],
+      wins: [],
+      context: sample7d > 0 ? ["7d total: " + sample7d + " " + rmY.kind.toLowerCase()] : []
+    };
+  }
+
+  // BASELINING — campaign younger than 7 days. Suppress deviation flags
+  // (baselines aren't reliable yet) but the zero-result hard-rule above
+  // still applies.
+  if (ageDays !== null && ageDays < 7) {
+    return {
+      color: "yellow",
+      tag: "BASELINING",
+      flags: [],
+      wins: [],
+      context: ["Day " + (ageDays + 1) + " of 7, establishing baseline"]
+    };
+  }
+
   // No baseline at all — campaign launched but had zero spend in the 7d
-  // window. Treat as baselining; it'll resolve once it accumulates events.
+  // window. Treat as baselining.
   if (!baseline || baselineDays === 0) {
-    return { color: "yellow", tag: "BASELINING", reasons: ["No 7-day history yet"] };
+    return { color: "yellow", tag: "BASELINING", flags: [], wins: [], context: ["No 7-day history yet"] };
   }
 
   var color = "green";
-  var reasons = [];
+  var flags = [];
+  var wins = [];
+  var context = [];
 
   // 1. Cost-per-result deviation vs own 7d average daily CPR
-  var cprY = rmY.value > 0 ? parseFloat(yesterday.spend) / rmY.value : null;
+  var cprY = rmY.value > 0 ? spendY / rmY.value : null;
   var cprB = rmB && rmB.value > 0 ? parseFloat(baseline.spend) / rmB.value : null;
   if (cprY !== null && cprB !== null && cprB > 0) {
     var d = (cprY - cprB) / cprB * 100;
-    if (d >= 50) { color = worse(color, "red"); reasons.push(rmY.costLabel + " " + fmtR(cprY) + " (+" + d.toFixed(0) + "% vs 7d)"); }
-    else if (d >= 25) { color = worse(color, "orange"); reasons.push(rmY.costLabel + " " + fmtR(cprY) + " (+" + d.toFixed(0) + "% vs 7d)"); }
-    else if (d >= 10) { color = worse(color, "yellow"); reasons.push(rmY.costLabel + " " + fmtR(cprY) + " (+" + d.toFixed(0) + "% vs 7d)"); }
-    else if (d <= -10) { reasons.push(rmY.costLabel + " " + fmtR(cprY) + " (" + d.toFixed(0) + "% vs 7d, improving)"); }
+    if (d >= 50) { color = worse(color, "red"); flags.push(rmY.costLabel + " " + fmtR(cprY) + " up " + d.toFixed(0) + "% vs 7d"); }
+    else if (d >= 25) { color = worse(color, "orange"); flags.push(rmY.costLabel + " " + fmtR(cprY) + " up " + d.toFixed(0) + "% vs 7d"); }
+    else if (d >= 10) { color = worse(color, "yellow"); flags.push(rmY.costLabel + " " + fmtR(cprY) + " up " + d.toFixed(0) + "% vs 7d"); }
+    else if (d <= -10) { wins.push(rmY.costLabel + " " + fmtR(cprY) + " down " + Math.abs(d).toFixed(0) + "% vs 7d"); }
   }
 
   // 2. Frequency (Meta only — TikTok/Google don't report comparable freq)
   var freq = parseFloat(yesterday.frequency || 0);
   var platform = String(yesterday.platform || "").toLowerCase();
-  if (freq > 0 && platform.indexOf("facebook") >= 0) {
-    if (freq > 4) { color = worse(color, "red"); reasons.push("Frequency " + freq.toFixed(2) + "x (saturation)"); }
-    else if (freq >= 3.5) { color = worse(color, "orange"); reasons.push("Frequency " + freq.toFixed(2) + "x (approaching ceiling)"); }
-    else if (freq >= 3) { color = worse(color, "yellow"); reasons.push("Frequency " + freq.toFixed(2) + "x (elevated)"); }
+  if (freq > 0 && (platform.indexOf("facebook") >= 0 || platform.indexOf("instagram") >= 0)) {
+    if (freq > 4) { color = worse(color, "red"); flags.push("Frequency " + freq.toFixed(2) + "x, saturation"); }
+    else if (freq >= 3.5) { color = worse(color, "orange"); flags.push("Frequency " + freq.toFixed(2) + "x, approaching ceiling"); }
+    else if (freq >= 3) { color = worse(color, "yellow"); flags.push("Frequency " + freq.toFixed(2) + "x, elevated"); }
   }
 
   // 3. CTR deviation vs own 7d
@@ -142,9 +172,10 @@ function dispositionFor(yesterday, baseline, baselineDays, ageDays) {
   var ctrB = parseFloat(baseline.ctr || 0);
   if (ctrY > 0 && ctrB > 0) {
     var cd = (ctrY - ctrB) / ctrB * 100;
-    if (cd <= -40) { color = worse(color, "red"); reasons.push("CTR " + ctrY.toFixed(2) + "% (-" + Math.abs(cd).toFixed(0) + "% vs 7d)"); }
-    else if (cd <= -20) { color = worse(color, "orange"); reasons.push("CTR " + ctrY.toFixed(2) + "% (-" + Math.abs(cd).toFixed(0) + "% vs 7d)"); }
-    else if (cd <= -10) { color = worse(color, "yellow"); reasons.push("CTR " + ctrY.toFixed(2) + "% (-" + Math.abs(cd).toFixed(0) + "% vs 7d)"); }
+    if (cd <= -40) { color = worse(color, "red"); flags.push("CTR " + ctrY.toFixed(2) + "% down " + Math.abs(cd).toFixed(0) + "% vs 7d"); }
+    else if (cd <= -20) { color = worse(color, "orange"); flags.push("CTR " + ctrY.toFixed(2) + "% down " + Math.abs(cd).toFixed(0) + "% vs 7d"); }
+    else if (cd <= -10) { color = worse(color, "yellow"); flags.push("CTR " + ctrY.toFixed(2) + "% down " + Math.abs(cd).toFixed(0) + "% vs 7d"); }
+    else if (cd >= 10) { wins.push("CTR " + ctrY.toFixed(2) + "% up " + cd.toFixed(0) + "% vs 7d"); }
   }
 
   // 4. Pacing (lifetime budget only — daily-budget campaigns pace by definition)
@@ -152,28 +183,28 @@ function dispositionFor(yesterday, baseline, baselineDays, ageDays) {
   if (pacing) {
     if (pacing.ratio > 135 || pacing.ratio < 60) {
       color = worse(color, "red");
-      reasons.push("Pacing " + pacing.ratio.toFixed(0) + "% (" + (pacing.ratio > 100 ? "ahead" : "behind") + ")");
+      flags.push("Pacing " + pacing.ratio.toFixed(0) + "% of schedule, " + (pacing.ratio > 100 ? "ahead" : "behind"));
     } else if (pacing.ratio > 115 || pacing.ratio < 75) {
       color = worse(color, "orange");
-      reasons.push("Pacing " + pacing.ratio.toFixed(0) + "% (" + (pacing.ratio > 100 ? "ahead" : "behind") + ")");
+      flags.push("Pacing " + pacing.ratio.toFixed(0) + "% of schedule, " + (pacing.ratio > 100 ? "ahead" : "behind"));
     } else if (pacing.ratio > 105 || pacing.ratio < 90) {
       color = worse(color, "yellow");
-      reasons.push("Pacing " + pacing.ratio.toFixed(0) + "%");
+      flags.push("Pacing " + pacing.ratio.toFixed(0) + "% of schedule");
     }
   }
 
-  // Thin sample override — protects small-budget campaigns (Willowbrook
-  // territory) from being false-flagged on noise. Cap escalation at WATCH.
+  // Thin-sample handling. Note in CONTEXT (not as a flag) so it's clearly
+  // informational. Cap escalation at WATCH for thin samples — small
+  // baselines are noisy and a single bad day shouldn't trigger ACTION
+  // when 7-day history is too sparse to read confidently.
   var thin = sample7d < 50;
   if (thin) {
     if (color === "red" || color === "orange") color = "yellow";
-    reasons.push("Thin sample (" + sample7d + " " + rmY.kind.toLowerCase() + " in 7d)");
+    context.push("Thin baseline: " + sample7d + " " + rmY.kind.toLowerCase() + " in 7d");
   }
 
-  if (reasons.length === 0) reasons.push("All signals within band");
-
   var tag = color === "red" ? "ACTION" : color === "orange" ? "WARNING" : color === "yellow" ? "WATCH" : "HEALTHY";
-  return { color: color, tag: tag, reasons: reasons };
+  return { color: color, tag: tag, flags: flags, wins: wins, context: context };
 }
 
 // Lifetime-budget pacing only. Daily-budget campaigns pace themselves by
@@ -369,7 +400,9 @@ function buildHtml(opts) {
 
     var rowsHtml = b.rows.map(function(r) {
       var c = DISP_COLORS[r.disposition.color] || DISP_COLORS.green;
-      var reasons = (r.disposition.reasons || []).map(escapeHtml).join(" &middot; ");
+      var flags = (r.disposition.flags || []);
+      var wins = (r.disposition.wins || []);
+      var context = (r.disposition.context || []);
 
       // Thumbnail tile — 64x64 rounded square. Wraps in an <a> to the ad's
       // public-platform permalink when one is available so EXCO can click
@@ -387,19 +420,40 @@ function buildHtml(opts) {
         ? '<a href="' + escapeHtml(r.previewUrl) + '" target="_blank" rel="noopener" style="font-size:9px;color:' + P.cyan + ';text-decoration:none;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">View live &rarr;</a>'
         : '';
 
+      // Reason lines — flags rendered red (the cause of the disposition),
+      // wins rendered green (improvements vs baseline), context rendered
+      // muted (informational notes like thin baseline). Each on its own
+      // line so the eye reads "what's wrong" before "what's good", which
+      // matches how a media buyer triages a flagged campaign.
+      var flagsHtml = flags.length === 0 ? "" :
+        '<div style="font-size:11px;color:' + DISP_COLORS.red.fill + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;font-weight:700;">' +
+        flags.map(function(f) { return '<span style="margin-right:6px;">&#9888;</span>' + escapeHtml(f); }).join('<br/>') +
+        '</div>';
+      var winsHtml = wins.length === 0 ? "" :
+        '<div style="font-size:11px;color:' + DISP_COLORS.green.fill + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;font-weight:700;">' +
+        wins.map(function(w) { return '<span style="margin-right:6px;">&#10003;</span>' + escapeHtml(w); }).join('<br/>') +
+        '</div>';
+      var contextHtml = context.length === 0 ? "" :
+        '<div style="font-size:10px;color:' + P.caption + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;font-style:italic;">' +
+        context.map(escapeHtml).join(' &middot; ') +
+        '</div>';
+      var noSignalHtml = (flags.length === 0 && wins.length === 0 && context.length === 0)
+        ? '<div style="font-size:11px;color:' + DISP_COLORS.green.fill + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;font-weight:700;"><span style="margin-right:6px;">&#10003;</span>All signals within band</div>'
+        : "";
+
       return '<tr>' +
         // Thumbnail column
         '<td style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' +
           thumbHtml +
         '</td>' +
-        // Description column — chip, platform, name, reasons, view link
+        // Description column — chip, platform, name, flags/wins/context, view link
         '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
           '<div style="margin-bottom:4px;line-height:1.6;">' +
             dispChip(r.disposition) +
             '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
           '</div>' +
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.35;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
-          '<div style="font-size:11px;color:' + P.label + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;">' + reasons + '</div>' +
+          flagsHtml + winsHtml + contextHtml + noSignalHtml +
           (viewLink ? '<div style="margin-top:8px;">' + viewLink + '</div>' : '') +
         '</td>' +
         '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
@@ -467,22 +521,44 @@ function buildHtml(opts) {
   var methodology =
     '<div style="font-size:10px;color:' + P.caption + ';line-height:1.7;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<div style="font-size:10px;color:' + P.label + ';font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">How dispositions are derived</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.red.fill + ';font-weight:900;">ACTION</span> &middot; cost-per-result up 50%+ vs 7d, or frequency >4.0x, or pacing outside 60-135%, or CTR down 40%+</div>' +
+      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.red.fill + ';font-weight:900;">ACTION</span> &middot; zero results on R100+ spend (App Install, Leads, Follows + Likes), or cost-per-result up 50%+ vs 7d, or frequency >4.0x, or pacing outside 60-135%, or CTR down 40%+</div>' +
       '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.orange.fill + ';font-weight:900;">WARNING</span> &middot; CPR up 25-50%, or frequency 3.5-4.0x, or pacing 60-75% / 115-135%, or CTR down 20-40%</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.yellow.fill + ';font-weight:900;">WATCH</span> &middot; smaller deviations, or thin sample (<50 events in 7d), or campaign younger than 7 days (BASELINING)</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.green.fill + ';font-weight:900;">HEALTHY</span> &middot; all signals within ±10% of own 7-day baseline, frequency under 3.0x, pacing 90-110%</div>' +
-      '<div style="margin-top:10px;color:' + P.caption + ';">Each campaign is judged against its own rolling 7-day average — never against a global benchmark — so MTN MoMo and Willowbrook are evaluated on their own terms, not each other&#39;s.</div>' +
+      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.yellow.fill + ';font-weight:900;">WATCH</span> &middot; smaller deviations, or thin baseline (<50 events in 7d), or campaign younger than 7 days (BASELINING)</div>' +
+      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.green.fill + ';font-weight:900;">HEALTHY</span> &middot; all signals within &plusmn;10% of own 7-day baseline, frequency under 3.0x, pacing 90-110%</div>' +
+      '<div style="margin-top:10px;color:' + P.caption + ';"><span style="color:' + DISP_COLORS.red.fill + ';">&#9888;</span> red lines explain the disposition (the problem). <span style="color:' + DISP_COLORS.green.fill + ';">&#10003;</span> green lines are improvements vs 7-day baseline. Italic context lines flag thin baselines or campaign age.</div>' +
+      '<div style="margin-top:6px;color:' + P.caption + ';">Each campaign is judged against its own rolling 7-day average, never against a global benchmark, so MTN MoMo and Willowbrook are evaluated on their own terms, not each other&#39;s.</div>' +
+    '</div>';
+
+  // CSS keyframes for the logo glow. Apple Mail honours these; Gmail web
+  // partially honours them; Outlook strips them but still renders the
+  // strong static box-shadow set inline on the <img>, so the logo always
+  // shows with a visible glow regardless of client.
+  var glowStyles =
+    '<style>' +
+    '@keyframes gasGlow {' +
+      '0%, 100% { box-shadow: 0 0 22px rgba(249,98,3,0.55), 0 0 44px rgba(255,61,0,0.35); }' +
+      '50% { box-shadow: 0 0 38px rgba(249,98,3,0.85), 0 0 80px rgba(255,61,0,0.55); }' +
+    '}' +
+    '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
+    '</style>';
+
+  var logoBlock =
+    '<div style="text-align:center;margin-bottom:18px;">' +
+      '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:0;box-shadow:0 0 30px rgba(249,98,3,0.65),0 0 60px rgba(255,61,0,0.45);"/>' +
     '</div>';
 
   return '<!DOCTYPE html>' +
-    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Pulse</title></head>' +
+    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Pulse</title>' +
+    glowStyles +
+    '</head>' +
     '<body style="margin:0;padding:0;background:' + P.bg + ';font-family:Manrope,\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' + P.bg + ';padding:36px 14px;">' +
     '<tr><td align="center">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
 
-      // Header
-      '<tr><td style="padding:38px 36px 24px;text-align:center;">' +
+      // Header — logo with animated glow + title + date
+      '<tr><td style="padding:32px 36px 24px;text-align:center;">' +
+      logoBlock +
       '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">GAS Daily Pulse</div>' +
       '<div style="font-size:26px;font-weight:900;letter-spacing:4px;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
         '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
