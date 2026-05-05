@@ -657,7 +657,11 @@ export default async function handler(req, res) {
   var isCron = !!(cronSecret && timingSafeStrEqual(authHeader, "Bearer " + cronSecret));
 
   if (!isCron) {
-    if (!(await rateLimit(req, res, { maxPerMin: 6, maxPerHour: 30 }))) return;
+    // Rate limit is generous because the only callers here are admin
+    // operators driving dry-run previews + manual re-sends. Real auth
+    // gating below (DASHBOARD_API_KEY exact match) is what blocks abuse;
+    // the limiter is just defense-in-depth.
+    if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
     var apiKey = req.headers["x-api-key"] || req.query.api_key || "";
     var expectedKey = process.env.DASHBOARD_API_KEY || "";
     if (!apiKey || !expectedKey || apiKey !== expectedKey) {
