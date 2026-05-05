@@ -2863,29 +2863,22 @@ export default function MediaOnGas(){
       if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}
       if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}
       if(d.campaigns){
-        var prev=selected;
         setCampaigns(d.campaigns);
-        // Active = campaigns that delivered in this date window. The
-        // /api/campaigns endpoint returns ACTIVE+SCHEDULED campaigns
-        // regardless of date, so a May-selected campaign with zero
-        // April delivery still appears in d.campaigns when the user
-        // switches to April. Filter on impressions/spend > 0 to identify
-        // who actually ran in the requested window.
+        // /api/campaigns returns ACTIVE+SCHEDULED campaigns regardless of
+        // date. The "active in this window" set is the subset that
+        // actually delivered impressions or spend. We always auto-select
+        // this set so a date change refreshes the visible portfolio to
+        // what actually ran in the new period, including campaigns that
+        // didn't run in the previous period (e.g. May → April reveals
+        // April-only campaigns).
         var activeMap={};
         d.campaigns.forEach(function(x){if(parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0)activeMap[x.campaignId]=true;});
         var activeIds=Object.keys(activeMap);
-        // Earlier behaviour kept the previous selection as long as the
-        // campaign IDs still existed, which produced stale numbers when
-        // the user switched from one month to another, the IDs were
-        // valid but had zero data in the new window. Now we keep ONLY
-        // the previously-selected IDs that still delivered in the new
-        // period. If none qualify, fall back to all active in the new
-        // period so the dashboard reflects what actually ran.
-        if(prev.length>0){
-          var keptActive=prev.filter(function(id){return activeMap[id]===true;});
-          if(keptActive.length>0){setSelected(keptActive);}
-          else {setSelected(activeIds);}
-        } else if(urlSelected){
+        // Share-link views: respect the URL-specified selection but only
+        // its intersection with active-in-window so a stale share link
+        // can't show zero-data campaigns. If the intersection is empty,
+        // fall through to the standard auto-pick.
+        if(urlSelected&&urlSelected.length>0){
           var validUrl=urlSelected.filter(function(id){return activeMap[id]===true;});
           setSelected(validUrl.length>0?validUrl:activeIds);
         } else {
