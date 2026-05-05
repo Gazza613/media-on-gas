@@ -2528,7 +2528,9 @@ export default function MediaOnGas(){
   // is empty so the Top Ads block feels alive instead of static.
   var alq=useState(QUIRKY_AD_LOADERS[0]),adLoaderQuip=alq[0],setAdLoaderQuip=alq[1];
   var wn=useState([]),dataWarnings=wn[0],setDataWarnings=wn[1];
-  var sc=useState(true),showCampaigns=sc[0],setShowCampaigns=sc[1];
+  // Campaigns drawer is collapsed by default; user opens it from the top-nav
+  // "{N} Campaigns" button when they want to filter the selection.
+  var sc=useState(false),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
   // Brief success toast after a share email is sent, shown near the top of
   // the summary view for 3.5s then fades out on its own.
@@ -2854,7 +2856,7 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);var h=authHeaders();fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
+  var fetchData=function(){setLoading(true);var h=authHeaders();fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
   // Comparison data fetch. Only runs when compareMode is on. Reuses the
   // same /api/campaigns endpoint for the prior date range so the existing
@@ -3923,7 +3925,7 @@ export default function MediaOnGas(){
             ].filter(function(p){return p.totalClicks>0;});
             return null;
   })();
-  return(<div style={{minHeight:"100vh",background:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
+  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:loading?"#000000":"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Persona card breathing glow, opacity-only so each card's box-shadow
          keeps its platform colour. animationDelay is staggered per card via
@@ -4002,7 +4004,7 @@ export default function MediaOnGas(){
         header input[type="date"] { width: 100px !important; font-size: 11px !important; }
       }
     `}</style>
-    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>
+    {!loading&&<div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>}
 
     <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(6,2,14,0.97)",borderBottom:"1px solid "+P.rule}}>
       <div style={{maxWidth:1400,margin:"0 auto",padding:"10px 28px"}}>
@@ -4073,7 +4075,7 @@ export default function MediaOnGas(){
       <button onClick={function(){setDataWarnings([]);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.label,cursor:"pointer",fontSize:14,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
     </div>}
 
-    <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1}}>
+    <div style={{width:"100%",maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1,flex:1,boxSizing:"border-box"}}>
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onToggleGroup={toggleGroup} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
