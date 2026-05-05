@@ -5247,6 +5247,29 @@ export default function MediaOnGas(){
 
             if(allFilteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data may still be loading or the campaigns have no ad-level insights yet.</div></div>;
 
+            // earnedTotal — net community growth used as the Followers
+            // section headline so the Creative tab reconciles to Summary
+            // and Community Growth. Computed with the same formula as
+            // Summary at line ~4327, FB page_likes (Meta action aggregate)
+            // + IG NET follower growth from Page Insights (organic + paid,
+            // since Meta does not attribute IG follows to specific ads)
+            // + TikTok per-campaign follows from /api/campaigns. The per-
+            // ad attribution table below the strip ranks ads by their own
+            // measurable contribution; this headline is the net delta.
+            var creativeMatchedPages=[];var creativeMatchedIds={};
+            for(var ms=0;ms<selCamps.length;ms++){
+              var bestPg=null;var bestSc=0;
+              for(var mp=0;mp<pages.length;mp++){
+                var sc5=autoMatchPage(selCamps[ms].campaignName,pages[mp].name);
+                if(sc5>bestSc){bestSc=sc5;bestPg=pages[mp];}
+              }
+              if(bestPg&&bestSc>=2&&!creativeMatchedIds[bestPg.id]){creativeMatchedPages.push(bestPg);creativeMatchedIds[bestPg.id]=true;}
+            }
+            var creativeIgGrowth=0;
+            creativeMatchedPages.forEach(function(mpg){if(mpg.instagram_business_account)creativeIgGrowth+=parseFloat(mpg.instagram_business_account.follower_growth||0);});
+            var creativeTtE=0;selCamps.forEach(function(c){if(c.platform==="TikTok")creativeTtE+=parseFloat(c.follows||0);});
+            var creativeEarnedTotal=parseFloat(m.pageLikes||0)+creativeIgGrowth+creativeTtE;
+
             var platformGroup=function(p){
               if(p==="Facebook")return "Facebook";
               if(p==="Instagram")return "Instagram";
@@ -5514,6 +5537,15 @@ export default function MediaOnGas(){
                 var secCpc=totals.clicks>0?totals.spend/totals.clicks:0;
                 var secCpm=totals.imps>0?(totals.spend/totals.imps*1000):0;
                 var secResType=arr[0]?arr[0].resultType:sec.metric;
+                // Followers section uses the same earnedTotal Summary uses
+                // (FB page_likes + IG net growth + TikTok follows) so the
+                // headline number matches across tabs. The per-ad table
+                // below still ranks by per-ad attribution. Other sections
+                // continue to use per-ad totals.results.
+                var headlineResults=sec.key==="followers"?creativeEarnedTotal:totals.results;
+                var headlineCpr=sec.key==="followers"
+                  ? (creativeEarnedTotal>0?totals.spend/creativeEarnedTotal:0)
+                  : totals.cpr;
                 return <div key={sec.key} style={{marginBottom:36,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22,flexWrap:"wrap",gap:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -5521,6 +5553,7 @@ export default function MediaOnGas(){
                       <div>
                         <div style={{fontSize:19,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1}}>{sec.label}</div>
                         <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:3}}>{sec.desc}</div>
+                        {sec.key==="followers"&&<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:6,fontStyle:"italic",lineHeight:1.5,maxWidth:560}}>Headline FOLLOWS reconciles to Summary and Community Growth (FB page likes + IG net follower growth + TikTok follows). The table below ranks ads by per-ad attribution — IG ads show profile visits because Meta does not attribute IG follows to individual ads.</div>}
                       </div>
                     </div>
                     <div style={{textAlign:"right"}}>
@@ -5532,8 +5565,8 @@ export default function MediaOnGas(){
                   <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:22}}>
                     <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>SPEND</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(totals.spend)}</div></Glass>
                     <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>IMPRESSIONS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(totals.imps)}</div></Glass>
-                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{resultLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.results>0?fmt(totals.results):"-"}</div></Glass>
-                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{costPerLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{totals.cpr>0?fR(totals.cpr):"-"}</div></Glass>
+                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{resultLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{headlineResults>0?fmt(headlineResults):"-"}</div></Glass>
+                    <Glass accent={sec.accent} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>{costPerLabel(secResType)}</div><div style={{fontSize:18,fontWeight:900,color:sec.accent,fontFamily:fm}}>{headlineCpr>0?fR(headlineCpr):"-"}</div></Glass>
                     <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>BLENDED CTR</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>{totals.ctr.toFixed(2)+"%"}</div></Glass>
                     <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>CPC</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{secCpc>0?fR(secCpc):"-"}</div></Glass>
                   </div>
