@@ -4973,11 +4973,18 @@ export default function MediaOnGas(){
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
                   {sections.map(function(s){
+                    // Objective headline strip (dot + label + bottom border
+                    // + fade gradient) is locked to P.fb so every section
+                    // reads in one consistent voice on the Summary page.
+                    // Per-objective accents are still used on the per-card
+                    // strip / borders below so the four sections stay
+                    // subtly differentiated.
+                    var hAcc=P.fb;
                     return <div key={s.og.key} style={{marginBottom:28}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,paddingBottom:10,borderBottom:"2px solid "+s.og.accent+"50"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:s.og.accent,boxShadow:"0 0 10px "+s.og.accent}}/>
-                        <span style={{fontSize:16,fontWeight:900,color:s.og.accent,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",lineHeight:1}}>{s.og.label}</span>
-                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+s.og.accent+"40, transparent)"}}/>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,paddingBottom:10,borderBottom:"2px solid "+hAcc+"50"}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:hAcc,boxShadow:"0 0 10px "+hAcc}}/>
+                        <span style={{fontSize:16,fontWeight:900,color:hAcc,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",lineHeight:1}}>{s.og.label}</span>
+                        <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+hAcc+"40, transparent)"}}/>
                         <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1,fontStyle:"italic"}}>{"ranked "+s.og.criterion+" \u00b7 "+s.groups.length+" platform"+(s.groups.length===1?"":"s")}</span>
                       </div>
                       {s.groups.map(function(g){
