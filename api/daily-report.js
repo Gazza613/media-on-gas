@@ -471,12 +471,9 @@ function buildHtml(opts) {
       '</tr>';
     }).join("");
 
-    var labelWarning = b.known ? "" :
-      '<span style="display:inline-block;margin-left:8px;font-size:9px;color:' + P.amber + ';background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);padding:2px 7px;border-radius:5px;letter-spacing:1px;font-family:Manrope,Helvetica,Arial,sans-serif;">unmapped key: ' + escapeHtml(b.key) + '</span>';
-
     return '<tr><td style="padding:24px 36px 0;">' +
       '<div style="display:block;margin-bottom:14px;">' +
-        '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">' + escapeHtml(b.label) + labelWarning + '</div>' +
+        '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">' + escapeHtml(b.label) + '</div>' +
         '<div style="margin-top:6px;font-size:11px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
           '<strong style="color:' + P.txt + ';">' + escapeHtml(fmtR(spend)) + '</strong> spend &middot; ' +
           '<strong style="color:' + P.cyan + ';">' + escapeHtml(fmtNum(results)) + '</strong> results &middot; ' +
@@ -586,6 +583,15 @@ function buildHtml(opts) {
       '<tr><td align="center" style="background:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border-radius:12px;">' +
       '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
       '</td></tr></table></td></tr>' +
+
+      // Signoff — the report is published by Sami, the AI agent in the
+      // Media department. Surfacing the signature anchors the email to a
+      // named author rather than a faceless cron.
+      '<tr><td style="padding:28px 36px 4px;">' +
+      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
+      '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1.5px;text-transform:uppercase;">AI Expert Agent</div>' +
+      '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>' +
+      '</td></tr>' +
 
       // Footer
       '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +

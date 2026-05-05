@@ -106,6 +106,12 @@ function buildNudgeHtml(opts) {
         <div style="margin-top:14px;font-size:10px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:600;">Pull the latest, click Share, pick ${clientName}, send</div>
       </td></tr>
 
+      <tr><td style="padding:28px 40px 4px;">
+        <div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>
+        <div style="font-size:11px;color:#F96203;font-weight:700;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1.5px;text-transform:uppercase;">AI Expert Agent</div>
+        <div style="font-size:10px;color:#8B7FA3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>
+      </td></tr>
+
       <tr><td style="padding:28px 40px 8px;">
         <div style="height:1px;background:rgba(168,85,247,0.16);"></div>
       </td></tr>

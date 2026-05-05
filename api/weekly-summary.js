@@ -250,6 +250,14 @@ function buildHtml(opts) {
     '<a href="' + origin + '" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
     '</td></tr></table></td></tr>' +
 
+    // Signoff — same author as the daily Pulse so EXCO sees a consistent
+    // named voice across all automated reports.
+    '<tr><td style="padding:28px 40px 4px;">' +
+    '<div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
+    '<div style="font-size:11px;color:#F96203;font-weight:700;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1.5px;text-transform:uppercase;">AI Expert Agent</div>' +
+    '<div style="font-size:10px;color:#8B7FA3;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>' +
+    '</td></tr>' +
+
     // Divider
     '<tr><td style="padding:28px 40px 8px;"><div style="height:1px;background:rgba(168,85,247,0.16);"></div></td></tr>' +
 
