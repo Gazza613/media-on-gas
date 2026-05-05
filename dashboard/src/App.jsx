@@ -5257,7 +5257,14 @@ export default function MediaOnGas(){
               return false;
             });
 
-            if(allFilteredAds.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:8}}>No ad-level creative data for the selected campaigns.</div><div style={{fontSize:11}}>Data may still be loading or the campaigns have no ad-level insights yet.</div></div>;
+            // Empty state on the Creative tab — rather than the dry "no
+            // data" message, reuse the rotating QUIRKY_AD_LOADERS quip
+            // (already cycling on a 5s interval via the parent useEffect)
+            // alongside a spinner. Most of the time this state is just
+            // "ads are still loading" and the quirky copy keeps the user
+            // engaged through the wait. Adsetlevel insights can take a
+            // beat to come back from Meta on cold cache.
+            if(allFilteredAds.length===0)return <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}><div style={{width:48,height:48,border:"3px solid "+P.rule,borderTop:"3px solid "+P.blaze,borderRadius:"50%",animation:"spin 1s linear infinite"}}/><style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style><div style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontFamily:ff,fontStyle:"italic",textAlign:"center",maxWidth:520,lineHeight:1.6,letterSpacing:0.2,transition:"opacity 0.3s"}}>{adLoaderQuip}<span style={{display:"inline-block",width:20}}>…</span></div></div>;
 
             // earnedTotal — net community growth used as the Followers
             // section headline so the Creative tab reconciles to Summary
