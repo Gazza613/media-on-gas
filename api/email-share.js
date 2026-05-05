@@ -451,13 +451,23 @@ function buildEmailHtml(opts) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Your Performance Metrics That Matter</title>
+<style>
+@keyframes gasGlow {
+  0%, 100% { box-shadow: 0 0 22px rgba(249,98,3,0.55), 0 0 44px rgba(255,61,0,0.35); }
+  50% { box-shadow: 0 0 38px rgba(249,98,3,0.85), 0 0 80px rgba(255,61,0,0.55); }
+}
+.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }
+</style>
 </head>
 <body style="margin:0;padding:0;background:#06020e;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#06020e;padding:40px 16px;">
   <tr><td align="center">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;background:linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(249,98,3,0.42);box-shadow:0 0 0 1px rgba(249,98,3,0.18),0 0 40px rgba(249,98,3,0.28),0 0 90px rgba(168,85,247,0.12);">
 
-      <tr><td style="padding:40px 40px 28px;text-align:center;">
+      <tr><td style="padding:36px 40px 24px;text-align:center;">
+        <div style="margin-bottom:18px;">
+          <img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:0;box-shadow:0 0 30px rgba(249,98,3,0.65),0 0 60px rgba(255,61,0,0.45);"/>
+        </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
           <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
