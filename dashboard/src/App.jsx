@@ -4062,7 +4062,12 @@ export default function MediaOnGas(){
     </div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} session={viewToken?"":session} viewToken={viewToken}/>
-    {!isClient&&<ChatPanel apiBase={API} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected} onOpenAd={setPreviewAd}/>}
+    {/* Chat FAB + panel scoped to the Summary tab. The chat is grounded in
+        Summary's snapshot, so showing the FAB on Deep Dive / Creative /
+        Demographics / etc. invited questions the bot can't answer in
+        context. Hide the entry point everywhere except Summary; clients
+        already never see it. */}
+    {!isClient&&tab==="summary"&&<ChatPanel apiBase={API} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected} onOpenAd={setPreviewAd}/>}
 
     {!isClient&&dataWarnings.length>0&&<div style={{maxWidth:1400,margin:"12px auto 0",padding:"12px 18px",background:P.warning+"15",border:"1px solid "+P.warning+"50",borderLeft:"4px solid "+P.warning,borderRadius:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative",zIndex:2}}>
       <div style={{color:P.warning,fontSize:18,flexShrink:0,marginTop:1}}>{"\u26A0"}</div>
@@ -5885,18 +5890,6 @@ export default function MediaOnGas(){
             </div>;
           })()}
 
-          {/* Inline chat CTA, sits at the end of the Summary so clients always see it */}
-          <div style={{marginTop:36,background:"linear-gradient(135deg,rgba(249,98,3,0.12),rgba(168,85,247,0.08) 60%,rgba(6,2,14,0.4))",border:"1px solid "+P.ember+"30",borderLeft:"4px solid "+P.ember,borderRadius:16,padding:"28px 32px",display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
-            <div style={{width:64,height:64,borderRadius:16,background:"linear-gradient(135deg,#FF3D00,#FF6B00)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 8px 24px rgba(255,61,0,0.35)"}}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#fff" strokeWidth="1.5" fill="rgba(255,255,255,0.2)" strokeLinejoin="round"/></svg>
-            </div>
-            <div style={{flex:1,minWidth:240}}>
-              <div style={{fontSize:11,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:800,marginBottom:6}}>Your Data, On Demand</div>
-              <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",lineHeight:1.15,marginBottom:6}}>Chat To Your GAS Media Expert Now</div>
-              <div style={{fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.6,maxWidth:560}}>Ask questions about this report, get expert answers grounded in your live campaign numbers. Which platform is performing, where to scale, why a metric moved, all scoped to this period only.</div>
-            </div>
-            <button onClick={function(){setShowChat(true);}} style={{background:gEmber,border:"none",borderRadius:12,padding:"14px 28px",color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,cursor:"pointer",letterSpacing:2.5,textTransform:"uppercase",boxShadow:"0 6px 20px rgba(255,61,0,0.35)",flexShrink:0}}>Start Chat</button>
-          </div>
         </div>)}
         {tab==="overview"&&(<div>
 
