@@ -5311,12 +5311,17 @@ export default function MediaOnGas(){
               return true;
             });
 
-            // Objective sections in fixed order
+            // Objective sections in fixed order. Icons render in P.fb so
+            // the headline strip (icon container, label, ADS IN SECTION
+            // count) reads in one consistent blue voice across all four
+            // sections — same treatment as Summary's "Top Ads Per Objective"
+            // block. Per-objective accent is still preserved on the KPI
+            // tiles and creatives table below for subtle differentiation.
             var objSections=[
-              {key:"leads",label:"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.rose,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
+              {key:"leads",label:"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.fb,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
               {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,icon:Ic.bolt(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on store clicks delivered and cost per click"},
-              {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.tt,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
-              {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.cyan,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
+              {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.fb,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
+              {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
             ];
 
             // Group ads by objective. Followers gets a special union: any ad that earned
@@ -5565,19 +5570,26 @@ export default function MediaOnGas(){
                 var headlineCpr=sec.key==="followers"
                   ? (creativeEarnedTotal>0?totals.spend/creativeEarnedTotal:0)
                   : totals.cpr;
+                // Headline strip is locked to P.fb (icon box, label text,
+                // ADS IN SECTION count) so all four sections read in one
+                // consistent voice. KPI tiles + creatives table below
+                // continue to use sec.accent for per-objective subtle
+                // differentiation. Same treatment as Summary's Top Ads
+                // Per Objective headline.
+                var hAcc=P.fb;
                 return <div key={sec.key} style={{marginBottom:36,background:P.glass,borderRadius:18,padding:"6px 28px 28px",border:"1px solid "+P.rule}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 18px",borderBottom:"1px solid "+P.rule,marginBottom:22,flexWrap:"wrap",gap:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:14}}>
-                      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+sec.accent+"25,"+sec.accent+"08)",border:"1px solid "+sec.accent+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{sec.icon}</div>
+                      <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+hAcc+"25,"+hAcc+"08)",border:"1px solid "+hAcc+"40",display:"flex",alignItems:"center",justifyContent:"center"}}>{sec.icon}</div>
                       <div>
-                        <div style={{fontSize:19,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1}}>{sec.label}</div>
+                        <div style={{fontSize:19,fontWeight:900,color:hAcc,fontFamily:ff,letterSpacing:1}}>{sec.label}</div>
                         <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:3}}>{sec.desc}</div>
                         {sec.key==="followers"&&<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:6,fontStyle:"italic",lineHeight:1.5,maxWidth:560}}>Headline FOLLOWS reconciles to Summary and Community Growth (FB page likes + IG net follower growth + TikTok follows). The table below ranks ads by per-ad attribution — IG ads show profile visits because Meta does not attribute IG follows to individual ads.</div>}
                       </div>
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5}}>ADS IN SECTION</div>
-                      <div style={{fontSize:22,fontWeight:900,color:sec.accent,fontFamily:fm}}>{arr.length}</div>
+                      <div style={{fontSize:22,fontWeight:900,color:hAcc,fontFamily:fm}}>{arr.length}</div>
                     </div>
                   </div>
 
