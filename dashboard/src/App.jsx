@@ -2892,7 +2892,11 @@ export default function MediaOnGas(){
     }).catch(function(err){console.error("API Error:",err);setLoading(false);});
     fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});
     fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});
-    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});
+    // Timeseries fetch lives in its own useEffect below so it can scope
+    // by the selected campaignIds. Removed the unscoped duplicate that
+    // used to fire here on every fetchData() because it raced with the
+    // scoped fetch and could briefly replace the trendline data with
+    // a portfolio-wide aggregate.
   };
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
   // Comparison data fetch. Only runs when compareMode is on. Reuses the
@@ -2983,7 +2987,12 @@ export default function MediaOnGas(){
         </div>
       </div>
       {!hasData?<div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:6}}>Loading trendlines…</div><div>Fetching {tsGran==="week"?"weekly":"monthly"} performance from Meta, TikTok and Google.</div></div>:<div>
-        <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{tsGran==="week"?"Weekly":"Monthly"} results by platform x objective | {buckets.length} {tsGran==="week"?"weeks":"months"} in view</div>
+        {/* Scope line — dates + selected count, so it's obvious the
+            cells aggregate exactly the campaigns currently ticked over
+            the date range chosen at the top of the dashboard, nothing
+            wider. Granularity (Weekly / Monthly) controls only how the
+            sparkline is bucketed inside that window. */}
+        <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{tsGran==="week"?"Weekly":"Monthly"} aggregation, scoped to your selected period ({df} to {dt}) &middot; {selected.length} campaign{selected.length===1?"":"s"} selected</div>
         <div style={{display:"grid",gridTemplateColumns:"140px repeat(4,1fr)",gap:8,marginBottom:6}}>
           <div/>
           {platCols.map(function(p){return <div key={p.key} style={{textAlign:"center",fontSize:11,fontWeight:900,color:p.accent,fontFamily:fm,letterSpacing:1.5,padding:"8px 4px",borderBottom:"1px solid "+p.accent+"35"}}>{p.label}</div>;})}
