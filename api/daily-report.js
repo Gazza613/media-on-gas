@@ -71,8 +71,12 @@ function resultMetricFor(c) {
   if (obj === "lead_generation" || obj === "outcome_leads" || obj.indexOf("lead") >= 0) {
     return { kind: "Leads", value: parseInt(c.leads || 0), costLabel: "CPL" };
   }
-  if (obj.indexOf("page_likes") >= 0 || obj.indexOf("post_engagement") >= 0 || obj.indexOf("outcome_engagement") >= 0 || obj.indexOf("follower") >= 0) {
-    var f = parseInt(c.follows || 0) + parseInt(c.pageLikes || 0);
+  if (obj.indexOf("page_likes") >= 0 || obj.indexOf("post_engagement") >= 0 || obj.indexOf("outcome_engagement") >= 0 || obj.indexOf("follower") >= 0 || name.indexOf("like") >= 0 || name.indexOf("follow") >= 0) {
+    // Sum across both platforms' field names — Meta uses pageLikes /
+    // pageFollows, TikTok uses follows / likes. The undefined fields
+    // coerce to 0 so a Meta campaign and a TikTok campaign both produce
+    // the right total without branching on platform.
+    var f = parseInt(c.follows || 0) + parseInt(c.likes || 0) + parseInt(c.pageLikes || 0) + parseInt(c.pageFollows || 0);
     return { kind: "Follows + Likes", value: f, costLabel: "CPF" };
   }
   return { kind: "Clicks", value: parseInt(c.clicks || 0), costLabel: "CPC" };
@@ -181,8 +185,14 @@ function pacingFor(c) {
   var amount = parseFloat(c.budgetAmount || 0);
   var spend = parseFloat(c.spend || 0);
   if (!amount || amount <= 0) return null;
-  if (!c.startTime || !c.stopTime) return null;
-  var s = Date.parse(c.startTime), e = Date.parse(c.stopTime), now = Date.now();
+  // /api/campaigns exposes start/end as `startDate` / `endDate` (YYYY-MM-DD
+  // slices of Meta's start_time / stop_time). Earlier code looked for
+  // startTime/stopTime which were never present, so pacing always silently
+  // skipped.
+  var rawStart = c.startDate || c.startTime || "";
+  var rawEnd = c.endDate || c.stopTime || "";
+  if (!rawStart || !rawEnd) return null;
+  var s = Date.parse(rawStart), e = Date.parse(rawEnd), now = Date.now();
   if (!s || !e || e <= s) return null;
   if (now < s) return null;
   var timePct = ((Math.min(now, e) - s) / (e - s)) * 100;
@@ -197,8 +207,14 @@ function clientKeyOf(name) {
 }
 
 function ageDaysFor(c) {
-  if (!c.startTime) return null;
-  var s = Date.parse(c.startTime);
+  // /api/campaigns exposes start/end dates as `startDate` / `endDate`
+  // (YYYY-MM-DD strings). Older code read `startTime` which doesn't exist
+  // on the response — every campaign appeared as "no age info" and the
+  // BASELINING branch never fired. Use startDate first, fall back to
+  // startTime for any future shape change.
+  var raw = c.startDate || c.startTime || "";
+  if (!raw) return null;
+  var s = Date.parse(raw);
   if (!s) return null;
   var d = (Date.now() - s) / (24 * 60 * 60 * 1000);
   return d < 0 ? 0 : Math.floor(d);
@@ -207,7 +223,7 @@ function ageDaysFor(c) {
 // Aggregate yesterday + baseline into a per-campaign disposition row.
 // Match on rawCampaignId where possible; fall back to campaignName for
 // platforms (TikTok/Google) where the dashboard suffixes id with platform.
-function buildCampaignRows(yesterdayCampaigns, baselineCampaigns) {
+function buildCampaignRows(yesterdayCampaigns, baselineCampaigns, adsByCampaign) {
   var baseByKey = {};
   baselineCampaigns.forEach(function(c) {
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
@@ -225,6 +241,12 @@ function buildCampaignRows(yesterdayCampaigns, baselineCampaigns) {
     var age = ageDaysFor(c);
     var disp = dispositionFor(c, b, b ? baselineDays : 0, age);
     var rm = resultMetricFor(c);
+
+    // Pick representative ad for this campaign — the top-spending ad
+    // yesterday. Falls back to nothing if the ad fetch failed or this
+    // campaign has no resolvable creative.
+    var topAd = (adsByCampaign && adsByCampaign[String(c.rawCampaignId || "")]) || null;
+
     rows.push({
       campaignName: c.campaignName,
       platform: c.platform,
@@ -236,7 +258,9 @@ function buildCampaignRows(yesterdayCampaigns, baselineCampaigns) {
       cpr: rm.value > 0 ? spend / rm.value : null,
       frequency: parseFloat(c.frequency || 0),
       ctr: parseFloat(c.ctr || 0),
-      disposition: disp
+      disposition: disp,
+      thumbnail: topAd ? topAd.thumbnail : "",
+      previewUrl: topAd ? topAd.previewUrl : ""
     });
   });
   return rows;
@@ -346,11 +370,37 @@ function buildHtml(opts) {
     var rowsHtml = b.rows.map(function(r) {
       var c = DISP_COLORS[r.disposition.color] || DISP_COLORS.green;
       var reasons = (r.disposition.reasons || []).map(escapeHtml).join(" &middot; ");
+
+      // Thumbnail tile — 64x64 rounded square. Wraps in an <a> to the ad's
+      // public-platform permalink when one is available so EXCO can click
+      // through to the live creative on Facebook / Instagram. Falls back
+      // to a gradient placeholder cell when the ad has no creative URL
+      // resolved (e.g. brand-new ad, Meta CDN miss).
+      var thumbHtml = "";
+      if (r.thumbnail) {
+        var imgTag = '<img src="' + escapeHtml(r.thumbnail) + '" alt="ad creative" width="64" height="64" style="width:64px;height:64px;display:block;border-radius:10px;object-fit:cover;border:1px solid ' + P.rule + ';"/>';
+        thumbHtml = r.previewUrl ? '<a href="' + escapeHtml(r.previewUrl) + '" target="_blank" rel="noopener" style="display:block;text-decoration:none;">' + imgTag + '</a>' : imgTag;
+      } else {
+        thumbHtml = '<div style="width:64px;height:64px;display:block;border-radius:10px;background:linear-gradient(135deg,' + P.ember + '40,' + P.lava + '40);border:1px solid ' + P.rule + ';"></div>';
+      }
+      var viewLink = r.previewUrl
+        ? '<a href="' + escapeHtml(r.previewUrl) + '" target="_blank" rel="noopener" style="font-size:9px;color:' + P.cyan + ';text-decoration:none;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">View live &rarr;</a>'
+        : '';
+
       return '<tr>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';">' +
-          '<div style="display:block;margin-bottom:4px;">' + dispChip(r.disposition) + '<span style="margin-left:8px;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;">' + escapeHtml(r.platform || "") + '</span></div>' +
+        // Thumbnail column
+        '<td style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' +
+          thumbHtml +
+        '</td>' +
+        // Description column — chip, platform, name, reasons, view link
+        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
+          '<div style="margin-bottom:4px;line-height:1.6;">' +
+            dispChip(r.disposition) +
+            '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
+          '</div>' +
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.35;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
           '<div style="font-size:11px;color:' + P.label + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;">' + reasons + '</div>' +
+          (viewLink ? '<div style="margin-top:8px;">' + viewLink + '</div>' : '') +
         '</td>' +
         '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
@@ -400,7 +450,7 @@ function buildHtml(opts) {
         '<div style="font-size:22px;font-weight:900;color:' + P.ember + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(totals.spend)) + '</div></div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Active campaigns</div>' +
+        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Campaigns</div>' +
         '<div style="font-size:22px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totals.activeCampaigns + '</div></div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
@@ -488,6 +538,37 @@ async function fetchCampaigns(from, to, apiKey) {
   return await r.json();
 }
 
+// Pull yesterday's per-ad insights so the email can show a thumbnail + a
+// "View live" link straight to the public Facebook / Instagram permalink.
+// The thumbnails are CDN URLs (Meta-hosted, signed but auth-free) so any
+// email client can render them inline.
+async function fetchAdsByCampaign(from, to, apiKey) {
+  try {
+    var u = ORIGIN + "/api/ads?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+    var r = await fetch(u, { headers: { "x-api-key": apiKey || "" } });
+    if (!r.ok) return {};
+    var data = await r.json();
+    var ads = (data && data.ads) || [];
+    // Pick the top-spending ad per Meta campaignId. /api/ads exposes the
+    // raw Meta campaign id (no _facebook suffix), which matches the
+    // rawCampaignId field on /api/campaigns rows.
+    var byCamp = {};
+    ads.forEach(function(a) {
+      var cid = String(a.campaignId || "");
+      if (!cid) return;
+      var sp = parseFloat(a.spend || 0);
+      var cur = byCamp[cid];
+      if (!cur || sp > cur.spend) {
+        byCamp[cid] = { spend: sp, thumbnail: a.thumbnail || "", previewUrl: a.previewUrl || "" };
+      }
+    });
+    return byCamp;
+  } catch (_) {
+    // Thumbnails are nice-to-have. Never break the email over them.
+    return {};
+  }
+}
+
 export default async function handler(req, res) {
   var cronSecret = process.env.CRON_SECRET || "";
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
@@ -523,21 +604,23 @@ export default async function handler(req, res) {
     return;
   }
 
-  var yesterdayData, baselineData;
+  var yesterdayData, baselineData, adsByCampaign;
   try {
-    var pair = await Promise.all([
+    var trio = await Promise.all([
       fetchCampaigns(yFrom, yTo, dashKey),
-      fetchCampaigns(bFrom, bTo, dashKey)
+      fetchCampaigns(bFrom, bTo, dashKey),
+      fetchAdsByCampaign(yFrom, yTo, dashKey)
     ]);
-    yesterdayData = pair[0];
-    baselineData = pair[1];
+    yesterdayData = trio[0];
+    baselineData = trio[1];
+    adsByCampaign = trio[2] || {};
   } catch (err) {
     console.error("daily-report fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
     return;
   }
 
-  var rows = buildCampaignRows(yesterdayData.campaigns || [], baselineData.campaigns || []);
+  var rows = buildCampaignRows(yesterdayData.campaigns || [], baselineData.campaigns || [], adsByCampaign);
   var clients = groupByClient(rows);
   var totals = {
     spend: rows.reduce(function(a, r) { return a + r.spend; }, 0),

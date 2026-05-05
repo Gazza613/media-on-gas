@@ -10,10 +10,19 @@
 // with a "needs label" footer warning so we notice immediately.
 
 export var clientLabels = {
+  // Hyphenated variants — match the actual Meta campaign naming, e.g.
+  // "MTN-MoMo_META_Like&Follow_..." where the first underscore-segment
+  // carries an internal hyphen.
+  "MTN-MoMo": "MTN MoMo",
+  "MTN-MoMoPOS": "MTN MoMo POS",
+  "MTN-MoMo-POS": "MTN MoMo POS",
+  "MTN-Khava": "MTN Khava",
+  // PascalCase variants for compatibility with anything that drops the
+  // hyphen during creation.
   MTNMoMo: "MTN MoMo",
   MTNMoMoPOS: "MTN MoMo POS",
-  Willowbrook: "Willowbrook",
   MTNKhava: "MTN Khava",
+  Willowbrook: "Willowbrook",
   ConcordCollege: "Concord College",
   EdenCollege: "Eden College",
   PsychoBunny: "Psycho Bunny ZA",
