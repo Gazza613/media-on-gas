@@ -5857,12 +5857,18 @@ export default function MediaOnGas(){
                     </div>;
                   })}
 
-                  {/* CROSS-OBJECTIVE STRATEGIC INSIGHTS */}
+                  {/* CROSS-OBJECTIVE STRATEGIC ACTIONS \u2014 copy intentionally
+                      written for the internal team in plain media-buyer
+                      language: short sentences, named numbers, action verbs.
+                      Heavier jargon ("benchmark midpoint", "head and tail",
+                      "incremental results", "tail creatives") was removed
+                      after the team flagged the previous block as too dense
+                      to read at a glance. */}
                   <div style={{marginTop:28,padding:"22px 26px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",borderRadius:"0 14px 14px 0",border:"1px solid "+P.ember+"20",borderLeft:"4px solid "+P.ember,position:"relative",overflow:"hidden"}}>
                     <div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+P.ember+"06, transparent)",pointerEvents:"none"}}></div>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>
                       {Ic.crown(P.ember,16)}
-                      <span style={{fontSize:10,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase"}}>STRATEGIC INSIGHTS | CROSS-OBJECTIVE</span>
+                      <span style={{fontSize:10,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase"}}>Strategic Actions Across Objectives</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.ember+"30, transparent)",marginLeft:8}}/>
                     </div>
                     {(function(){
@@ -5876,31 +5882,38 @@ export default function MediaOnGas(){
                       });
                       if(objRanked.length>=2){
                         var best=objRanked[0],worst=objRanked[objRanked.length-1];
-                        lines.push("Objective efficiency ranking (vs industry benchmark midpoint): "+objRanked.map(function(o){var bm=o.sec.bench;var r=bm?(o.totals.cpr/bm.mid):0;return o.sec.label+" "+(r>0?(r<1?"-":"+")+Math.round(Math.abs(1-r)*100)+"%":"n/a");}).join(" | ")+". Strongest: "+best.sec.label+". Weakest: "+worst.sec.label+".");
+                        var costParts=objRanked.map(function(o){
+                          var bm=o.sec.bench;
+                          if(!bm||o.totals.cpr<=0)return o.sec.label+" no benchmark";
+                          var pct=Math.abs(1-(o.totals.cpr/bm.mid))*100;
+                          var dir=(o.totals.cpr/bm.mid)<1?"under":"over";
+                          return o.sec.label+" "+pct.toFixed(2)+"% "+dir;
+                        });
+                        lines.push("Cost vs industry average, by objective: "+costParts.join(", ")+". Best running: "+best.sec.label+". Most expensive: "+worst.sec.label+".");
                       }
                       // Platform-objective fit
                       var fits=[];
-                      objBreakdown.forEach(function(o){if(o.platTop&&o.platMix[o.platTop]>=3)fits.push(o.sec.label+" leans "+o.platTop);});
-                      if(fits.length>0)lines.push("Platform-objective fit: "+fits.join(" | ")+". Use this to anchor media planning, do not force spend into platforms that the data says under-deliver for a given objective.");
+                      objBreakdown.forEach(function(o){if(o.platTop&&o.platMix[o.platTop]>=3)fits.push(o.sec.label+" on "+o.platTop);});
+                      if(fits.length>0)lines.push("Where each objective performs best: "+fits.join(", ")+". Plan budget around these strengths, do not push spend into platforms that are not pulling for a given goal.");
                       // Total reallocation potential
                       var totRealloc=0,totReallocSpend=0,totReallocCount=0;
                       objBreakdown.forEach(function(o){if(o.realloc>0){totRealloc+=o.realloc;totReallocSpend+=o.tailSpend;totReallocCount+=o.tailCount;}});
                       if(totRealloc>0){
-                        lines.push("Portfolio-wide reallocation: "+totReallocCount+" tail creatives consuming "+fR(totReallocSpend)+" could be pruned. Redeploying that spend to top-ranked ad sets projects ~"+fmt(totRealloc)+" additional incremental results at current efficiency, a compounding win without new budget.");
+                        lines.push("Spend you can free up: "+totReallocCount+" weak ads are using "+fR(totReallocSpend)+" with little to show. Move that money to the top performers and you would gain about "+fmt(totRealloc)+" more results at current rates, no extra budget needed.");
                       }
                       // Creative refresh mandate
                       var refreshCount=0;
                       objBreakdown.forEach(function(o){if(o.efficiencyGap>=2.5)refreshCount++;});
-                      if(refreshCount>0)lines.push(refreshCount+" of "+objBreakdown.length+" objectives show a 2.5x+ efficiency gap between head and tail. These categories need a creative refresh sprint: 3-5 new variants tested against the current top performer, biased to the winning format and platform in each.");
+                      if(refreshCount>0)lines.push("Creative refresh needed: "+refreshCount+" of "+objBreakdown.length+" objectives have a 2.5x cost gap between top and bottom ads. Build 3 to 5 new versions for each, test them against the current best performer, lean into the winning format and platform.");
                       // Attention commentary
                       var allImps=0,allClicks=0;filteredAds.forEach(function(a){allImps+=a.impressions;allClicks+=a.clicks;});
                       var portfolioCtr=allImps>0?(allClicks/allImps*100):0;
                       if(portfolioCtr>0){
-                        lines.push("Portfolio blended CTR: "+portfolioCtr.toFixed(2)+"% on "+fmt(allImps)+" impressions"+(portfolioCtr>=1.2?". Above the 1.2% healthy threshold, the creative is earning attention. Protect this by retiring fatigued creatives before CTR slides.":portfolioCtr>=0.8?". In the acceptable 0.8-1.2% band but not exceptional. Prioritise creative testing over audience expansion.":". Below 0.8%, attention is the bottleneck. Audience or creative fit is off before any scaling decision."));
+                        lines.push("Overall click-through rate: "+portfolioCtr.toFixed(2)+"% across "+fmt(allImps)+" impressions"+(portfolioCtr>=1.2?". Above the 1.20% healthy mark, the creatives are earning attention. Retire tired ads early to keep this rate up.":portfolioCtr>=0.8?". In the acceptable 0.80% to 1.20% band but not exceptional. Test new creatives before chasing more audience reach.":". Below 0.80%, attention is the bottleneck. Audience or creative fit is off, fix that before scaling."));
                       }
                       // Headline action
                       var scaleCount=0;objBreakdown.forEach(function(o){scaleCount+=o.top5.filter(function(a){return a.results>0;}).length;});
-                      if(scaleCount>0)lines.push("Next 14 days: scale the "+scaleCount+" green-tagged creatives by +20% budget, kill the bottom "+totReallocCount+" tail ads, brief "+(refreshCount*4)+" new variants across "+refreshCount+" objective(s) needing refresh. Re-measure on day 14 with a minimum of 3x current volume per winning ad before locking in any permanent reallocation.");
+                      if(scaleCount>0)lines.push("Next 14 days: raise budget by 20.00% on the "+scaleCount+" winning ads, pause the "+totReallocCount+" weakest, brief "+(refreshCount*4)+" new versions across the "+refreshCount+" objective(s) that need a refresh. Check back on day 14 once each winning ad has reached at least 3x its current volume before locking in any permanent change.");
                       return <div style={{fontSize:13.5,color:P.txt,fontFamily:ff,lineHeight:2.1,letterSpacing:0.2,position:"relative"}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:8,display:"flex",gap:8}}><span style={{color:P.ember,fontWeight:900,flexShrink:0}}>{"\u25B8"}</span><span>{l}</span></div>;})}</div>;
                     })()}
                   </div>
