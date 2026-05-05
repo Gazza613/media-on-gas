@@ -82,7 +82,7 @@ export function buildResetHtml(opts) {
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
           <tr>
             <td valign="middle" style="width:56px;padding-right:14px;">
-              <img src="${logoUrl}" alt="GAS Marketing" width="48" height="48" style="width:48px;height:48px;border-radius:50%;display:block;border:0;"/>
+              <img src="${logoUrl}" alt="GAS Marketing" width="48" height="48" border="0" style="width:48px;height:48px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>
             </td>
             <td valign="middle">
               <div style="font-size:12px;color:#FFFBF8;font-weight:800;letter-spacing:3px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">

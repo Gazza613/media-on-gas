@@ -533,15 +533,15 @@ function buildHtml(opts) {
   var glowStyles =
     '<style>' +
     '@keyframes gasGlow {' +
-      '0%, 100% { box-shadow: 0 0 22px rgba(249,98,3,0.55), 0 0 44px rgba(255,61,0,0.35); }' +
-      '50% { box-shadow: 0 0 38px rgba(249,98,3,0.85), 0 0 80px rgba(255,61,0,0.55); }' +
+      '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
+      '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
     '}' +
     '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
     '</style>';
 
   var logoBlock =
     '<div style="text-align:center;margin-bottom:18px;">' +
-      '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:0;box-shadow:0 0 30px rgba(249,98,3,0.65),0 0 60px rgba(255,61,0,0.45);"/>' +
+      '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>' +
     '</div>';
 
   return '<!DOCTYPE html>' +
@@ -598,7 +598,7 @@ function buildHtml(opts) {
       '<tr><td style="padding:18px 36px 30px;">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">' +
       '<tr><td valign="middle" style="width:54px;padding-right:14px;">' +
-      '<img src="' + logoUrl + '" alt="GAS Marketing" width="46" height="46" style="width:46px;height:46px;border-radius:50%;display:block;border:0;"/>' +
+      '<img src="' + logoUrl + '" alt="GAS Marketing" width="46" height="46" border="0" style="width:46px;height:46px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
       '</td><td valign="middle">' +
       '<div style="font-size:12px;color:' + P.txt + ';font-weight:800;letter-spacing:3px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
