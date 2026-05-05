@@ -2856,7 +2856,51 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){setLoading(true);var h=authHeaders();fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}if(d.campaigns){var prev=selected;setCampaigns(d.campaigns);if(prev.length>0){var validIds=d.campaigns.map(function(x){return x.campaignId;});var kept=prev.filter(function(id){return validIds.indexOf(id)>=0;});setSelected(kept.length>0?kept:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{if(urlSelected){var valid=urlSelected.filter(function(id){return d.campaigns.some(function(c){return c.campaignId===id;});});setSelected(valid.length>0?valid:d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}else{setSelected(d.campaigns.filter(function(x){return parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0;}).map(function(x){return x.campaignId;}));}}}if(d.pages){setPages(d.pages);}if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);setLoading(false);}).catch(function(err){console.error("API Error:",err);setLoading(false);});fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});};
+  var fetchData=function(){
+    setLoading(true);
+    var h=authHeaders();
+    fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){
+      if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}
+      if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}
+      if(d.campaigns){
+        var prev=selected;
+        setCampaigns(d.campaigns);
+        // Active = campaigns that delivered in this date window. The
+        // /api/campaigns endpoint returns ACTIVE+SCHEDULED campaigns
+        // regardless of date, so a May-selected campaign with zero
+        // April delivery still appears in d.campaigns when the user
+        // switches to April. Filter on impressions/spend > 0 to identify
+        // who actually ran in the requested window.
+        var activeMap={};
+        d.campaigns.forEach(function(x){if(parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0)activeMap[x.campaignId]=true;});
+        var activeIds=Object.keys(activeMap);
+        // Earlier behaviour kept the previous selection as long as the
+        // campaign IDs still existed, which produced stale numbers when
+        // the user switched from one month to another, the IDs were
+        // valid but had zero data in the new window. Now we keep ONLY
+        // the previously-selected IDs that still delivered in the new
+        // period. If none qualify, fall back to all active in the new
+        // period so the dashboard reflects what actually ran.
+        if(prev.length>0){
+          var keptActive=prev.filter(function(id){return activeMap[id]===true;});
+          if(keptActive.length>0){setSelected(keptActive);}
+          else {setSelected(activeIds);}
+        } else if(urlSelected){
+          var validUrl=urlSelected.filter(function(id){return activeMap[id]===true;});
+          setSelected(validUrl.length>0?validUrl:activeIds);
+        } else {
+          setSelected(activeIds);
+        }
+      }
+      if(d.pages){setPages(d.pages);}
+      if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}
+      setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);
+      setLoading(false);
+    }).catch(function(err){console.error("API Error:",err);setLoading(false);});
+    fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});
+    fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});
+    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran,{headers:h}).then(function(r){return r.json();}).then(function(d4){if(d4.series){setTimeseries(d4);}}).catch(function(err){console.error("Timeseries API error:",err);});
+  };
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
   // Comparison data fetch. Only runs when compareMode is on. Reuses the
   // same /api/campaigns endpoint for the prior date range so the existing
