@@ -2959,7 +2959,11 @@ export default function MediaOnGas(){
   // tabs so both render the same matrix without code duplication. Reads
   // the timeseries state, the granularity toggle, and the dashboard's
   // colour + format helpers from the enclosing component scope.
-  var renderTrendlines=function(){
+  var renderTrendlines=function(opts){
+    // opts.showCommentary defaults to true. Summary opts out so the
+    // section reads as a clean visual block; Optimisation keeps the
+    // momentum-leader / attention-point summary at the foot.
+    var showCommentary=!opts||opts.showCommentary!==false;
     var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"Clicks to App Store",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"landingpage",label:"Landing Page",accent:P.cyan}];
     var platCols=[{key:"Facebook",label:"FB",accent:P.fb},{key:"Instagram",label:"IG",accent:P.ig},{key:"TikTok",label:"TT",accent:P.tt},{key:"Google",label:"Google",accent:P.gd}];
     var hasData=timeseries&&timeseries.series&&timeseries.series.length>0;
@@ -3012,7 +3016,7 @@ export default function MediaOnGas(){
             })}
           </div>;
         })}
-        <div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.25)",borderRadius:10,border:"1px solid "+P.rule}}>
+        {showCommentary&&<div style={{marginTop:18,padding:"14px 16px",background:"rgba(0,0,0,0.25)",borderRadius:10,border:"1px solid "+P.rule}}>
           {(function(){
             var lines=[];
             var rankings=[];
@@ -3025,7 +3029,7 @@ export default function MediaOnGas(){
             if(lines.length===0)lines.push("Not enough "+(tsGran==="week"?"weekly":"monthly")+" history yet to spot momentum patterns. Re-check after another "+(tsGran==="week"?"week":"month")+" of delivery.");
             return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:5,display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"▸"}</span><span>{l}</span></div>;})}</div>;
           })()}
-        </div>
+        </div>}
       </div>}
     </div>;
   };
@@ -4709,8 +4713,10 @@ export default function MediaOnGas(){
               {/* Performance Trendlines, slotted between Objective Insights
                   and Objective Demographics so the same matrix surfaced on
                   the Optimisation tab also reads on Summary. Helper is
-                  shared, so any tweak there flows here automatically. */}
-              {renderTrendlines()}
+                  shared, so any tweak there flows here automatically.
+                  showCommentary:false skips the momentum/attention block
+                  on Summary, kept only on the Optimisation tab. */}
+              {renderTrendlines({showCommentary:false})}
 
               {/* Objective Demographics, lifted out of the Objective
                   Highlights card so Trendlines can slot cleanly between
