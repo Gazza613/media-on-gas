@@ -164,7 +164,20 @@ export default async function handler(req, res) {
             row.actions.forEach(function(a) {
               var at = String(a.action_type || "").toLowerCase();
               var v = parseInt(a.value || 0);
-              if (objective === "leads" && (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at.indexOf("onsite_conversion.lead") >= 0)) results = Math.max(results, v);
+              // Lead-Gen action-type list mirrors api/campaigns.js exactly
+              // so the Trendlines lead totals reconcile with Summary's
+              // Objective Highlights. Earlier the timeseries route only
+              // matched a subset (lead, fb_pixel_lead, onsite_conversion
+              // .lead* via prefix), missing onsite_web_lead and
+              // offsite_complete_registration_add_meta_leads, which
+              // undercounted lead campaigns that fired those events.
+              if (objective === "leads" && (
+                at === "lead" ||
+                at === "onsite_web_lead" ||
+                at === "offsite_conversion.fb_pixel_lead" ||
+                at === "onsite_conversion.lead_grouped" ||
+                at === "offsite_complete_registration_add_meta_leads"
+              )) results = Math.max(results, v);
               // FB follower-objective: accept both page_like (modern) AND
               // like (legacy PAGE_LIKES objective returns page likes under
               // this key) plus the follow action. The Facebook placement
