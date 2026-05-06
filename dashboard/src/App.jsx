@@ -2756,6 +2756,29 @@ export default function MediaOnGas(){
     return function(){clearInterval(iv2);};
   },[adsList&&adsList.length]);
   var ts1=useState(null),timeseries=ts1[0],setTimeseries=ts1[1];
+  // Placement-level performance breakdown (FB Feed, IG Reels, Stories,
+  // Audience Network, TikTok FYP, YouTube, Google Search, etc.). Pulled
+  // from /api/placements with publisher_platform + platform_position
+  // breakdowns on Meta. Re-fetches whenever the date range or selected
+  // campaigns change so the section is always scoped to the user's
+  // current view.
+  var pl1=useState([]),placements=pl1[0],setPlacements=pl1[1];
+  useEffect(function(){
+    if(!isAuthed())return;
+    var ids=(selected||[]).slice();
+    var extra=[];
+    (selected||[]).forEach(function(x){
+      var s=String(x||"");
+      var stripped=s.replace(/_(facebook|instagram)$/,"").replace(/^google_/,"");
+      if(stripped&&extra.indexOf(stripped)<0)extra.push(stripped);
+    });
+    var allIds=ids.concat(extra);
+    var idsQs=allIds.length>0?("&campaignIds="+encodeURIComponent(allIds.join(","))):"";
+    fetch(API+"/api/placements?from="+df+"&to="+dt+idsQs,{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d&&d.placements)setPlacements(d.placements);})
+      .catch(function(){});
+  },[df,dt,session,viewToken,selected]);
   // IG follower-count snapshots (last 8 days) from /api/ig-snapshot.
   // Used to reconcile the live IG total on Community Growth against
   // historic counts captured by the daily 06:00 SAST cron, so the team
@@ -4994,6 +5017,100 @@ export default function MediaOnGas(){
                   showCommentary:false skips the momentum/attention block
                   on Summary, kept only on the Optimisation tab. */}
               {renderTrendlines({showCommentary:false})}
+
+              {/* Placement Performance Assessment — sub-platform breakdown
+                  showing where the budget is delivering and what each
+                  placement returned. Sources from /api/placements which
+                  pulls Meta with publisher_platform + platform_position
+                  breakdowns (FB Feed, IG Reels, Stories, Audience
+                  Network, etc.), TikTok as a single FYP row, Google
+                  rolled up by channel sub-type. Same Glass-card styling
+                  as Trendlines so it reads as a continuation. */}
+              {(function(){
+                if(!placements||placements.length===0)return null;
+                var totSpend=placements.reduce(function(a,p){return a+parseFloat(p.spend||0);},0);
+                var totImps=placements.reduce(function(a,p){return a+parseFloat(p.impressions||0);},0);
+                var totClicks=placements.reduce(function(a,p){return a+parseFloat(p.clicks||0);},0);
+                if(totSpend<=0)return null;
+                // Compute per-row "results" as the predominant outcome
+                // metric: leads → installs → follows+pageLikes → clicks.
+                // Same priority the rest of the dashboard uses for
+                // mixed-objective totals.
+                var rows=placements.map(function(p){
+                  var leads=parseInt(p.leads||0);
+                  var installs=parseInt(p.appInstalls||0);
+                  var follows=parseInt(p.follows||0)+parseInt(p.pageLikes||0);
+                  var resultsCount, resultsLabel;
+                  if(leads>0){resultsCount=leads;resultsLabel="leads";}
+                  else if(installs>0){resultsCount=installs;resultsLabel="installs";}
+                  else if(follows>0){resultsCount=follows;resultsLabel="follows + likes";}
+                  else {resultsCount=parseInt(p.clicks||0);resultsLabel="clicks";}
+                  return Object.assign({},p,{resultsCount:resultsCount,resultsLabel:resultsLabel});
+                });
+                rows.sort(function(a,b){return b.spend-a.spend;});
+                var maxSpend=rows.length>0?rows[0].spend:1;
+                var top3Spend=rows.slice(0,3).reduce(function(a,p){return a+p.spend;},0);
+                var top3Share=totSpend>0?(top3Spend/totSpend*100):0;
+                // Most efficient = lowest cost per result among rows
+                // with material spend (R200+) and at least one result.
+                var efficient=rows.filter(function(p){return p.spend>=200&&p.resultsCount>0;}).slice().sort(function(a,b){return (a.spend/a.resultsCount)-(b.spend/b.resultsCount);})[0];
+                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 0 14px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      {Ic.target(P.solar,18)}
+                      <span style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>Placement Performance Assessment</span>
+                    </div>
+                    <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{rows.length} placement{rows.length===1?"":"s"} active</span>
+                  </div>
+                  <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:14,textTransform:"uppercase"}}>Where your spend is delivering, ranked by share of investment &middot; scoped to your selected period ({df} to {dt}) &middot; {selected.length} campaign{selected.length===1?"":"s"} selected</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {rows.map(function(p,i){
+                      var sharePct=totSpend>0?(p.spend/totSpend*100):0;
+                      var widthPct=maxSpend>0?(p.spend/maxSpend*100):0;
+                      var ctr=p.impressions>0?(parseFloat(p.clicks||0)/parseFloat(p.impressions||0)*100):0;
+                      var cpr=p.resultsCount>0?p.spend/p.resultsCount:0;
+                      var cpc=parseFloat(p.clicks||0)>0?p.spend/parseFloat(p.clicks||0):0;
+                      return <div key={p.key||i} style={{display:"grid",gridTemplateColumns:"36px 220px 1fr 90px 70px 70px 90px",gap:14,alignItems:"center",padding:"12px 14px",background:"rgba(0,0,0,0.22)",border:"1px solid "+P.rule,borderRadius:10}}>
+                        <div style={{width:30,height:30,borderRadius:"50%",background:p.color+"20",border:"1px solid "+p.color+"50",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:p.color,fontFamily:fm}}>{i+1}</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{width:8,height:8,borderRadius:"50%",background:p.color,flexShrink:0}}></span>
+                            <span style={{fontSize:12,fontWeight:800,color:P.txt,fontFamily:fm,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
+                          </div>
+                          <div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1,textTransform:"uppercase"}}>{p.platform}{cpr>0?" · "+fR(cpr)+" / "+p.resultsLabel:""}</div>
+                        </div>
+                        <div style={{position:"relative",height:18,background:"rgba(255,255,255,0.04)",borderRadius:9,overflow:"hidden"}}>
+                          <div style={{position:"absolute",left:0,top:0,bottom:0,width:widthPct.toFixed(2)+"%",background:"linear-gradient(90deg,"+p.color+"AA,"+p.color+"55)",borderRadius:9,transition:"width 0.6s ease"}}></div>
+                          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",paddingLeft:10,fontSize:10,fontWeight:700,color:P.txt,fontFamily:fm,letterSpacing:0.5}}>{sharePct.toFixed(2)}%</div>
+                        </div>
+                        <div style={{textAlign:"right",fontFamily:fm}}>
+                          <div style={{fontSize:13,fontWeight:900,color:P.ember}}>{fR(p.spend)}</div>
+                          <div style={{fontSize:8,color:P.caption,letterSpacing:1.2,textTransform:"uppercase",marginTop:2}}>spend</div>
+                        </div>
+                        <div style={{textAlign:"right",fontFamily:fm}}>
+                          <div style={{fontSize:12,fontWeight:800,color:P.cyan}}>{fmt(p.impressions)}</div>
+                          <div style={{fontSize:8,color:P.caption,letterSpacing:1.2,textTransform:"uppercase",marginTop:2}}>imps</div>
+                        </div>
+                        <div style={{textAlign:"right",fontFamily:fm}}>
+                          <div style={{fontSize:12,fontWeight:800,color:P.mint}}>{ctr.toFixed(2)}%</div>
+                          <div style={{fontSize:8,color:P.caption,letterSpacing:1.2,textTransform:"uppercase",marginTop:2}}>ctr</div>
+                        </div>
+                        <div style={{textAlign:"right",fontFamily:fm}}>
+                          <div style={{fontSize:13,fontWeight:900,color:p.color}}>{fmt(p.resultsCount)}</div>
+                          <div style={{fontSize:8,color:P.caption,letterSpacing:1.2,textTransform:"uppercase",marginTop:2}}>{p.resultsLabel}</div>
+                        </div>
+                      </div>;
+                    })}
+                  </div>
+                  <div style={{marginTop:14,padding:"12px 16px",background:"rgba(0,0,0,0.25)",borderRadius:10,border:"1px solid "+P.rule}}>
+                    <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>
+                      <div style={{marginBottom:4,display:"flex",gap:8}}><span style={{color:P.solar,fontWeight:900}}>{"▸"}</span><span>Top 3 placements account for <strong>{top3Share.toFixed(2)}%</strong> of {fR(totSpend)} total spend, that concentration is where any optimisation lever moves the needle fastest.</span></div>
+                      {efficient&&<div style={{marginBottom:4,display:"flex",gap:8}}><span style={{color:P.mint,fontWeight:900}}>{"▸"}</span><span>Most efficient delivery: <strong style={{color:efficient.color}}>{efficient.name}</strong> at <strong>{fR(efficient.spend/efficient.resultsCount)} per {efficient.resultsLabel.replace(/s$/,"")}</strong> ({fmt(efficient.resultsCount)} {efficient.resultsLabel} on {fR(efficient.spend)} spend).</span></div>}
+                      <div style={{display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"▸"}</span><span>Blended: {fmt(totImps)} impressions and {fmt(totClicks)} clicks across {rows.length} placement{rows.length===1?"":"s"}, weighted ranking by spend so the top rows are where the team should evaluate creative refresh and bid pressure first.</span></div>
+                    </div>
+                  </div>
+                </div>;
+              })()}
 
               {/* Objective Demographics, lifted out of the Objective
                   Highlights card so Trendlines can slot cleanly between
