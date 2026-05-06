@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
 import { labelFor } from "./_clientLabels.js";
+import { readRecent as readIgSnapshots, ymd as ymdIg } from "./_igSnapshots.js";
 
 // Daily Pulse — campaign performance snapshot for EXCO. Fires every morning
 // at 08:15 SAST (06:15 UTC) via Vercel cron. Compares yesterday's per-campaign
@@ -380,6 +381,7 @@ function buildHtml(opts) {
   var clients = opts.clients; // grouped buckets
   var totals = opts.totals;
   var unlabelled = opts.unlabelled || [];
+  var igRollup = opts.igRollup || {};
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   // Disposition counts across the agency
@@ -579,6 +581,52 @@ function buildHtml(opts) {
       // Per-client blocks
       clientBlocks +
 
+      // IG follower roll-up — independent of campaign delivery, sourced
+      // from the daily 06:00 SAST snapshot cron. One row per IG account
+      // with a non-zero follower count showing live total + day delta +
+      // week delta. Skips silently if no snapshots exist yet (first 7
+      // days after rollout, or if the cron has not fired yet).
+      ((function() {
+        var rows = Object.keys(igRollup || {}).map(function(id){return Object.assign({igId:id}, igRollup[id]);}).filter(function(r){return r.live > 0;});
+        if (rows.length === 0) return "";
+        rows.sort(function(a, b) { return b.live - a.live; });
+        var fmtN = function(n) { var v = parseInt(n) || 0; return v.toLocaleString("en-ZA"); };
+        var deltaSpan = function(d, suffix) {
+          if (d === null || d === undefined) return '<span style="color:' + P.caption + ';">no prior snapshot</span>';
+          if (d === 0) return '<span style="color:' + P.caption + ';">flat ' + suffix + '</span>';
+          var c = d > 0 ? P.mint : P.lava;
+          var sign = d > 0 ? "+" : "";
+          return '<span style="color:' + c + ';font-weight:800;">' + sign + fmtN(d) + '</span> <span style="color:' + P.caption + ';">' + suffix + '</span>';
+        };
+        var rowsHtml = rows.map(function(r) {
+          return '<tr>' +
+            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
+              '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + P.ig + ';margin-right:8px;vertical-align:middle;"></span>' +
+              '<strong style="color:' + P.ig + ';font-size:12px;">@' + escapeHtml(r.username || r.igId) + '</strong>' +
+            '</td>' +
+            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
+              '<strong style="color:' + P.txt + ';font-size:14px;font-weight:900;">' + fmtN(r.live) + '</strong>' +
+              ' <span style="color:' + P.caption + ';font-size:10px;">followers</span>' +
+            '</td>' +
+            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:11px;">' +
+              deltaSpan(r.dayDelta, "since yesterday") +
+            '</td>' +
+            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:11px;">' +
+              deltaSpan(r.weekDelta, "this week") +
+            '</td>' +
+          '</tr>';
+        }).join("");
+        return '<tr><td style="padding:24px 36px 0;">' +
+          '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:6px;">Instagram Follower Counts</div>' +
+          '<div style="font-size:11px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:12px;">Live total per matched account from yesterday\'s 06:00 SAST snapshot, with day-over-day and week-over-week deltas. Captured independently of Meta Page Insights so the number can be cross-referenced against the actual IG profile.</div>' +
+          '<div style="border:1px solid ' + P.rule + ';border-radius:12px;overflow:hidden;background:rgba(0,0,0,0.20);">' +
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
+              rowsHtml +
+            '</table>' +
+          '</div>' +
+        '</td></tr>';
+      })()) +
+
       // Methodology
       '<tr><td style="padding:32px 36px 8px;">' +
       '<div style="background:rgba(0,0,0,0.22);border:1px solid ' + P.rule + ';border-left:4px solid ' + P.amber + ';border-radius:0 12px 12px 0;padding:18px 22px;">' +
@@ -698,16 +746,18 @@ export default async function handler(req, res) {
     return;
   }
 
-  var yesterdayData, baselineData, adsByCampaign;
+  var yesterdayData, baselineData, adsByCampaign, igSnaps;
   try {
-    var trio = await Promise.all([
+    var quad = await Promise.all([
       fetchCampaigns(yFrom, yTo, dashKey),
       fetchCampaigns(bFrom, bTo, dashKey),
-      fetchAdsByCampaign(yFrom, yTo, dashKey)
+      fetchAdsByCampaign(yFrom, yTo, dashKey),
+      readIgSnapshots(8)
     ]);
-    yesterdayData = trio[0];
-    baselineData = trio[1];
-    adsByCampaign = trio[2] || {};
+    yesterdayData = quad[0];
+    baselineData = quad[1];
+    adsByCampaign = quad[2] || {};
+    igSnaps = quad[3] || [];
   } catch (err) {
     console.error("daily-report fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
@@ -720,6 +770,28 @@ export default async function handler(req, res) {
     spend: rows.reduce(function(a, r) { return a + r.spend; }, 0),
     activeCampaigns: rows.length
   };
+  // Pre-compute IG follower deltas per IG account from the snapshot
+  // history, so the rendering pass can show "today vs yesterday /
+  // this week" lines per matched IG account on each client block.
+  var igRollup = (function() {
+    if (!igSnaps || igSnaps.length === 0) return {};
+    var todaySnap = igSnaps[igSnaps.length - 1];
+    var yestSnap = igSnaps.length > 1 ? igSnaps[igSnaps.length - 2] : null;
+    var weekSnap = igSnaps.length >= 8 ? igSnaps[igSnaps.length - 8] : igSnaps[0];
+    var out = {};
+    Object.keys((todaySnap && todaySnap.accounts) || {}).forEach(function(igId) {
+      var t = todaySnap.accounts[igId];
+      var y = yestSnap && yestSnap.accounts && yestSnap.accounts[igId];
+      var w = weekSnap && weekSnap.accounts && weekSnap.accounts[igId];
+      out[igId] = {
+        username: t.username || "",
+        live: parseInt(t.followersCount || 0),
+        dayDelta: y ? (parseInt(t.followersCount || 0) - parseInt(y.followersCount || 0)) : null,
+        weekDelta: (w && weekSnap.date !== todaySnap.date) ? (parseInt(t.followersCount || 0) - parseInt(w.followersCount || 0)) : null
+      };
+    });
+    return out;
+  })();
 
   // Empty-day guard. If everything is paused, still send so silence isn't
   // ambiguous, but with a one-line "no spend yesterday" body.
@@ -733,7 +805,7 @@ export default async function handler(req, res) {
     return await sendEmail(res, dateLabel, emptyHtml, isCron);
   }
 
-  var html = buildHtml({ dateLabel: dateLabel, clients: clients, totals: totals });
+  var html = buildHtml({ dateLabel: dateLabel, clients: clients, totals: totals, igRollup: igRollup });
 
   if (dryRun) {
     res.status(200).json({

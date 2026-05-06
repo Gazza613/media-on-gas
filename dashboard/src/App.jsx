@@ -2748,6 +2748,19 @@ export default function MediaOnGas(){
     return function(){clearInterval(iv2);};
   },[adsList&&adsList.length]);
   var ts1=useState(null),timeseries=ts1[0],setTimeseries=ts1[1];
+  // IG follower-count snapshots (last 8 days) from /api/ig-snapshot.
+  // Used to reconcile the live IG total on Community Growth against
+  // historic counts captured by the daily 06:00 SAST cron, so the team
+  // can see "today vs yesterday" / "today vs 7 days ago" deltas
+  // independent of Meta's per-day Page Insights settling.
+  var igs1=useState(null),igSnapshots=igs1[0],setIgSnapshots=igs1[1];
+  useEffect(function(){
+    if(!isAuthed())return;
+    fetch(API+"/api/ig-snapshot?days=8",{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.snapshots)setIgSnapshots(d.snapshots);})
+      .catch(function(){});
+  },[session,viewToken]);
   // Lazy-loaded demographics payload. Fetched the first time the user
   // opens the Demographics tab, then re-fetched when the date range
   // changes. Keeps Summary load time unaffected (demographic breakdowns
@@ -5063,6 +5076,50 @@ export default function MediaOnGas(){
                     </div>
                     <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>
                       Meta does not expose per-ad IG follow attribution, the in-feed Follow happens on the profile after a click-through. Profile Visits is the per-ad signal you can rank ads on. Net page growth is the period outcome, mixed paid and organic.{convRate>0?" Implied conversion rate "+convRate.toFixed(2)+"% (treats all growth as paid, an upper bound).":""}
+                    </div>
+                  </div>;
+                })()}
+                {/* IG follower reconciliation — surfaces the live IG total
+                    alongside the historic counts captured by the 06:00 SAST
+                    snapshot cron. Lets the team verify daily that the
+                    dashboard's reported numbers track the actual IG profile
+                    even when Meta's per-day Page Insights metric settles
+                    late. One row per matched IG account with a non-zero
+                    live followers_count. */}
+                {(function(){
+                  var igs=igSnapshots||[];
+                  var matchedIg=matchedPages3.filter(function(mp){return mp.instagram_business_account&&mp.instagram_business_account.id;});
+                  if(matchedIg.length===0)return null;
+                  var todaySnap=igs.length>0?igs[igs.length-1]:null;
+                  var yestSnap=igs.length>1?igs[igs.length-2]:null;
+                  var weekSnap=igs.length>=8?igs[igs.length-8]:(igs.length>0?igs[0]:null);
+                  return <div style={{marginTop:14,padding:"14px 18px",background:"rgba(0,0,0,0.22)",border:"1px solid "+P.rule,borderRadius:10}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:2,textTransform:"uppercase",marginBottom:8,fontFamily:fm}}>Live IG Follower Reconciliation</div>
+                    {matchedIg.map(function(mp){
+                      var ig=mp.instagram_business_account;
+                      var live=parseInt(ig.followers_count||0);
+                      var igId=String(ig.id);
+                      var todayC=todaySnap&&todaySnap.accounts&&todaySnap.accounts[igId]?parseInt(todaySnap.accounts[igId].followersCount||0):null;
+                      var yestC=yestSnap&&yestSnap.accounts&&yestSnap.accounts[igId]?parseInt(yestSnap.accounts[igId].followersCount||0):null;
+                      var weekC=weekSnap&&weekSnap.accounts&&weekSnap.accounts[igId]?parseInt(weekSnap.accounts[igId].followersCount||0):null;
+                      var dayDelta=todayC!==null&&yestC!==null?(todayC-yestC):null;
+                      var weekDelta=todayC!==null&&weekC!==null&&weekSnap&&todaySnap&&weekSnap.date!==todaySnap.date?(todayC-weekC):null;
+                      var startCount=live-igGrowth;
+                      var deltaTxt=function(d){if(d===null)return "";if(d>0)return "+"+fmt(d);if(d<0)return "-"+fmt(Math.abs(d));return "0";};
+                      var deltaCol=function(d){if(d===null)return P.caption;if(d>0)return P.mint;if(d<0)return P.rose;return P.label;};
+                      return <div key={igId} style={{display:"flex",alignItems:"center",gap:14,padding:"6px 0",fontSize:11,fontFamily:fm,color:P.txt,flexWrap:"wrap"}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6,minWidth:170}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:P.ig}}></span>
+                          <strong style={{color:P.ig}}>@{ig.username||ig.name||igId}</strong>
+                        </span>
+                        <span><strong style={{color:P.txt}}>{fmt(live)}</strong> <span style={{color:P.caption}}>live</span></span>
+                        {dayDelta!==null&&<span style={{color:deltaCol(dayDelta)}}>{deltaTxt(dayDelta)} <span style={{color:P.caption}}>since yesterday</span></span>}
+                        {weekDelta!==null&&<span style={{color:deltaCol(weekDelta)}}>{deltaTxt(weekDelta)} <span style={{color:P.caption}}>this week</span></span>}
+                        {igGrowth!==0&&<span><span style={{color:P.caption}}>{df} starting count:</span> <strong>{fmt(startCount)}</strong></span>}
+                      </div>;
+                    })}
+                    <div style={{fontSize:9,color:P.caption,fontStyle:"italic",marginTop:6,lineHeight:1.5}}>
+                      Live count from Meta's `/me/accounts` snapshot, daily counts captured at 06:00 SAST and stored independently of Meta's per-day Page Insights metric. Period starting count is computed as live total minus net page growth for {df} to {dt}.
                     </div>
                   </div>;
                 })()}
