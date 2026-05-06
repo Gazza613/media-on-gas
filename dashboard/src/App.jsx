@@ -4812,6 +4812,29 @@ export default function MediaOnGas(){
                   </div>
                 </div>
                 {(function(){var biggestPlat=communityData.slice().sort(function(a,b){return b.total-a.total;})[0];var fastestGrow=communityData.filter(function(c){return c.earned>0;}).slice().sort(function(a,b){return b.earned-a.earned;})[0];return standRow([biggestPlat?stand("LARGEST FOLLOWER COUNT PLATFORM",biggestPlat.name+", "+fmt(biggestPlat.total),biggestPlat.color):null,fastestGrow?stand("TOP GROWTH THIS PERIOD",fastestGrow.name+", +"+fmt(fastestGrow.earned),fastestGrow.color):null,(function(){var cs=(objectives4["Followers & Likes"]&&objectives4["Followers & Likes"].spend)||0;return earnedTotal>0&&cs>0?stand("COST PER MEMBER",fR(cs/earnedTotal)+" (community spend only)",P.solar):null;})()]);})()}
+                {/* Data-source diagnostic — exposes exactly what each
+                    platform reported back so a "0 earned" cell can be
+                    interrogated without going to the API. FB shows how
+                    many selected Meta campaigns reported a page_like
+                    action, IG shows the matched-page count + the IG
+                    follower-growth sum returned by Page Insights, and
+                    TT shows the count of TikTok campaigns reporting
+                    in-ad follows. Italic + captioned so it reads as
+                    "behind the scenes" not headline content. */}
+                {(function(){
+                  var metaSel=sel.filter(function(c){return c.platform==="Facebook"||c.platform==="Instagram"||c.platform==="Meta";});
+                  var fbContribCount=metaSel.filter(function(c){return parseFloat(c.pageLikes||0)>0;}).length;
+                  var ttSel=sel.filter(function(c){return c.platform==="TikTok";});
+                  var ttContribCount=ttSel.filter(function(c){return parseFloat(c.follows||0)>0;}).length;
+                  var igMatchedPages=matchedPages3.filter(function(mp){return mp.instagram_business_account;});
+                  var igPagesWithGrowth=igMatchedPages.filter(function(mp){return parseFloat(mp.instagram_business_account.follower_growth||0)>0;}).length;
+                  return <div style={{marginTop:18,padding:"12px 16px",background:"rgba(0,0,0,0.22)",border:"1px solid "+P.rule,borderRadius:10,fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.7,fontStyle:"italic"}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.label,fontStyle:"normal",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Data sources behind these numbers</div>
+                    <div><strong style={{color:P.fb,fontStyle:"normal"}}>FB</strong> {"· "}page_like / like action from {fbContribCount} of {metaSel.length} Meta campaign{metaSel.length===1?"":"s"} {"· "}{fmt(parseFloat(m.pageLikes||0))} earned</div>
+                    <div><strong style={{color:P.ig,fontStyle:"normal"}}>IG</strong> {"· "}{igMatchedPages.length} matched IG page{igMatchedPages.length===1?"":"s"} of {pages.filter(function(p){return p.instagram_business_account;}).length} known {"· "}{igPagesWithGrowth} reporting non-zero follower growth {"· "}{fmt(igGrowth)} earned (Page Insights, organic + paid combined)</div>
+                    <div><strong style={{color:P.tt,fontStyle:"normal"}}>TT</strong> {"· "}follows from {ttContribCount} of {ttSel.length} TikTok campaign{ttSel.length===1?"":"s"} {"· "}{fmt(ttE2)} earned</div>
+                  </div>;
+                })()}
                 {/* Community member demographic cards, slotted directly under
                     the existing Community Growth KPIs so the owned-audience
                     composition reads as part of the same section rather than
