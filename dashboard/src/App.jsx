@@ -3091,6 +3091,13 @@ export default function MediaOnGas(){
             return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:5,display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"▸"}</span><span>{l}</span></div>;})}</div>;
           })()}
         </div>}
+        {/* Reconciliation note. The Followers row's IG cell shows
+            Profile Visits (clicks) because Meta does not attribute
+            in-feed Follow taps to specific ads on Instagram, the follow
+            happens on the profile after a click-through. Net IG
+            follower growth is on Community Growth, sourced from Page
+            Insights. Other rows reconcile to Objective Highlights. */}
+        <div style={{marginTop:10,fontSize:9,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>Followers IG cell shows Profile Visits (clicks). Meta does not attribute IG follows to specific ads, the in-feed Follow happens on the profile after a click-through. Net IG follower growth lives on Community Growth, sourced from Page Insights. Every other cell reconciles to Objective Highlights for the same date range.</div>
       </div>}
     </div>;
   };

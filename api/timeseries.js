@@ -307,8 +307,13 @@ export default async function handler(req, res) {
             var spend = parseFloat(r.metrics.costMicros || 0) / 1000000;
             var imps = parseInt(r.metrics.impressions || 0);
             var clk = parseInt(r.metrics.clicks || 0);
-            var conv = Math.round(parseFloat(r.metrics.conversions || 0));
-            var results = conv > 0 ? conv : clk;
+            // Google Trendlines reports clicks as the result, mirroring
+            // the Meta + TikTok rows and the api/campaigns.js Objective
+            // Highlights aggregator. Earlier the Google block preferred
+            // conversion count when present, but conversions diverge
+            // from clicks on App Install / Landing Page goals so the
+            // Trendlines Google cell undercounted versus Highlights.
+            var results = clk;
             if (!campaignAllowed(r.campaign && r.campaign.id, r.campaign && r.campaign.name)) return;
             addTo(seriesMap, bucketPlat, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
           });
