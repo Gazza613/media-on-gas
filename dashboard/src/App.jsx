@@ -792,7 +792,7 @@ function CampaignSelector(props){
   var f=cs.filter(function(c){return (parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)&&(String(c.campaignName||"").toLowerCase().indexOf(search.toLowerCase())>=0||String(c.accountName||"").toLowerCase().indexOf(search.toLowerCase())>=0);});
   var g={};f.forEach(function(c){var k=c.accountName||"Unknown";if(!g[k])g[k]={platform:c.platform,campaigns:[]};g[k].campaigns.push(c);});
   return(<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:16,padding:18,maxHeight:480,overflowY:"auto"}}>
-    <input placeholder="Search campaigns..." value={search} onChange={function(e){props.onSearch(e.target.value);}} style={{width:"100%",boxSizing:"border-box",background:"rgba(40,25,60,0.5)",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",marginBottom:12}}/>
+    <input name="campaign-search" autoComplete="off" placeholder="Search campaigns..." value={search} onChange={function(e){props.onSearch(e.target.value);}} style={{width:"100%",boxSizing:"border-box",background:"rgba(40,25,60,0.5)",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",marginBottom:12}}/>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       <button onClick={props.onSelectAll} style={{background:P.ember+"15",border:"1px solid "+P.ember+"30",borderRadius:8,padding:"4px 12px",color:P.ember,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>All ({f.length})</button>
       <button onClick={props.onClearAll} style={{background:P.rule,border:"1px solid "+P.rule,borderRadius:8,padding:"4px 12px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Clear</button>
@@ -1425,7 +1425,7 @@ function ShareModal(props){
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
-          <input value={recipientName[0]} onChange={function(e){recipientName[1](e.target.value);}} placeholder="e.g. Jane or Willowbrook Village" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,outline:"none"}}/>
+          <input name="share-recipient-name" autoComplete="off" value={recipientName[0]} onChange={function(e){recipientName[1](e.target.value);}} placeholder="e.g. Jane or Willowbrook Village" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:13,fontFamily:ff,outline:"none"}}/>
         </div>
       </div>
 
@@ -1447,11 +1447,11 @@ function ShareModal(props){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Your name</div>
-          <input value={senderName[0]} onChange={function(e){senderName[1](e.target.value);}} placeholder="e.g. Gary Shepherd" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          <input name="share-sender-name" autoComplete="name" value={senderName[0]} onChange={function(e){senderName[1](e.target.value);}} placeholder="e.g. Gary Shepherd" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Title (optional)</div>
-          <input value={senderTitle[0]} onChange={function(e){senderTitle[1](e.target.value);}} placeholder="e.g. Performance Lead" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          <input name="share-sender-title" autoComplete="organization-title" value={senderTitle[0]} onChange={function(e){senderTitle[1](e.target.value);}} placeholder="e.g. Performance Lead" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
       </div>
 
@@ -1460,16 +1460,16 @@ function ShareModal(props){
         <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Email delivery (optional)</div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>To</div>
-          <input value={emailTo[0]} onChange={function(e){emailTo[1](e.target.value);err[1]("");}} placeholder="client@company.co.za" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          <input name="share-email-to" type="email" autoComplete="email" value={emailTo[0]} onChange={function(e){emailTo[1](e.target.value);err[1]("");}} placeholder="client@company.co.za" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
             <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Cc</div>
-            <input value={emailCc[0]} onChange={function(e){emailCc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+            <input name="share-email-cc" type="email" autoComplete="off" value={emailCc[0]} onChange={function(e){emailCc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           </div>
           <div>
             <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Bcc</div>
-            <input value={emailBcc[0]} onChange={function(e){emailBcc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+            <input name="share-email-bcc" type="email" autoComplete="off" value={emailBcc[0]} onChange={function(e){emailBcc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           </div>
         </div>
         <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:8,lineHeight:1.5}}>Sends from grow@gasmarketing.co.za with a branded HTML report and a live dashboard link.</div>
@@ -2156,8 +2156,8 @@ function CampaignAuditModal(props){
           <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:16}}>
             <div style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Invite a Team Member</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr auto",gap:10,alignItems:"stretch"}}>
-              <input value={inviteName[0]} onChange={function(e){inviteName[1](e.target.value);}} placeholder="Full name" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
-              <input value={inviteEmail[0]} onChange={function(e){inviteEmail[1](e.target.value);}} placeholder="work@domain.com" type="email" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+              <input name="invite-name" autoComplete="name" value={inviteName[0]} onChange={function(e){inviteName[1](e.target.value);}} placeholder="Full name" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+              <input name="invite-email" autoComplete="email" value={inviteEmail[0]} onChange={function(e){inviteEmail[1](e.target.value);}} placeholder="work@domain.com" type="email" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
               <button onClick={sendInvite} disabled={teamBusy[0]||!inviteName[0].trim()||!inviteEmail[0].trim()} style={{background:teamBusy[0]||!inviteName[0].trim()||!inviteEmail[0].trim()?"#555":gEmber,border:"none",borderRadius:8,padding:"10px 20px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:teamBusy[0]?"wait":"pointer",letterSpacing:1.5,whiteSpace:"nowrap"}}>{teamBusy[0]?"SENDING...":"SEND INVITE"}</button>
             </div>
             {inviteNote[0]&&<div style={{marginTop:10,fontSize:11,color:P.mint,fontFamily:fm}}>{inviteNote[0]}</div>}
