@@ -165,7 +165,6 @@ export default async function handler(req, res) {
               var at = String(a.action_type || "").toLowerCase();
               var v = parseInt(a.value || 0);
               if (objective === "leads" && (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at.indexOf("onsite_conversion.lead") >= 0)) results = Math.max(results, v);
-              else if (objective === "appinstall" && (at.indexOf("app_install") >= 0 || at.indexOf("mobile_app_install") >= 0)) results = Math.max(results, v);
               // FB follower-objective: accept both page_like (modern) AND
               // like (legacy PAGE_LIKES objective returns page likes under
               // this key) plus the follow action. The Facebook placement
@@ -175,11 +174,18 @@ export default async function handler(req, res) {
               else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "like" || at === "follow" || at === "onsite_conversion.follow")) results = Math.max(results, v);
             });
           }
-          // Objective-specific fallback: landing page and click-to-app-store
-          // campaigns always report clicks. IG follower campaigns also fall
-          // back to clicks since that is the "Profile Visit" ad actually
-          // drives (matches the Top Performers tile treatment).
-          if (objective === "landingpage" || (results === 0 && objective === "appinstall")) results = clk;
+          // App Install campaigns are judged on CLICKS TO THE APP STORE,
+          // not the downstream install. Meta rarely reports installs back
+          // through ads insights — the SDK / app-events integration owns
+          // that signal. Every click on the App Install CTA is a click to
+          // the store, which is the in-platform success metric. Mirrors
+          // Summary's Objective Highlights, the Creative tab, and the
+          // daily Pulse so all three reconcile to the same number.
+          if (objective === "appinstall") results = clk;
+          // Landing Page campaigns always report clicks. IG follower
+          // campaigns fall back to clicks since that's the Profile Visit
+          // the ad actually drives.
+          if (objective === "landingpage") results = clk;
           if (objective === "followers" && platform === "Instagram") results = clk;
           if (!campaignAllowed(row.campaign_id, row.campaign_name)) return;
           addTo(seriesMap, platform, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
