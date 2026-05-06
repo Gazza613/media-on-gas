@@ -2519,12 +2519,21 @@ function genFlags(m,t,camps){
         fl.push({id:id++,severity:"warning",platform:c.platform||"Meta",metric:"High Cost Per Lead",currentValue:fR(cCpl)+" Cost Per Lead",threshold:"R200 Cost Per Lead",message:"Campaign ‘"+c.campaignName+"’ is capturing leads at "+fR(cCpl)+", above the R200 efficient range for paid social lead generation in this market.",recommendation:"Test shorter forms (fewer fields), stronger lead magnets, or pre-qualifying questions to filter out low-intent fills. Consider switching from broad targeting to interest-narrow Lookalikes off your existing converter list.",status:"open"});
       }
     } else if(isAppInstall){
-      var cInstalls=parseFloat(c.appInstalls||0);
-      var cCpi=cInstalls>0?cSpend/cInstalls:0;
-      if(cInstalls===0&&cSpend>1000){
-        fl.push({id:id++,severity:"critical",platform:c.platform||"Meta",metric:"Underperforming App Install Campaign",currentValue:"0 installs on "+fR(cSpend)+" spend",threshold:"any app install",message:"Campaign ‘"+c.campaignName+"’ has driven no app installs on "+fR(cSpend)+" spend across "+fmt(cImps)+" impressions. For an app-install objective this points to broken store-link configuration, weak creative, or audience mismatch with app users.",recommendation:"Confirm the app store deep link is firing correctly. Audit creative for clear app demonstration in the first 3 seconds. Verify the SDK / App Events integration is reporting installs back to the platform.",status:"open"});
-      } else if(cCpi>0&&cCpi>30){
-        fl.push({id:id++,severity:"warning",platform:c.platform||"Meta",metric:"High Cost Per Install",currentValue:fR(cCpi)+" Cost Per Install",threshold:"R30 Cost Per Install",message:"Campaign ‘"+c.campaignName+"’ is acquiring app installs at "+fR(cCpi)+", above the R30 efficient range.",recommendation:"Refresh creative around the strongest in-app benefit. Test app-store-style screenshots or short demo clips against polished brand creative.",status:"open"});
+      // App Install campaigns are judged on CLICKS TO THE APP STORE,
+      // not the downstream install. Meta and TikTok rarely report
+      // installs back through ads insights — the SDK / app-events
+      // integration owns that signal, so install counts read near zero
+      // on most days even when the campaign is delivering well. Every
+      // click on the App Install CTA is a click to the store, which is
+      // the in-platform success metric. Mirrors Creative tab + Pulse.
+      var cStoreClicks=parseFloat(c.clicks||0);
+      var cCpsc=cStoreClicks>0?cSpend/cStoreClicks:0;
+      if(cStoreClicks===0&&cSpend>1000){
+        fl.push({id:id++,severity:"critical",platform:c.platform||"Meta",metric:"Underperforming App Install Campaign",currentValue:"0 store clicks on "+fR(cSpend)+" spend",threshold:"any click to app store",message:"Campaign ‘"+c.campaignName+"’ has driven no clicks to the app store on "+fR(cSpend)+" spend across "+fmt(cImps)+" impressions. Every click on the App Install CTA is a click to the store, so a zero result here points to broken creative, blocked CTA, or audience mismatch.",recommendation:"Confirm the App Install CTA is rendering. Audit creative for clear app demonstration in the first 3 seconds. Verify the campaign objective is set correctly in the platform.",status:"open"});
+      } else if(cCpsc>0&&cCpsc>3){
+        fl.push({id:id++,severity:"warning",platform:c.platform||"Meta",metric:"High Cost Per Store Click",currentValue:fR(cCpsc)+" Cost Per Click to App Store",threshold:"R3.00 Cost Per Click to App Store",message:"Campaign ‘"+c.campaignName+"’ is driving clicks to the app store at "+fR(cCpsc)+", above the R3.00 efficient range for paid social App Install campaigns.",recommendation:"Refresh creative around the strongest in-app benefit. Test app-store-style screenshots or short demo clips against polished brand creative. Tighten audience to known app users via Lookalikes off your installed-base list.",status:"open"});
+      } else if(cStoreClicks>0&&cCpsc>0&&cCpsc<=1.5){
+        fl.push({id:id++,severity:"positive",platform:c.platform||"Meta",metric:"Efficient App Store Acquisition",currentValue:fmt(cStoreClicks)+" store clicks at "+fR(cCpsc)+" each",threshold:"R1.50 Cost Per Click to App Store",message:"Campaign ‘"+c.campaignName+"’ has driven "+fmt(cStoreClicks)+" clicks to the app store at "+fR(cCpsc)+", well inside the efficient range.",recommendation:"Scale this campaign by 15 to 20 percent. Document the winning creative hook for replication on future App Install pushes.",status:"open"});
       }
     } else {
       // Traffic / Landing Page / unknown — CTR is the success signal here

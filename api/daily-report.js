@@ -66,7 +66,15 @@ function resultMetricFor(c) {
   var obj = String(c.objective || "").toLowerCase();
   var name = String(c.campaignName || "").toLowerCase();
   if (obj.indexOf("appinstall") >= 0 || obj.indexOf("app_install") >= 0 || obj.indexOf("app_promotion") >= 0 || name.indexOf("appinstal") >= 0) {
-    return { kind: "Installs", value: parseInt(c.appInstalls || 0), costLabel: "CPI" };
+    // App Install campaigns are judged on CLICKS TO THE APP STORE, not
+    // on the downstream install. Meta + TikTok rarely report installs
+    // back through ads insights (the SDK / app-events integration owns
+    // that signal), so install counts run near zero on most days even
+    // when the campaign is delivering well. Every click on the App
+    // Install CTA is a click to the store, which is the in-platform
+    // success metric. Matches the Creative tab and Summary's
+    // CLICKS TO APP STORE label.
+    return { kind: "Clicks to App Store", value: parseInt(c.clicks || 0), costLabel: "CPC" };
   }
   if (obj === "lead_generation" || obj === "outcome_leads" || obj.indexOf("lead") >= 0) {
     return { kind: "Leads", value: parseInt(c.leads || 0), costLabel: "CPL" };
@@ -106,13 +114,13 @@ function dispositionFor(yesterday, baseline, baselineDays, ageDays) {
   var rmB = baseline ? resultMetricFor(baseline) : null;
   var sample7d = rmB ? rmB.value : 0;
 
-  // Result-driving objectives (App Install, Leads, Follows + Likes) where
-  // zero results on material spend is a critical failure regardless of
-  // anything else. Traffic/Click campaigns are excluded — for those, the
-  // "result" is clicks and 0 clicks on R100 is rare enough that it's
-  // already covered by the deviation logic below.
+  // Result-driving objectives where zero results on material spend is
+  // a critical failure regardless of anything else. App Install uses
+  // CLICKS TO APP STORE as its in-platform success metric (Meta and
+  // TikTok rarely report downstream installs through ads insights), so
+  // it's included alongside Leads and Follows + Likes.
   var ZERO_RESULT_FLOOR = 100; // R100 — anything spending more than this without a single result is on fire
-  var isResultObjective = rmY.kind === "Installs" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes";
+  var isResultObjective = rmY.kind === "Clicks to App Store" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes";
   if (isResultObjective && rmY.value === 0 && spendY >= ZERO_RESULT_FLOOR) {
     return {
       color: "red",
