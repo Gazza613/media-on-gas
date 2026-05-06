@@ -2553,14 +2553,39 @@ function genFlags(m,t,camps){
     var isAppInstall=obj==="appinstall"||nm.indexOf("appinstall")>=0||nm.indexOf("app_install")>=0;
 
     if(isFollowers){
-      var cFollows=parseFloat(c.follows||0)+parseFloat(c.likes||0)+parseFloat(c.pageLikes||0)+parseFloat(c.pageFollows||0);
-      var cCpf=cFollows>0?cSpend/cFollows:0;
-      if(cFollows===0&&cSpend>1000){
-        fl.push({id:id++,severity:"critical",platform:c.platform||"Meta",metric:"Underperforming Follower Campaign",currentValue:"0 follows on "+fR(cSpend)+" spend",threshold:"any follower acquisition",message:"Campaign ‘"+c.campaignName+"’ has acquired no followers or likes on "+fR(cSpend)+" spend across "+fmt(cImps)+" impressions. For a follower-objective campaign the success metric is the follow action, not the clickthrough, so a zero result here points to creative that is not asking for the follow or audience targeting that is not interested in following the page.",recommendation:"Audit the call to action: does the creative explicitly invite a follow? Test creator-led content, behind-the-scenes angles, or community-led hooks which typically convert follows better than polished brand assets. If the campaign is on TikTok, ensure the in-ad Follow CTA is enabled in the ad group settings.",status:"open"});
-      } else if(cCpf>0&&cCpf>8){
-        fl.push({id:id++,severity:"warning",platform:c.platform||"Meta",metric:"High Cost Per Follow",currentValue:fR(cCpf)+" Cost Per Follow",threshold:"R8.00 Cost Per Follow",message:"Campaign ‘"+c.campaignName+"’ is acquiring followers at "+fR(cCpf)+", above the R8.00 efficient range. Each new community member is costing more than the benchmark for paid social follower acquisition.",recommendation:"Refresh creative angles and test different hooks. If Cost Per Follow stays elevated for 48 hours, pause the weakest-performing ad set and redirect budget to the highest-converting follower variant.",status:"open"});
-      } else if(cFollows>0&&cCpf>0&&cCpf<=4){
-        fl.push({id:id++,severity:"positive",platform:c.platform||"Meta",metric:"Efficient Follower Acquisition",currentValue:fmt(cFollows)+" follows at "+fR(cCpf)+" Cost Per Follow",threshold:"R4.00 Cost Per Follow",message:"Campaign ‘"+c.campaignName+"’ has acquired "+fmt(cFollows)+" followers at "+fR(cCpf)+", well inside the efficient range. The creative-audience fit on this follower campaign is converting attention into community at a strong rate.",recommendation:"Scale this campaign by 15 to 20 percent before auction dynamics shift. Document the winning creative hook and apply the same approach to other follower campaigns in the portfolio.",status:"open"});
+      // IG-only follower campaigns are judged on Cost Per Profile Visit
+      // (CPV), not on follows. Meta does not attribute in-feed Follow
+      // taps on Instagram to specific ads, the follow happens on the
+      // profile after a click-through. So an IG-only follower campaign
+      // structurally returns 0 follows in ads insights even when it's
+      // delivering well, and the old "0 follows on R1k spend" rule
+      // false-flagged every IG follower campaign as critical.
+      // Profile Visits (clicks) is the per-ad attributable signal,
+      // CPV is the right efficiency metric. Page-level follower growth
+      // shows up on Community Growth.
+      if(c.platform==="Instagram"){
+        var cClicksIg=parseFloat(c.clicks||0);
+        var cCpv=cClicksIg>0?cSpend/cClicksIg:0;
+        if(cClicksIg===0&&cSpend>1000){
+          fl.push({id:id++,severity:"critical",platform:"Instagram",metric:"Underperforming IG Follower Campaign",currentValue:"0 Profile Visits on "+fR(cSpend)+" spend",threshold:"any Profile Visit",message:"Campaign ‘"+c.campaignName+"’ has driven no Profile Visits on "+fR(cSpend)+" spend across "+fmt(cImps)+" impressions. IG follow attribution lives on the profile after a click-through, so Profile Visits (clicks to the IG profile) is the per-ad signal. Zero clicks here points to weak creative or audience mismatch.",recommendation:"Audit the creative hook and ensure the call-to-action invites a profile click. Test creator-led content or behind-the-scenes angles which typically out-perform polished brand assets on IG follow campaigns.",status:"open"});
+        } else if(cCpv>0&&cCpv>5){
+          fl.push({id:id++,severity:"warning",platform:"Instagram",metric:"High Cost Per Profile Visit",currentValue:fR(cCpv)+" Cost Per Profile Visit",threshold:"R5.00 Cost Per Profile Visit",message:"Campaign ‘"+c.campaignName+"’ is driving IG Profile Visits at "+fR(cCpv)+", above the R5.00 efficient range. Profile Visits are the per-ad attributable step in the IG follower funnel, the page-level follow conversion happens after.",recommendation:"Refresh creative angles to reduce Cost Per Profile Visit. Once visits land cheaper, monitor whole-account IG follower growth on Community Growth to see if the funnel converts at scale.",status:"open"});
+        } else if(cClicksIg>0&&cCpv>0&&cCpv<=2){
+          fl.push({id:id++,severity:"positive",platform:"Instagram",metric:"Efficient IG Profile Visit Acquisition",currentValue:fmt(cClicksIg)+" Profile Visits at "+fR(cCpv)+" each",threshold:"R2.00 Cost Per Profile Visit",message:"Campaign ‘"+c.campaignName+"’ has driven "+fmt(cClicksIg)+" IG Profile Visits at "+fR(cCpv)+", well inside the efficient range. Step 1 of the IG follower funnel (paid attribution) is working.",recommendation:"Scale by 15 to 20 percent. Track whole-account follower growth on Community Growth to confirm Step 2 (the on-profile follow conversion) is also converting at scale.",status:"open"});
+        }
+      } else {
+        // FB / TikTok / mixed Meta follower campaigns are judged on the
+        // combined follow signal (page_like + reactions on FB, in-ad
+        // follow attribution on TikTok). Existing logic applies.
+        var cFollows=parseFloat(c.follows||0)+parseFloat(c.likes||0)+parseFloat(c.pageLikes||0)+parseFloat(c.pageFollows||0);
+        var cCpf=cFollows>0?cSpend/cFollows:0;
+        if(cFollows===0&&cSpend>1000){
+          fl.push({id:id++,severity:"critical",platform:c.platform||"Meta",metric:"Underperforming Follower Campaign",currentValue:"0 follows on "+fR(cSpend)+" spend",threshold:"any follower acquisition",message:"Campaign ‘"+c.campaignName+"’ has acquired no followers or likes on "+fR(cSpend)+" spend across "+fmt(cImps)+" impressions. For a follower-objective campaign the success metric is the follow action, not the clickthrough, so a zero result here points to creative that is not asking for the follow or audience targeting that is not interested in following the page.",recommendation:"Audit the call to action: does the creative explicitly invite a follow? Test creator-led content, behind-the-scenes angles, or community-led hooks which typically convert follows better than polished brand assets. If the campaign is on TikTok, ensure the in-ad Follow CTA is enabled in the ad group settings.",status:"open"});
+        } else if(cCpf>0&&cCpf>8){
+          fl.push({id:id++,severity:"warning",platform:c.platform||"Meta",metric:"High Cost Per Follow",currentValue:fR(cCpf)+" Cost Per Follow",threshold:"R8.00 Cost Per Follow",message:"Campaign ‘"+c.campaignName+"’ is acquiring followers at "+fR(cCpf)+", above the R8.00 efficient range. Each new community member is costing more than the benchmark for paid social follower acquisition.",recommendation:"Refresh creative angles and test different hooks. If Cost Per Follow stays elevated for 48 hours, pause the weakest-performing ad set and redirect budget to the highest-converting follower variant.",status:"open"});
+        } else if(cFollows>0&&cCpf>0&&cCpf<=4){
+          fl.push({id:id++,severity:"positive",platform:c.platform||"Meta",metric:"Efficient Follower Acquisition",currentValue:fmt(cFollows)+" follows at "+fR(cCpf)+" Cost Per Follow",threshold:"R4.00 Cost Per Follow",message:"Campaign ‘"+c.campaignName+"’ has acquired "+fmt(cFollows)+" followers at "+fR(cCpf)+", well inside the efficient range. The creative-audience fit on this follower campaign is converting attention into community at a strong rate.",recommendation:"Scale this campaign by 15 to 20 percent before auction dynamics shift. Document the winning creative hook and apply the same approach to other follower campaigns in the portfolio.",status:"open"});
+        }
       }
     } else if(isLeads){
       var cLeads=parseFloat(c.leads||0);
@@ -4937,6 +4962,42 @@ export default function MediaOnGas(){
                     <div><strong style={{color:P.fb,fontStyle:"normal"}}>FB</strong> {"· "}page_like / like action from {fbContribCount} of {metaSel.length} Meta campaign{metaSel.length===1?"":"s"} {"· "}{fmt(parseFloat(m.pageLikes||0))} earned</div>
                     <div><strong style={{color:P.ig,fontStyle:"normal"}}>IG</strong> {"· "}{igMatchedPages.length} matched IG page{igMatchedPages.length===1?"":"s"} of {pages.filter(function(p){return p.instagram_business_account;}).length} known {"· "}{igPagesWithGrowth} reporting non-zero follower growth {"· "}{fmt(igGrowth)} earned (Page Insights, organic + paid combined)</div>
                     <div><strong style={{color:P.tt,fontStyle:"normal"}}>TT</strong> {"· "}follows from {ttContribCount} of {ttSel.length} TikTok campaign{ttSel.length===1?"":"s"} {"· "}{fmt(ttE2)} earned</div>
+                  </div>;
+                })()}
+                {/* IG follower-campaign 2-step funnel callout. Surfaces only
+                    when there's IG follower-objective ad activity in the
+                    selection. Frames the campaign honestly: paid drives
+                    Profile Visits (per-ad attributable), the page grows by
+                    a separate amount (whole-account, paid + organic). The
+                    two metrics aren't directly tied because Meta does not
+                    expose per-ad IG follow attribution, so reporting both
+                    lets the reader see the funnel without pretending the
+                    attribution exists. */}
+                {(function(){
+                  var igFollowerCamps=sel.filter(function(c){
+                    if(c.platform!=="Instagram")return false;
+                    var obj=String(c.objective||"").toLowerCase();
+                    var name=String(c.campaignName||"").toLowerCase();
+                    return obj==="followers"||name.indexOf("follower")>=0||name.indexOf("like&follow")>=0||name.indexOf("like_follow")>=0||name.indexOf("_like_")>=0||name.indexOf("_follow_")>=0;
+                  });
+                  if(igFollowerCamps.length===0)return null;
+                  var igFolClicks=igFollowerCamps.reduce(function(a,c){return a+parseFloat(c.clicks||0);},0);
+                  var igFolSpend=igFollowerCamps.reduce(function(a,c){return a+parseFloat(c.spend||0);},0);
+                  var igCpv=igFolClicks>0?igFolSpend/igFolClicks:0;
+                  var convRate=igFolClicks>0&&igGrowth>0?(igGrowth/igFolClicks*100):0;
+                  return <div style={{marginTop:14,padding:"14px 18px",background:"linear-gradient(135deg,"+P.ig+"10 0%,"+P.ig+"05 60%,transparent)",border:"1px solid "+P.ig+"35",borderLeft:"3px solid "+P.ig,borderRadius:"0 12px 12px 0"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:P.ig}}></span>
+                      <span style={{fontSize:10,fontWeight:800,color:P.ig,letterSpacing:2,textTransform:"uppercase",fontFamily:fm}}>IG Follower Campaigns, 2-Step Funnel</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:10}}>
+                      <div><div style={{fontSize:9,color:P.caption,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Step 1, Profile Visits</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(igFolClicks)}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:2}}>per-ad attributable</div></div>
+                      <div><div style={{fontSize:9,color:P.caption,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Cost per Profile Visit</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{igCpv>0?fR(igCpv):"-"}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:2}}>{fR(igFolSpend)} spent</div></div>
+                      <div><div style={{fontSize:9,color:P.caption,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Step 2, Net Page Growth</div><div style={{fontSize:18,fontWeight:900,color:P.ig,fontFamily:fm}}>{igGrowth>0?"+"+fmt(igGrowth):"-"}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:2}}>whole account, paid + organic</div></div>
+                    </div>
+                    <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>
+                      Meta does not expose per-ad IG follow attribution, the in-feed Follow happens on the profile after a click-through. Profile Visits is the per-ad signal you can rank ads on. Net page growth is the period outcome, mixed paid and organic.{convRate>0?" Implied conversion rate "+convRate.toFixed(2)+"% (treats all growth as paid, an upper bound).":""}
+                    </div>
                   </div>;
                 })()}
                 {/* Community member demographic cards, slotted directly under
