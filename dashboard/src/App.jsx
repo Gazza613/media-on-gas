@@ -8,7 +8,15 @@ import CreateTab from "./CreateTab.jsx";
 // 70% opacity), every explanation / sub-copy uses P.caption (white at 58%
 // opacity). P.label and P.caption are kept for non-label uses (chart strokes,
 // background tints via concat like P.sub+"15", icon colours, etc.).
-var P={void:"#121212",cosmos:"#121212",nebula:"#1a1a1a",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
+// Page palette. void / cosmos / nebula were originally three flavours of
+// dark grey (#121212, #1a1a1a) which clashed against the header's deep
+// navy (rgba(6,2,14)) — page felt grey while the header felt navy.
+// Realigned to the same deep-navy family so the gradient, modals, and
+// header all sit in one cohesive colour space:
+//   void   #06020e  page bottom, matches header background exactly
+//   cosmos #0a0418  modal + card surface, one notch lifted
+//   nebula #0d061f  gradient mid, slightly more depth
+var P={void:"#06020e",cosmos:"#0a0418",nebula:"#0d061f",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
 var ff="Poppins,Outfit,Segoe UI,sans-serif",fm="JetBrains Mono,Consolas,monospace";
 
