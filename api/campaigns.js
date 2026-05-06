@@ -1054,18 +1054,40 @@ export default async function handler(req, res) {
           pg.instagram_business_account.follower_growth = 0;
           try {
             var igId = pg.instagram_business_account.id;
-            var since = Math.floor(new Date(from).getTime() / 1000);
-            var until = Math.floor(new Date(to + "T23:59:59").getTime() / 1000);
-            var igUrl = "https://graph.facebook.com/v25.0/" + igId + "/insights?metric=follower_count&period=day&since=" + since + "&until=" + until + "&access_token=" + pgToken;
-            var igRes = await fetch(igUrl);
-            if (igRes.status === 200) {
-              var igData = await igRes.json();
-              if (igData.data && igData.data[0] && igData.data[0].values) {
-                var totalGrowth = 0;
-                for (var v = 0; v < igData.data[0].values.length; v++) { totalGrowth += igData.data[0].values[v].value; }
-                pg.instagram_business_account.follower_growth = totalGrowth;
-              }
+            // Meta IG Insights `follower_count` has a hard 30-day cap
+            // per request, requests with since→until > 30 days return
+            // empty data silently. For windows like 2026-05-01 → 2026
+            // -05-31 (31 inclusive days, ~30d 23h in unix seconds),
+            // the API rejects and we sum to zero — which read as "no
+            // growth this period" on the dashboard. Chunk into sub-30
+            // -day windows and sum the daily values across chunks.
+            var sinceMs = new Date(from + "T00:00:00Z").getTime();
+            var untilMs = new Date(to + "T23:59:59Z").getTime();
+            var DAY_MS = 24 * 60 * 60 * 1000;
+            var MAX_WINDOW_MS = 29 * DAY_MS; // 29 days conservative cap
+            var totalGrowth = 0;
+            var chunkStart = sinceMs;
+            var chunkGuard = 0;
+            while (chunkStart <= untilMs && chunkGuard < 24) {
+              chunkGuard++;
+              var chunkEnd = Math.min(chunkStart + MAX_WINDOW_MS, untilMs);
+              var sinceTs = Math.floor(chunkStart / 1000);
+              var untilTs = Math.floor(chunkEnd / 1000);
+              try {
+                var igUrl = "https://graph.facebook.com/v25.0/" + igId + "/insights?metric=follower_count&period=day&since=" + sinceTs + "&until=" + untilTs + "&access_token=" + pgToken;
+                var igRes = await fetch(igUrl);
+                if (igRes.status === 200) {
+                  var igData = await igRes.json();
+                  if (igData.data && igData.data[0] && igData.data[0].values) {
+                    for (var v = 0; v < igData.data[0].values.length; v++) {
+                      totalGrowth += parseInt(igData.data[0].values[v].value || 0);
+                    }
+                  }
+                }
+              } catch (chErr) { /* chunk failure non-fatal, the rest still sum */ }
+              chunkStart = chunkEnd + DAY_MS; // next chunk starts the day after this one ended
             }
+            pg.instagram_business_account.follower_growth = totalGrowth;
           } catch (igErr) { console.error("IG insights error", igErr); }
         }
         delete pg.access_token;
