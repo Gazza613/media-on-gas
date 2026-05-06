@@ -6,10 +6,25 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
   padding: 0;
   font-family: 'Poppins', sans-serif;
+  /* Force the deep-void background onto the document root so fast
+     scroll, momentum scroll, and rubber-band overscroll never expose
+     the browser's default white. The dashboard's gradient still
+     paints over this on its root <div>; this is the safety net for
+     any pixel the gradient does not cover (e.g. the moment between
+     pages, or beyond the viewport when overscrolling). */
+  background: #06020e;
+  color-scheme: dark;
+}
+/* Belt-and-braces: kill the white flash on iOS Safari rubber-band and
+   on Chrome's momentum scroll when the page is taller than the viewport
+   but the inner gradient does not extend all the way. */
+html {
+  background-color: #06020e;
+  overscroll-behavior: none;
 }
 
 ::-webkit-scrollbar {
