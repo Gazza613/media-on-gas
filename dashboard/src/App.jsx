@@ -4317,7 +4317,7 @@ export default function MediaOnGas(){
             ].filter(function(p){return p.totalClicks>0;});
             return null;
   })();
-  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:loading?"#000000":"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
+  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:loading?P.void:"linear-gradient(170deg,"+P.void+","+P.cosmos+" 30%,"+P.nebula+" 60%,"+P.cosmos+")",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Persona card breathing glow, opacity-only so each card's box-shadow
          keeps its platform colour. animationDelay is staggered per card via
