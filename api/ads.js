@@ -1127,6 +1127,21 @@ export default async function handler(req, res) {
           r.spend = parseFloat((r.spend * sSpend).toFixed(2));
           r.impressions = Math.round(r.impressions * sImps);
           r.clicks = Math.round(r.clicks * sClk);
+          // Keep click-based result types aligned with the scaled
+          // clicks so the displayed `results` matches the sort key.
+          // Without this, Top Ads ranking by clicks (engagementSort)
+          // and the displayed STORE CLICKS / CLICKS number diverged
+          // whenever a campaign's apportionment factor differed from
+          // 1.0, producing the "rank order does not match displayed
+          // values" symptom on the Summary Top Ads tiles.
+          if (r.resultType === "store_clicks" || r.resultType === "lp_clicks" || r.resultType === "clicks" || r.resultType === "profile_visits") {
+            r.results = r.clicks;
+          }
+          // Recompute derived rates from the scaled raw counts so
+          // CTR / CPC / CPM displayed match the rest of the row.
+          r.ctr = r.impressions > 0 ? parseFloat(((r.clicks / r.impressions) * 100).toFixed(2)) : 0;
+          r.cpc = r.clicks > 0 ? parseFloat((r.spend / r.clicks).toFixed(2)) : 0;
+          r.cpm = r.impressions > 0 ? parseFloat(((r.spend / r.impressions) * 1000).toFixed(2)) : 0;
           r.placements = { "FYP": { spend: r.spend, impressions: r.impressions, clicks: r.clicks } };
           allAds.push(r);
         });
