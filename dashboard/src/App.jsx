@@ -3064,6 +3064,32 @@ export default function MediaOnGas(){
     var hasData=timeseries&&timeseries.series&&timeseries.series.length>0;
     var buckets=(timeseries&&timeseries.buckets)||[];
     var findSeries=function(pl,ob){if(!hasData)return null;for(var i=0;i<timeseries.series.length;i++){var s=timeseries.series[i];if(s.platform===pl&&s.objective===ob)return s;}return null;};
+    // IG Followers reconciliation: Meta cannot attribute in-feed Follow
+    // taps to specific ads on Instagram, so api/timeseries returns
+    // Profile Visits (clicks) for the IG Followers cell. Highlights
+    // uses Page Insights net follower_growth for the same period
+    // instead, which means the two view's Followers totals diverge by
+    // the click-vs-growth gap. We close the gap here by computing the
+    // same igGrowth Highlights uses (matched IG pages, summed
+    // follower_growth from the /api/campaigns response) and
+    // OVERRIDING the IG Followers cell with that number. The headline
+    // now reconciles to Highlights cell-for-cell. The sparkline
+    // distributes the period growth proportionally to weekly IG ad
+    // delivery so the trend shape stays meaningful.
+    var trendSel=campaigns.filter(function(c){return selected.indexOf(c.campaignId)>=0;});
+    var matchedIgPages={};
+    trendSel.forEach(function(c){
+      pages.forEach(function(pg){
+        if(!pg.instagram_business_account)return;
+        if(matchedIgPages[pg.id])return;
+        if(autoMatchPage(c.campaignName,pg.name)>=2)matchedIgPages[pg.id]=pg;
+      });
+    });
+    var igGrowthOverride=0;
+    Object.keys(matchedIgPages).forEach(function(id){
+      var pg=matchedIgPages[id];
+      igGrowthOverride+=parseFloat((pg.instagram_business_account&&pg.instagram_business_account.follower_growth)||0);
+    });
     var wow=function(points){if(!points||points.length<2)return null;var last=points[points.length-1],prev=points[points.length-2];if(prev.results<=0&&last.results<=0)return null;if(prev.results===0)return {delta:100,direction:"up",label:"new"};var d=((last.results-prev.results)/prev.results)*100;return{delta:Math.abs(d),direction:d>=0?"up":"down",label:(d>=0?"+":"-")+Math.abs(d).toFixed(2)+"%"};};
     var sparkPath=function(points,h,w){if(!points||points.length===0)return"";var vals=points.map(function(p){return p.results;});var max=Math.max.apply(null,vals.concat([1]));var min=Math.min.apply(null,vals);var range=max-min||1;return points.map(function(p,i){var x=(i/(Math.max(points.length-1,1)))*w;var y=h-((p.results-min)/range)*h;return(i===0?"M":"L")+x.toFixed(1)+","+y.toFixed(1);}).join(" ");};
     var sparkArea=function(points,h,w){if(!points||points.length===0)return"";var path=sparkPath(points,h,w);if(!path)return"";return path+" L"+w+","+h+" L0,"+h+" Z";};
@@ -3097,6 +3123,25 @@ export default function MediaOnGas(){
             {platCols.map(function(p){
               var s=findSeries(p.key,o.key);
               var pts=s&&s.points||[];
+              // IG Followers override: use Page Insights follower_growth
+              // (Highlights' source of truth) instead of Profile Visits
+              // clicks, so the cell reconciles to Objective Highlights
+              // cell-for-cell. The per-week sparkline is reshaped to
+              // distribute the period growth proportionally to weekly
+              // IG ad delivery, so the trend reads meaningfully.
+              if(p.key==="Instagram"&&o.key==="followers"&&pts.length>0){
+                var totalClicks=pts.reduce(function(a,x){return a+(x.results||0);},0);
+                if(totalClicks>0&&igGrowthOverride!==0){
+                  var ratio=igGrowthOverride/totalClicks;
+                  pts=pts.map(function(x){return Object.assign({},x,{results:Math.round((x.results||0)*ratio)});});
+                } else {
+                  // No click activity OR zero growth — flat-distribute
+                  // the override across buckets so the headline still
+                  // matches Highlights even with no per-week shape.
+                  var per=Math.round(igGrowthOverride/Math.max(pts.length,1));
+                  pts=pts.map(function(x){return Object.assign({},x,{results:per});});
+                }
+              }
               var totalResults=pts.reduce(function(a,x){return a+(x.results||0);},0);
               var totalSpend=pts.reduce(function(a,x){return a+(x.spend||0);},0);
               var delta=wow(pts);
@@ -3130,13 +3175,13 @@ export default function MediaOnGas(){
             return <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>{lines.map(function(l,li){return <div key={li} style={{marginBottom:5,display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"▸"}</span><span>{l}</span></div>;})}</div>;
           })()}
         </div>}
-        {/* Reconciliation note. The Followers row's IG cell shows
-            Profile Visits (clicks) because Meta does not attribute
-            in-feed Follow taps to specific ads on Instagram, the follow
-            happens on the profile after a click-through. Net IG
-            follower growth is on Community Growth, sourced from Page
-            Insights. Other rows reconcile to Objective Highlights. */}
-        <div style={{marginTop:10,fontSize:9,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>Followers IG cell shows Profile Visits (clicks). Meta does not attribute IG follows to specific ads, the in-feed Follow happens on the profile after a click-through. Net IG follower growth lives on Community Growth, sourced from Page Insights. Every other cell reconciles to Objective Highlights for the same date range.</div>
+        {/* Reconciliation note. Every cell here, including the IG
+            Followers cell, reconciles to Objective Highlights for the
+            same date range. The IG Followers cell uses Page Insights
+            net follower growth distributed across weeks proportional
+            to ad delivery, since Meta does not expose per-ad IG follow
+            attribution. */}
+        <div style={{marginTop:10,fontSize:9,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>All cells reconcile to Objective Highlights for the same date range. The IG Followers cell uses Page Insights net follower growth (Meta does not expose per-ad IG follow attribution), distributed across weeks proportional to ad delivery so the trend shape stays meaningful.</div>
       </div>}
     </div>;
   };
