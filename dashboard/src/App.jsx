@@ -5214,10 +5214,10 @@ export default function MediaOnGas(){
                           <span style={{width:6,height:6,borderRadius:"50%",background:P.ig}}></span>
                           <strong style={{color:P.ig}}>@{ig.username||ig.name||igId}</strong>
                         </span>
-                        <span><strong style={{color:P.txt}}>{fmt(live)}</strong> <span style={{color:P.caption}}>live</span></span>
+                        <span><strong style={{color:P.txt}}>{Math.round(live).toLocaleString()}</strong> <span style={{color:P.caption}}>live</span></span>
                         {dayDelta!==null&&<span style={{color:deltaCol(dayDelta)}}>{deltaTxt(dayDelta)} <span style={{color:P.caption}}>since yesterday</span></span>}
                         {weekDelta!==null&&<span style={{color:deltaCol(weekDelta)}}>{deltaTxt(weekDelta)} <span style={{color:P.caption}}>this week</span></span>}
-                        {igGrowth!==0&&<span><span style={{color:P.caption}}>{df} starting count:</span> <strong>{fmt(startCount)}</strong></span>}
+                        {igGrowth!==0&&<span><span style={{color:P.caption}}>{df} starting count:</span> <strong>{Math.round(startCount).toLocaleString()}</strong></span>}
                       </div>;
                     })}
                     <div style={{fontSize:9,color:P.caption,fontStyle:"italic",marginTop:6,lineHeight:1.5}}>
