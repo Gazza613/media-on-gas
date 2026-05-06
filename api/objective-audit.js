@@ -18,6 +18,11 @@ var META_ACCOUNTS = [
 // Bucket names intentionally match the Summary labels so Audit and
 // Summary are directly comparable ("Leads" not "Lead Generation",
 // "Unclassified" rather than silently defaulting to Landing Page).
+// Name-based classification, mirrors the rest of the backend
+// (api/campaigns.js, api/ads.js, api/timeseries.js, api/reconcile.js).
+// Lead/POS matching tightened to require word-boundary patterns so a
+// substring match cannot false-flag (e.g. "PaidSocial" must never
+// resolve to a Lead campaign).
 function detectObjectiveFromName(campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0
@@ -31,13 +36,13 @@ function detectObjectiveFromName(campaignName) {
   if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) {
     return { obj: "Followers & Likes", source: "name keyword: 'follower' / '_like_' / 'paidsocial_like'" };
   }
-  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) {
-    return { obj: "Leads", source: "name keyword: 'lead' / 'pos'" };
+  if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) {
+    return { obj: "Leads", source: "name keyword: 'lead_gen' / '_lead_' / '_pos_' / 'momo pos'" };
   }
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) {
     return { obj: "Landing Page Clicks", source: "name keyword: 'homeloan' / 'traffic' / 'paidsearch'" };
   }
-  return { obj: "Unclassified", source: "default fallback (no keyword match, dropped from Summary)" };
+  return { obj: "Unclassified", source: "no name keyword matched" };
 }
 
 function mapMetaObjective(metaObj) {
@@ -81,10 +86,21 @@ async function fetchMeta(account, token, activeFrom, activeTo) {
       var isActive = (c.effective_status === "ACTIVE");
       var recentlyActive = !!activeSet[String(c.id)];
       if (!isActive && !recentlyActive) return;
+      // Name-first classification, mirrors api/campaigns.js + api/ads.js
+      // + api/timeseries.js + api/reconcile.js. The team's naming
+      // convention is authoritative, Meta's API objective is the
+      // fallback for campaigns without a recognised name tag. This
+      // stops Home-Loan Traffic campaigns (Meta classifies as
+      // LEAD_GENERATION but the team tagged "_Traffic_") from being
+      // miscategorised as Leads in the audit while the rest of the
+      // dashboard treats them as Landing Page.
+      var nameClass = detectObjectiveFromName(c.name);
       var apiMapped = mapMetaObjective(c.objective);
-      var classification = apiMapped
-        ? { obj: apiMapped, source: "Meta API objective: " + c.objective }
-        : detectObjectiveFromName(c.name);
+      var classification = (nameClass.obj !== "Unclassified")
+        ? nameClass
+        : (apiMapped
+            ? { obj: apiMapped, source: "Meta API objective: " + c.objective + " (no name keyword)" }
+            : nameClass);
       rows.push({
         platform: "Meta",
         accountName: account.name,
@@ -138,10 +154,14 @@ async function fetchTikTok(advId, token, activeFrom, activeTo) {
       var isActive = (c.operation_status === "ENABLE");
       var recentlyActive = !!activeSet[cid];
       if (!isActive && !recentlyActive) return;
+      // Name-first classification, same priority as the Meta block above.
+      var ttNameClass = detectObjectiveFromName(c.campaign_name);
       var apiMapped = mapTikTokObjective(c.objective_type);
-      var classification = apiMapped
-        ? { obj: apiMapped, source: "TikTok API objective_type: " + c.objective_type }
-        : detectObjectiveFromName(c.campaign_name);
+      var classification = (ttNameClass.obj !== "Unclassified")
+        ? ttNameClass
+        : (apiMapped
+            ? { obj: apiMapped, source: "TikTok API objective_type: " + c.objective_type + " (no name keyword)" }
+            : ttNameClass);
       rows.push({
         platform: "TikTok",
         accountName: "MTN MoMo TikTok",
