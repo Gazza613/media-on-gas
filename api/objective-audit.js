@@ -33,8 +33,8 @@ function detectObjectiveFromName(campaignName) {
       || n.indexOf("googleapp") >= 0 || n.indexOf("google_app") >= 0 || n.indexOf("google app") >= 0) {
     return { obj: "Clicks to App Store", source: "name keyword: app install / app campaign / UAC / app promo" };
   }
-  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) {
-    return { obj: "Followers & Likes", source: "name keyword: 'follower' / '_like_' / 'paidsocial_like'" };
+  if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) {
+    return { obj: "Followers & Likes", source: "name keyword: 'follower' / 'like&follow' / '_like_' / '_follow_'" };
   }
   if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) {
     return { obj: "Leads", source: "name keyword: 'lead_gen' / '_lead_' / '_pos_' / 'momo pos'" };

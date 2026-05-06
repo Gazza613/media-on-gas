@@ -1576,6 +1576,10 @@ function CampaignAuditModal(props){
   // "all" shows everything, the operator can switch to "name_overrode"
   // or "api_fallback" to focus the eyeball pass.
   var discrepFilter=useState("all");
+  // State filter — Live / No Delivery / Paused / Dormant. Sits next to
+  // the platform + objective dropdowns so the operator can scope the
+  // audit to e.g. "every campaign that's switched on but not delivering".
+  var stateFilter=useState("all");
 
   // Reconciliation state
   var recRows=useState([]);
@@ -1714,10 +1718,23 @@ function CampaignAuditModal(props){
 
   var data=rows[0]||[];
   var q=(query[0]||"").toLowerCase().trim();
+  // State derivation mirrors the inline logic in the table cell so the
+  // filter lines up with the chip the operator sees: LIVE = switched on
+  // and delivered in last 30d, NO DELIVERY = on but no spend, PAUSED =
+  // off but had recent delivery, DORMANT = off and no recent delivery.
+  var stateOf=function(c){
+    var s=String(c.status||"").toUpperCase();
+    var on=s==="ACTIVE"||s==="ENABLE"||s==="ENABLED";
+    if(on&&c.activeLast30Days)return "live";
+    if(on&&!c.activeLast30Days)return "no_delivery";
+    if(c.activeLast30Days)return "paused";
+    return "dormant";
+  };
   var filtered=data.filter(function(c){
     if(platFilter[0]!=="all"&&c.platform!==platFilter[0])return false;
     if(objFilter[0]!=="all"&&c.detectedObjective!==objFilter[0])return false;
     if(discrepFilter[0]!=="all"&&(c.discrepancy||"")!==discrepFilter[0])return false;
+    if(stateFilter[0]!=="all"&&stateOf(c)!==stateFilter[0])return false;
     if(q){
       var hay=(c.campaignName+" "+c.accountName+" "+c.apiObjective+" "+c.detectedObjective).toLowerCase();
       if(hay.indexOf(q)<0)return false;
@@ -1799,24 +1816,20 @@ function CampaignAuditModal(props){
           <option value="all">All objectives</option>
           {Object.keys(objectives).sort().map(function(o){return <option key={o} value={o}>{o}</option>;})}
         </select>
-      </div>}
-      {/* Discrepancy filter pill row, sits below the existing search +
-          dropdowns. Click a pill to scope the audit to rows where the
-          name tag and API objective disagreed (NAME OVERRODE) or where
-          the API was the fallback (API FALLBACK). Counts on each pill
-          show how many rows fall into each state. */}
-      {view[0]==="audit"&&data.length>0&&<div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:2,textTransform:"uppercase",fontFamily:fm,marginRight:4}}>Discrepancy</span>
-        {[
-          {key:"all",label:"ALL",color:P.txt,count:data.length},
-          {key:"agrees",label:"AGREES",color:discrepColors.agrees,count:discrepCounts.agrees},
-          {key:"name_overrode",label:"NAME OVERRODE",color:discrepColors.name_overrode,count:discrepCounts.name_overrode},
-          {key:"api_fallback",label:"API FALLBACK",color:discrepColors.api_fallback,count:discrepCounts.api_fallback},
-          {key:"unclassified",label:"UNCLASSIFIED",color:discrepColors.unclassified,count:discrepCounts.unclassified}
-        ].map(function(p){
-          var active=discrepFilter[0]===p.key;
-          return <button key={p.key} onClick={function(){discrepFilter[1](p.key);}} style={{background:active?p.color+"25":"transparent",border:"1px solid "+(active?p.color+"60":P.rule),borderRadius:8,padding:"6px 12px",color:active?p.color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,display:"flex",alignItems:"center",gap:6}}>{p.label}<span style={{background:p.color+"22",color:p.color,padding:"1px 7px",borderRadius:4,fontSize:9,fontWeight:900}}>{p.count}</span></button>;
-        })}
+        <select value={discrepFilter[0]} onChange={function(e){discrepFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
+          <option value="all">All discrepancies</option>
+          <option value="agrees">Agrees ({discrepCounts.agrees})</option>
+          <option value="name_overrode">Name overrode ({discrepCounts.name_overrode})</option>
+          <option value="api_fallback">API fallback ({discrepCounts.api_fallback})</option>
+          <option value="unclassified">Unclassified ({discrepCounts.unclassified})</option>
+        </select>
+        <select value={stateFilter[0]} onChange={function(e){stateFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
+          <option value="all">All states</option>
+          <option value="live">Live</option>
+          <option value="no_delivery">No delivery</option>
+          <option value="paused">Paused</option>
+          <option value="dormant">Dormant</option>
+        </select>
       </div>}
       {view[0]==="reconcile"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
         <input value={recQuery[0]} onChange={function(e){recQuery[1](e.target.value);}} placeholder="Search campaign..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
