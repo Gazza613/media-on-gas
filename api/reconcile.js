@@ -3,6 +3,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { fetchWithTimeout } from "./_fetchTimeout.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
+import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 
 // Admin-only reconciliation endpoint. For a given date range, it pulls the
 // ground-truth campaign-level aggregate from each platform's API directly
@@ -54,11 +55,22 @@ function statusOf(deltaPct) {
 // the source-of-truth doesn't treat post reactions on a Lead Gen campaign
 // as followers, which is what the dashboard (after the "like" fix) no
 // longer does.
-// Name-first classification, the team's naming convention is
-// AUTHORITATIVE for objective. Mirrors api/campaigns.js + api/ads.js +
-// api/timeseries.js. Lead/POS matching tightened to require word-
-// boundary patterns so substring false-positives cannot occur.
-function canonicalObjective(rawMetaObj, campaignName) {
+// Override → name → API → fallback. Mirrors api/campaigns.js +
+// api/ads.js + api/timeseries.js. The optional overridesMap +
+// campaignId arguments let the reconcile cron honour manual
+// overrides set via Settings → Objectives Audit; older callers
+// that omit them keep their previous behaviour.
+function canonicalObjective(rawMetaObj, campaignName, overridesMap, campaignId) {
+  if (overridesMap && campaignId) {
+    var disp = overridesMap[String(campaignId)];
+    if (disp) {
+      var canon = displayToCanonical(disp);
+      if (canon) return canon;
+    }
+  }
+  return _canonicalObjectiveImpl(rawMetaObj, campaignName);
+}
+function _canonicalObjectiveImpl(rawMetaObj, campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
@@ -80,7 +92,7 @@ function canonicalObjective(rawMetaObj, campaignName) {
 // errored, the green ticks below don't include it" rather than silently
 // dropping the rows. Every external fetch is wrapped with fetchWithTimeout
 // so a single hung platform call can't stall the whole reconcile.
-async function fetchMetaTruth(token, from, to, warnings) {
+async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
   warnings = warnings || [];
   var out = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
@@ -142,7 +154,7 @@ async function fetchMetaTruth(token, from, to, warnings) {
         // follower-family campaign (PAGE_LIKES / OUTCOME_ENGAGEMENT etc.).
         // This keeps Lead Gen campaigns from showing phantom followers that
         // contradict the dashboard.
-        var obj = canonicalObjective(objMap[row.campaign_id], row.campaign_name);
+        var obj = canonicalObjective(objMap[row.campaign_id], row.campaign_name, overridesMap, row.campaign_id);
         var pageLikesRaw = actions["page_like"] || 0;
         if (obj === "followers") pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
         var follows = actions["follow"] || actions["onsite_conversion.follow"] || actions["onsite_conversion.ig_follow"] || 0;
@@ -220,7 +232,7 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
   }
 }
 
-async function fetchGoogleTruth(from, to, warnings) {
+async function fetchGoogleTruth(from, to, warnings, overridesMap) {
   warnings = warnings || [];
   try {
     var cid = process.env.GOOGLE_ADS_CLIENT_ID;
@@ -282,7 +294,7 @@ async function fetchGoogleTruth(from, to, warnings) {
       // video completes) and those must not be reported as leads, or
       // SoT disagrees with the dashboard which correctly scopes leads
       // to lead-gen campaigns. Mirrors api/campaigns.js + canonicalObjective.
-      var gObj = canonicalObjective("", v.campaignName);
+      var gObj = canonicalObjective("", v.campaignName, overridesMap, id);
       var leadsForRow = gObj === "leads" ? Math.round(v.conversions) : 0;
       return {
         platform: "Google",
@@ -570,10 +582,15 @@ export default async function handler(req, res) {
   // OAuth refresh fail) the helper pushes a record so the response can
   // surface it instead of silently returning empty rows for that platform.
   var warnings = [];
+  // Manual objective overrides loaded once so reconcile honours the
+  // same operator corrections the dashboard uses. Reconcile is the
+  // ground-truth diff, so trusting overrides here keeps the cron's
+  // verdicts aligned with what the team has chosen to report.
+  var overridesMap = await getOverrides();
   var results = await Promise.all([
-    metaToken ? fetchMetaTruth(metaToken, from, to, warnings) : Promise.resolve([]),
+    metaToken ? fetchMetaTruth(metaToken, from, to, warnings, overridesMap) : Promise.resolve([]),
     ttToken && ttAdvId ? fetchTikTokTruth(ttToken, ttAdvId, from, to, warnings) : Promise.resolve([]),
-    fetchGoogleTruth(from, to, warnings),
+    fetchGoogleTruth(from, to, warnings, overridesMap),
     fetchDashboardNumbers(req, from, to),
     fetchAdSumsByCampaign(req, from, to),
     fetchAdsetSumsByCampaign(req, from, to),

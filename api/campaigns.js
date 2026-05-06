@@ -1,6 +1,18 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, filterPagesForPrincipal } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
+
+// Helper for classifier call sites. Resolves a manual override (set via
+// Settings → Objectives Audit) ahead of name + API logic. Returns the
+// canonical lower-case objective key when an override is present, else
+// null so the caller falls through to the existing pipeline.
+function overrideFor(overridesMap, campaignId) {
+  if (!overridesMap || !campaignId) return null;
+  var disp = overridesMap[String(campaignId)];
+  if (!disp) return null;
+  return displayToCanonical(disp);
+}
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
   { name: "MTN Khava", id: "act_3600654450252189" },
@@ -88,7 +100,15 @@ export default async function handler(req, res) {
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-07";
 
-  var cacheKey = CAMPAIGNS_CACHE_VERSION + "|" + from + "|" + to;
+  // Manual objective overrides (Settings → Audit). Loaded once per
+  // request, used everywhere objectives are classified below. The hash
+  // of the active overrides is folded into the response cache key so a
+  // change in Settings invalidates the cached response on the next
+  // dashboard fetch instead of leaking stale numbers for the cache TTL.
+  var overridesMap = await getOverrides();
+  var overrideKeys = Object.keys(overridesMap || {}).sort();
+  var overrideSig = overrideKeys.length === 0 ? "" : overrideKeys.map(function(k){return k+":"+overridesMap[k];}).join("|");
+  var cacheKey = CAMPAIGNS_CACHE_VERSION + "|" + from + "|" + to + "|ov:" + overrideSig;
   var cached = req.query.fresh === "1" ? null : campaignsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };
@@ -110,6 +130,8 @@ export default async function handler(req, res) {
 
   var allCampaigns = [];
   var seenIds = {};
+  // overridesMap is loaded above (used to build the cache key) and is
+  // also the snapshot used by every classify call site below.
   // Surface per-platform fetch failures so the dashboard can show a banner
   // instead of silently rendering zeros.
   var warnings = [];
@@ -297,13 +319,17 @@ export default async function handler(req, res) {
           // name detection.
           var rawMetaObj = String((campaignInfo[c.campaign_id] || {}).objective || "").toUpperCase();
           var isFbPlacement = platName === "Facebook";
-          // Name-first classification, the team's naming convention is
-          // authoritative. Examples it correctly resolves: a Home Loans
-          // campaign Meta classifies as LEAD_GENERATION but the team
-          // tagged "_Traffic_" stays Landing Page; a "_Like_" campaign
-          // Meta classifies as OUTCOME_ENGAGEMENT stays Followers. Falls
-          // back to Meta's API objective when the name carries no tag.
+          // Manual override (Settings → Objectives Audit) wins over both
+          // name detection and API objective, the team can correct any
+          // misclassification and the override propagates everywhere.
+          // Falls through to name-first → API logic when no override is
+          // set for this campaignId.
           var canonObj = (function() {
+            var ov = overridesMap[String(c.campaign_id)];
+            if (ov) {
+              var canon = displayToCanonical(ov);
+              if (canon) return canon;
+            }
             var fromName = objectiveFromName(c.campaign_name || "");
             if (fromName && fromName !== "unknown") return fromName;
             var o = rawMetaObj;
@@ -499,13 +525,17 @@ export default async function handler(req, res) {
           var rawMetaObj = String(info.objective || "").toUpperCase();
           var isFbPlacement = a.platform === "Facebook";
           var canonObj = (function() {
+            var ov = overrideFor(overridesMap, a.campaign_id);
+            if (ov) return ov;
+            var fromName = objectiveFromName(a.campaign_name || "");
+            if (fromName && fromName !== "unknown") return fromName;
             var o = rawMetaObj;
             if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
             if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
             if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
             if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
             if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
-            return objectiveFromName(a.campaign_name || "");
+            return "unknown";
           })();
           var pageLikes = a.pageLikes;
           if (canonObj === "followers" && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
@@ -588,7 +618,7 @@ export default async function handler(req, res) {
             campaignId: uniqueId,
             rawCampaignId: cid,
             campaignName: info.name || ("Campaign " + cid),
-            objective: objectiveFromName(info.name || ""),
+            objective: overrideFor(overridesMap, cid) || objectiveFromName(info.name || ""),
             _sumImpressions: 0, _sumSpend: 0, _sumClicks: 0, _sumReachPublisher: 0,
             leads: 0, appInstalls: 0, landingPageViews: 0, pageLikes: 0, pageFollows: 0,
             actions: [],
@@ -715,7 +745,7 @@ export default async function handler(req, res) {
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
         var si = campaignInfo[cid];
-        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: si.name, objective: objectiveFromName(si.name), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled", budgetAmount: si.budgetAmount || null, budgetDaily: si.budgetDaily || null, budgetMode: si.budgetMode || "unset", budgetFlightDays: si.budgetFlightDays || null });
+        allCampaigns.push({ platform: "Facebook", metaPlatform: "facebook", accountName: account.name + (account.name.indexOf("Meta")<0&&account.name.indexOf("meta")<0?" Meta":""), accountId: account.id, campaignId: cid + "_facebook", rawCampaignId: cid, campaignName: si.name, objective: overrideFor(overridesMap, cid) || objectiveFromName(si.name), impressions: "0", reach: "0", frequency: "0", spend: "0", cpm: "0", cpc: "0", ctr: "0", clicks: "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", actions: [], status: "scheduled", budgetAmount: si.budgetAmount || null, budgetDaily: si.budgetDaily || null, budgetMode: si.budgetMode || "unset", budgetFlightDays: si.budgetFlightDays || null });
       }
     });
   }
@@ -748,11 +778,18 @@ export default async function handler(req, res) {
         ttStatuses[ttCamp.campaign_id] = ttCamp.operation_status;
         var ttObj = String(ttCamp.objective_type || "").toUpperCase();
         var ttCanonObj;
-        if (ttObj === "APP_PROMOTION" || ttObj === "APP_INSTALL" || ttObj.indexOf("APP") >= 0) ttCanonObj = "appinstall";
-        else if (ttObj === "LEAD_GENERATION") ttCanonObj = "leads";
-        else if (ttObj === "ENGAGEMENT" || ttObj === "COMMUNITY_INTERACTION" || ttObj === "VIDEO_VIEWS") ttCanonObj = "followers";
-        else if (ttObj === "TRAFFIC" || ttObj === "REACH" || ttObj === "WEB_CONVERSIONS") ttCanonObj = "landingpage";
-        else ttCanonObj = objectiveFromName(ttCamp.campaign_name || "");
+        // Override wins over both API objective and name detection.
+        var ttOv = overrideFor(overridesMap, ttCamp.campaign_id);
+        if (ttOv) ttCanonObj = ttOv;
+        else {
+          var ttFromName = objectiveFromName(ttCamp.campaign_name || "");
+          if (ttFromName && ttFromName !== "unknown") ttCanonObj = ttFromName;
+          else if (ttObj === "APP_PROMOTION" || ttObj === "APP_INSTALL" || ttObj.indexOf("APP") >= 0) ttCanonObj = "appinstall";
+          else if (ttObj === "LEAD_GENERATION") ttCanonObj = "leads";
+          else if (ttObj === "ENGAGEMENT" || ttObj === "COMMUNITY_INTERACTION" || ttObj === "VIDEO_VIEWS") ttCanonObj = "followers";
+          else if (ttObj === "TRAFFIC" || ttObj === "REACH" || ttObj === "WEB_CONVERSIONS") ttCanonObj = "landingpage";
+          else ttCanonObj = "unknown";
+        }
         ttObjectives[ttCamp.campaign_id] = ttCanonObj;
         var ttMode = String(ttCamp.budget_mode || "").toUpperCase();
         var ttRawBudget = parseFloat(ttCamp.budget || 0);
@@ -859,7 +896,11 @@ export default async function handler(req, res) {
               // Fall through to name-based detection for everything else.
               var gSubType = String((gc.advertisingChannelSubType || gc.advertising_channel_sub_type || "")).toUpperCase();
               var gChanType = String((gc.advertisingChannelType || gc.advertising_channel_type || "")).toUpperCase();
-              var gObjective = (gSubType.indexOf("APP_CAMPAIGN") >= 0 || gChanType === "MULTI_CHANNEL") ? "appinstall" : objectiveFromName(gName);
+              // Override wins over channel hint + name. The Google
+              // campaign id sits on gc.id, which the dashboard uses
+              // as rawCampaignId on the row.
+              var gOv = overrideFor(overridesMap, gc.id);
+              var gObjective = gOv ? gOv : ((gSubType.indexOf("APP_CAMPAIGN") >= 0 || gChanType === "MULTI_CHANNEL") ? "appinstall" : objectiveFromName(gName));
               var gIsLeadsCampaign = gObjective === "leads";
               // Google budgets: CUSTOM period with an end_date means the
               // account-level budget is a total/lifetime figure, treat it

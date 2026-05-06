@@ -1,5 +1,6 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
+import { getOverrides } from "./_objectiveOverrides.js";
 
 // Admin-only. Returns every campaign from every platform with its detected
 // objective and the reason for that classification. Managers use this to
@@ -354,6 +355,33 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error("Objective audit aggregate error", err);
   }
+
+  // Apply manual overrides as a post-processing pass. The override
+  // wins over name detection and API objective wherever it's set, and
+  // each affected row gets discrepancy="manual_override" so the audit
+  // chip renders distinctly. Rows without an override pass through
+  // unchanged. Stored on a separate `auto*` field set so the operator
+  // can compare what the dashboard would have classified vs. what's
+  // currently being reported.
+  try {
+    var overrides = await getOverrides();
+    if (overrides && Object.keys(overrides).length > 0) {
+      all = all.map(function(row) {
+        var ov = overrides[String(row.campaignId)];
+        if (!ov) return row;
+        return Object.assign({}, row, {
+          autoDetectedObjective: row.detectedObjective,
+          autoDiscrepancy: row.discrepancy,
+          autoClassificationSource: row.classificationSource,
+          detectedObjective: ov,
+          discrepancy: "manual_override",
+          classificationSource: "Manual override (was: " + row.detectedObjective + ")",
+          overridden: true,
+          overriddenObjective: ov
+        });
+      });
+    }
+  } catch (_) {}
 
   // Sort: platform first, then account, then campaign name
   all.sort(function(a, b) {

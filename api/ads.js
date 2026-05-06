@@ -1,6 +1,14 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
+
+function overrideFor(overridesMap, campaignId) {
+  if (!overridesMap || !campaignId) return null;
+  var disp = overridesMap[String(campaignId)];
+  if (!disp) return null;
+  return displayToCanonical(disp);
+}
 
 // Module-level caches that persist across warm Vercel invocations on the same instance.
 // Meta Graph API has aggressive app-level rate limits (#4) and video thumbnails + image
@@ -114,6 +122,10 @@ export default async function handler(req, res) {
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
+  // Manual objective overrides loaded once at handler entry. Each ad
+  // inherits its parent campaign's override, so per-ad classification
+  // checks the override map by campaign_id.
+  var overridesMap = await getOverrides();
 
   // Admin-only debug flag that returns the raw Meta actionsAgg + trueTotals
   // per ad so we can verify what Meta is actually returning when a tile
@@ -748,9 +760,10 @@ export default async function handler(req, res) {
         // "like" action (post reactions vs. page likes, see below).
         var rawMetaObj = campObjMap[ins.campaign_id] || "";
         var apiObj = mapMetaObjective(rawMetaObj);
-        // Name-first classification, the team's tag is authoritative.
-        // Falls back to Meta's API objective then to "landingpage".
-        var objective = detectObjective(ins.campaign_name) || apiObj || "landingpage";
+        // Override → name → API → landingpage. Override is keyed by
+        // raw Meta campaign id; ads inherit their parent campaign's
+        // classification end-to-end across the dashboard.
+        var objective = overrideFor(overridesMap, ins.campaign_id) || detectObjective(ins.campaign_name) || apiObj || "landingpage";
         var isFbPlacement = pub === "facebook" || pub === "audience_network" || pub === "messenger" || pub === "oculus";
 
         var leads = 0, installs = 0, pageLikes = 0, reactionLikes = 0, follows = 0;
@@ -1045,8 +1058,8 @@ export default async function handler(req, res) {
           var ttImps = parseInt(mt.impressions || 0);
           var ttClicks = parseInt(mt.clicks || 0);
           var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
-          // Name-first classification, mirrors the Meta block above.
-          var ttObjective = detectObjective(mt.campaign_name) || ttApiObj || "landingpage";
+          // Override → name → API → landingpage.
+          var ttObjective = overrideFor(overridesMap, mt.campaign_id) || detectObjective(mt.campaign_name) || ttApiObj || "landingpage";
           var ttResCount, ttResType;
           // TikTok "likes" metric = video hearts (engagement), NOT follows.
           // Only count actual follows for the Followers objective. Bundling
@@ -1332,10 +1345,12 @@ export default async function handler(req, res) {
             var gPlace = gPlatform === "YouTube" ? "YouTube" : gPlatform === "Google Search" ? "Search" : gPlatform === "Performance Max" ? "Pmax" : gPlatform === "Demand Gen" ? "Demand" : "Display";
             var gConv = Math.round(parseFloat(r.metrics.conversions || 0));
             var nameObj = detectObjective(r.campaign.name);
-            // Channel sub-type can hint at app campaigns. detectObjective
-            // now returns null when no name tag is present, so fall back
-            // to "landingpage" as the safe default for Google rows.
-            var gObjective = (chSubType.indexOf("APP") >= 0 || chSubType.indexOf("APP_INSTALL") >= 0) ? "appinstall" : (nameObj || "landingpage");
+            // Override → channel hint (if app) → name → landingpage.
+            // Google's APP_CAMPAIGN signal is structurally enforced so
+            // it's the authoritative app-classification source unless
+            // an operator override says otherwise.
+            var gOv = overrideFor(overridesMap, r.campaign && r.campaign.id);
+            var gObjective = gOv ? gOv : ((chSubType.indexOf("APP") >= 0 || chSubType.indexOf("APP_INSTALL") >= 0) ? "appinstall" : (nameObj || "landingpage"));
             var gResCount, gResType;
             if (gConv > 0) { gResCount = gConv; gResType = gObjective === "leads" ? "leads" : gObjective === "appinstall" ? "installs" : "conversions"; }
             else if (gObjective === "appinstall") { gResCount = clk; gResType = "store_clicks"; }

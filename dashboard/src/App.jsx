@@ -1746,15 +1746,72 @@ function CampaignAuditModal(props){
   var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Unclassified":P.label};
   // Per-state colours for the new Discrepancy chip + filter pills.
   // agrees = mint, name_overrode = warning amber (the eyeball-it row),
-  // api_fallback = cyan info, unclassified = muted label grey.
-  var discrepColors={agrees:P.mint,name_overrode:P.warning,api_fallback:P.cyan,unclassified:P.label};
-  var discrepLabels={agrees:"AGREES",name_overrode:"NAME OVERRODE",api_fallback:"API FALLBACK",unclassified:"UNCLASSIFIED"};
-  var discrepCounts={agrees:0,name_overrode:0,api_fallback:0,unclassified:0};
+  // api_fallback = cyan info, unclassified = muted label grey,
+  // manual_override = ember (operator-driven, set in Settings → Audit).
+  var discrepColors={agrees:P.mint,name_overrode:P.warning,api_fallback:P.cyan,unclassified:P.label,manual_override:P.ember};
+  var discrepLabels={agrees:"AGREES",name_overrode:"NAME OVERRODE",api_fallback:"API FALLBACK",unclassified:"UNCLASSIFIED",manual_override:"OVERRIDDEN"};
+  var discrepCounts={agrees:0,name_overrode:0,api_fallback:0,unclassified:0,manual_override:0};
   data.forEach(function(c){var k=c.discrepancy||"unclassified";if(discrepCounts[k]!==undefined)discrepCounts[k]++;});
 
+  // Saving state per row, so the dropdown can show a small spinner /
+  // disabled state while the override is in flight without re-rendering
+  // the whole table.
+  var savingId=useState("");
+  // Allowed override values for the dropdown. Display strings match
+  // what the audit's `detectedObjective` field uses, so the table chip
+  // updates immediately without a refetch.
+  var OVERRIDE_OPTIONS=["Auto","Clicks to App Store","Leads","Followers & Likes","Landing Page Clicks","Unclassified"];
+
+  // Auto-save handler. Posts to /api/objective-overrides, then mutates
+  // the local `rows` state so the chip + classificationSource update
+  // instantly. Falls back to a refresh on error.
+  var saveOverride=function(campaignId, objective){
+    if(!campaignId)return;
+    savingId[1](String(campaignId));
+    var body={campaignId:String(campaignId),objective:objective==="Auto"?"auto":objective};
+    fetch(props.apiBase+"/api/objective-overrides",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        savingId[1]("");
+        if(r.status===200&&r.data&&r.data.ok){
+          // Optimistic in-place update so the operator sees the change
+          // immediately. Server has authoritative value but mirroring
+          // the verdict here keeps the UX snappy.
+          rows[1](function(prev){
+            return (prev||[]).map(function(row){
+              if(String(row.campaignId)!==String(campaignId))return row;
+              var clearing=!objective||objective==="Auto";
+              if(clearing){
+                return Object.assign({},row,{
+                  detectedObjective:row.autoDetectedObjective||row.detectedObjective,
+                  classificationSource:row.autoClassificationSource||row.classificationSource,
+                  discrepancy:row.autoDiscrepancy||row.discrepancy,
+                  overridden:false,
+                  overriddenObjective:null
+                });
+              }
+              return Object.assign({},row,{
+                autoDetectedObjective:row.autoDetectedObjective||row.detectedObjective,
+                autoClassificationSource:row.autoClassificationSource||row.classificationSource,
+                autoDiscrepancy:row.autoDiscrepancy||row.discrepancy,
+                detectedObjective:objective,
+                classificationSource:"Manual override (was: "+(row.autoDetectedObjective||row.detectedObjective)+")",
+                discrepancy:"manual_override",
+                overridden:true,
+                overriddenObjective:objective
+              });
+            });
+          });
+        } else {
+          err[1]((r.data&&r.data.error)||"Could not save override");
+        }
+      })
+      .catch(function(){savingId[1]("");err[1]("Connection error");});
+  };
+
   var exportCsv=function(){
-    var header=["Platform","Account","Campaign Name","Detected Objective","Discrepancy","Name Verdict","API Verdict","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
-    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.discrepancy||"",c.nameVerdict||"",c.apiVerdict||"",c.classificationSource,c.apiObjective,c.status,c.activeLast30Days?"yes":"no",c.campaignId];}));
+    var header=["Platform","Account","Campaign Name","Detected Objective","Override","Auto Verdict (no override)","Discrepancy","Name Verdict","API Verdict","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
+    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.overridden?(c.overriddenObjective||""):"",c.autoDetectedObjective||"",c.discrepancy||"",c.nameVerdict||"",c.apiVerdict||"",c.classificationSource,c.apiObjective,c.status,c.activeLast30Days?"yes":"no",c.campaignId];}));
     var csv=all.map(function(r){return r.map(function(cell){var s=String(cell||"");if(s.indexOf(",")>=0||s.indexOf('"')>=0||s.indexOf("\n")>=0){return '"'+s.replace(/"/g,'""')+'"';}return s;}).join(",");}).join("\n");
     var blob=new Blob([csv],{type:"text/csv"});
     var url=URL.createObjectURL(blob);
@@ -1822,6 +1879,7 @@ function CampaignAuditModal(props){
           <option value="name_overrode">Name overrode ({discrepCounts.name_overrode})</option>
           <option value="api_fallback">API fallback ({discrepCounts.api_fallback})</option>
           <option value="unclassified">Unclassified ({discrepCounts.unclassified})</option>
+          <option value="manual_override">Overridden ({discrepCounts.manual_override})</option>
         </select>
         <select value={stateFilter[0]} onChange={function(e){stateFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
           <option value="all">All states</option>
@@ -1856,6 +1914,7 @@ function CampaignAuditModal(props){
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Account</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Campaign</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Detected Objective</th>
+              {props.isSuperadmin&&<th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Override</th>}
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Discrepancy</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Why</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>API Objective</th>
@@ -1871,10 +1930,17 @@ function CampaignAuditModal(props){
                 <td style={{padding:"10px",color:P.label,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.accountName}</td>
                 <td style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:320}}>{c.campaignName}</td>
                 <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}><span style={{background:oc+"18",border:"1px solid "+oc+"50",color:oc,padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{c.detectedObjective}</span></td>
+                {props.isSuperadmin&&<td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}>{(function(){
+                  var current=c.overridden?c.overriddenObjective:"Auto";
+                  var saving=savingId[0]===String(c.campaignId);
+                  return <select disabled={saving} value={current||"Auto"} onChange={function(e){saveOverride(c.campaignId,e.target.value);}} title={c.overridden?("Override active. Auto verdict was: "+(c.autoDetectedObjective||"unknown")):"Set a manual override (saves on change)"} style={{background:c.overridden?P.ember+"15":P.glass,border:"1px solid "+(c.overridden?P.ember+"60":P.rule),borderRadius:6,padding:"4px 8px",color:c.overridden?P.ember:P.label,fontSize:10,fontWeight:700,fontFamily:fm,outline:"none",cursor:saving?"wait":"pointer",letterSpacing:0.5}}>
+                    {OVERRIDE_OPTIONS.map(function(o){return <option key={o} value={o}>{o}</option>;})}
+                  </select>;
+                })()}</td>}
                 <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}>{(function(){
                   var d=c.discrepancy||"unclassified";
                   var dc=discrepColors[d]||P.label;
-                  var tip=d==="name_overrode"?("Name says "+c.nameVerdict+", API says "+c.apiVerdict+". Name won."):d==="api_fallback"?("No name keyword matched, API objective '"+c.apiVerdict+"' was used as fallback."):d==="agrees"?("Both signals point to "+(c.nameVerdict&&c.nameVerdict!=="Unclassified"?c.nameVerdict:c.apiVerdict)+"."):"Neither name keyword nor API objective produced a verdict.";
+                  var tip=d==="manual_override"?("Manual override set in Settings → Audit. Auto verdict was: "+(c.autoDetectedObjective||"unknown")):d==="name_overrode"?("Name says "+c.nameVerdict+", API says "+c.apiVerdict+". Name won."):d==="api_fallback"?("No name keyword matched, API objective '"+c.apiVerdict+"' was used as fallback."):d==="agrees"?("Both signals point to "+(c.nameVerdict&&c.nameVerdict!=="Unclassified"?c.nameVerdict:c.apiVerdict)+"."):"Neither name keyword nor API objective produced a verdict.";
                   return <span title={tip} style={{background:dc+"18",border:"1px solid "+dc+"50",color:dc,padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:800,letterSpacing:1,cursor:"help"}}>{discrepLabels[d]||d}</span>;
                 })()}</td>
                 <td style={{padding:"10px",color:P.label,verticalAlign:"top",fontSize:10,lineHeight:1.5}}>{c.classificationSource}</td>

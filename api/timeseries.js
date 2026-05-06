@@ -1,6 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -11,6 +12,13 @@ var metaAccounts = [
   { name: "Psycho Bunny ZA", id: "act_9001636663181231" },
   { name: "GAS Agency", id: "act_542990539806888" }
 ];
+
+function overrideFor(overridesMap, campaignId) {
+  if (!overridesMap || !campaignId) return null;
+  var disp = overridesMap[String(campaignId)];
+  if (!disp) return null;
+  return displayToCanonical(disp);
+}
 
 // Name-based objective detection. Returns null when the campaign name
 // has no recognised tag — caller is expected to fall back to the
@@ -93,6 +101,11 @@ export default async function handler(req, res) {
     });
   }
 
+  // Manual objective overrides (Settings → Objectives Audit). Loaded
+  // once at handler entry, used by every classify call site below to
+  // honour an operator-supplied correction ahead of name + API logic.
+  var overridesMap = await getOverrides();
+
   var campaignAllowed = function(id, name) {
     if (isClientScoped) {
       if (!(id && allowedIds[String(id)]) && !(name && allowedNames[String(name)])) return false;
@@ -154,7 +167,7 @@ export default async function handler(req, res) {
           // safe default. Stops Lead-Gen-on-Meta campaigns the team has
           // tagged as "_Traffic_" from being miscounted as leads in the
           // trendline.
-          var objective = detectObjective(row.campaign_name) || mapMetaObjective(campObjMap[row.campaign_id]) || "landingpage";
+          var objective = overrideFor(overridesMap, row.campaign_id) || detectObjective(row.campaign_name) || mapMetaObjective(campObjMap[row.campaign_id]) || "landingpage";
           var bucket = row.date_start;
           var spend = parseFloat(row.spend || 0);
           var imps = parseInt(row.impressions || 0);
@@ -246,7 +259,7 @@ export default async function handler(req, res) {
           var day = (rawDay + "").split(" ")[0].split("T")[0];
           if (!day) return;
           var bucket = bucketKey(day, granularity);
-          var objective = detectObjective(m.campaign_name) || mapTikTokObjective(ttCampObjMap[String(d.campaign_id || "")]) || "landingpage";
+          var objective = overrideFor(overridesMap, d.campaign_id) || detectObjective(m.campaign_name) || mapTikTokObjective(ttCampObjMap[String(d.campaign_id || "")]) || "landingpage";
           var spend = parseFloat(m.spend || 0);
           var imps = parseInt(m.impressions || 0);
           var clk = parseInt(m.clicks || 0);
@@ -303,7 +316,7 @@ export default async function handler(req, res) {
             var gPlatform = chType === "VIDEO" || (r.campaign.name || "").toLowerCase().indexOf("youtube") >= 0 ? "YouTube" : chType === "SEARCH" ? "Google Search" : chType === "PERFORMANCE_MAX" ? "Performance Max" : chType === "DEMAND_GEN" || chType === "DISCOVERY" ? "Demand Gen" : "Google Display";
             // Roll all Google sub-platforms into "Google" for the matrix to keep it readable
             var bucketPlat = "Google";
-            var objective = detectObjective(r.campaign.name) || "landingpage";
+            var objective = overrideFor(overridesMap, r.campaign && r.campaign.id) || detectObjective(r.campaign.name) || "landingpage";
             var spend = parseFloat(r.metrics.costMicros || 0) / 1000000;
             var imps = parseInt(r.metrics.impressions || 0);
             var clk = parseInt(r.metrics.clicks || 0);
