@@ -5048,7 +5048,12 @@ export default function MediaOnGas(){
                   return Object.assign({},p,{resultsCount:resultsCount,resultsLabel:resultsLabel});
                 });
                 rows.sort(function(a,b){return b.spend-a.spend;});
-                var maxSpend=rows.length>0?rows[0].spend:1;
+                var totalRowCount=rows.length;
+                // Cap the visual list at 10 so the section doesn't dwarf
+                // the rest of the Summary tab. Totals and footer insights
+                // still reflect the full placement set.
+                var visibleRows=rows.slice(0,10);
+                var maxSpend=visibleRows.length>0?visibleRows[0].spend:1;
                 var top3Spend=rows.slice(0,3).reduce(function(a,p){return a+p.spend;},0);
                 var top3Share=totSpend>0?(top3Spend/totSpend*100):0;
                 // Most efficient = lowest cost per result among rows
@@ -5060,11 +5065,11 @@ export default function MediaOnGas(){
                       {Ic.target(P.solar,18)}
                       <span style={{fontSize:16,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>Placement Performance Assessment</span>
                     </div>
-                    <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{rows.length} placement{rows.length===1?"":"s"} active</span>
+                    <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>{totalRowCount>10?"Top 10 of "+totalRowCount:totalRowCount+" placement"+(totalRowCount===1?"":"s")+" active"}</span>
                   </div>
                   <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:14,textTransform:"uppercase"}}>Where your spend is delivering, ranked by share of investment &middot; scoped to your selected period ({df} to {dt}) &middot; {selected.length} campaign{selected.length===1?"":"s"} selected</div>
                   <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                    {rows.map(function(p,i){
+                    {visibleRows.map(function(p,i){
                       var sharePct=totSpend>0?(p.spend/totSpend*100):0;
                       var widthPct=maxSpend>0?(p.spend/maxSpend*100):0;
                       var ctr=p.impressions>0?(parseFloat(p.clicks||0)/parseFloat(p.impressions||0)*100):0;
@@ -5106,7 +5111,7 @@ export default function MediaOnGas(){
                     <div style={{fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>
                       <div style={{marginBottom:4,display:"flex",gap:8}}><span style={{color:P.solar,fontWeight:900}}>{"▸"}</span><span>Top 3 placements account for <strong>{top3Share.toFixed(2)}%</strong> of {fR(totSpend)} total spend, that concentration is where any optimisation lever moves the needle fastest.</span></div>
                       {efficient&&<div style={{marginBottom:4,display:"flex",gap:8}}><span style={{color:P.mint,fontWeight:900}}>{"▸"}</span><span>Most efficient delivery: <strong style={{color:efficient.color}}>{efficient.name}</strong> at <strong>{fR(efficient.spend/efficient.resultsCount)} per {efficient.resultsLabel.replace(/s$/,"")}</strong> ({fmt(efficient.resultsCount)} {efficient.resultsLabel} on {fR(efficient.spend)} spend).</span></div>}
-                      <div style={{display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"▸"}</span><span>Blended: {fmt(totImps)} impressions and {fmt(totClicks)} clicks across {rows.length} placement{rows.length===1?"":"s"}, weighted ranking by spend so the top rows are where the team should evaluate creative refresh and bid pressure first.</span></div>
+                      <div style={{display:"flex",gap:8}}><span style={{color:P.cyan,fontWeight:900}}>{"▸"}</span><span>Blended: {fmt(totImps)} impressions and {fmt(totClicks)} clicks across {totalRowCount} placement{totalRowCount===1?"":"s"}{totalRowCount>10?", top 10 shown above":""}, weighted ranking by spend so the top rows are where the team should evaluate creative refresh and bid pressure first.</span></div>
                     </div>
                   </div>
                 </div>;
