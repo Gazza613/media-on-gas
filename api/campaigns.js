@@ -150,12 +150,33 @@ export default async function handler(req, res) {
     try {
       // daily_budget / lifetime_budget / spend_cap come back in account
       // currency CENTS (Meta's convention), so divide by 100 before use.
-      var listUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,objective,effective_status,created_time,start_time,stop_time,daily_budget,lifetime_budget,spend_cap,budget_remaining&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\"]}]&limit=100&access_token=" + metaToken;
-      var listRes = await fetch(listUrl);
-      var listData = await listRes.json();
-      if (listData.data) {
-        for (var k = 0; k < listData.data.length; k++) {
-          var camp = listData.data[k];
+      // Filter expanded to include PAUSED campaigns alongside ACTIVE +
+      // SCHEDULED, otherwise a campaign that delivered earlier in the
+      // requested window then got paused gets dropped from campaignInfo
+      // and is missing from the campaign list (the rest of the pipeline
+      // still tries to fall back via insights, but downstream lookups
+      // for budget / start / stop dates fail). PAUSED rarely runs into
+      // the hundreds, the pagination loop below catches them all.
+      var listFilter = "&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\",\"PAUSED\"]}]";
+      var listBaseUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,objective,effective_status,created_time,start_time,stop_time,daily_budget,lifetime_budget,spend_cap,budget_remaining" + listFilter + "&limit=200&access_token=" + metaToken;
+      // Follow paging.next so accounts with >200 campaigns matching the
+      // filter (e.g. an agency account aggregating many clients) do not
+      // silently drop campaigns. Earlier the call had no pagination and
+      // any campaign past the first 100 was missed entirely.
+      var listAllRows = [];
+      var listNext = listBaseUrl;
+      var listGuard = 0;
+      while (listNext && listGuard < 20) {
+        listGuard++;
+        var listRes = await fetch(listNext);
+        if (!listRes.ok) break;
+        var listData = await listRes.json();
+        if (listData.data) listAllRows = listAllRows.concat(listData.data);
+        listNext = listData.paging && listData.paging.next ? listData.paging.next : null;
+      }
+      if (listAllRows.length > 0) {
+        for (var k = 0; k < listAllRows.length; k++) {
+          var camp = listAllRows[k];
           var dailyB = parseFloat(camp.daily_budget || 0) / 100;
           var lifetimeB = parseFloat(camp.lifetime_budget || 0) / 100;
           var spendCapB = parseFloat(camp.spend_cap || 0) / 100;
@@ -741,6 +762,53 @@ export default async function handler(req, res) {
         });
       });
     } catch (err) { console.error("Meta insights error for", account.name, err); warnings.push({ platform: "Meta", account: account.name, stage: "insights", message: String(err && err.message || err) }); }
+
+    // Synthetic-row fallback. Any campaign appearing in the authoritative
+    // campaign-level insights (reachMap / spendMap / impsMap / clicksMap)
+    // that DID NOT make it into rowMap via the publisher_platform-broken
+    // insights gets a synthesised Facebook row here using the auth totals.
+    // This catches two real-world cases that previously dropped the row
+    // entirely and produced a -100% delta versus reconcile's source of
+    // truth: (1) Meta returned a publisher_platform value mapPubToPlat
+    // does not recognise (rare, defensive); (2) the publisher_platform
+    // call paginated past the breakdown limit while the unbroken call
+    // succeeded. The unknownPubs diagnostic still tracks the original
+    // unmapped-publisher case for debugging, this synthesis just stops
+    // it from leaking into Summary as zeros.
+    Object.keys(reachMap || {}).concat(Object.keys(spendMap || {})).concat(Object.keys(impsMap || {})).forEach(function(cid) {
+      if (!cid) return;
+      if (seenIds[cid]) return;
+      var imps = (impsMap && impsMap[cid]) || 0;
+      var sp = (spendMap && spendMap[cid]) || 0;
+      var clk = (clicksMap && clicksMap[cid]) || 0;
+      var rch = (reachMap && reachMap[cid]) || 0;
+      if (imps <= 0 && sp <= 0) return; // nothing to synthesise
+      seenIds[cid] = true;
+      var si = campaignInfo[cid] || {};
+      var canonObjFallback = overrideFor(overridesMap, cid) || objectiveFromName(si.name || "");
+      var fbAccountName = account.name + (account.name.indexOf("Meta") < 0 && account.name.indexOf("meta") < 0 ? " Meta" : "");
+      var statusOut = si.status ? String(si.status).toLowerCase().replace("campaign_paused", "paused").replace("adset_paused", "paused") : "active";
+      var freqStr = rch > 0 ? (imps / rch).toFixed(2) : "0";
+      var cpmStr = imps > 0 ? ((sp / imps) * 1000).toFixed(2) : "0";
+      var cpcStr = clk > 0 ? (sp / clk).toFixed(2) : "0";
+      var ctrStr = imps > 0 ? ((clk / imps) * 100).toFixed(2) : "0";
+      allCampaigns.push({
+        platform: "Facebook", metaPlatform: "facebook",
+        accountName: fbAccountName, accountId: account.id,
+        campaignId: cid + "_facebook", rawCampaignId: cid,
+        campaignName: si.name || "Campaign " + cid,
+        objective: canonObjFallback, impressions: imps.toString(), reach: rch.toString(),
+        frequency: freqStr, spend: sp.toFixed(2), cpm: cpmStr, cpc: cpcStr, ctr: ctrStr, clicks: clk.toString(),
+        leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", pageFollows: "0",
+        costPerLead: "0", costPerInstall: "0", actions: [],
+        reactionsByType: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 }, reactionsTotal: 0,
+        startDate: si.startTime ? si.startTime.substring(0, 10) : "",
+        endDate: si.stopTime ? si.stopTime.substring(0, 10) : "",
+        status: statusOut,
+        budgetAmount: si.budgetAmount || null, budgetDaily: si.budgetDaily || null, budgetMode: si.budgetMode || "unset", budgetFlightDays: si.budgetFlightDays || null,
+        synthesisedFrom: "campaign-level fallback"
+      });
+    });
 
     Object.keys(campaignInfo).forEach(function(cid) {
       if (!seenIds[cid] && campaignInfo[cid] && campaignInfo[cid].status === "SCHEDULED") {
