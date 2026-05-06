@@ -56,6 +56,27 @@ function mapMetaObjective(metaObj) {
   return null;
 }
 
+// Discrepancy state per row. Tells the operator at a glance how the
+// final classification was reached:
+//   agrees         — name tag and API objective both pointed to the
+//                    same verdict (or only one signal was present and
+//                    it succeeded).
+//   name_overrode  — name tag and API objective DISAGREED, name won.
+//                    This is the row to eyeball, the team named it
+//                    one thing, the platform considers it another.
+//   api_fallback   — no name keyword matched, the platform's API
+//                    objective was used as the fallback.
+//   unclassified   — neither name keyword nor API objective produced
+//                    a verdict. Falls into the dashboard's
+//                    "unknown / dropped" bucket.
+function computeDiscrepancy(nameObj, apiObj) {
+  var nameMatched = nameObj && nameObj !== "Unclassified";
+  if (!nameMatched && !apiObj) return "unclassified";
+  if (!nameMatched && apiObj) return "api_fallback";
+  if (nameMatched && !apiObj) return "agrees";
+  return nameObj === apiObj ? "agrees" : "name_overrode";
+}
+
 function mapTikTokObjective(ttObj) {
   if (!ttObj) return null;
   var o = String(ttObj).toUpperCase();
@@ -109,6 +130,9 @@ async function fetchMeta(account, token, activeFrom, activeTo) {
         apiObjective: c.objective || "",
         detectedObjective: classification.obj,
         classificationSource: classification.source,
+        nameVerdict: nameClass.obj,
+        apiVerdict: apiMapped || null,
+        discrepancy: computeDiscrepancy(nameClass.obj, apiMapped),
         status: c.effective_status || c.status || "",
         activeLast30Days: recentlyActive
       });
@@ -170,6 +194,9 @@ async function fetchTikTok(advId, token, activeFrom, activeTo) {
         apiObjective: c.objective_type || "",
         detectedObjective: classification.obj,
         classificationSource: classification.source,
+        nameVerdict: ttNameClass.obj,
+        apiVerdict: apiMapped || null,
+        discrepancy: computeDiscrepancy(ttNameClass.obj, apiMapped),
         status: c.operation_status || "",
         activeLast30Days: recentlyActive
       });
@@ -256,13 +283,18 @@ async function fetchGoogle(activeFrom, activeTo) {
       else if (chType === "PERFORMANCE_MAX") platform = "Performance Max";
       else if (chType === "DISCOVERY" || chType === "DEMAND_GEN") platform = "Demand Gen";
       var name = campaign.name || "(unnamed)";
-      var classification;
+      var nameClass = detectObjectiveFromName(name);
       // MULTI_CHANNEL is Google's channel type for UAC / App campaigns.
       // advertising_channel_sub_type can also contain APP_CAMPAIGN / APP_INSTALL.
-      if (chType === "MULTI_CHANNEL" || chSub.indexOf("APP") >= 0) {
-        classification = { obj: "Clicks to App Store", source: "Google channel: " + chType + (chSub ? (" / " + chSub) : "") };
+      // Channel hint is rock-solid for app campaigns (the campaign type is
+      // structurally enforced by Google), so it wins for app classification.
+      // For everything else, name-based detection drives.
+      var channelHintObj = (chType === "MULTI_CHANNEL" || chSub.indexOf("APP") >= 0) ? "Clicks to App Store" : null;
+      var classification;
+      if (channelHintObj) {
+        classification = { obj: channelHintObj, source: "Google channel: " + chType + (chSub ? (" / " + chSub) : "") };
       } else {
-        classification = detectObjectiveFromName(name);
+        classification = nameClass;
       }
       out.push({
         platform: platform,
@@ -272,6 +304,9 @@ async function fetchGoogle(activeFrom, activeTo) {
         apiObjective: chType + (chSub ? (" / " + chSub) : ""),
         detectedObjective: classification.obj,
         classificationSource: classification.source,
+        nameVerdict: nameClass.obj,
+        apiVerdict: channelHintObj,
+        discrepancy: computeDiscrepancy(nameClass.obj, channelHintObj),
         status: campaign.status || "",
         activeLast30Days: r.totalImps > 0
       });

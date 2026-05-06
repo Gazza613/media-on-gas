@@ -1570,6 +1570,12 @@ function CampaignAuditModal(props){
   var query=useState("");
   var platFilter=useState("all");
   var objFilter=useState("all");
+  // Discrepancy filter — show only the audit rows where the team's name
+  // tag and the platform's API objective disagreed (or rows where the
+  // API was the fallback because no name keyword matched). Default
+  // "all" shows everything, the operator can switch to "name_overrode"
+  // or "api_fallback" to focus the eyeball pass.
+  var discrepFilter=useState("all");
 
   // Reconciliation state
   var recRows=useState([]);
@@ -1711,6 +1717,7 @@ function CampaignAuditModal(props){
   var filtered=data.filter(function(c){
     if(platFilter[0]!=="all"&&c.platform!==platFilter[0])return false;
     if(objFilter[0]!=="all"&&c.detectedObjective!==objFilter[0])return false;
+    if(discrepFilter[0]!=="all"&&(c.discrepancy||"")!==discrepFilter[0])return false;
     if(q){
       var hay=(c.campaignName+" "+c.accountName+" "+c.apiObjective+" "+c.detectedObjective).toLowerCase();
       if(hay.indexOf(q)<0)return false;
@@ -1720,10 +1727,17 @@ function CampaignAuditModal(props){
   var platforms={};data.forEach(function(c){platforms[c.platform]=true;});
   var objectives={};data.forEach(function(c){objectives[c.detectedObjective]=true;});
   var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Unclassified":P.label};
+  // Per-state colours for the new Discrepancy chip + filter pills.
+  // agrees = mint, name_overrode = warning amber (the eyeball-it row),
+  // api_fallback = cyan info, unclassified = muted label grey.
+  var discrepColors={agrees:P.mint,name_overrode:P.warning,api_fallback:P.cyan,unclassified:P.label};
+  var discrepLabels={agrees:"AGREES",name_overrode:"NAME OVERRODE",api_fallback:"API FALLBACK",unclassified:"UNCLASSIFIED"};
+  var discrepCounts={agrees:0,name_overrode:0,api_fallback:0,unclassified:0};
+  data.forEach(function(c){var k=c.discrepancy||"unclassified";if(discrepCounts[k]!==undefined)discrepCounts[k]++;});
 
   var exportCsv=function(){
-    var header=["Platform","Account","Campaign Name","Detected Objective","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
-    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.classificationSource,c.apiObjective,c.status,c.activeLast30Days?"yes":"no",c.campaignId];}));
+    var header=["Platform","Account","Campaign Name","Detected Objective","Discrepancy","Name Verdict","API Verdict","Classification Source","API Objective","Status","Active Last 30 Days","Campaign ID"];
+    var all=[header].concat(filtered.map(function(c){return [c.platform,c.accountName,c.campaignName,c.detectedObjective,c.discrepancy||"",c.nameVerdict||"",c.apiVerdict||"",c.classificationSource,c.apiObjective,c.status,c.activeLast30Days?"yes":"no",c.campaignId];}));
     var csv=all.map(function(r){return r.map(function(cell){var s=String(cell||"");if(s.indexOf(",")>=0||s.indexOf('"')>=0||s.indexOf("\n")>=0){return '"'+s.replace(/"/g,'""')+'"';}return s;}).join(",");}).join("\n");
     var blob=new Blob([csv],{type:"text/csv"});
     var url=URL.createObjectURL(blob);
@@ -1786,6 +1800,24 @@ function CampaignAuditModal(props){
           {Object.keys(objectives).sort().map(function(o){return <option key={o} value={o}>{o}</option>;})}
         </select>
       </div>}
+      {/* Discrepancy filter pill row, sits below the existing search +
+          dropdowns. Click a pill to scope the audit to rows where the
+          name tag and API objective disagreed (NAME OVERRODE) or where
+          the API was the fallback (API FALLBACK). Counts on each pill
+          show how many rows fall into each state. */}
+      {view[0]==="audit"&&data.length>0&&<div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:2,textTransform:"uppercase",fontFamily:fm,marginRight:4}}>Discrepancy</span>
+        {[
+          {key:"all",label:"ALL",color:P.txt,count:data.length},
+          {key:"agrees",label:"AGREES",color:discrepColors.agrees,count:discrepCounts.agrees},
+          {key:"name_overrode",label:"NAME OVERRODE",color:discrepColors.name_overrode,count:discrepCounts.name_overrode},
+          {key:"api_fallback",label:"API FALLBACK",color:discrepColors.api_fallback,count:discrepCounts.api_fallback},
+          {key:"unclassified",label:"UNCLASSIFIED",color:discrepColors.unclassified,count:discrepCounts.unclassified}
+        ].map(function(p){
+          var active=discrepFilter[0]===p.key;
+          return <button key={p.key} onClick={function(){discrepFilter[1](p.key);}} style={{background:active?p.color+"25":"transparent",border:"1px solid "+(active?p.color+"60":P.rule),borderRadius:8,padding:"6px 12px",color:active?p.color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,display:"flex",alignItems:"center",gap:6}}>{p.label}<span style={{background:p.color+"22",color:p.color,padding:"1px 7px",borderRadius:4,fontSize:9,fontWeight:900}}>{p.count}</span></button>;
+        })}
+      </div>}
       {view[0]==="reconcile"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
         <input value={recQuery[0]} onChange={function(e){recQuery[1](e.target.value);}} placeholder="Search campaign..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         <select value={recStatusFilter[0]} onChange={function(e){recStatusFilter[1](e.target.value);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",cursor:"pointer"}}>
@@ -1811,6 +1843,7 @@ function CampaignAuditModal(props){
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Account</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Campaign</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Detected Objective</th>
+              <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Discrepancy</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Why</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>API Objective</th>
               <th style={{padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule}}>Status</th>
@@ -1825,6 +1858,12 @@ function CampaignAuditModal(props){
                 <td style={{padding:"10px",color:P.label,verticalAlign:"top",whiteSpace:"nowrap"}}>{c.accountName}</td>
                 <td style={{padding:"10px",color:P.txt,verticalAlign:"top",fontWeight:600,wordBreak:"break-word",maxWidth:320}}>{c.campaignName}</td>
                 <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}><span style={{background:oc+"18",border:"1px solid "+oc+"50",color:oc,padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{c.detectedObjective}</span></td>
+                <td style={{padding:"10px",verticalAlign:"top",whiteSpace:"nowrap"}}>{(function(){
+                  var d=c.discrepancy||"unclassified";
+                  var dc=discrepColors[d]||P.label;
+                  var tip=d==="name_overrode"?("Name says "+c.nameVerdict+", API says "+c.apiVerdict+". Name won."):d==="api_fallback"?("No name keyword matched, API objective '"+c.apiVerdict+"' was used as fallback."):d==="agrees"?("Both signals point to "+(c.nameVerdict&&c.nameVerdict!=="Unclassified"?c.nameVerdict:c.apiVerdict)+"."):"Neither name keyword nor API objective produced a verdict.";
+                  return <span title={tip} style={{background:dc+"18",border:"1px solid "+dc+"50",color:dc,padding:"3px 10px",borderRadius:6,fontSize:10,fontWeight:800,letterSpacing:1,cursor:"help"}}>{discrepLabels[d]||d}</span>;
+                })()}</td>
                 <td style={{padding:"10px",color:P.label,verticalAlign:"top",fontSize:10,lineHeight:1.5}}>{c.classificationSource}</td>
                 <td style={{padding:"10px",color:P.caption,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.apiObjective||"—"}</td>
                 <td style={{padding:"10px",color:P.caption,verticalAlign:"top",fontSize:10,whiteSpace:"nowrap"}}>{c.status||"—"}</td>
