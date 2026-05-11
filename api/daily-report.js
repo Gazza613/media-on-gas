@@ -13,10 +13,17 @@ import { labelFor } from "./_clientLabels.js";
 // naming convention — so MTN MoMo, MTN MoMo POS, Willowbrook etc. each get
 // their own block in the email.
 //
-// Recipient (v1): gary@gasmarketing.co.za only. Other EXCO members will be
-// added once the report is calibrated.
+// Recipients: GAS leadership team — comma-separated list passed straight
+// to nodemailer's `to` field so every named address gets a primary delivery
+// (no CC distinction).
 
-var TO_EMAIL = "gary@gasmarketing.co.za";
+var TO_EMAIL = [
+  "gary@gasmarketing.co.za",
+  "sam@gasmarketing.co.za",
+  "busi@gasmarketing.co.za",
+  "claire@gasmarketing.co.za",
+  "donovan@gasmarketing.co.za"
+].join(", ");
 var ORIGIN = "https://media-on-gas.vercel.app";
 
 function escapeHtml(s) {

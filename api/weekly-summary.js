@@ -11,10 +11,10 @@ import { timingSafeStrEqual } from "./_createAuth.js";
 //   2. Reports sent to clients
 //   3. Clients currently overdue for their 7-day SLA report
 //
-// Recipient: gary@gasmarketing.co.za  CC: sam@gasmarketing.co.za
+// Recipients: gary@gasmarketing.co.za, sam@gasmarketing.co.za — both
+// addressed on the TO line as primary recipients.
 
-var TO_EMAIL = "gary@gasmarketing.co.za";
-var CC_EMAIL = "sam@gasmarketing.co.za";
+var TO_EMAIL = "gary@gasmarketing.co.za, sam@gasmarketing.co.za";
 var SLA_DAYS = 7;
 var TEAM_DOMAIN = "gasmarketing.co.za";
 
@@ -573,12 +573,11 @@ export default async function handler(req, res) {
     await transporter.sendMail({
       from: "GAS Marketing Automation <" + gmailUser + ">",
       to: TO_EMAIL,
-      cc: CC_EMAIL,
       subject: "Weekly Activity Summary | " + weekLabel,
       text: text,
       html: html
     });
-    res.status(200).json({ ok: true, sent: true, to: TO_EMAIL, cc: CC_EMAIL, weekLabel: weekLabel,
+    res.status(200).json({ ok: true, sent: true, to: TO_EMAIL, weekLabel: weekLabel,
       loginCount: loginRows.length, reportCount: reportRows.length, overdueCount: overdueRows.length });
   } catch (err) {
     console.error("Weekly summary send failed", err);
