@@ -7,10 +7,11 @@ import { getSession } from "./auth.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
 
 // Daily cron: finds every client whose last report was sent more than 7
-// days ago and emails the account manager a quirky nudge, BCCing Gary.
-// Client identity comes from the recipient email domain (survives personnel
-// changes at the client side). Account manager is the authenticated
-// sender on the last send for that client.
+// days ago and emails the GAS leadership team a nudge. The body still
+// calls out the responsible account manager (the authenticated sender of
+// the last report for that client) so accountability is visible, but
+// every named leadership address is addressed primary so SLA enforcement
+// is a team-wide concern, not a single-person problem.
 //
 // Trigger: Vercel cron hits GET /api/nudge-cron with Authorization:
 // Bearer <CRON_SECRET>. An admin can also call it manually from a browser
@@ -20,6 +21,18 @@ var SUPERADMIN_EMAIL = "gary@gasmarketing.co.za";
 var TEAM_DOMAIN = "gasmarketing.co.za";
 var SLA_DAYS = 7;
 var BUFFER_HOURS = 2; // hit right after SLA, not in the middle of day 7
+
+// Fixed leadership distribution. Every overdue-client nudge ships to this
+// list as TO recipients so all five leaders see every SLA breach. The list
+// is filtered through isTeamEmail() before send (defense-in-depth) so any
+// future config typo cannot leak a nudge to a client domain.
+var NUDGE_RECIPIENTS = [
+  "gary@gasmarketing.co.za",
+  "sam@gasmarketing.co.za",
+  "busi@gasmarketing.co.za",
+  "claire@gasmarketing.co.za",
+  "donovan@gasmarketing.co.za"
+];
 
 // Hard rule: nudges are internal-only. A nudge MUST NEVER reach a client
 // address, no matter what the audit log says about who sent the last
@@ -60,11 +73,20 @@ function escapeHtml(s) {
 
 function buildNudgeHtml(opts) {
   var clientName = escapeHtml(opts.clientName);
-  var amName = escapeHtml(opts.amName || "there");
+  var amName = escapeHtml(opts.amName || "");
   var lastSentDisplay = opts.lastSentDisplay;
   var daysOverdue = opts.daysOverdue;
   var dashboardUrl = opts.dashboardUrl;
   var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  // Two phrasings — one when we know who the AM was (so accountability is
+  // explicit in the body), one when the last send had no captured sender
+  // name and the message stays team-addressed without naming anyone.
+  var sentByLine = amName
+    ? 'The last report for <strong style="color:#F96203;">' + clientName + '</strong> was sent by <strong style="color:#F96203;">' + amName + '</strong> on <strong style="color:#F96203;">' + lastSentDisplay + '</strong>. That is now <strong style="color:#F96203;">' + daysOverdue + ' days ago</strong>, past the line.'
+    : 'The last report for <strong style="color:#F96203;">' + clientName + '</strong> was sent on <strong style="color:#F96203;">' + lastSentDisplay + '</strong>. That is now <strong style="color:#F96203;">' + daysOverdue + ' days ago</strong>, past the line.';
+  var actionLine = amName
+    ? amName + ', please pull the latest and send when you have a couple of minutes. Two minutes to pull, two minutes to send.'
+    : 'Whoever owns ' + clientName + ' this week, please pull the latest and send. Two minutes to pull, two minutes to send.';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -87,13 +109,13 @@ function buildNudgeHtml(opts) {
 
       <tr><td style="padding:36px 40px 12px;">
         <div style="font-size:11px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Reporting SLA check</div>
-        <div style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">Pssst, ${clientName} hasn't had their report in ${daysOverdue} days.</div>
-        <div style="font-size:15px;color:#FFFBF8;line-height:1.7;">Hi ${amName},</div>
+        <div style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">${clientName} has not had their report in ${daysOverdue} days.</div>
+        <div style="font-size:15px;color:#FFFBF8;line-height:1.7;">Hi team,</div>
         <div style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
-          Our client-facing SLA is one report every 7 days. The last report for <strong style="color:#F96203;">${clientName}</strong> was sent on <strong style="color:#F96203;">${lastSentDisplay}</strong>. That's now <strong style="color:#F96203;">${daysOverdue} days ago</strong>, which is past the line.
+          Our client-facing SLA is one report every 7 days. ${sentByLine}
         </div>
         <div style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
-          Takes two minutes to pull, two minutes to send. Your client is probably wondering where the numbers are.
+          ${actionLine}
         </div>
       </td></tr>
 
@@ -366,13 +388,19 @@ export default async function handler(req, res) {
   var origin = "https://media-on-gas.vercel.app";
   var todayKey = new Date().toISOString().slice(0, 10);
 
+  // Leadership distribution list, filtered through the team-domain
+  // allowlist as defense-in-depth. Same list used for every overdue
+  // client this run — the loop builds the recipient list once.
+  var leadershipList = filterTeamOnly(NUDGE_RECIPIENTS);
+  if (leadershipList.length === 0) leadershipList = [SUPERADMIN_EMAIL];
+
   for (var i = 0; i < overdue.length; i++) {
     var c = overdue[i];
-    // HARD ALLOWLIST. The recorded "last sender" becomes the AM only if
-    // it is a @gasmarketing.co.za address. Any other value (client email,
-    // corrupted data, test record) is overridden to the superadmin.
+    // Resolve the responsible account manager from the recorded last
+    // sender. Only used for body accountability text, not routing — every
+    // nudge goes to the full leadership list regardless.
     var rawAm = c.lastSenderEmail || "";
-    var am = isTeamEmail(rawAm) ? rawAm.toLowerCase() : SUPERADMIN_EMAIL;
+    var amEmail = isTeamEmail(rawAm) ? rawAm.toLowerCase() : "";
     var daysOverdue = Math.floor((now - c.lastSentTs) / (24 * 60 * 60 * 1000));
     var clientName = displayNameFromIdentity(c.identity, c.lastSlug);
     var lastSentDisplay = new Date(c.lastSentTs).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
@@ -396,20 +424,16 @@ export default async function handler(req, res) {
       dashboardUrl: origin,
       origin: origin
     });
-    var text = "Pssst, " + clientName + " hasn't had a report in " + daysOverdue + " days.\n\n" +
-      "Last sent on " + lastSentDisplay + ".\n\n" +
+    var text = clientName + " has not had a report in " + daysOverdue + " days.\n\n" +
+      "Last sent on " + lastSentDisplay + (c.lastSenderName ? " by " + c.lastSenderName : "") + ".\n\n" +
       "Open the dashboard and send: " + origin + "\n\n" +
       "GAS Marketing Automation";
 
     if (dryRun || !canSend) {
-      // Preview uses the same final allowlist as the real send path.
-      var previewTo = filterTeamOnly([am]);
-      if (previewTo.length === 0) previewTo = [SUPERADMIN_EMAIL];
-      var previewBcc = previewTo.indexOf(SUPERADMIN_EMAIL) >= 0 ? [] : [SUPERADMIN_EMAIL];
       results.push({
-        identity: c.identity, clientName: clientName, am: am,
+        identity: c.identity, clientName: clientName, am: amEmail,
         lastSent: c.lastSentIso, daysOverdue: daysOverdue,
-        wouldNotify: { to: previewTo, bcc: filterTeamOnly(previewBcc) },
+        wouldNotify: { to: leadershipList },
         lastSenderRaw: c.lastSenderEmail || "",
         senderWasInternal: isTeamEmail(c.lastSenderEmail),
         status: dryRun ? "dry_run" : "mailer_not_configured"
@@ -417,30 +441,18 @@ export default async function handler(req, res) {
       continue;
     }
 
-    // FINAL GATE before handing the message to nodemailer. Rebuild the
-    // to: + bcc: fields from scratch using only team-domain addresses.
-    // Any other value is dropped here, no matter what upstream logic
-    // produced it. If the to: would be empty after filtering (can't
-    // happen given the force-fallback above, but belt-and-suspenders),
-    // send to Gary. Nothing exits the function to a client domain.
-    var toList = filterTeamOnly([am]);
-    if (toList.length === 0) toList = [SUPERADMIN_EMAIL];
-    var bccCandidates = toList.indexOf(SUPERADMIN_EMAIL) >= 0 ? [] : [SUPERADMIN_EMAIL];
-    var bccList = filterTeamOnly(bccCandidates);
-
     try {
       await transporter.sendMail({
         from: "GAS Marketing Automation <" + gmailUser + ">",
-        to: toList.join(", "),
-        bcc: bccList.length ? bccList.join(", ") : undefined,
-        subject: "Pssst, " + clientName + " is " + daysOverdue + " days overdue for a report",
+        to: leadershipList.join(", "),
+        subject: clientName + " is " + daysOverdue + " days overdue for a report",
         text: text,
         html: html
       });
-      results.push({ identity: c.identity, clientName: clientName, to: toList, bcc: bccList, daysOverdue: daysOverdue, status: "sent" });
+      results.push({ identity: c.identity, clientName: clientName, to: leadershipList, daysOverdue: daysOverdue, status: "sent" });
     } catch (err) {
       console.error("Nudge send failed", c.identity, err);
-      results.push({ identity: c.identity, clientName: clientName, to: toList, status: "error: " + String(err && err.message || err) });
+      results.push({ identity: c.identity, clientName: clientName, to: leadershipList, status: "error: " + String(err && err.message || err) });
     }
   }
 
