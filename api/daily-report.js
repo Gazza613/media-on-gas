@@ -309,6 +309,157 @@ function analystNote(yesterday, baseline, rmY, ageDays) {
   return "Limited delivery yesterday, sample too thin to derive a confident read. Re-evaluate when the next 24-48 hours of impressions land.";
 }
 
+// Anomaly detector. Runs a battery of yesterday-vs-7d-average checks
+// covering the exact watch-list a senior media team would triage at
+// 08:00 every morning: rapid spend movement, click/CTR collapse,
+// conversion disappearance, CPL inflation, lead-volume drops on
+// lead-gen-objective campaigns (Willowbrook, MTN MoMo POS), plus the
+// supporting signals an analyst would catch as leading indicators
+// (frequency cliff, CPM spike, impressions cliff).
+//
+// Returns an array of anomaly objects; each carries a `type` key
+// (used to group identical anomalies across campaigns in the email),
+// a severity tier (critical → high → medium), the colour token, and
+// the one-line message body shown on the campaign's line.
+var ANOMALY_DEFS = {
+  conversions_disappeared: { word: "Conversions Disappeared", color: "red",    severity: 3, caption: "Campaigns producing zero results today on R100+ spend, when the 7-day baseline had material delivery. Conversion path may be broken." },
+  spend_spike:             { word: "Spend Spike",             color: "orange", severity: 2, caption: "Daily spend is 2.5x or more of the 7-day daily average. Verify daily budget caps and bid strategies haven't shifted." },
+  spend_collapse:          { word: "Spend Collapse",          color: "orange", severity: 2, caption: "Daily spend is under 30% of the 7-day daily average on a campaign that normally spends. Possible pause, budget cap hit, payment issue, or ad disapproval." },
+  lead_volume_drop:        { word: "Lead Volume Drop",        color: "orange", severity: 2, caption: "Daily lead volume is 50%+ below the 7-day daily average on a lead-gen objective. Pipeline impact — investigate immediately." },
+  cpr_spike:               { word: "Cost-Per-Result Spike",   color: "orange", severity: 2, caption: "Cost per Lead, Install, or Follow is 50%+ above the 7-day average. Each result is materially more expensive than yesterday's economics suggest it should be." },
+  ctr_collapse:            { word: "CTR Collapse",            color: "orange", severity: 2, caption: "Click-through rate is 40%+ below the 7-day average. Engagement layer is breaking — audience is scrolling past the creative." },
+  click_collapse:          { word: "Click Volume Collapse",   color: "orange", severity: 2, caption: "Click count is 50%+ below the 7-day daily average while spend held. Auction is paying for impressions that aren't converting to clicks — auction shift or creative fatigue." },
+  frequency_cliff:         { word: "Frequency Cliff",         color: "yellow", severity: 1, caption: "Frequency jumped to 3.5x or higher and is 50%+ above the 7-day average. Audience pool exhausting — saturation onset." },
+  cpm_spike:               { word: "CPM Spike",               color: "yellow", severity: 1, caption: "Cost per 1,000 impressions is 40%+ above the 7-day average. Either auction crowded today or relevance/quality score dropped." },
+  impressions_cliff:       { word: "Impressions Cliff",       color: "yellow", severity: 1, caption: "Impressions delivery is 40%+ below the 7-day average while spend held. Delivery throttled — check bid cap, audience size, frequency cap, or ad rejection." }
+};
+
+function detectAnomalies(yesterday, baseline, rmY) {
+  if (!baseline) return [];
+  var out = [];
+
+  var spendY = parseFloat(yesterday.spend || 0);
+  var spendB = parseFloat(baseline.spend || 0);
+  var spendDaily = spendB / 7;
+
+  var clicksY = parseInt(yesterday.clicks || 0);
+  var clicksB = parseInt(baseline.clicks || 0);
+  var clicksDaily = clicksB / 7;
+
+  var impsY = parseInt(yesterday.impressions || 0);
+  var impsB = parseInt(baseline.impressions || 0);
+  var impsDaily = impsB / 7;
+
+  var ctrY = parseFloat(yesterday.ctr || 0);
+  var ctrB = parseFloat(baseline.ctr || 0);
+
+  var cpmY = impsY > 0 ? (spendY / impsY) * 1000 : null;
+  var cpmB = impsB > 0 ? (spendB / impsB) * 1000 : null;
+
+  var freqY = parseFloat(yesterday.frequency || 0);
+  var freqB = parseFloat(baseline.frequency || 0);
+
+  var resY = rmY.value;
+  var rmB = resultMetricFor(baseline);
+  var resB = rmB.value;
+  var resDaily = resB / 7;
+  var cprY = resY > 0 ? spendY / resY : null;
+  var cprB = resB > 0 ? spendB / resB : null;
+  var isResultObj = rmY.kind === "Leads" || rmY.kind === "Clicks to App Store" || rmY.kind === "Follows + Likes";
+
+  // 1. CONVERSIONS DISAPPEARED — campaign with 7d daily avg >=3 conversions
+  //    today produces 0 on R100+ spend. The single most important alert.
+  if (isResultObj && resDaily >= 3 && resY === 0 && spendY >= 100) {
+    out.push({
+      type: "conversions_disappeared",
+      message: "Zero " + rmY.kind.toLowerCase() + " on " + fmtR(spendY) + " spend (7d avg " + resDaily.toFixed(1) + "/day). Audit form, landing page, app-store listing, or tracking pixel."
+    });
+  }
+
+  // 2. SPEND SPIKE — runaway daily spend (>=2.5x daily avg)
+  if (spendDaily >= 50 && spendY > spendDaily * 2.5) {
+    var spendLift = ((spendY - spendDaily) / spendDaily * 100);
+    out.push({
+      type: "spend_spike",
+      message: fmtR(spendY) + " today vs " + fmtR(spendDaily) + " 7d daily average (up " + spendLift.toFixed(0) + "%). Confirm budget cap was intentional."
+    });
+  }
+
+  // 3. SPEND COLLAPSE — campaign that normally spends went near-silent
+  if (spendDaily >= 100 && spendY < spendDaily * 0.3) {
+    var spendDrop = ((spendDaily - spendY) / spendDaily * 100);
+    out.push({
+      type: "spend_collapse",
+      message: fmtR(spendY) + " today vs " + fmtR(spendDaily) + " 7d daily average (down " + spendDrop.toFixed(0) + "%). Check for unintended pause, budget cap exhaustion, billing issue, or ad disapproval."
+    });
+  }
+
+  // 4. LEAD VOLUME DROP — Leads objective specifically (Willowbrook, MTN POS)
+  if (rmY.kind === "Leads" && resDaily >= 5 && resY > 0 && resY < resDaily * 0.5) {
+    var leadDrop = ((resDaily - resY) / resDaily * 100);
+    out.push({
+      type: "lead_volume_drop",
+      message: resY + " leads today vs " + resDaily.toFixed(1) + "/day 7d average (down " + leadDrop.toFixed(0) + "%). Lead-gen pipeline impact — review form completion, lead quality, audience fatigue."
+    });
+  }
+
+  // 5. CPL / CPI / CPF SPIKE — cost per result up 50%+ on material sample
+  if (isResultObj && resY > 0 && resB >= 5 && cprY !== null && cprB !== null && cprB > 0 && cprY > cprB * 1.5) {
+    var cprLift = ((cprY - cprB) / cprB * 100);
+    out.push({
+      type: "cpr_spike",
+      message: rmY.costLabel + " " + fmtR(cprY) + " today vs " + fmtR(cprB) + " 7d average (up " + cprLift.toFixed(0) + "%). Each " + rmY.kind.replace(/s$/, "").toLowerCase() + " is materially more expensive."
+    });
+  }
+
+  // 6. CTR COLLAPSE — engagement layer failing fast
+  if (ctrB >= 0.3 && ctrY > 0 && ctrY < ctrB * 0.6) {
+    var ctrDrop = ((ctrB - ctrY) / ctrB * 100);
+    out.push({
+      type: "ctr_collapse",
+      message: "CTR " + ctrY.toFixed(2) + "% today vs " + ctrB.toFixed(2) + "% 7d average (down " + ctrDrop.toFixed(0) + "%). Audience is scrolling past — creative refresh needed in next 24-48h."
+    });
+  }
+
+  // 7. CLICK VOLUME COLLAPSE — clicks crashed while spend held
+  if (clicksDaily >= 20 && clicksY < clicksDaily * 0.5 && spendY >= spendDaily * 0.7) {
+    var clickDrop = ((clicksDaily - clicksY) / clicksDaily * 100);
+    out.push({
+      type: "click_collapse",
+      message: fmtNum(clicksY) + " clicks today vs " + fmtNum(Math.round(clicksDaily)) + "/day 7d average (down " + clickDrop.toFixed(0) + "%) while spend held at " + fmtR(spendY) + ". CPC is climbing fast."
+    });
+  }
+
+  // 8. FREQUENCY CLIFF — saturation onset
+  if (freqY >= 3.5 && freqB > 0 && freqY > freqB * 1.5) {
+    var freqLift = ((freqY - freqB) / freqB * 100);
+    out.push({
+      type: "frequency_cliff",
+      message: "Frequency " + freqY.toFixed(2) + "x today vs " + freqB.toFixed(2) + "x 7d average (up " + freqLift.toFixed(0) + "%). Audience pool exhausting — expand targeting or rotate creative before CTR crumbles."
+    });
+  }
+
+  // 9. CPM SPIKE — auction crowded or quality dropped
+  if (cpmY !== null && cpmB !== null && cpmB > 5 && cpmY > cpmB * 1.4) {
+    var cpmLift = ((cpmY - cpmB) / cpmB * 100);
+    out.push({
+      type: "cpm_spike",
+      message: "CPM " + fmtR(cpmY) + " today vs " + fmtR(cpmB) + " 7d average (up " + cpmLift.toFixed(0) + "%). Compare against placement mix and audience overlap with other active campaigns."
+    });
+  }
+
+  // 10. IMPRESSIONS CLIFF — delivery throttled while spend roughly held
+  if (impsDaily >= 1000 && impsY < impsDaily * 0.6 && spendY >= spendDaily * 0.7) {
+    var impDrop = ((impsDaily - impsY) / impsDaily * 100);
+    out.push({
+      type: "impressions_cliff",
+      message: fmtNum(impsY) + " impressions today vs " + fmtNum(Math.round(impsDaily)) + "/day 7d average (down " + impDrop.toFixed(0) + "%) while spend held. Check bid cap, audience size, frequency cap, or ad approval status."
+    });
+  }
+
+  return out;
+}
+
 // Aggregate yesterday + baseline into a per-campaign disposition row.
 // Match on rawCampaignId where possible; fall back to campaignName for
 // platforms (TikTok/Google) where the dashboard suffixes id with platform.
@@ -331,6 +482,7 @@ function buildCampaignRows(yesterdayCampaigns, baselineCampaigns, adsByCampaign)
     var disp = dispositionFor(c, b, b ? baselineDays : 0, age);
     var rm = resultMetricFor(c);
     var note = analystNote(c, b, rm, age);
+    var anomalies = detectAnomalies(c, b, rm);
 
     // Pick representative ad for this campaign — the top-spending ad
     // yesterday. Falls back to nothing if the ad fetch failed or this
@@ -355,6 +507,7 @@ function buildCampaignRows(yesterdayCampaigns, baselineCampaigns, adsByCampaign)
       clicks: clicksY,
       disposition: disp,
       analystNote: note,
+      anomalies: anomalies,
       thumbnail: topAd ? topAd.thumbnail : "",
       previewUrl: topAd ? topAd.previewUrl : ""
     });
@@ -584,6 +737,68 @@ function buildHtml(opts) {
 
   var clientBlocks = clients.map(clientBlock).join("");
 
+  // Anomalies section — aggregated across every flagged campaign, grouped
+  // by anomaly type so the media team can scan a single "what's on fire
+  // today" list before drilling into per-client blocks. Each group surfaces
+  // the count, a short description of the rule, and the affected campaigns
+  // with their one-line message. Section skips entirely when zero anomalies
+  // fired (a clean morning).
+  var anomaliesByType = {};
+  clients.forEach(function(b) {
+    b.rows.forEach(function(r) {
+      (r.anomalies || []).forEach(function(an) {
+        if (!anomaliesByType[an.type]) anomaliesByType[an.type] = [];
+        anomaliesByType[an.type].push({
+          campaignName: r.campaignName,
+          platform: r.platform,
+          message: an.message
+        });
+      });
+    });
+  });
+  var totalAnomalies = Object.keys(anomaliesByType).reduce(function(a, k) { return a + anomaliesByType[k].length; }, 0);
+  var anomaliesBlock = "";
+  if (totalAnomalies > 0) {
+    // Order groups by definition severity (3 → 1) then by count desc.
+    var groupKeys = Object.keys(anomaliesByType).sort(function(a, b) {
+      var sa = (ANOMALY_DEFS[a] && ANOMALY_DEFS[a].severity) || 0;
+      var sb = (ANOMALY_DEFS[b] && ANOMALY_DEFS[b].severity) || 0;
+      if (sb !== sa) return sb - sa;
+      return anomaliesByType[b].length - anomaliesByType[a].length;
+    });
+    var groupsHtml = groupKeys.map(function(k) {
+      var def = ANOMALY_DEFS[k] || { word: k, color: "yellow", caption: "" };
+      var col = DISP_COLORS[def.color] || DISP_COLORS.yellow;
+      var items = anomaliesByType[k];
+      var itemsHtml = items.map(function(it) {
+        return '<div style="padding:10px 14px;border-top:1px solid ' + P.rule + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
+          '<div style="font-size:11px;font-weight:800;color:' + P.txt + ';line-height:1.4;word-break:break-word;">' + escapeHtml(it.campaignName) +
+            ' <span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:6px;">' + escapeHtml(it.platform || "") + '</span>' +
+          '</div>' +
+          '<div style="font-size:11px;color:' + P.label + ';margin-top:4px;line-height:1.55;">' + escapeHtml(it.message) + '</div>' +
+        '</div>';
+      }).join("");
+      return '<div style="margin-top:12px;border:1px solid ' + col.border + ';border-left:4px solid ' + col.fill + ';border-radius:10px;overflow:hidden;background:' + col.soft + ';">' +
+        '<div style="padding:12px 14px;display:block;">' +
+          '<div style="display:block;line-height:1.4;">' +
+            '<span style="display:inline-block;font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:' + col.fill + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(def.word) + '</span>' +
+            '<span style="display:inline-block;margin-left:8px;padding:2px 8px;background:' + col.fill + ';color:#0a0418;font-size:10px;font-weight:900;border-radius:5px;font-family:Manrope,Helvetica,Arial,sans-serif;">' + items.length + '</span>' +
+          '</div>' +
+          '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:6px;line-height:1.5;">' + escapeHtml(def.caption) + '</div>' +
+        '</div>' +
+        itemsHtml +
+      '</div>';
+    }).join("");
+    anomaliesBlock = '<tr><td style="padding:24px 36px 0;">' +
+      '<div style="display:block;margin-bottom:4px;">' +
+        '<div style="display:inline-block;background:' + DISP_COLORS.red.soft + ';border:1px solid ' + DISP_COLORS.red.border + ';color:' + DISP_COLORS.red.fill + ';font-size:9px;font-weight:900;padding:4px 10px;border-radius:6px;letter-spacing:2px;font-family:Manrope,Helvetica,Arial,sans-serif;">ANOMALIES TO WATCH</div>' +
+        '<span style="display:inline-block;margin-left:10px;font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + totalAnomalies + ' signal' + (totalAnomalies === 1 ? "" : "s") + ' flagged for immediate review</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:8px;line-height:1.6;">Yesterday-vs-7d-average departures large enough to warrant a media-team eyeball before the day starts. Each anomaly is per campaign, against that campaign\'s own baseline.</div>' +
+      groupsHtml +
+    '</td></tr>';
+  }
+
   // Agency totals strip — 4 KPI tiles
   var totalsStrip =
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
@@ -661,6 +876,11 @@ function buildHtml(opts) {
 
       // Totals strip
       '<tr><td style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
+
+      // Anomalies — sits above per-client blocks so the media team sees
+      // "what's on fire today" before drilling into individual campaigns.
+      // Empty string when no anomalies fired (clean morning).
+      anomaliesBlock +
 
       // Per-client blocks
       clientBlocks +
