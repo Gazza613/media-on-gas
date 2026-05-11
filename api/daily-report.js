@@ -2,7 +2,6 @@ import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
 import { labelFor } from "./_clientLabels.js";
-import { readRecent as readIgSnapshots, ymd as ymdIg } from "./_igSnapshots.js";
 
 // Daily Pulse — campaign performance snapshot for EXCO. Fires every morning
 // at 08:15 SAST (06:15 UTC) via Vercel cron. Compares yesterday's per-campaign
@@ -187,19 +186,19 @@ function dispositionFor(yesterday, baseline, baselineDays, ageDays) {
     else if (cd >= 10) { wins.push("CTR " + ctrY.toFixed(2) + "% up " + cd.toFixed(0) + "% vs 7d"); }
   }
 
-  // 4. Pacing (lifetime budget only — daily-budget campaigns pace by definition)
-  var pacing = pacingFor(yesterday);
-  if (pacing) {
-    if (pacing.ratio > 135 || pacing.ratio < 60) {
-      color = worse(color, "red");
-      flags.push("Pacing " + pacing.ratio.toFixed(0) + "% of schedule, " + (pacing.ratio > 100 ? "ahead" : "behind"));
-    } else if (pacing.ratio > 115 || pacing.ratio < 75) {
-      color = worse(color, "orange");
-      flags.push("Pacing " + pacing.ratio.toFixed(0) + "% of schedule, " + (pacing.ratio > 100 ? "ahead" : "behind"));
-    } else if (pacing.ratio > 105 || pacing.ratio < 90) {
-      color = worse(color, "yellow");
-      flags.push("Pacing " + pacing.ratio.toFixed(0) + "% of schedule");
-    }
+  // 4. CPC deviation vs own 7d. Even on result objectives where CPR
+  // already drives the colour, a CPC blowout signals auction pressure or
+  // creative fatigue and is worth surfacing on its own.
+  var clicksY = parseInt(yesterday.clicks || 0);
+  var cpcY = clicksY > 0 ? spendY / clicksY : null;
+  var clicksB = baseline ? parseInt(baseline.clicks || 0) : 0;
+  var cpcB = baseline && clicksB > 0 ? parseFloat(baseline.spend || 0) / clicksB : null;
+  if (cpcY !== null && cpcB !== null && cpcB > 0) {
+    var pd = (cpcY - cpcB) / cpcB * 100;
+    if (pd >= 50) { color = worse(color, "red"); flags.push("CPC " + fmtR(cpcY) + " up " + pd.toFixed(0) + "% vs 7d"); }
+    else if (pd >= 25) { color = worse(color, "orange"); flags.push("CPC " + fmtR(cpcY) + " up " + pd.toFixed(0) + "% vs 7d"); }
+    else if (pd >= 10) { color = worse(color, "yellow"); flags.push("CPC " + fmtR(cpcY) + " up " + pd.toFixed(0) + "% vs 7d"); }
+    else if (pd <= -10) { wins.push("CPC " + fmtR(cpcY) + " down " + Math.abs(pd).toFixed(0) + "% vs 7d"); }
   }
 
   // Thin-sample handling. Note in CONTEXT (not as a flag) so it's clearly
@@ -214,31 +213,6 @@ function dispositionFor(yesterday, baseline, baselineDays, ageDays) {
 
   var tag = color === "red" ? "ACTION" : color === "orange" ? "WARNING" : color === "yellow" ? "WATCH" : "HEALTHY";
   return { color: color, tag: tag, flags: flags, wins: wins, context: context };
-}
-
-// Lifetime-budget pacing only. Daily-budget campaigns pace themselves by
-// definition (the platform spends the daily cap each day) so reporting a
-// pacing ratio for them adds noise rather than signal.
-function pacingFor(c) {
-  var mode = String(c.budgetMode || "").toLowerCase();
-  if (mode !== "lifetime") return null;
-  var amount = parseFloat(c.budgetAmount || 0);
-  var spend = parseFloat(c.spend || 0);
-  if (!amount || amount <= 0) return null;
-  // /api/campaigns exposes start/end as `startDate` / `endDate` (YYYY-MM-DD
-  // slices of Meta's start_time / stop_time). Earlier code looked for
-  // startTime/stopTime which were never present, so pacing always silently
-  // skipped.
-  var rawStart = c.startDate || c.startTime || "";
-  var rawEnd = c.endDate || c.stopTime || "";
-  if (!rawStart || !rawEnd) return null;
-  var s = Date.parse(rawStart), e = Date.parse(rawEnd), now = Date.now();
-  if (!s || !e || e <= s) return null;
-  if (now < s) return null;
-  var timePct = ((Math.min(now, e) - s) / (e - s)) * 100;
-  var spendPct = (spend / amount) * 100;
-  if (timePct <= 0) return null;
-  return { ratio: spendPct / timePct * 100, timePct: timePct, spendPct: spendPct };
 }
 
 function clientKeyOf(name) {
@@ -258,6 +232,81 @@ function ageDaysFor(c) {
   if (!s) return null;
   var d = (Date.now() - s) / (24 * 60 * 60 * 1000);
   return d < 0 ? 0 : Math.floor(d);
+}
+
+// Per-campaign analyst commentary. Synthesises spend, CTR, CPC, and the
+// objective-aligned result count into a single one-to-two-sentence read of
+// what the day actually says — the way a senior media analyst would brief
+// it verbally. Branches are ordered so the highest-signal observation wins:
+// conversion-funnel breakdowns, fatigue signatures, auction-pressure
+// signatures, scale unlocks, then steady-state.
+function analystNote(yesterday, baseline, rmY, ageDays) {
+  var spendY = parseFloat(yesterday.spend || 0);
+  var clicksY = parseInt(yesterday.clicks || 0);
+  var ctrY = parseFloat(yesterday.ctr || 0);
+  var cpcY = clicksY > 0 ? spendY / clicksY : null;
+  var resY = rmY.value;
+  var isResultObj = rmY.kind === "Leads" || rmY.kind === "Clicks to App Store" || rmY.kind === "Follows + Likes";
+  var cprY = resY > 0 ? spendY / resY : null;
+
+  var ctrB = baseline ? parseFloat(baseline.ctr || 0) : 0;
+  var clicksB = baseline ? parseInt(baseline.clicks || 0) : 0;
+  var spendB = baseline ? parseFloat(baseline.spend || 0) : 0;
+  var cpcB = clicksB > 0 ? spendB / clicksB : null;
+  var ctrDelta = (ctrY > 0 && ctrB > 0) ? ((ctrY - ctrB) / ctrB * 100) : null;
+  var cpcDelta = (cpcY !== null && cpcB !== null && cpcB > 0) ? ((cpcY - cpcB) / cpcB * 100) : null;
+
+  // Pre-7d-campaigns are noisy. Refuse to over-interpret.
+  if (ageDays !== null && ageDays < 7) {
+    return "Day " + (ageDays + 1) + " of delivery, insufficient history for a defensible read. CTR " + ctrY.toFixed(2) + "% and CPC " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " are the early-tell signals to watch as the auction settles.";
+  }
+
+  // Engagement → conversion breakdown. Clicks are present, results aren't.
+  // The ad funnel is doing its job; the bottleneck is post-click.
+  if (isResultObj && resY === 0 && clicksY >= 30) {
+    var postClick = rmY.kind === "Leads" ? "lead form (fields, friction, validation)"
+      : rmY.kind === "Clicks to App Store" ? "app store listing (ratings, screenshots, description)"
+      : "follow flow (profile content quality, first-impression load)";
+    return fmtNum(clicksY) + " clicks landed but zero " + rmY.kind.toLowerCase() + " converted. The creative and targeting are earning attention; the breakdown is post-click. Audit " + postClick + " — that is where today's spend is leaking.";
+  }
+
+  // Strong creative + expensive auction → buy cheaper inventory, keep the assets.
+  if (ctrDelta !== null && cpcDelta !== null && ctrDelta >= 5 && cpcDelta >= 20) {
+    return "CTR holding at " + ctrY.toFixed(2) + "% (up " + ctrDelta.toFixed(0) + "% vs 7d) but CPC up " + cpcDelta.toFixed(0) + "% to " + fmtR(cpcY) + ". Creative is still winning attention, the auction is just more crowded. Layer in lookalike expansion or push toward Advantage+ placements to cheapen inventory without touching what is working.";
+  }
+
+  // Classic fatigue signature — CTR softening + CPC inflating.
+  if (ctrDelta !== null && cpcDelta !== null && ctrDelta <= -10 && cpcDelta >= 10) {
+    return "Fatigue signature: CTR down " + Math.abs(ctrDelta).toFixed(0) + "% to " + ctrY.toFixed(2) + "% while CPC climbed " + cpcDelta.toFixed(0) + "% to " + fmtR(cpcY) + ". Audience has seen the asset enough times to scroll past it. Rotate creative within 48 hours before CPC compounds further.";
+  }
+
+  // Scale unlock — both directions favourable.
+  if (ctrDelta !== null && cpcDelta !== null && ctrDelta >= 10 && cpcDelta <= -10) {
+    return "Both efficiency vectors moving the right way: CTR up " + ctrDelta.toFixed(0) + "% to " + ctrY.toFixed(2) + "%, CPC down " + Math.abs(cpcDelta).toFixed(0) + "% to " + fmtR(cpcY) + ". This is the scale signal, lift daily budget 15-20% and let the algorithm extend the win.";
+  }
+
+  // CTR softening on a click-pacing objective without proportional CPC move.
+  if (ctrDelta !== null && ctrDelta <= -20) {
+    return "CTR fell " + Math.abs(ctrDelta).toFixed(0) + "% vs own 7d to " + ctrY.toFixed(2) + "%. Spend is converting fewer impressions into clicks, which compresses the top of the funnel for everything downstream. First lever is creative refresh, second is audience widening.";
+  }
+
+  // CPC drift without CTR drop — auction got harder.
+  if (cpcDelta !== null && cpcDelta >= 25 && (ctrDelta === null || ctrDelta > -10)) {
+    return "CPC at " + fmtR(cpcY) + " is " + cpcDelta.toFixed(0) + "% above own 7d while CTR held at " + ctrY.toFixed(2) + "%. The creative is still landing, the auction is just more expensive. Reaction depends on remaining budget runway, hold for 48h to confirm sustained drift before rebidding.";
+  }
+
+  // Healthy result-objective campaign with material delivery.
+  if (isResultObj && resY > 0 && cprY !== null) {
+    var resWord = rmY.kind.replace(/s$/, "").toLowerCase();
+    return fmtNum(resY) + " " + rmY.kind.toLowerCase() + " at " + fmtR(cprY) + " per " + resWord + ", driven by " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR and " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Funnel is converting at " + (clicksY > 0 ? (resY / clicksY * 100).toFixed(2) : "0.00") + "% click-to-" + resWord + ", hold position and audit weekly.";
+  }
+
+  // Click-based objective, steady delivery.
+  if (clicksY > 0 && ctrY > 0) {
+    return ctrY.toFixed(2) + "% CTR on " + fmtNum(clicksY) + " clicks at " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Signals sit within band of own 7-day average — no creative or bid change indicated today.";
+  }
+
+  return "Limited delivery yesterday, sample too thin to derive a confident read. Re-evaluate when the next 24-48 hours of impressions land.";
 }
 
 // Aggregate yesterday + baseline into a per-campaign disposition row.
@@ -281,11 +330,15 @@ function buildCampaignRows(yesterdayCampaigns, baselineCampaigns, adsByCampaign)
     var age = ageDaysFor(c);
     var disp = dispositionFor(c, b, b ? baselineDays : 0, age);
     var rm = resultMetricFor(c);
+    var note = analystNote(c, b, rm, age);
 
     // Pick representative ad for this campaign — the top-spending ad
     // yesterday. Falls back to nothing if the ad fetch failed or this
     // campaign has no resolvable creative.
     var topAd = (adsByCampaign && adsByCampaign[String(c.rawCampaignId || "")]) || null;
+
+    var clicksY = parseInt(c.clicks || 0);
+    var cpcY = clicksY > 0 ? spend / clicksY : null;
 
     rows.push({
       campaignName: c.campaignName,
@@ -298,7 +351,10 @@ function buildCampaignRows(yesterdayCampaigns, baselineCampaigns, adsByCampaign)
       cpr: rm.value > 0 ? spend / rm.value : null,
       frequency: parseFloat(c.frequency || 0),
       ctr: parseFloat(c.ctr || 0),
+      cpc: cpcY,
+      clicks: clicksY,
       disposition: disp,
+      analystNote: note,
       thumbnail: topAd ? topAd.thumbnail : "",
       previewUrl: topAd ? topAd.previewUrl : ""
     });
@@ -381,7 +437,6 @@ function buildHtml(opts) {
   var clients = opts.clients; // grouped buckets
   var totals = opts.totals;
   var unlabelled = opts.unlabelled || [];
-  var igRollup = opts.igRollup || {};
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   // Disposition counts across the agency
@@ -451,32 +506,60 @@ function buildHtml(opts) {
         ? '<div style="font-size:11px;color:' + DISP_COLORS.green.fill + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;font-weight:700;"><span style="margin-right:6px;">&#10003;</span>All signals within band</div>'
         : "";
 
+      // Analyst note — the senior-media-buyer read of yesterday in one or
+      // two sentences. Sits between the campaign name and the flag/win
+      // lines, styled as a soft callout so it reads as commentary rather
+      // than data.
+      var analystHtml = r.analystNote ?
+        '<div style="margin-top:8px;padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
+        escapeHtml(r.analystNote) +
+        '</div>' : '';
+
+      // Metric strip — Spend / CTR / CPC / Result (count + CPR underneath).
+      // Four right-aligned columns keep the email readable on a phone while
+      // surfacing the four numbers the user wants to triage every morning.
+      var ctrTxt = r.ctr > 0 ? r.ctr.toFixed(2) + "%" : '<span style="color:' + P.caption + ';">-</span>';
+      var cpcTxt = r.cpc !== null ? escapeHtml(fmtR(r.cpc)) : '<span style="color:' + P.caption + ';">-</span>';
+      var cprStack = r.cpr !== null
+        ? '<div style="font-size:9px;color:' + P.mint + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:4px;font-weight:800;">' + escapeHtml(fmtR(r.cpr)) + ' ' + escapeHtml(r.cprLabel) + '</div>'
+        : '';
+
       return '<tr>' +
         // Thumbnail column
         '<td style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' +
           thumbHtml +
         '</td>' +
-        // Description column — chip, platform, name, flags/wins/context, view link
+        // Description column — chip, platform, name, analyst note, flags/wins/context, view link
         '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
           '<div style="margin-bottom:4px;line-height:1.6;">' +
             dispChip(r.disposition) +
             '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
           '</div>' +
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.35;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
+          analystHtml +
           flagsHtml + winsHtml + contextHtml + noSignalHtml +
           (viewLink ? '<div style="margin-top:8px;">' + viewLink + '</div>' : '') +
         '</td>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
+        // Spend
+        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div style="font-size:13px;color:' + P.ember + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">spend</div>' +
         '</td>' +
+        // CTR
+        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + ctrTxt + '</div>' +
+          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CTR</div>' +
+        '</td>' +
+        // CPC
+        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div style="font-size:13px;color:' + P.amber + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + cpcTxt + '</div>' +
+          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CPC</div>' +
+        '</td>' +
+        // Objective result (count + CPR underneath)
         '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
           '<div style="font-size:13px;color:' + P.cyan + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtNum(r.results)) + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">' + escapeHtml(r.resultsKind) + '</div>' +
-        '</td>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.mint + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + (r.cpr !== null ? escapeHtml(fmtR(r.cpr)) : '<span style="color:' + P.caption + ';">-</span>') + '</div>' +
-          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">' + escapeHtml(r.cprLabel) + '</div>' +
+          cprStack +
         '</td>' +
       '</tr>';
     }).join("");
@@ -528,12 +611,13 @@ function buildHtml(opts) {
   var methodology =
     '<div style="font-size:10px;color:' + P.caption + ';line-height:1.7;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<div style="font-size:10px;color:' + P.label + ';font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">How dispositions are derived</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.red.fill + ';font-weight:900;">ACTION</span> &middot; zero results on R100+ spend (App Install, Leads, Follows + Likes), or cost-per-result up 50%+ vs 7d, or frequency >4.0x, or pacing outside 60-135%, or CTR down 40%+</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.orange.fill + ';font-weight:900;">WARNING</span> &middot; CPR up 25-50%, or frequency 3.5-4.0x, or pacing 60-75% / 115-135%, or CTR down 20-40%</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.yellow.fill + ';font-weight:900;">WATCH</span> &middot; smaller deviations, or thin baseline (<50 events in 7d), or campaign younger than 7 days (BASELINING)</div>' +
-      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.green.fill + ';font-weight:900;">HEALTHY</span> &middot; all signals within &plusmn;10% of own 7-day baseline, frequency under 3.0x, pacing 90-110%</div>' +
-      '<div style="margin-top:10px;color:' + P.caption + ';"><span style="color:' + DISP_COLORS.red.fill + ';">&#9888;</span> red lines explain the disposition (the problem). <span style="color:' + DISP_COLORS.green.fill + ';">&#10003;</span> green lines are improvements vs 7-day baseline. Italic context lines flag thin baselines or campaign age.</div>' +
-      '<div style="margin-top:6px;color:' + P.caption + ';">Each campaign is judged against its own rolling 7-day average, never against a global benchmark, so MTN MoMo and Willowbrook are evaluated on their own terms, not each other&#39;s.</div>' +
+      '<div style="margin-bottom:4px;">Every campaign is read on four signals: <strong>spend</strong>, <strong>CTR</strong>, <strong>CPC</strong>, and the <strong>objective-aligned result</strong> (Leads, Clicks to App Store, Follows + Likes, or Clicks for traffic-style campaigns). Each is compared to the same campaign&#39;s own rolling 7-day baseline, never to a global benchmark.</div>' +
+      '<div style="margin-bottom:4px;margin-top:8px;"><span style="color:' + DISP_COLORS.red.fill + ';font-weight:900;">ACTION</span> &middot; zero results on R100+ spend (Leads, Clicks to App Store, Follows + Likes), or CPR up 50%+ vs 7d, or CPC up 50%+ vs 7d, or frequency &gt;4.0x, or CTR down 40%+</div>' +
+      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.orange.fill + ';font-weight:900;">WARNING</span> &middot; CPR up 25-50%, or CPC up 25-50%, or frequency 3.5-4.0x, or CTR down 20-40%</div>' +
+      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.yellow.fill + ';font-weight:900;">WATCH</span> &middot; smaller deviations (10-25% CPR/CPC drift, frequency 3.0-3.5x, CTR down 10-20%), thin baseline (&lt;50 events in 7d), or campaign younger than 7 days (BASELINING)</div>' +
+      '<div style="margin-bottom:4px;"><span style="color:' + DISP_COLORS.green.fill + ';font-weight:900;">HEALTHY</span> &middot; all signals within &plusmn;10% of own 7-day baseline, frequency under 3.0x</div>' +
+      '<div style="margin-top:10px;color:' + P.caption + ';">The italic note under each campaign is the analyst read — a senior media buyer&#39;s one-line interpretation of how spend, CTR, CPC, and result delivery interact today. <span style="color:' + DISP_COLORS.red.fill + ';">&#9888;</span> red lines surface the specific metric driving the disposition. <span style="color:' + DISP_COLORS.green.fill + ';">&#10003;</span> green lines are wins vs the 7-day baseline.</div>' +
+      '<div style="margin-top:6px;color:' + P.caption + ';">Each campaign is judged against its own rolling 7-day average, so MTN MoMo and Willowbrook are evaluated on their own terms, not each other&#39;s.</div>' +
     '</div>';
 
   // CSS keyframes for the logo glow. Apple Mail honours these; Gmail web
@@ -581,52 +665,6 @@ function buildHtml(opts) {
       // Per-client blocks
       clientBlocks +
 
-      // IG follower roll-up — independent of campaign delivery, sourced
-      // from the daily 06:00 SAST snapshot cron. One row per IG account
-      // with a non-zero follower count showing live total + day delta +
-      // week delta. Skips silently if no snapshots exist yet (first 7
-      // days after rollout, or if the cron has not fired yet).
-      ((function() {
-        var rows = Object.keys(igRollup || {}).map(function(id){return Object.assign({igId:id}, igRollup[id]);}).filter(function(r){return r.live > 0;});
-        if (rows.length === 0) return "";
-        rows.sort(function(a, b) { return b.live - a.live; });
-        var fmtN = function(n) { var v = parseInt(n) || 0; return v.toLocaleString("en-ZA"); };
-        var deltaSpan = function(d, suffix) {
-          if (d === null || d === undefined) return '<span style="color:' + P.caption + ';">no prior snapshot</span>';
-          if (d === 0) return '<span style="color:' + P.caption + ';">flat ' + suffix + '</span>';
-          var c = d > 0 ? P.mint : P.lava;
-          var sign = d > 0 ? "+" : "";
-          return '<span style="color:' + c + ';font-weight:800;">' + sign + fmtN(d) + '</span> <span style="color:' + P.caption + ';">' + suffix + '</span>';
-        };
-        var rowsHtml = rows.map(function(r) {
-          return '<tr>' +
-            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
-              '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + P.ig + ';margin-right:8px;vertical-align:middle;"></span>' +
-              '<strong style="color:' + P.ig + ';font-size:12px;">@' + escapeHtml(r.username || r.igId) + '</strong>' +
-            '</td>' +
-            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
-              '<strong style="color:' + P.txt + ';font-size:14px;font-weight:900;">' + fmtN(r.live) + '</strong>' +
-              ' <span style="color:' + P.caption + ';font-size:10px;">followers</span>' +
-            '</td>' +
-            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:11px;">' +
-              deltaSpan(r.dayDelta, "since yesterday") +
-            '</td>' +
-            '<td style="padding:10px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:11px;">' +
-              deltaSpan(r.weekDelta, "this week") +
-            '</td>' +
-          '</tr>';
-        }).join("");
-        return '<tr><td style="padding:24px 36px 0;">' +
-          '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:6px;">Instagram Follower Counts</div>' +
-          '<div style="font-size:11px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:12px;">Live total per matched account from yesterday\'s 06:00 SAST snapshot, with day-over-day and week-over-week deltas. Captured independently of Meta Page Insights so the number can be cross-referenced against the actual IG profile.</div>' +
-          '<div style="border:1px solid ' + P.rule + ';border-radius:12px;overflow:hidden;background:rgba(0,0,0,0.20);">' +
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
-              rowsHtml +
-            '</table>' +
-          '</div>' +
-        '</td></tr>';
-      })()) +
-
       // Methodology
       '<tr><td style="padding:32px 36px 8px;">' +
       '<div style="background:rgba(0,0,0,0.22);border:1px solid ' + P.rule + ';border-left:4px solid ' + P.amber + ';border-radius:0 12px 12px 0;padding:18px 22px;">' +
@@ -640,11 +678,11 @@ function buildHtml(opts) {
       '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
       '</td></tr></table></td></tr>' +
 
-      // Signoff — the report is published by Sami, the AI agent in the
+      // Signoff — the report is published by SAMI, the AI agent in the
       // Media department. Surfacing the signature anchors the email to a
       // named author rather than a faceless cron.
       '<tr><td style="padding:28px 36px 4px;">' +
-      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
+      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">SAMI</div>' +
       '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1.5px;text-transform:uppercase;">AI Expert Agent</div>' +
       '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>' +
       '</td></tr>' +
@@ -746,18 +784,16 @@ export default async function handler(req, res) {
     return;
   }
 
-  var yesterdayData, baselineData, adsByCampaign, igSnaps;
+  var yesterdayData, baselineData, adsByCampaign;
   try {
-    var quad = await Promise.all([
+    var triple = await Promise.all([
       fetchCampaigns(yFrom, yTo, dashKey),
       fetchCampaigns(bFrom, bTo, dashKey),
-      fetchAdsByCampaign(yFrom, yTo, dashKey),
-      readIgSnapshots(8)
+      fetchAdsByCampaign(yFrom, yTo, dashKey)
     ]);
-    yesterdayData = quad[0];
-    baselineData = quad[1];
-    adsByCampaign = quad[2] || {};
-    igSnaps = quad[3] || [];
+    yesterdayData = triple[0];
+    baselineData = triple[1];
+    adsByCampaign = triple[2] || {};
   } catch (err) {
     console.error("daily-report fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
@@ -770,29 +806,6 @@ export default async function handler(req, res) {
     spend: rows.reduce(function(a, r) { return a + r.spend; }, 0),
     activeCampaigns: rows.length
   };
-  // Pre-compute IG follower deltas per IG account from the snapshot
-  // history, so the rendering pass can show "today vs yesterday /
-  // this week" lines per matched IG account on each client block.
-  var igRollup = (function() {
-    if (!igSnaps || igSnaps.length === 0) return {};
-    var todaySnap = igSnaps[igSnaps.length - 1];
-    var yestSnap = igSnaps.length > 1 ? igSnaps[igSnaps.length - 2] : null;
-    var weekSnap = igSnaps.length >= 8 ? igSnaps[igSnaps.length - 8] : igSnaps[0];
-    var out = {};
-    Object.keys((todaySnap && todaySnap.accounts) || {}).forEach(function(igId) {
-      var t = todaySnap.accounts[igId];
-      var y = yestSnap && yestSnap.accounts && yestSnap.accounts[igId];
-      var w = weekSnap && weekSnap.accounts && weekSnap.accounts[igId];
-      out[igId] = {
-        username: t.username || "",
-        live: parseInt(t.followersCount || 0),
-        dayDelta: y ? (parseInt(t.followersCount || 0) - parseInt(y.followersCount || 0)) : null,
-        weekDelta: (w && weekSnap.date !== todaySnap.date) ? (parseInt(t.followersCount || 0) - parseInt(w.followersCount || 0)) : null
-      };
-    });
-    return out;
-  })();
-
   // Empty-day guard. If everything is paused, still send so silence isn't
   // ambiguous, but with a one-line "no spend yesterday" body.
   if (rows.length === 0) {
@@ -805,7 +818,7 @@ export default async function handler(req, res) {
     return await sendEmail(res, dateLabel, emptyHtml, isCron);
   }
 
-  var html = buildHtml({ dateLabel: dateLabel, clients: clients, totals: totals, igRollup: igRollup });
+  var html = buildHtml({ dateLabel: dateLabel, clients: clients, totals: totals });
 
   if (dryRun) {
     res.status(200).json({
