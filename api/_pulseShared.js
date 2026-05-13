@@ -203,7 +203,7 @@ export var ANOMALY_DEFS = {
     word: "Conversions Disappeared",
     color: "red",
     severity: 3,
-    caption: "Campaign producing zero results today on R100+ spend, when the 7-day baseline had material delivery. The funnel from impression to result is broken somewhere.",
+    caption: "Campaign producing zero results yesterday on R100+ spend, when the 7-day baseline had material delivery. The funnel from impression to result is broken somewhere.",
     procedure: [
       "Open the campaign in the platform ads manager and confirm ad-set DELIVERY status (active, not paused or rejected).",
       "Click through the ad's primary CTA yourself — verify the landing page, lead form, or app-store listing loads and is on the right URL.",
@@ -303,7 +303,7 @@ export var ANOMALY_DEFS = {
     word: "CPM Spike",
     color: "yellow",
     severity: 1,
-    caption: "Cost per 1,000 impressions is 40%+ above the 7-day average. Either today's auction was more crowded or relevance/quality score dropped.",
+    caption: "Cost per 1,000 impressions is 40%+ above the 7-day average. Either yesterday's auction was more crowded or relevance/quality score dropped.",
     procedure: [
       "Open the campaign and check Quality Ranking, Engagement Rate Ranking, and Conversion Rate Ranking — any Below Average rating drives CPM up.",
       "Cross-reference with industry calendar (e.g. month-end, Black Friday, election noise) for known auction-pressure events.",
@@ -370,7 +370,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var spendLift = ((spendY - spendDaily) / spendDaily * 100);
     out.push({
       type: "spend_spike",
-      message: fmtR(spendY) + " today vs " + fmtR(spendDaily) + " 7d daily average (up " + spendLift.toFixed(0) + "%)."
+      message: fmtR(spendY) + " yesterday vs " + fmtR(spendDaily) + " 7d daily average (up " + spendLift.toFixed(0) + "%)."
     });
   }
 
@@ -378,7 +378,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var spendDrop = ((spendDaily - spendY) / spendDaily * 100);
     out.push({
       type: "spend_collapse",
-      message: fmtR(spendY) + " today vs " + fmtR(spendDaily) + " 7d daily average (down " + spendDrop.toFixed(0) + "%)."
+      message: fmtR(spendY) + " yesterday vs " + fmtR(spendDaily) + " 7d daily average (down " + spendDrop.toFixed(0) + "%)."
     });
   }
 
@@ -386,7 +386,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var leadDrop = ((resDaily - resY) / resDaily * 100);
     out.push({
       type: "lead_volume_drop",
-      message: resY + " leads today vs " + resDaily.toFixed(1) + "/day 7d average (down " + leadDrop.toFixed(0) + "%)."
+      message: resY + " leads yesterday vs " + resDaily.toFixed(1) + "/day 7d average (down " + leadDrop.toFixed(0) + "%)."
     });
   }
 
@@ -394,7 +394,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var cprLift = ((cprY - cprB) / cprB * 100);
     out.push({
       type: "cpr_spike",
-      message: rmY.costLabel + " " + fmtR(cprY) + " today vs " + fmtR(cprB) + " 7d average (up " + cprLift.toFixed(0) + "%)."
+      message: rmY.costLabel + " " + fmtR(cprY) + " yesterday vs " + fmtR(cprB) + " 7d average (up " + cprLift.toFixed(0) + "%)."
     });
   }
 
@@ -402,7 +402,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var ctrDrop = ((ctrB - ctrY) / ctrB * 100);
     out.push({
       type: "ctr_collapse",
-      message: "CTR " + ctrY.toFixed(2) + "% today vs " + ctrB.toFixed(2) + "% 7d average (down " + ctrDrop.toFixed(0) + "%)."
+      message: "CTR " + ctrY.toFixed(2) + "% yesterday vs " + ctrB.toFixed(2) + "% 7d average (down " + ctrDrop.toFixed(0) + "%)."
     });
   }
 
@@ -410,7 +410,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var clickDrop = ((clicksDaily - clicksY) / clicksDaily * 100);
     out.push({
       type: "click_collapse",
-      message: fmtNum(clicksY) + " clicks today vs " + fmtNum(Math.round(clicksDaily)) + "/day 7d average (down " + clickDrop.toFixed(0) + "%) while spend held at " + fmtR(spendY) + "."
+      message: fmtNum(clicksY) + " clicks yesterday vs " + fmtNum(Math.round(clicksDaily)) + "/day 7d average (down " + clickDrop.toFixed(0) + "%) while spend held at " + fmtR(spendY) + "."
     });
   }
 
@@ -418,7 +418,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var freqLift = ((freqY - freqB) / freqB * 100);
     out.push({
       type: "frequency_cliff",
-      message: "Frequency " + freqY.toFixed(2) + "x today vs " + freqB.toFixed(2) + "x 7d average (up " + freqLift.toFixed(0) + "%)."
+      message: "Frequency " + freqY.toFixed(2) + "x yesterday vs " + freqB.toFixed(2) + "x 7d average (up " + freqLift.toFixed(0) + "%)."
     });
   }
 
@@ -426,7 +426,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var cpmLift = ((cpmY - cpmB) / cpmB * 100);
     out.push({
       type: "cpm_spike",
-      message: "CPM " + fmtR(cpmY) + " today vs " + fmtR(cpmB) + " 7d average (up " + cpmLift.toFixed(0) + "%)."
+      message: "CPM " + fmtR(cpmY) + " yesterday vs " + fmtR(cpmB) + " 7d average (up " + cpmLift.toFixed(0) + "%)."
     });
   }
 
@@ -434,7 +434,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     var impDrop = ((impsDaily - impsY) / impsDaily * 100);
     out.push({
       type: "impressions_cliff",
-      message: fmtNum(impsY) + " impressions today vs " + fmtNum(Math.round(impsDaily)) + "/day 7d average (down " + impDrop.toFixed(0) + "%) while spend held."
+      message: fmtNum(impsY) + " impressions yesterday vs " + fmtNum(Math.round(impsDaily)) + "/day 7d average (down " + impDrop.toFixed(0) + "%) while spend held."
     });
   }
 

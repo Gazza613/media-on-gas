@@ -136,7 +136,7 @@ function buildHtml(opts) {
 
     anomaliesBlock =
       '<tr><td style="padding:28px 36px 0;">' +
-        '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:6px;">Anomalies to action today</div>' +
+        '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:6px;">Anomalies from yesterday</div>' +
         '<div style="font-size:11px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:14px;">Yesterday-vs-7d-average departures large enough to warrant a same-day intervention. Each card lists the affected campaigns, the specific deltas, the corrective procedure to run, and an Open in Ads Manager link straight to the platform UI.</div>' +
         groupsHtml +
       '</td></tr>';
