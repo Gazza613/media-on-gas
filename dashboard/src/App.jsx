@@ -4346,7 +4346,7 @@ export default function MediaOnGas(){
   // glass cards have a brighter canvas to read against. Loading state
   // uses the same colour so the page never flashes a darker tone
   // between mount and first data paint.
-  var pageBackdrop = "#0A1429";
+  var pageBackdrop = "#0B141B";
   return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:pageBackdrop,color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Persona card breathing glow, opacity-only so each card's box-shadow
@@ -4428,7 +4428,7 @@ export default function MediaOnGas(){
     `}</style>
     {!loading&&<div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>}
 
-    <header style={{position:"sticky",top:0,zIndex:100,background:"#0A1429",borderBottom:"1px solid "+P.rule}}>
+    <header style={{position:"sticky",top:0,zIndex:100,background:"#0B141B",borderBottom:"1px solid "+P.rule}}>
       <div style={{maxWidth:1400,margin:"0 auto",padding:"10px 28px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
