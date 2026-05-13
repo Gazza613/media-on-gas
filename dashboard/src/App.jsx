@@ -411,14 +411,14 @@ function Reveal(props){
     return function(){obs.disconnect();};
   },[reduced,shown]);
   var minH=props.minHeight;
-  var delay=props.delay||0;
+  // Render children once the wrapper enters the viewport, but with no
+  // fade/translate of its own — so chart titles, axes, and surrounding
+  // text don't animate. Inner Recharts bars + CSS bar fills still
+  // animate via ChartReveal because they mount the moment this block
+  // becomes shown. minHeight reserves layout space to prevent the page
+  // from jumping when the chart mounts.
   return(
     <div ref={ref} style={Object.assign({
-      transition:reduced?"none":"opacity 0.9s cubic-bezier(0.22,1,0.36,1), transform 0.9s cubic-bezier(0.22,1,0.36,1)",
-      transitionDelay:delay+"ms",
-      opacity:shown?1:0,
-      transform:shown?"translateY(0) scale(1)":"translateY(48px) scale(0.97)",
-      willChange:shown?"auto":"opacity, transform",
       minHeight:minH||undefined
     },props.style||{})}>
       {shown?props.children:null}
