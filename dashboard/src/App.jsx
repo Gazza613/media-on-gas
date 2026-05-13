@@ -3396,7 +3396,7 @@ export default function MediaOnGas(){
   // at its header rather than wherever the previous scroll position was.
   useEffect(function(){try{window.scrollTo({top:0,behavior:"smooth"});}catch(_){window.scrollTo(0,0);}},[tab]);
 
-  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"#0B141B"}}>
+  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"#070E16"}}>
     <div style={{width:42,height:42,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
     <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
     <div style={{color:P.label,fontFamily:fm,fontSize:11,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Checking you in</div>
@@ -4346,7 +4346,7 @@ export default function MediaOnGas(){
   // glass cards have a brighter canvas to read against. Loading state
   // uses the same colour so the page never flashes a darker tone
   // between mount and first data paint.
-  var pageBackdrop = "#0B141B";
+  var pageBackdrop = "#070E16";
   return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:pageBackdrop,color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Persona card breathing glow, opacity-only so each card's box-shadow
@@ -4428,7 +4428,7 @@ export default function MediaOnGas(){
     `}</style>
     {!loading&&<div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>}
 
-    <header style={{position:"sticky",top:0,zIndex:100,background:"#0B141B",borderBottom:"1px solid "+P.rule}}>
+    <header style={{position:"sticky",top:0,zIndex:100,background:"#070E16",borderBottom:"1px solid "+P.rule}}>
       <div style={{maxWidth:1400,margin:"0 auto",padding:"10px 28px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -7558,6 +7558,6 @@ export default function MediaOnGas(){
       </div>
     </div>
 
-    <footer style={{borderTop:"1px solid "+P.rule,background:"#0B141B",padding:"20px 28px"}}><div style={{maxWidth:1400,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center",gap:18,flexWrap:"wrap"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:26,height:26,borderRadius:"50%",overflow:"hidden"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div><span style={{fontSize:11,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2}}>MEDIA ON GAS</span><span style={{fontSize:9,color:P.caption}}>Powered by GAS Marketing Automation</span></div><div style={{flex:1,textAlign:"center",fontSize:10,fontFamily:fm}}><a href="https://www.gasmarketing.co.za/privacy-policy" target="_blank" rel="noopener noreferrer" style={{color:P.label,textDecoration:"none",letterSpacing:1.5,fontWeight:700,padding:"4px 10px",borderRadius:6,border:"1px solid "+P.rule,transition:"color 0.2s ease, border-color 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.color=P.ember;e.currentTarget.style.borderColor=P.ember+"55";}} onMouseLeave={function(e){e.currentTarget.style.color=P.label;e.currentTarget.style.borderColor=P.rule;}}>Privacy &amp; Data Policy</a></div><div style={{fontSize:9,color:P.caption,fontFamily:fm,textAlign:"right",lineHeight:1.8}}>Live data · All figures in ZAR · Confidential · grow@gasmarketing.co.za</div></div></footer>
+    <footer style={{borderTop:"1px solid "+P.rule,background:"#070E16",padding:"20px 28px"}}><div style={{maxWidth:1400,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center",gap:18,flexWrap:"wrap"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:26,height:26,borderRadius:"50%",overflow:"hidden"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div><span style={{fontSize:11,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2}}>MEDIA ON GAS</span><span style={{fontSize:9,color:P.caption}}>Powered by GAS Marketing Automation</span></div><div style={{flex:1,textAlign:"center",fontSize:10,fontFamily:fm}}><a href="https://www.gasmarketing.co.za/privacy-policy" target="_blank" rel="noopener noreferrer" style={{color:P.label,textDecoration:"none",letterSpacing:1.5,fontWeight:700,padding:"4px 10px",borderRadius:6,border:"1px solid "+P.rule,transition:"color 0.2s ease, border-color 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.color=P.ember;e.currentTarget.style.borderColor=P.ember+"55";}} onMouseLeave={function(e){e.currentTarget.style.color=P.label;e.currentTarget.style.borderColor=P.rule;}}>Privacy &amp; Data Policy</a></div><div style={{fontSize:9,color:P.caption,fontFamily:fm,textAlign:"right",lineHeight:1.8}}>Live data · All figures in ZAR · Confidential · grow@gasmarketing.co.za</div></div></footer>
   </div>);
 }
