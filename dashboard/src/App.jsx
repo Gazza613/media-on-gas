@@ -4502,7 +4502,7 @@ export default function MediaOnGas(){
       <button onClick={function(){setDataWarnings([]);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.label,cursor:"pointer",fontSize:14,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
     </div>}
 
-    <div style={{width:"100%",maxWidth:1400,margin:"0 auto",padding:"20px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1,flex:1,boxSizing:"border-box"}}>
+    <div style={{width:"100%",maxWidth:1400,margin:"0 auto",padding:"40px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1,flex:1,boxSizing:"border-box"}}>
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onToggleGroup={toggleGroup} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}
 
       <div style={{flex:1,minWidth:0}}>
