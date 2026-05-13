@@ -16,14 +16,14 @@ html, body {
      paints over this on its root <div>; this is the safety net for
      any pixel the gradient does not cover (e.g. the moment between
      pages, or beyond the viewport when overscrolling). */
-  background: #1a0b2e;
+  background: #0B1A44;
   color-scheme: dark;
 }
 /* Belt-and-braces: kill the white flash on iOS Safari rubber-band and
    on Chrome's momentum scroll when the page is taller than the viewport
    but the inner gradient does not extend all the way. */
 html {
-  background-color: #1a0b2e;
+  background-color: #0B1A44;
   overscroll-behavior: none;
 }
 
