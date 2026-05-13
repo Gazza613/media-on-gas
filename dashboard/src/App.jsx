@@ -2459,10 +2459,10 @@ function ChatPanel(props){
     "Where should we shift budget next?"
   ];
 
-  return (<><style>{"@keyframes fabRipple{0%{transform:scale(0.9);opacity:0.55}100%{transform:scale(1.8);opacity:0}}@keyframes fabEntrance{0%{transform:translateY(40px) scale(0.6);opacity:0}60%{transform:translateY(-4px) scale(1.06);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}@keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}@keyframes fabShimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}@keyframes fabLabelIn{0%{transform:translateX(12px);opacity:0}100%{transform:translateX(0);opacity:1}}@keyframes sparkleOrbit{0%{transform:rotate(0deg) translateX(27px) rotate(0deg)}100%{transform:rotate(360deg) translateX(27px) rotate(-360deg)}}"}</style>
+  return (<><style>{"@keyframes fabRipple{0%{transform:scale(0.9);opacity:0.55}100%{transform:scale(1.8);opacity:0}}@keyframes fabEntrance{0%{transform:translateY(40px) scale(0.6);opacity:0}60%{transform:translateY(-4px) scale(1.06);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}@keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}@keyframes fabShimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}@keyframes fabLabelIn{0%{transform:translateX(12px);opacity:0}100%{transform:translateX(0);opacity:1}}@keyframes sparkleOrbit{0%{transform:rotate(0deg) translateX(24px) rotate(0deg)}100%{transform:rotate(360deg) translateX(24px) rotate(-360deg)}}"}</style>
   {!isOpen&&<div style={{position:"fixed",right:22,bottom:22,zIndex:900,display:"flex",alignItems:"center",gap:10,flexDirection:"row-reverse",pointerEvents:"none",animation:"fabEntrance 0.8s cubic-bezier(0.34,1.56,0.64,1) both"}}>
     {/* FAB wrapper with ripples */}
-    <div style={{position:"relative",width:54,height:54,pointerEvents:"auto",animation:"fabFloat 4s ease-in-out infinite"}} onMouseEnter={function(){hover[1](true);}} onMouseLeave={function(){hover[1](false);}}>
+    <div style={{position:"relative",width:49,height:49,pointerEvents:"auto",animation:"fabFloat 4s ease-in-out infinite"}} onMouseEnter={function(){hover[1](true);}} onMouseLeave={function(){hover[1](false);}}>
       {/* Outer rippling rings, staggered so a wave is always emitting */}
       <div style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid rgba(249,98,3,0.55)",animation:"fabRipple 2.4s ease-out infinite",pointerEvents:"none"}}/>
       <div style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid rgba(168,85,247,0.45)",animation:"fabRipple 2.4s ease-out infinite 1.2s",pointerEvents:"none"}}/>
@@ -2473,7 +2473,7 @@ function ChatPanel(props){
       {/* Actual button */}
       <button onClick={openPanel} aria-label="Chat with GAS Media Expert" style={{position:"relative",width:"100%",height:"100%",borderRadius:"50%",border:"none",cursor:"pointer",background:"linear-gradient(135deg,#FF3D00 0%,#FF6B00 40%,#F96203 70%,#A855F7 130%)",backgroundSize:"200% 200%",animation:"fabShimmer 5s ease-in-out infinite alternate",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:hover[0]?"0 14px 34px rgba(255,61,0,0.55), 0 0 0 2px rgba(255,255,255,0.12) inset, 0 0 48px rgba(168,85,247,0.35)":"0 8px 24px rgba(255,61,0,0.42), 0 0 0 1px rgba(255,255,255,0.08) inset",transform:hover[0]?"scale(1.08)":"scale(1)",transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s",outline:"none"}}>
         {/* Sparkle icon (AI-forward) with a small chat affordance */}
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
           <path d="M12 2l1.6 4.8L18 8l-4.4 1.2L12 14l-1.6-4.8L6 8l4.4-1.2L12 2z" fill="#fff" stroke="#fff" strokeWidth="0.5" strokeLinejoin="round"/>
           <circle cx="18" cy="17" r="2" fill="rgba(255,255,255,0.95)"/>
           <circle cx="6" cy="17" r="1.5" fill="rgba(255,255,255,0.7)"/>
