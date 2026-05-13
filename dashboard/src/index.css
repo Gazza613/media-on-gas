@@ -41,13 +41,19 @@ html {
   background: rgba(249,98,3,0.5);
 }
 
+/* Chrome's native calendar indicator is a mid-grey SVG. Plain
+   invert+brightness leaves it stuck near mid-grey because grey is grey
+   when inverted. brightness(0) flattens every pixel to pure black first,
+   THEN invert(1) flips that to pure white, so the icon reads as solid
+   light grey/white on the dark navy backdrop regardless of the source
+   colour. opacity 0.85 keeps it from feeling harsh; hover bumps it to 1. */
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.4);
-  opacity: 1;
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
   cursor: pointer;
 }
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
-  filter: invert(1) brightness(1.8);
+  opacity: 1;
 }
 
 @keyframes pulse-glow {
