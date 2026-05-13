@@ -3396,7 +3396,7 @@ export default function MediaOnGas(){
   // at its header rather than wherever the previous scroll position was.
   useEffect(function(){try{window.scrollTo({top:0,behavior:"smooth"});}catch(_){window.scrollTo(0,0);}},[tab]);
 
-  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"linear-gradient(170deg,#06020e,#0d0618 30%,#150b24 60%,#0d0618)"}}>
+  if(authChecking)return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,background:"#0B141B"}}>
     <div style={{width:42,height:42,border:"3px solid "+P.rule,borderTop:"3px solid "+P.ember,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
     <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
     <div style={{color:P.label,fontFamily:fm,fontSize:11,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Checking you in</div>
