@@ -73,20 +73,16 @@ function escapeHtml(s) {
 
 function buildNudgeHtml(opts) {
   var clientName = escapeHtml(opts.clientName);
-  var amName = escapeHtml(opts.amName || "");
   var lastSentDisplay = opts.lastSentDisplay;
   var daysOverdue = opts.daysOverdue;
   var dashboardUrl = opts.dashboardUrl;
   var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
-  // Two phrasings — one when we know who the AM was (so accountability is
-  // explicit in the body), one when the last send had no captured sender
-  // name and the message stays team-addressed without naming anyone.
-  var sentByLine = amName
-    ? 'The last report for <strong style="color:#F96203;">' + clientName + '</strong> was sent by <strong style="color:#F96203;">' + amName + '</strong> on <strong style="color:#F96203;">' + lastSentDisplay + '</strong>. That is now <strong style="color:#F96203;">' + daysOverdue + ' days ago</strong>, past the line.'
-    : 'The last report for <strong style="color:#F96203;">' + clientName + '</strong> was sent on <strong style="color:#F96203;">' + lastSentDisplay + '</strong>. That is now <strong style="color:#F96203;">' + daysOverdue + ' days ago</strong>, past the line.';
-  var actionLine = amName
-    ? amName + ', please pull the latest and send when you have a couple of minutes. Two minutes to pull, two minutes to send.'
-    : 'Whoever owns ' + clientName + ' this week, please pull the latest and send. Two minutes to pull, two minutes to send.';
+  // Nudge body intentionally does not name the internal GAS sender —
+  // matching is on the client recipient domain (so the same client is
+  // tracked across any AM change) and the body addresses the team
+  // collectively rather than calling out a single person.
+  var sentByLine = 'The last report for <strong style="color:#F96203;">' + clientName + '</strong> was sent on <strong style="color:#F96203;">' + lastSentDisplay + '</strong>. That is now <strong style="color:#F96203;">' + daysOverdue + ' days ago</strong>, past the line.';
+  var actionLine = 'Please pull the latest and send when you have a couple of minutes. Two minutes to pull, two minutes to send.';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -418,14 +414,13 @@ export default async function handler(req, res) {
 
     var html = buildNudgeHtml({
       clientName: clientName,
-      amName: c.lastSenderName || "",
       lastSentDisplay: lastSentDisplay,
       daysOverdue: daysOverdue,
       dashboardUrl: origin,
       origin: origin
     });
     var text = clientName + " has not had a report in " + daysOverdue + " days.\n\n" +
-      "Last sent on " + lastSentDisplay + (c.lastSenderName ? " by " + c.lastSenderName : "") + ".\n\n" +
+      "Last sent on " + lastSentDisplay + ".\n\n" +
       "Open the dashboard and send: " + origin + "\n\n" +
       "GAS Marketing Automation";
 
