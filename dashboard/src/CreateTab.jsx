@@ -54,13 +54,17 @@ function clearSavedDraft() {
   try { sessionStorage.removeItem(DRAFT_KEY); sessionStorage.removeItem(STEP_KEY); } catch (_) {}
 }
 
+// `naming` is the human-readable token that flows into the Meta
+// campaign / ad-set / ad name. Stays separate from `code` so the
+// internal short-form (LDS / ENG / TRF) is still available wherever
+// the dashboard needs a compact identifier.
 var OBJECTIVES = [
-  { id: "OUTCOME_TRAFFIC",        label: "Traffic",        sub: "Drive clicks to a landing page",   code: "TRF" },
-  { id: "OUTCOME_ENGAGEMENT",     label: "Engagement",     sub: "Likes, comments, post engagement", code: "ENG" },
-  { id: "OUTCOME_LEADS",          label: "Leads",          sub: "Lead form or landing page leads",  code: "LDS" },
-  { id: "OUTCOME_AWARENESS",      label: "Awareness",      sub: "Reach + impression coverage",      code: "AWR" },
-  { id: "OUTCOME_SALES",          label: "Sales",          sub: "Pixel conversions, requires pixel",code: "SLS" },
-  { id: "OUTCOME_APP_PROMOTION",  label: "App Promotion",  sub: "App installs, requires app store URL", code: "APP" }
+  { id: "OUTCOME_TRAFFIC",        label: "Traffic",        sub: "Drive clicks to a landing page",   code: "TRF", naming: "Traffic" },
+  { id: "OUTCOME_ENGAGEMENT",     label: "Engagement",     sub: "Likes, comments, post engagement", code: "ENG", naming: "Like&Follow" },
+  { id: "OUTCOME_LEADS",          label: "Leads",          sub: "Lead form or landing page leads",  code: "LDS", naming: "Leads" },
+  { id: "OUTCOME_AWARENESS",      label: "Awareness",      sub: "Reach + impression coverage",      code: "AWR", naming: "Awareness" },
+  { id: "OUTCOME_SALES",          label: "Sales",          sub: "Pixel conversions, requires pixel",code: "SLS", naming: "Sales" },
+  { id: "OUTCOME_APP_PROMOTION",  label: "App Promotion",  sub: "App installs, requires app store URL", code: "APP", naming: "AppInstall" }
 ];
 
 var CTAS = [
@@ -340,15 +344,20 @@ function Wizard(props) {
       var creatives = draft.creatives || [];
       if (creatives.length === 0) return false;
       if (draft.creativeMode === "carousel" && creatives.length < 2) return false;
-      // Each creative needs a uploaded asset + headline + primary text + URL + concept + version.
-      // Carousel cards share primaryText (taken from creatives[0]) but each card needs image_hash + headline + URL.
+      // Each creative needs an uploaded asset + headline + primary text + URL
+      // + the name parts that drive composeAdName. Under the new naming
+      // convention the required parts are assetName and productAction; the
+      // legacy concept/version fields are still accepted as fallbacks.
+      // Carousel cards share primaryText (creatives[0]) but each card needs
+      // image_hash + headline + URL.
       for (var i = 0; i < creatives.length; i++) {
         var c = creatives[i];
         if (!(c.imageHash || c.videoId)) return false;
         if (!c.headline.trim()) return false;
         if (!c.linkUrl.trim()) return false;
-        if (!c.concept.trim()) return false;
-        if (!c.version.trim()) return false;
+        var assetOk = (c.assetName && c.assetName.trim()) || (c.concept && c.concept.trim());
+        var actionOk = (c.productAction && c.productAction.trim()) || (c.concept && c.concept.trim());
+        if (!assetOk || !actionOk) return false;
         if (draft.creativeMode !== "carousel" && !c.primaryText.trim()) return false;
       }
       // Single-mode carousel/single use creatives[0].primaryText as the text.
@@ -577,12 +586,14 @@ function Step0(props) {
   var draft = props.draft, update = props.update, accounts = props.accounts;
 
   var objMatch = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
+  // Live-preview chips for the new naming convention:
+  //   Client-Name _ Platform _ Objective _ Product-Name _ MonthYear
   var nameParts = [
-    { label: "Client", value: (draft.clientCode || "").toUpperCase() },
-    { label: "Obj",    value: objMatch ? objMatch.code : "" },
-    { label: "Funding",value: draft.funding },
-    { label: "Period", value: ymCodeFromDate(draft.startDate) },
-    { label: "Variant",value: (draft.variant || "").toUpperCase() }
+    { label: "Client",     value: draft.clientCode || "" },
+    { label: "Platform",   value: platformNamingForCampaign() },
+    { label: "Objective",  value: objMatch ? objMatch.naming : "" },
+    { label: "Product",    value: draft.productName || draft.variant || "" },
+    { label: "MonthYear",  value: monthYearFromDate(draft.startDate) }
   ];
 
   return <div>
@@ -608,18 +619,20 @@ function Step0(props) {
     <Glass accent={P.ember} st={{padding:26,marginBottom:18}}>
       <div style={{fontSize:13,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>2. Name your campaign</div>
       <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
-        Type the parts. Objective, Funding and Period auto-fill from your other choices. Variant is optional.
+        Naming convention: <strong style={{color:P.txt}}>Client-Name_Platform_Objective_Product-Name_MonthYear</strong>.<br/>
+        Example: <span style={{color:P.ember,fontFamily:fm}}>MTN-MoMo_META_Like&amp;Follow_MoMoDeals_May2026</span>.<br/>
+        Platform, Objective and MonthYear auto-fill from your other choices below.
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-        <Field label="Client code" fm={fm} P={P} hint="3-6 char short code, uppercase. E.g. MOMO, NEDB, GAS.">
-          <input value={draft.clientCode} onChange={function(e){ update({ clientCode: sanitiseNamePart(e.target.value, 8) }); }}
-            placeholder="MOMO"
-            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        <Field label="Client name" fm={fm} P={P} hint="Use the agency form with hyphens. E.g. MTN-MoMo, GAS-Marketing, Willowbrook.">
+          <input value={draft.clientCode} onChange={function(e){ update({ clientCode: sanitiseLoose(e.target.value, 20) }); }}
+            placeholder="MTN-MoMo"
+            style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
         </Field>
-        <Field label="Variant (optional)" fm={fm} P={P} hint="Differentiator. E.g. LAUNCH, ALWAYSON, FLASHSALE.">
-          <input value={draft.variant} onChange={function(e){ update({ variant: sanitiseNamePart(e.target.value, 14) }); }}
-            placeholder="LAUNCH"
-            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        <Field label="Product name" fm={fm} P={P} hint="The product or campaign theme. Hyphens fine. E.g. MoMoDeals, Electricity-Advance, HomeLoan-Promo.">
+          <input value={draft.productName || ""} onChange={function(e){ update({ productName: sanitiseLoose(e.target.value, 40) }); }}
+            placeholder="MoMoDeals"
+            style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
         </Field>
       </div>
     </Glass>
@@ -687,11 +700,16 @@ function Step1(props) {
     updateNested("audience", { targetingItems: existing.filter(function(x){ return !(x.id === id && x.type === type); }) });
   };
 
+  var objMatchAS = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
+  // Ad-set live-preview chips per the agency naming convention:
+  //   Client-Name _ Platform _ Objective _ Product-Name _ Target-Audience _ MonthYear
   var nameParts = [
-    { label: "Audience", value: (a.audienceLabel || "").toUpperCase() },
-    { label: "Geo",      value: geoCodeFromLocations(a.locations) },
-    { label: "Demo",     value: demoCode(a.ageMin, a.ageMax, a.genders) },
-    { label: "Placement",value: placementCode(draft.platformMode, draft.placement) }
+    { label: "Client",     value: draft.clientCode || "" },
+    { label: "Platform",   value: platformNamingForAdLevel(draft.platformMode) },
+    { label: "Objective",  value: objMatchAS ? objMatchAS.naming : "" },
+    { label: "Product",    value: draft.productName || draft.variant || "" },
+    { label: "Audience",   value: a.audienceLabel || "" },
+    { label: "MonthYear",  value: monthYearFromDate(draft.startDate) }
   ];
 
   return <div>
@@ -699,11 +717,15 @@ function Step1(props) {
       name={props.generatedAdsetName} parts={nameParts}/>
 
     <Glass accent={P.cyan} st={{padding:26,marginBottom:18}}>
-      <div style={{fontSize:13,fontWeight:800,color:P.cyan,letterSpacing:2,fontFamily:fm,marginBottom:14,textTransform:"uppercase"}}>Audience label</div>
-      <Field label="Short label for this ad set's audience" fm={fm} P={P} hint='E.g. "COLD", "WARM", "LAL1", "FANS", "RTG-CARTABANDON". Goes into the ad-set name.'>
-        <input value={a.audienceLabel} onChange={function(e){ updateNested("audience", { audienceLabel: sanitiseNamePart(e.target.value, 16) }); }}
-          placeholder="COLD"
-          style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+      <div style={{fontSize:13,fontWeight:800,color:P.cyan,letterSpacing:2,fontFamily:fm,marginBottom:6,textTransform:"uppercase"}}>Target audience</div>
+      <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
+        Naming convention: <strong style={{color:P.txt}}>Client-Name_Platform_Objective_Product-Name_Target-Audience_MonthYear</strong>.<br/>
+        Example: <span style={{color:P.cyan,fontFamily:fm}}>MTN-MoMo_Facebook_Like&amp;Follow_Electricity-Advance_Cold-Audience_May2026</span>
+      </div>
+      <Field label="Audience label" fm={fm} P={P} hint='Use hyphenated agency form. E.g. Cold-Audience, Warm-Audience, LAL1-Audience, Page-Fans, Retargeting-CartAbandon.'>
+        <input value={a.audienceLabel} onChange={function(e){ updateNested("audience", { audienceLabel: sanitiseLoose(e.target.value, 32) }); }}
+          placeholder="Cold-Audience"
+          style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
       </Field>
     </Glass>
 
@@ -1085,17 +1107,26 @@ function CreativeCard(props) {
     </div>
 
     <div style={{marginTop:14,padding:"12px 14px",background:P.fuchsia+"08",border:"1px solid "+P.fuchsia+"30",borderRadius:10}}>
-      <div style={{fontSize:10,fontWeight:800,color:P.fuchsia,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Ad name parts</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <Field label="Concept" fm={fm} P={P} hint="Short label. E.g. HEROIMAGE, TESTIMONIAL, OFFER15PCT">
-          <input value={c.concept} onChange={function(e){ props.onChange({ concept: sanitiseNamePart(e.target.value, 18) }); }}
-            placeholder="HEROIMAGE"
-            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+      <div style={{fontSize:10,fontWeight:800,color:P.fuchsia,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Ad name parts</div>
+      <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:"inherit",lineHeight:1.6,marginBottom:10}}>
+        Naming: <strong style={{color:P.txt}}>Platform_AssetName_RatioSize_Product&amp;Action_MonthYear</strong>.<br/>
+        Example: <span style={{color:P.fuchsia,fontFamily:fm}}>Facebook_Static1_9x16_AyandaUGC-ElectricityAdvance_May2026</span>.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        <Field label="Asset name" fm={fm} P={P} hint='E.g. Static1, Video2, GIF1. Asset type and number for tracking.'>
+          <input value={c.assetName || c.concept || ""} onChange={function(e){ props.onChange({ assetName: sanitiseLoose(e.target.value, 24) }); }}
+            placeholder="Static1"
+            style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
         </Field>
-        <Field label="Version" fm={fm} P={P} hint="V01, V02, A, B, etc.">
-          <input value={c.version} onChange={function(e){ props.onChange({ version: sanitiseNamePart(e.target.value, 6) }); }}
-            placeholder="V01"
-            style={Object.assign({}, inputStyle(P, fm), { textTransform: "uppercase", letterSpacing: 1 })}/>
+        <Field label="Ratio / Size" fm={fm} P={P} hint='E.g. 9x16 (Reels/Stories), 1x1 (Feed), 16x9 (Wide). Auto-detects from upload when possible.'>
+          <input value={c.ratioSize || ""} onChange={function(e){ props.onChange({ ratioSize: sanitiseLoose(String(e.target.value).replace(/[:/]/g,"x"), 8) }); }}
+            placeholder="9x16"
+            style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
+        </Field>
+        <Field label="Product &amp; Action" fm={fm} P={P} hint='Talent-or-concept-plus-product. E.g. AyandaUGC-ElectricityAdvance, OfferHero-MoMoDeals.'>
+          <input value={c.productAction || c.concept || ""} onChange={function(e){ props.onChange({ productAction: sanitiseLoose(e.target.value, 40) }); }}
+            placeholder="AyandaUGC-ElectricityAdvance"
+            style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
         </Field>
       </div>
     </div>
@@ -2083,15 +2114,79 @@ function emptyCreative() {
 
 // Sanitise a single name part: uppercase, allow only A-Z 0-9 dash, strip
 // underscores so they don't confuse the joiner, trim length.
+// Legacy sanitiser — uppercase + alphanum-and-hyphen only. Kept around
+// for any field that still wants the compact uppercase form.
 function sanitiseNamePart(s, maxLen) {
   s = String(s || "").replace(/[^a-zA-Z0-9-]/g, "").toUpperCase();
   if (typeof maxLen === "number") s = s.slice(0, maxLen);
   return s;
 }
 
+// New naming-convention sanitiser. Preserves the case the user typed,
+// allows hyphens and the ampersand (e.g. "MTN-MoMo", "Like&Follow",
+// "AyandaUGC-ElectricityAdvance"), strips spaces (we use underscores
+// to separate name parts, so spaces inside a part create ambiguous
+// segments). Strips other punctuation and control chars.
+function sanitiseLoose(s, maxLen) {
+  s = String(s || "").replace(/[^a-zA-Z0-9\-&]/g, "");
+  if (typeof maxLen === "number") s = s.slice(0, maxLen);
+  return s;
+}
+
+// Compact "YYYYMM" form. Retained for any code path that still needs
+// the numeric period (audit lookups, historic comparison keys).
 function ymCodeFromDate(iso) {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
   return iso.slice(0, 4) + iso.slice(5, 7);
+}
+
+// MonthYear naming form: "May2026", "Jan2026", etc. This is the form
+// that ships in the new campaign/ad-set/ad names.
+var MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function monthYearFromDate(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  var mm = parseInt(iso.slice(5, 7), 10);
+  if (!mm || mm < 1 || mm > 12) return "";
+  return MONTH_NAMES[mm - 1] + iso.slice(0, 4);
+}
+
+// Platform token per naming-convention level:
+//   Campaign  -> "META" (umbrella, this Create tab is Meta-only)
+//   Ad set / Ad -> "Facebook" | "Instagram" | "Facebook&Instagram"
+//                  derived from the team's placement choice
+function platformNamingForCampaign() { return "META"; }
+function platformNamingForAdLevel(platformMode) {
+  if (platformMode === "ig_only") return "Instagram";
+  if (platformMode === "fb_only") return "Facebook";
+  return "Facebook&Instagram";
+}
+
+// Asset format → "Static" / "Video" / "GIF" / "Carousel" for the ad
+// name's first creative segment.
+function assetTypeNaming(creative, draft) {
+  if (draft.creativeMode === "carousel") return "Carousel";
+  if (creative.videoId) return "Video";
+  if (creative.imageHash && creative.filename && /\.gif$/i.test(creative.filename)) return "GIF";
+  return "Static";
+}
+
+// Ratio string for the ad name (e.g. "9x16", "1x1", "16x9"). Derives
+// from the creative's known dimensions when available; falls back to
+// the user-typed ratioSize field.
+function ratioNaming(creative) {
+  if (creative.ratioSize) return sanitiseLoose(String(creative.ratioSize).replace(/[:/]/g, "x"), 8);
+  if (creative.width && creative.height) {
+    // Reduce w:h to common ad-creative ratios.
+    var w = parseInt(creative.width, 10), h = parseInt(creative.height, 10);
+    if (!w || !h) return "";
+    var ratio = w / h;
+    if (ratio > 1.6) return "16x9";
+    if (ratio > 1.1) return "1.91x1";
+    if (ratio > 0.9) return "1x1";
+    if (ratio > 0.7) return "4x5";
+    return "9x16";
+  }
+  return "";
 }
 
 // Geo code derived from the include locations. Picks the most specific
@@ -2161,41 +2256,63 @@ function formatCode(c) {
   return "IMG";
 }
 
-// Compose campaign name: {Client}_{Obj}_{Funding}_{Period}_{Variant}
+// Compose campaign name per agency naming convention:
+//   Client-Name_Platform_Objective_Product-Name_MonthYear
+//   e.g. MTN-MoMo_META_Like&Follow_MoMoDeals_May2026
 function composeCampaignName(draft) {
   var obj = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
+  // productName is the new field; fall back to legacy `variant` on
+  // older drafts so half-finished work doesn't break.
+  var product = sanitiseLoose(draft.productName || draft.variant || "", 40);
   var parts = [
-    sanitiseNamePart(draft.clientCode, 8),
-    obj ? obj.code : "",
-    draft.funding || "",
-    ymCodeFromDate(draft.startDate),
-    sanitiseNamePart(draft.variant, 14)
+    sanitiseLoose(draft.clientCode, 20),
+    platformNamingForCampaign(),
+    obj ? obj.naming : "",
+    product,
+    monthYearFromDate(draft.startDate)
   ].filter(Boolean);
   return parts.join("_");
 }
 
-// Compose ad-set name: {Audience}_{Geo}_{Demo}_{Placement}
+// Compose ad-set name per agency naming convention:
+//   Client-Name_Platform_Objective_Product-Name_Target-Audience_MonthYear
+//   e.g. MTN-MoMo_Facebook_Like&Follow_Electricity-Advance_Cold-Audience_May2026
 function composeAdsetName(draft) {
+  var obj = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
   var a = draft.audience || {};
+  var product = sanitiseLoose(draft.productName || draft.variant || "", 40);
+  var audience = sanitiseLoose(a.audienceLabel || "", 32);
   var parts = [
-    sanitiseNamePart(a.audienceLabel, 16),
-    geoCodeFromLocations(a.locations),
-    demoCode(a.ageMin, a.ageMax, a.genders),
-    placementCode(draft.platformMode, draft.placement)
+    sanitiseLoose(draft.clientCode, 20),
+    platformNamingForAdLevel(draft.platformMode),
+    obj ? obj.naming : "",
+    product,
+    audience,
+    monthYearFromDate(draft.startDate)
   ].filter(Boolean);
   return parts.join("_");
 }
 
-// Compose ad name: {Format}_{Concept}_{Version} — for carousel mode the same
-// rule applies but we use card #1 as the canonical ad name.
+// Compose ad name per agency naming convention:
+//   Platform_AssetName_RatioSize_Product-Name&Action_MonthYear
+//   e.g. Facebook_Static1_9x16_AyandaUGC-ElectricityAdvance_May2026
+//
+// The creative's `assetName` (e.g. "Static1") + `productAction` (e.g.
+// "AyandaUGC-ElectricityAdvance") drive the middle segments. Falls back
+// to legacy `concept` / `version` fields so half-finished drafts still
+// produce something sensible.
 function composeAdName(creative, idx, draft) {
-  var fmt;
-  if (draft.creativeMode === "carousel") fmt = "CAR";
-  else fmt = formatCode(creative);
+  var assetType = assetTypeNaming(creative, draft);
+  var assetIndex = creative.assetIndex || (idx + 1);
+  var assetName = creative.assetName ? sanitiseLoose(creative.assetName, 24) : (assetType + assetIndex);
+  var ratio = ratioNaming(creative);
+  var productAction = sanitiseLoose(creative.productAction || creative.concept || draft.productName || "", 40);
   var parts = [
-    fmt,
-    sanitiseNamePart(creative.concept, 18),
-    sanitiseNamePart(creative.version, 6)
+    platformNamingForAdLevel(draft.platformMode),
+    assetName,
+    ratio,
+    productAction,
+    monthYearFromDate(draft.startDate)
   ].filter(Boolean);
   return parts.join("_");
 }
