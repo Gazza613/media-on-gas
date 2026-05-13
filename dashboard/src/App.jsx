@@ -4340,17 +4340,12 @@ export default function MediaOnGas(){
             ].filter(function(p){return p.totalClicks>0;});
             return null;
   })();
-  // Page backdrop. Static multi-radial gradient: an orchid flare bottom-
-  // right, a faint cyan glow mid-stage, and a softly-brightening ellipse
-  // anchored at the top of the viewport. Each radial sits at low alpha
-  // so the metric tiles and glass cards still read as the surface focus
-  // — only the negative space gets richer. background-attachment:fixed
-  // keeps the depth viewport-locked while scrolling long pages.
-  var pageBackdrop = loading ? P.void :
-    "radial-gradient(circle at 92% 88%, rgba(168,85,247,0.09) 0%, transparent 40%)," +
-    "radial-gradient(circle at 60% 55%, rgba(34,211,238,0.05) 0%, transparent 48%)," +
-    "radial-gradient(ellipse at 50% 0%, #1a0b2e 0%, #0d0618 35%, #06020e 80%)";
-  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:pageBackdrop,backgroundAttachment:loading?"scroll":"fixed",color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
+  // Page backdrop. Solid navy that matches the header strip exactly —
+  // no gradient, no radial ambience, no shading. Lighter than the
+  // near-black #06020e the page used to sit on, so the metric tiles and
+  // glass cards have a brighter canvas to read against.
+  var pageBackdrop = loading ? P.void : "#1a0b2e";
+  return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:pageBackdrop,color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Persona card breathing glow, opacity-only so each card's box-shadow
          keeps its platform colour. animationDelay is staggered per card via
@@ -4431,7 +4426,7 @@ export default function MediaOnGas(){
     `}</style>
     {!loading&&<div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>}
 
-    <header style={{position:"sticky",top:0,zIndex:100,background:"rgba(6,2,14,0.97)",borderBottom:"1px solid "+P.rule}}>
+    <header style={{position:"sticky",top:0,zIndex:100,background:"#1a0b2e",borderBottom:"1px solid "+P.rule}}>
       <div style={{maxWidth:1400,margin:"0 auto",padding:"10px 28px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
