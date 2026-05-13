@@ -4343,8 +4343,10 @@ export default function MediaOnGas(){
   // Page backdrop. Solid navy that matches the header strip exactly —
   // no gradient, no radial ambience, no shading. Lighter than the
   // near-black #06020e the page used to sit on, so the metric tiles and
-  // glass cards have a brighter canvas to read against.
-  var pageBackdrop = loading ? P.void : "#1a0b2e";
+  // glass cards have a brighter canvas to read against. Loading state
+  // uses the same colour so the page never flashes a darker tone
+  // between mount and first data paint.
+  var pageBackdrop = "#1a0b2e";
   return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:pageBackdrop,color:P.txt,fontFamily:ff,WebkitFontSmoothing:"antialiased"}}>
     <style>{`
       /* Persona card breathing glow, opacity-only so each card's box-shadow
