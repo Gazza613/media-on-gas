@@ -985,6 +985,21 @@ function Step3(props) {
       </div>
     </div>
 
+    {/* Bulk drop-zone — drag many files in one go from a synced Drive folder
+        or local disk. Disabled for carousel mode (cards there are managed
+        as a single ad, not one-ad-per-file). */}
+    {draft.creativeMode !== "carousel" && <BulkDropzone
+      P={P} fm={fm} apiBase={apiBase} token={token}
+      accountId={draft.accountId}
+      creatives={creatives}
+      onBatch={function(newCreatives){
+        // Replace any empty placeholder creatives (no asset uploaded yet)
+        // with the new uploads so the team isn't left with dangling rows.
+        var trimmed = creatives.filter(function(c){ return c.imageHash || c.videoId; });
+        var combined = trimmed.concat(newCreatives);
+        update({ creativeMode: combined.length > 1 ? "multi" : draft.creativeMode, creatives: combined });
+      }}/>}
+
     {/* Per-creative cards */}
     {creatives.map(function(c, idx){
       var adName = composeAdName(c, idx, draft);
@@ -1002,6 +1017,158 @@ function Step3(props) {
       + Add another {draft.creativeMode === "carousel" ? "card" : "creative"}
     </button>}
   </Glass>;
+}
+
+// Bulk-upload dropzone. Sits above the per-creative cards in Step 3 and
+// turns a drag-and-drop of many files (or a multi-file picker click) into
+// pre-filled creative cards — one per file, with assetName, ratioSize,
+// dimensions and uploaded imageHash/videoId all auto-populated. Each file
+// is read locally to detect dimensions and classify aspect ratio, then
+// streamed to /api/create/upload exactly like the single-file path so the
+// downstream submit flow doesn't care which input route was used.
+//
+// Concurrency caps at three parallel uploads. Meta's /adimages and
+// /advideos endpoints tolerate more, but most agency networks throttle
+// outbound POSTs over a certain size; three keeps the dashboard
+// responsive without piling on the bandwidth.
+function BulkDropzone(props) {
+  var P = props.P, fm = props.fm;
+  var apiBase = props.apiBase, token = props.token;
+  var accountId = props.accountId, creatives = props.creatives, onBatch = props.onBatch;
+  var fileRef = useRef(null);
+  var ds = useState(false), dragOver = ds[0], setDragOver = ds[1];
+  var psS = useState([]), progressItems = psS[0], setProgressItems = psS[1];
+  var bS = useState(false), busy = bS[0], setBusy = bS[1];
+
+  var disabled = !accountId || busy;
+
+  var uploadOne = function(file, runningList) {
+    return readDataUrl(file).then(function(dataUrl){
+      return readDimensions(file, dataUrl).then(function(dims){
+        var b64 = String(dataUrl).split(",")[1] || "";
+        var kind = classifyKind(file);
+        var uploadKind = kind === "video" ? "video" : "image"; // GIF posts as image
+        return fetch(apiBase + "/api/create/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+          body: JSON.stringify({ kind: uploadKind, accountId: accountId, filename: file.name, mimeType: file.type, dataB64: b64 })
+        })
+          .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+          .then(function(x){
+            if (!x.ok) throw new Error((x.data && x.data.error) || "Upload failed");
+            return creativeFromUpload({
+              file: file, uploadResult: x.data, dataUrl: dataUrl, dims: dims,
+              existingCreatives: runningList
+            });
+          });
+      });
+    });
+  };
+
+  var handleFiles = function(files) {
+    if (disabled) return;
+    var arr = Array.prototype.slice.call(files || []);
+    if (arr.length === 0) return;
+    setBusy(true);
+    var items = arr.map(function(f){ return { name: f.name, status: "queued", error: "" }; });
+    setProgressItems(items);
+
+    var POOL = 3;
+    var nextIndex = 0;
+    var runningList = creatives.slice(); // mutated as new creatives land so asset names stay unique
+    var collected = [];
+    var inFlight = 0;
+    var finishedCount = 0;
+
+    return new Promise(function(resolve){
+      var tick = function(){
+        while (inFlight < POOL && nextIndex < arr.length) {
+          (function(i){
+            inFlight++;
+            items[i].status = "uploading";
+            setProgressItems(items.slice());
+            uploadOne(arr[i], runningList)
+              .then(function(creative){
+                runningList.push(creative);
+                collected.push(creative);
+                items[i].status = "done";
+              })
+              .catch(function(err){
+                items[i].status = "error";
+                items[i].error = String(err && err.message || err);
+              })
+              .then(function(){
+                inFlight--;
+                finishedCount++;
+                setProgressItems(items.slice());
+                if (finishedCount === arr.length) {
+                  setBusy(false);
+                  if (collected.length > 0) onBatch(collected);
+                  resolve();
+                } else {
+                  tick();
+                }
+              });
+          })(nextIndex);
+          nextIndex++;
+        }
+      };
+      tick();
+    });
+  };
+
+  var onDrop = function(e){
+    e.preventDefault();
+    setDragOver(false);
+    if (disabled) return;
+    handleFiles(e.dataTransfer && e.dataTransfer.files);
+  };
+  var onDragOver = function(e){
+    e.preventDefault();
+    if (!disabled) setDragOver(true);
+  };
+  var onDragLeave = function(){ setDragOver(false); };
+  var onPick = function(e){
+    handleFiles(e.target.files);
+    e.target.value = ""; // allow re-picking the same file later
+  };
+
+  var borderColor = disabled ? P.rule : (dragOver ? P.fuchsia : P.fuchsia + "60");
+  var bg = dragOver ? P.fuchsia + "12" : "rgba(20,12,30,0.4)";
+
+  return <div style={{marginBottom:16}}>
+    <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
+      onClick={function(){ if (!disabled && fileRef.current) fileRef.current.click(); }}
+      style={{padding:"22px 24px",border:"2px dashed "+borderColor,background:bg,borderRadius:14,cursor:disabled?"not-allowed":"pointer",transition:"background 0.15s, border-color 0.15s",textAlign:"center"}}>
+      <div style={{fontSize:11,fontWeight:900,color:P.fuchsia,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",marginBottom:8}}>
+        Bulk drop — multiple files at once
+      </div>
+      <div style={{fontSize:13,color:P.txt,fontFamily:fm,fontWeight:700,marginBottom:6}}>
+        Drag a folder of mixed creatives here, or click to pick many files
+      </div>
+      <div style={{fontSize:11,color:P.label||P.sub,fontFamily:fm,lineHeight:1.6}}>
+        Each file becomes one ad. Aspect ratio (9x16, 1x1, 16x9, etc.) and asset name (Static1, Video2…) auto-fill from the file dimensions. Meta serves each ad on the placements its ratio fits (9x16 → Reels + Stories, 1x1 → Feed, 16x9 → In-Stream).
+      </div>
+      {!accountId && <div style={{marginTop:10,fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm}}>Pick an ad account on Step 0 first.</div>}
+      <input ref={fileRef} type="file" multiple style={{display:"none"}}
+        accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime"
+        onChange={onPick}/>
+    </div>
+
+    {progressItems.length > 0 && <div style={{marginTop:10,padding:"12px 14px",background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:10}}>
+      <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
+        Bulk upload progress
+      </div>
+      {progressItems.map(function(it, i){
+        var col = it.status === "done" ? P.mint : (it.status === "error" ? (P.critical || "#ef4444") : (it.status === "uploading" ? P.fuchsia : (P.label || P.sub)));
+        var label = it.status === "done" ? "✓ done" : (it.status === "error" ? ("× " + (it.error || "failed")) : (it.status === "uploading" ? "uploading…" : "queued"));
+        return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11,fontFamily:fm,padding:"3px 0",color:P.label||P.sub}}>
+          <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginRight:12}}>{it.name}</span>
+          <span style={{color:col,fontWeight:700,letterSpacing:0.5,whiteSpace:"nowrap"}}>{label}</span>
+        </div>;
+      })}
+    </div>}
+  </div>;
 }
 
 function CreativeCard(props) {
@@ -2108,6 +2275,113 @@ function emptyCreative() {
     headline: "", primaryText: "", description: "",
     linkUrl: "", callToAction: "LEARN_MORE",
     filename: null, previewDataUrl: null,
+    concept: "", version: "V01"
+  };
+}
+
+// ============================================================================
+// Bulk-upload helpers — detect each file's dimensions client-side, classify
+// into the agency's standard ratios, and slot the result into the
+// {Platform}_{AssetName}_{RatioSize}_… naming. Static images are read with
+// Image(); videos via a hidden <video> element's metadata. GIFs are
+// classified as their own asset type because Meta serves them as image_hash
+// but reporting treats them distinctly.
+// ============================================================================
+function classifyKind(file) {
+  if (!file || !file.type) return "image";
+  if (file.type.indexOf("video") === 0) return "video";
+  if (/\.gif$/i.test(file.name || "") || file.type === "image/gif") return "gif";
+  return "image";
+}
+
+function readDataUrl(file) {
+  return new Promise(function(resolve, reject){
+    var rdr = new FileReader();
+    rdr.onload = function(){ resolve(String(rdr.result || "")); };
+    rdr.onerror = function(){ reject(new Error("Could not read " + file.name)); };
+    rdr.readAsDataURL(file);
+  });
+}
+
+function readDimensions(file, dataUrl) {
+  var kind = classifyKind(file);
+  return new Promise(function(resolve){
+    if (kind === "video") {
+      var v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      v.onloadedmetadata = function(){ resolve({ width: v.videoWidth || 0, height: v.videoHeight || 0 }); };
+      v.onerror = function(){ resolve({ width: 0, height: 0 }); };
+      v.src = dataUrl;
+    } else {
+      var img = new Image();
+      img.onload = function(){ resolve({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 }); };
+      img.onerror = function(){ resolve({ width: 0, height: 0 }); };
+      img.src = dataUrl;
+    }
+  });
+}
+
+// Map raw width/height to the agency's preferred ratio token. Tolerances
+// keep "near-square" assets out of the 9x16 bucket and vice versa.
+function classifyRatio(w, h) {
+  if (!w || !h) return "";
+  var r = w / h;
+  if (r >= 1.85) return "1.91x1";
+  if (r >= 1.55) return "16x9";
+  if (r >= 1.10) return "1.91x1"; // landscape-ish rounds toward 1.91x1
+  if (r >= 0.90) return "1x1";
+  if (r >= 0.74) return "4x5";
+  return "9x16"; // anything taller than ~3:4 lands in the vertical bucket
+}
+
+function assetTypeFromKind(kind) {
+  if (kind === "video") return "Video";
+  if (kind === "gif") return "GIF";
+  return "Static";
+}
+
+// Compute a unique asset name within the current creatives list. e.g.
+// existing has Static1 + Static2 → new static becomes Static3. Numbering
+// is per asset-type so videos and statics get their own counters.
+function nextAssetName(existingCreatives, kind) {
+  var assetType = assetTypeFromKind(kind);
+  var pattern = new RegExp("^" + assetType + "(\\d+)$");
+  var maxN = 0;
+  (existingCreatives || []).forEach(function(c){
+    var name = c.assetName || "";
+    var m = name.match(pattern);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n > maxN) maxN = n;
+    }
+  });
+  return assetType + (maxN + 1);
+}
+
+// Build a creative object from an uploaded file. Each call should be
+// passed the running creatives list so asset names stay unique across
+// the batch. Returns the new creative; the caller appends it.
+function creativeFromUpload(args) {
+  var file = args.file;
+  var uploadResult = args.uploadResult; // { kind, imageHash, videoId }
+  var dataUrl = args.dataUrl;
+  var dims = args.dims; // { width, height }
+  var existingCreatives = args.existingCreatives || [];
+  var kind = classifyKind(file);
+  return {
+    kind: uploadResult.kind || kind,
+    imageHash: uploadResult.imageHash || null,
+    videoId: uploadResult.videoId || null,
+    headline: "", primaryText: "", description: "",
+    linkUrl: "", callToAction: "LEARN_MORE",
+    filename: file.name,
+    previewDataUrl: kind === "video" ? null : dataUrl,
+    width: dims.width || 0,
+    height: dims.height || 0,
+    ratioSize: classifyRatio(dims.width, dims.height),
+    assetName: nextAssetName(existingCreatives, kind),
+    productAction: "",
     concept: "", version: "V01"
   };
 }
