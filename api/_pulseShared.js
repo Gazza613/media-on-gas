@@ -86,9 +86,9 @@ export async function redisSetIfAbsent(key, ttlSeconds) {
 // Palette (mirrors dashboard's P.* tokens so emails feel continuous)
 // ============================================================================
 export var P = {
-  bg: "#06020e",
-  panel: "#0d0618",
-  panel2: "#1a0b2e",
+  bg: "#070E16",
+  panel: "#0F1820",
+  panel2: "#13202C",
   txt: "#FFFBF8",
   label: "rgba(255,251,248,0.70)",
   caption: "rgba(255,251,248,0.58)",
