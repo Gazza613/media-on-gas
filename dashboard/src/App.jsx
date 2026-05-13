@@ -4340,15 +4340,13 @@ export default function MediaOnGas(){
             ].filter(function(p){return p.totalClicks>0;});
             return null;
   })();
-  // Page backdrop. Static multi-radial gradient that mirrors the login
-  // screen's depth: an ember flare top-left, an orchid flare bottom-right,
-  // a faint cyan glow mid-stage, and a softly-brightening ellipse anchored
-  // at the top of the viewport. Each radial sits at low alpha so the
-  // metric tiles and glass cards still read as the surface focus — only
-  // the negative space gets richer. background-attachment:fixed keeps the
-  // depth viewport-locked while scrolling long pages.
+  // Page backdrop. Static multi-radial gradient: an orchid flare bottom-
+  // right, a faint cyan glow mid-stage, and a softly-brightening ellipse
+  // anchored at the top of the viewport. Each radial sits at low alpha
+  // so the metric tiles and glass cards still read as the surface focus
+  // — only the negative space gets richer. background-attachment:fixed
+  // keeps the depth viewport-locked while scrolling long pages.
   var pageBackdrop = loading ? P.void :
-    "radial-gradient(circle at 8% 12%, rgba(249,98,3,0.10) 0%, transparent 38%)," +
     "radial-gradient(circle at 92% 88%, rgba(168,85,247,0.09) 0%, transparent 40%)," +
     "radial-gradient(circle at 60% 55%, rgba(34,211,238,0.05) 0%, transparent 48%)," +
     "radial-gradient(ellipse at 50% 0%, #1a0b2e 0%, #0d0618 35%, #06020e 80%)";
