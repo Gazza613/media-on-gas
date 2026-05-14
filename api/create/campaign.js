@@ -170,7 +170,32 @@ export default async function handler(req, res) {
     //   carousel → one creative with N child cards, one ad. Each card has
     //              its own image_hash + headline + link.
     var creativesPosted = [];   // [{ creativeId, adId, name }]
-    if (p.creativeMode === "carousel") {
+    if (p.creativeMode === "advantage_plus") {
+      // Advantage+ Creative: ONE adcreative carries an asset_feed_spec
+      // with arrays of images/videos/titles/bodies/link_urls and Meta
+      // permutes them. Result is a single ad that Meta auto-tests
+      // across the supplied variants.
+      var apBody = buildAdvantagePlusCreative(p);
+      var apForm = creativeFormFromBody(apBody, p, token, p.creatives[0].adName);
+      var apRes = await fetch(graphBase + "/" + acct + "/adcreatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: apForm.toString()
+      });
+      var apData = await apRes.json();
+      if (!apRes.ok || !apData.id) {
+        return fail(res, 502, "Advantage+ creative create failed (campaign + adset were created, paused)", apData,
+          { campaignId: campaignId, adsetId: adsetId },
+          scrubForm(apForm));
+      }
+      var apAd = await postAd(graphBase, acct, token, p.creatives[0].adName, adsetId, apData.id, p);
+      if (apAd.error) {
+        return fail(res, 502, "Ad create failed (Advantage+ creative was created, paused)", apAd.detail,
+          { campaignId: campaignId, adsetId: adsetId, creativeId: apData.id },
+          apAd.scrubbed);
+      }
+      creativesPosted.push({ creativeId: apData.id, adId: apAd.id, name: p.creatives[0].adName });
+    } else if (p.creativeMode === "carousel") {
       var carouselBody = buildCarouselCreative(p);
       var crForm = creativeFormFromBody(carouselBody, p, token, p.creatives[0].adName);
       var crRes = await fetch(graphBase + "/" + acct + "/adcreatives", {
@@ -406,7 +431,7 @@ function validate(b) {
   if (b.endDate && !endIso) return { error: "endDate invalid (YYYY-MM-DD)" };
 
   // Creative validation. Three modes; per-mode rules differ.
-  var creativeMode = ["single", "multi", "carousel"].indexOf(b.creativeMode) >= 0 ? b.creativeMode : "single";
+  var creativeMode = ["single", "multi", "carousel", "advantage_plus"].indexOf(b.creativeMode) >= 0 ? b.creativeMode : "single";
   if (!Array.isArray(b.creatives) || b.creatives.length === 0) {
     return { error: "creatives[] missing — at least one creative required" };
   }
@@ -469,7 +494,15 @@ function validate(b) {
           callToAction: c.callToAction ? String(c.callToAction) : "LEARN_MORE",
           adName: String(c.adName || "").slice(0, 200)
         };
-      })
+      }),
+      // Advantage+ variants. Optional; only used when creativeMode is
+      // "advantage_plus". Each array capped at 5 to fit Meta's
+      // asset_feed_spec limits.
+      adVariants: b.adVariants && typeof b.adVariants === "object" ? {
+        headlines: Array.isArray(b.adVariants.headlines) ? b.adVariants.headlines.map(function(s){ return String(s||"").slice(0,200); }).filter(Boolean).slice(0,5) : [],
+        primaryTexts: Array.isArray(b.adVariants.primaryTexts) ? b.adVariants.primaryTexts.map(function(s){ return String(s||"").slice(0,1500); }).filter(Boolean).slice(0,5) : [],
+        descriptions: Array.isArray(b.adVariants.descriptions) ? b.adVariants.descriptions.map(function(s){ return String(s||"").slice(0,200); }).filter(Boolean).slice(0,5) : []
+      } : null
     }
   };
 }
@@ -698,6 +731,61 @@ function buildSingleCreative(c, p) {
     };
   }
   return { object_story_spec: storySpec };
+}
+
+// Advantage+ Creative builder. Constructs an asset_feed_spec where
+// every variant the team supplied (headlines, primary texts, images,
+// videos, link URLs, CTAs) becomes an array element and Meta auto-
+// permutes them at delivery time.
+//
+// Sources the variants from:
+//   - All non-empty headlines across creatives + p.adVariants.headlines
+//   - All non-empty primary texts across creatives + p.adVariants.primaryTexts
+//   - imageHash / videoId per creative
+//   - One link URL + one CTA from creative #0 (Meta requires these to
+//     be a single value, not an array, for the asset_feed_spec
+//     ad_formats=single_image/video case)
+function buildAdvantagePlusCreative(p) {
+  var firstC = p.creatives[0];
+  var variants = p.adVariants || {};
+  var headlines = uniqueNonEmpty(([firstC.headline].concat(p.creatives.slice(1).map(function(c){ return c.headline; }))).concat(variants.headlines || [])).slice(0, 5);
+  var bodies = uniqueNonEmpty(([firstC.primaryText].concat(p.creatives.slice(1).map(function(c){ return c.primaryText; }))).concat(variants.primaryTexts || [])).slice(0, 5);
+  var descriptions = uniqueNonEmpty(p.creatives.map(function(c){ return c.description; }).concat(variants.descriptions || []));
+
+  var images = p.creatives.filter(function(c){ return c.imageHash; }).map(function(c){ return { hash: c.imageHash }; });
+  var videos = p.creatives.filter(function(c){ return c.videoId; }).map(function(c){ return { video_id: c.videoId, thumbnail_hash: c.imageHash || undefined }; });
+
+  var spec = {
+    titles: headlines.map(function(t){ return { text: t }; }),
+    bodies: bodies.map(function(t){ return { text: t }; }),
+    link_urls: [{ website_url: firstC.linkUrl }],
+    call_to_action_types: [firstC.callToAction || "LEARN_MORE"],
+    ad_formats: videos.length > 0 ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"]
+  };
+  if (images.length > 0) spec.images = images;
+  if (videos.length > 0) spec.videos = videos;
+  if (descriptions.length > 0) spec.descriptions = descriptions.slice(0, 5).map(function(t){ return { text: t }; });
+
+  var storySpec = { page_id: p.pageId };
+  if (p.instagramId) storySpec.instagram_user_id = p.instagramId;
+
+  return {
+    object_story_spec: storySpec,
+    asset_feed_spec: spec
+  };
+}
+
+function uniqueNonEmpty(arr) {
+  var seen = {};
+  var out = [];
+  (arr || []).forEach(function(s){
+    var t = String(s || "").trim();
+    if (!t) return;
+    if (seen[t]) return;
+    seen[t] = true;
+    out.push(t);
+  });
+  return out;
 }
 
 function buildCarouselCreative(p) {

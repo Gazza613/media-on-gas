@@ -238,6 +238,11 @@ function Wizard(props) {
     // reporting + better Meta optimization). Default off so existing
     // single-campaign behaviour is preserved.
     autoSplitByRatio: false,
+    // Advantage+ Creative variants. Only used when creativeMode is
+    // 'advantage_plus'. Headlines and primary texts are merged with
+    // the per-creative ones at submit time and shipped as Meta's
+    // asset_feed_spec arrays.
+    adVariants: { headlines: ["", "", ""], primaryTexts: ["", "", ""] },
 
     // Budget
     funding: "ABO",       // CBO | ABO
@@ -365,12 +370,19 @@ function Wizard(props) {
       for (var i = 0; i < creatives.length; i++) {
         var c = creatives[i];
         if (!(c.imageHash || c.videoId)) return false;
-        if (!c.headline.trim()) return false;
-        if (!c.linkUrl.trim()) return false;
-        var assetOk = (c.assetName && c.assetName.trim()) || (c.concept && c.concept.trim());
-        var actionOk = (c.productAction && c.productAction.trim()) || (c.concept && c.concept.trim());
-        if (!assetOk || !actionOk) return false;
-        if (draft.creativeMode !== "carousel" && !c.primaryText.trim()) return false;
+        // In Advantage+ mode only the first creative needs headline +
+        // linkUrl + primaryText + name parts; cards 2..N contribute
+        // their asset and (optionally) headline/text to Meta's variant
+        // pool but don't have to be fully filled.
+        var requireFull = i === 0 || (draft.creativeMode !== "advantage_plus");
+        if (requireFull) {
+          if (!c.headline.trim()) return false;
+          if (!c.linkUrl.trim()) return false;
+          var assetOk = (c.assetName && c.assetName.trim()) || (c.concept && c.concept.trim());
+          var actionOk = (c.productAction && c.productAction.trim()) || (c.concept && c.concept.trim());
+          if (!assetOk || !actionOk) return false;
+          if (draft.creativeMode !== "carousel" && !c.primaryText.trim()) return false;
+        }
       }
       // Single-mode carousel/single use creatives[0].primaryText as the text.
       if (draft.creativeMode === "carousel" && !creatives[0].primaryText.trim()) return false;
@@ -451,6 +463,9 @@ function Wizard(props) {
       // high-spend threshold. Backend re-verifies the fingerprint
       // before letting submit through.
       approvalToken: approvalState && approvalState.status === "approved" ? approvalState.token : null,
+      // Advantage+ variants — extra headlines / primary texts that
+      // Meta will permute alongside the per-creative ones.
+      adVariants: draft.creativeMode === "advantage_plus" ? (draft.adVariants || {}) : null,
       urlTags: draft.urlTags || null
     };
     return { payload: payload, campaignName: cName, adsetName: aName, nameErrors: nameErrors };
@@ -1341,9 +1356,10 @@ function Step3(props) {
   var fbHidden = draft.platformMode === "ig_only";
 
   var modeTabs = [
-    { k: "single",   n: "Single ad",  sub: "1 image or video, 1 ad" },
-    { k: "multi",    n: "Multiple ads", sub: "N creatives, N ads in one ad set, Meta rotates" },
-    { k: "carousel", n: "Carousel",   sub: "1 ad with 2-10 swipeable cards" }
+    { k: "single",         n: "Single ad",      sub: "1 image or video, 1 ad" },
+    { k: "multi",          n: "Multiple ads",   sub: "N creatives, N ads in one ad set, Meta rotates" },
+    { k: "carousel",       n: "Carousel",       sub: "1 ad with 2-10 swipeable cards" },
+    { k: "advantage_plus", n: "Advantage+",     sub: "N assets + variant headlines + variant texts, Meta auto-tests combos" }
   ];
   var creatives = draft.creatives || [];
 
@@ -1406,6 +1422,50 @@ function Step3(props) {
         <div style={{position:"absolute",top:2,left:draft.multiAdvertiserAds?24:2,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
       </div>
     </div>
+
+    {/* Advantage+ Creative variants — extra headline / primary text
+        options Meta combines at delivery time with the per-creative
+        ones. Each list is capped at 5 by the backend. */}
+    {draft.creativeMode === "advantage_plus" && (function(){
+      var v = draft.adVariants || { headlines: [], primaryTexts: [] };
+      var setVar = function(field, idx, value){
+        var arr = (v[field] || []).slice();
+        arr[idx] = value;
+        var nextV = Object.assign({}, v); nextV[field] = arr;
+        update({ adVariants: nextV });
+      };
+      var addSlot = function(field){
+        var arr = (v[field] || []).slice();
+        if (arr.length >= 5) return;
+        arr.push("");
+        var nextV = Object.assign({}, v); nextV[field] = arr;
+        update({ adVariants: nextV });
+      };
+      return <div style={{margin:"-4px 0 18px",padding:"16px 18px",background:P.orchid+"10",border:"1px solid "+P.orchid+"40",borderLeft:"3px solid "+P.orchid,borderRadius:"0 10px 10px 0"}}>
+        <div style={{fontSize:11,fontWeight:800,color:P.orchid,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Advantage+ Creative Variants</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,lineHeight:1.55,marginBottom:14}}>
+          Meta builds one ad and permutes these variants with the assets you upload. The per-card headline + primary text below are included automatically; add 2-4 alternates here so Meta has room to test. Cap is 5 per list.
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Headline variants</div>
+            {(v.headlines || []).map(function(h, i){
+              return <input key={"h"+i} value={h} onChange={function(e){ setVar("headlines", i, e.target.value); }} maxLength={200}
+                placeholder={"Headline variant " + (i+1)} style={Object.assign({}, inputStyle(P, fm), { marginBottom: 6 })}/>;
+            })}
+            {(v.headlines || []).length < 5 && <button onClick={function(){ addSlot("headlines"); }} style={{background:"transparent",border:"1px dashed "+P.orchid+"60",borderRadius:8,padding:"6px 12px",color:P.orchid,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>+ Add another headline</button>}
+          </div>
+          <div>
+            <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Primary text variants</div>
+            {(v.primaryTexts || []).map(function(t, i){
+              return <textarea key={"t"+i} value={t} onChange={function(e){ setVar("primaryTexts", i, e.target.value); }} maxLength={1500}
+                placeholder={"Primary text variant " + (i+1)} style={Object.assign({}, inputStyle(P, fm), { minHeight: 60, marginBottom: 6 })}/>;
+            })}
+            {(v.primaryTexts || []).length < 5 && <button onClick={function(){ addSlot("primaryTexts"); }} style={{background:"transparent",border:"1px dashed "+P.orchid+"60",borderRadius:8,padding:"6px 12px",color:P.orchid,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>+ Add another primary text</button>}
+          </div>
+        </div>
+      </div>;
+    })()}
 
     {/* Bulk drop-zone — drag many files in one go from a synced Drive folder
         or local disk. Disabled for carousel mode (cards there are managed
@@ -3319,7 +3379,13 @@ function validateNamingConvention(draft, campaignName, adsetName, creatives) {
   if (!ADSET_NAME_RE.test(adsetName)) {
     errors.push("Ad-set name does not match Client_Platform_Objective_Product_Audience_MonthYear: " + (adsetName || "(empty)"));
   }
-  (creatives || []).forEach(function(c, idx){
+  // Carousel and Advantage+ create a single ad in Meta — only the
+  // first creative's ad name matters. Other modes create one ad per
+  // creative, so every adName must validate.
+  var toValidate = (draft && (draft.creativeMode === "carousel" || draft.creativeMode === "advantage_plus"))
+    ? (creatives || []).slice(0, 1)
+    : (creatives || []);
+  toValidate.forEach(function(c, idx){
     var adName = composeAdName(c, idx, draft);
     if (!AD_NAME_RE.test(adName)) {
       errors.push("Ad #" + (idx + 1) + " name does not match Platform_Asset_Ratio_ProductAction_MonthYear: " + (adName || "(empty)"));
