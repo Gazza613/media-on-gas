@@ -380,6 +380,17 @@ function Wizard(props) {
   // -------- Submit ---------------------------------------------------------
   var submit = function(){
     if (submitting) return;
+
+    // Hard naming-convention gate. Block submit if any campaign / ad-set /
+    // ad name doesn't match the agency regex. The wizard auto-fills these
+    // names from draft state, so a failure here usually means a draft
+    // field is missing (no product name, no audience, start date unset).
+    var nameErrors = validateNamingConvention(draft, generatedCampaignName, generatedAdsetName, draft.creatives || []);
+    if (nameErrors.length > 0) {
+      setSubmitErr({ status: 0, body: { error: "Naming convention violations", details: nameErrors } });
+      return;
+    }
+
     setSubmitting(true); setSubmitErr(null);
 
     var creativesPayload = (draft.creatives || []).map(function(c, idx){
@@ -479,8 +490,13 @@ function Wizard(props) {
     </div>
 
     {submitErr && <div style={{marginTop:18,padding:"14px 18px",background:(P.critical||"#ef4444")+"12",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:10,color:P.critical||"#ef4444",fontSize:12,fontFamily:fm,lineHeight:1.6}}>
-      <div style={{fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",fontSize:10,marginBottom:8}}>Create failed (HTTP {submitErr.status})</div>
+      <div style={{fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",fontSize:10,marginBottom:8}}>{submitErr.status > 0 ? ("Create failed (HTTP " + submitErr.status + ")") : "Submit blocked"}</div>
       <div style={{color:P.txt,marginBottom:8}}>{submitErr.body && submitErr.body.error}</div>
+      {submitErr.body && Array.isArray(submitErr.body.details) && submitErr.body.details.length > 0 && <ul style={{margin:"0 0 10px",padding:"0 0 0 18px",color:P.txt}}>
+        {submitErr.body.details.map(function(d, i){
+          return <li key={i} style={{margin:"4px 0",fontSize:11,fontFamily:fm,color:P.txt}}>{d}</li>;
+        })}
+      </ul>}
       {submitErr.body && submitErr.body.partial && <div style={{color:P.warning||"#fbbf24",marginBottom:8,fontSize:11}}>
         Partial state created and left PAUSED: {Object.keys(submitErr.body.partial).map(function(k){return k+"="+JSON.stringify(submitErr.body.partial[k]);}).join(", ")}
       </div>}
@@ -2528,6 +2544,43 @@ function formatCode(c) {
   if (c.videoId) return "VID";
   if (c.imageHash && c.filename && /\.gif$/i.test(c.filename)) return "GIF";
   return "IMG";
+}
+
+// Naming-convention validators. Each level has a regex that requires
+// exactly the expected segment count joined by underscores, with each
+// segment populated. If any name fails, submit is blocked at the
+// frontend and the team sees the specific reason. Mirrors what the
+// dashboard would otherwise have to detect from the audit-log /
+// objective-classification pipeline downstream.
+//
+//   Campaign: Client_Platform_Objective_Product_MonthYear        (5 segments)
+//   Ad set:   Client_Platform_Objective_Product_Audience_MonthYear (6 segments)
+//   Ad:       Platform_Asset_Ratio_ProductAction_MonthYear        (5 segments)
+//
+// MonthYear is the only segment with a fixed form (e.g. "May2026").
+// Other segments accept alphanum + hyphen + ampersand. Empty segments
+// (i.e. two underscores in a row) fail validation.
+var NAME_SEGMENT_RE = "[A-Za-z0-9][A-Za-z0-9\\-&]*";
+var MONTH_YEAR_RE = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\d{4}";
+var CAMPAIGN_NAME_RE = new RegExp("^" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + MONTH_YEAR_RE + "$");
+var ADSET_NAME_RE    = new RegExp("^" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + MONTH_YEAR_RE + "$");
+var AD_NAME_RE       = new RegExp("^" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + NAME_SEGMENT_RE + "_" + MONTH_YEAR_RE + "$");
+
+function validateNamingConvention(draft, campaignName, adsetName, creatives) {
+  var errors = [];
+  if (!CAMPAIGN_NAME_RE.test(campaignName)) {
+    errors.push("Campaign name does not match Client_Platform_Objective_Product_MonthYear: " + (campaignName || "(empty)"));
+  }
+  if (!ADSET_NAME_RE.test(adsetName)) {
+    errors.push("Ad-set name does not match Client_Platform_Objective_Product_Audience_MonthYear: " + (adsetName || "(empty)"));
+  }
+  (creatives || []).forEach(function(c, idx){
+    var adName = composeAdName(c, idx, draft);
+    if (!AD_NAME_RE.test(adName)) {
+      errors.push("Ad #" + (idx + 1) + " name does not match Platform_Asset_Ratio_ProductAction_MonthYear: " + (adName || "(empty)"));
+    }
+  });
+  return errors;
 }
 
 // Compose campaign name per agency naming convention:
