@@ -16,7 +16,9 @@ import { checkCreateAuth } from "../_createAuth.js";
 
 export const config = { maxDuration: 30 };
 
-var APPROVERS = ["gary@gasmarketing.co.za", "sam@gasmarketing.co.za"];
+// Approvers list. Currently only Gary. Easy to extend later by adding
+// addresses here — every entry receives the same Approve link.
+var APPROVERS = ["gary@gasmarketing.co.za"];
 var TTL_SECONDS = 24 * 60 * 60;
 var ORIGIN = "https://media-on-gas.vercel.app";
 
@@ -117,7 +119,7 @@ export default async function handler(req, res) {
           '<div style="font-size:11px;color:#F96203;letter-spacing:5px;font-weight:800;text-transform:uppercase;margin-bottom:8px;">High-spend approval requested</div>' +
           '<div style="font-size:22px;font-weight:900;color:#FFFBF8;line-height:1.3;margin-bottom:14px;">' + escapeHtml(record.campaignName) + '</div>' +
           '<div style="font-size:13px;color:rgba(255,251,248,0.82);line-height:1.7;">' +
-            '<strong>' + escapeHtml(requestedBy) + '</strong> wants to launch this campaign. Budget exceeds the high-spend threshold, so a second-person approval is required before it goes live in Meta.' +
+            '<strong>' + escapeHtml(requestedBy) + '</strong> wants to launch this campaign. Budget exceeds the high-spend threshold, so approval is required before it goes live in Meta.' +
           '</div>' +
         '</div>' +
         '<div style="padding:0 30px 18px;">' +
