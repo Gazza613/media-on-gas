@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   var email = normalizeEmail(body.email);
   var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRe.test(email)) {
-    // Even on malformed email return the generic OK message — never leak
+    // Even on malformed email return the generic OK message, never leak
     // anything an attacker could use to enumerate inputs.
     res.status(200).json({ ok: true });
     return;
@@ -126,7 +126,7 @@ export default async function handler(req, res) {
     } catch (_) {}
   } catch (err) {
     console.error("[forgot-password] send failed", err);
-    // Even a send failure returns generic OK — don't help the attacker
+    // Even a send failure returns generic OK, don't help the attacker
     // distinguish.
   }
 

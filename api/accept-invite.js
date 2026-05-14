@@ -7,10 +7,10 @@ import {
 // Public endpoint serving two flows that share the exact same form (set a
 // new password):
 //
-//   1. Accept-invite — first-time activation. Token comes from a Redis
+//   1. Accept-invite, first-time activation. Token comes from a Redis
 //      `invite:` key with 7-day TTL. Consuming it creates the user row.
 //
-//   2. Password reset — token comes from `reset:` key with 1-hour TTL,
+//   2. Password reset, token comes from `reset:` key with 1-hour TTL,
 //      issued by /api/forgot-password (self-serve) or /api/admin-reset
 //      (superadmin-triggered). Consuming it overwrites passwordHash on the
 //      existing user row. Role and other fields are preserved.

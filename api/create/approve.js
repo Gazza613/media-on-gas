@@ -1,5 +1,5 @@
 // Approver lands here from the email's one-click button. No
-// dashboard auth — possession of the token IS the auth (it was sent
+// dashboard auth, possession of the token IS the auth (it was sent
 // directly to gary@ and sam@ via Gmail SMTP, so anyone who clicks the
 // link has read the inbox). Marks the Redis approval record approved
 // and renders a confirmation HTML page.

@@ -1,6 +1,6 @@
 // Shared utilities for the GAS automated performance emails:
-//   - Weekly Pulse  (api/weekly-pulse.js)   — Monday 08:00 SAST, prior 7d vs 7d before
-//   - Daily Anomalies (api/daily-report.js) — Daily 08:15 SAST, anomalies-only watchlist
+//   - Weekly Pulse  (api/weekly-pulse.js)  , Monday 08:00 SAST, prior 7d vs 7d before
+//   - Daily Anomalies (api/daily-report.js), Daily 08:15 SAST, anomalies-only watchlist
 //
 // Both emails ship to the same 9-person GAS leadership + media team list,
 // both source from /api/campaigns + /api/ads, both share the dashboard
@@ -12,7 +12,7 @@ export var ORIGIN = "https://media-on-gas.vercel.app";
 
 // Distribution list. Both pulse emails go to every named address as
 // primary recipients (TO line, no CC distinction). brunettenkuna@gmail.com
-// is an external personal address — kept here at the user's explicit
+// is an external personal address, kept here at the user's explicit
 // request, so the pulse send path intentionally does not enforce a
 // @gasmarketing.co.za domain restriction (unlike the SLA nudge, which
 // is internal-team-only by design).
@@ -167,7 +167,7 @@ export function adsManagerUrl(c) {
   var platform = String(c.platform || c.metaPlatform || "").toLowerCase();
   var rawCid = String(c.rawCampaignId || c.campaignId || "");
   // The campaignId field is sometimes suffixed (_facebook / _instagram /
-  // google_ prefix) — strip these to recover the raw platform id.
+  // google_ prefix), strip these to recover the raw platform id.
   var cid = rawCid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
   var acct = String(c.accountId || "").replace(/^act_/, "");
 
@@ -194,9 +194,9 @@ export function adsManagerUrl(c) {
 // so the media team can execute the fix without having to look up the SOP.
 //
 // Severity tiers drive both the colour and the render order:
-//   3 = critical (red) — conversion path may be broken, immediate eyeball
-//   2 = high (orange)  — efficiency or volume crash, fix today
-//   1 = medium (yellow)— leading-indicator, schedule a closer look
+//   3 = critical (red), conversion path may be broken, immediate eyeball
+//   2 = high (orange) , efficiency or volume crash, fix today
+//   1 = medium (yellow), leading-indicator, schedule a closer look
 // ============================================================================
 export var ANOMALY_DEFS = {
   conversions_disappeared: {
@@ -206,9 +206,9 @@ export var ANOMALY_DEFS = {
     caption: "Campaign producing zero results yesterday on R100+ spend, when the 7-day baseline had material delivery. The funnel from impression to result is broken somewhere.",
     procedure: [
       "Open the campaign in the platform ads manager and confirm ad-set DELIVERY status (active, not paused or rejected).",
-      "Click through the ad's primary CTA yourself — verify the landing page, lead form, or app-store listing loads and is on the right URL.",
+      "Click through the ad's primary CTA yourself, verify the landing page, lead form, or app-store listing loads and is on the right URL.",
       "Submit a test lead / install / sign-up to confirm the conversion flow completes end-to-end.",
-      "Check the pixel / SDK / GA4 in Events Manager — is the conversion event still firing? If yes, issue is post-conversion attribution; if no, tracking is broken.",
+      "Check the pixel / SDK / GA4 in Events Manager, is the conversion event still firing? If yes, issue is post-conversion attribution; if no, tracking is broken.",
       "If broken and not resolved within 4 hours, pause spend on the affected ad-set to stop bleeding budget into a dead funnel."
     ]
   },
@@ -221,7 +221,7 @@ export var ANOMALY_DEFS = {
       "Open the campaign and confirm the daily budget cap matches the brief.",
       "Check whether the bid strategy was changed (e.g. Lowest Cost vs Bid Cap vs Cost Cap).",
       "Verify Advantage+ campaign budget settings haven't been toggled on if not intended.",
-      "Cross-reference with the client's monthly budget runway — if today's spend pace projects an over-spend, lower the cap or pause until reset."
+      "Cross-reference with the client's monthly budget runway, if today's spend pace projects an over-spend, lower the cap or pause until reset."
     ]
   },
   spend_collapse: {
@@ -230,7 +230,7 @@ export var ANOMALY_DEFS = {
     severity: 2,
     caption: "Spend is under 30% of the 7-day daily average on a campaign that normally spends. Possible pause, budget cap exhaustion, billing issue, or ad disapproval.",
     procedure: [
-      "Open the campaign — check status (active vs paused) and look for delivery limited warnings.",
+      "Open the campaign, check status (active vs paused) and look for delivery limited warnings.",
       "Verify the account's payment method is current (Billing → Payment settings).",
       "Check Account Quality / Ads Manager for any disapprovals or restricted ad notifications.",
       "If lifetime budget, check whether the budget cap was hit; if daily, check whether dayparting was changed.",
@@ -243,10 +243,10 @@ export var ANOMALY_DEFS = {
     severity: 2,
     caption: "Daily lead volume is 50%+ below the 7-day average on a lead-gen objective. Direct pipeline impact for the client.",
     procedure: [
-      "Open the campaign and audit the lead form — has it been edited recently? Are there new required fields, validation rules, or pre-fill changes?",
+      "Open the campaign and audit the lead form, has it been edited recently? Are there new required fields, validation rules, or pre-fill changes?",
       "Test-submit a lead yourself to confirm the form completes and CRM/sheet receives it.",
-      "Check audience targeting — has any condition been changed (geo, age, interests)?",
-      "Pull yesterday's leads in the CRM and check lead quality (real names, valid phone numbers) — a quality drop may explain a volume drop if the client filtered for quality.",
+      "Check audience targeting, has any condition been changed (geo, age, interests)?",
+      "Pull yesterday's leads in the CRM and check lead quality (real names, valid phone numbers), a quality drop may explain a volume drop if the client filtered for quality.",
       "Notify the account manager so the client isn't blindsided when they check their pipeline."
     ]
   },
@@ -256,22 +256,22 @@ export var ANOMALY_DEFS = {
     severity: 2,
     caption: "Cost per Lead, Install, or Follow is 50%+ above the 7-day average. Each conversion is materially more expensive than yesterday.",
     procedure: [
-      "Open the campaign and check CTR direction — if CTR also dropped, this is creative fatigue (rotate assets); if CTR held, this is a conversion-rate problem (audit landing page).",
-      "Check ad-set frequency — if >3.5x, audience is saturated and CPC inflation is dragging up CPR.",
-      "Look at placements — is any single placement driving up the cost? Pause or split-test it out.",
-      "Cross-reference against bidding strategy — if Lowest Cost, the auction is more expensive today; consider a Bid Cap to enforce ceiling."
+      "Open the campaign and check CTR direction, if CTR also dropped, this is creative fatigue (rotate assets); if CTR held, this is a conversion-rate problem (audit landing page).",
+      "Check ad-set frequency, if >3.5x, audience is saturated and CPC inflation is dragging up CPR.",
+      "Look at placements, is any single placement driving up the cost? Pause or split-test it out.",
+      "Cross-reference against bidding strategy, if Lowest Cost, the auction is more expensive today; consider a Bid Cap to enforce ceiling."
     ]
   },
   ctr_collapse: {
     word: "CTR Collapse",
     color: "orange",
     severity: 2,
-    caption: "Click-through rate is 40%+ below the 7-day average. The engagement layer is failing — audience is scrolling past the creative.",
+    caption: "Click-through rate is 40%+ below the 7-day average. The engagement layer is failing, audience is scrolling past the creative.",
     procedure: [
-      "Open the campaign — confirm creative wasn't auto-rotated by Meta's Dynamic Creative or Advantage+.",
-      "Pull frequency — if >3x, fatigue is the cause; rotate creative within 24-48 hours.",
-      "Check placements — Reels and Stories CTRs differ wildly from Feed; one bad placement can drag the blended number.",
-      "Audit creative quality — has anything dated (logo, offer, headline, CTA) since launch?",
+      "Open the campaign, confirm creative wasn't auto-rotated by Meta's Dynamic Creative or Advantage+.",
+      "Pull frequency, if >3x, fatigue is the cause; rotate creative within 24-48 hours.",
+      "Check placements, Reels and Stories CTRs differ wildly from Feed; one bad placement can drag the blended number.",
+      "Audit creative quality, has anything dated (logo, offer, headline, CTA) since launch?",
       "If brief allows, queue 2-3 fresh creative variants to test against the current control."
     ]
   },
@@ -281,9 +281,9 @@ export var ANOMALY_DEFS = {
     severity: 2,
     caption: "Click count is 50%+ below the 7-day daily average while spend held. Auction is paying for impressions that aren't converting to clicks.",
     procedure: [
-      "Open the campaign — confirm CPC trajectory. Climbing CPC + falling clicks = auction got harder.",
+      "Open the campaign, confirm CPC trajectory. Climbing CPC + falling clicks = auction got harder.",
       "Audit creative for date relevance, broken links, or platform policy issues.",
-      "Check audience overlap — are multiple campaigns competing for the same users?",
+      "Check audience overlap, are multiple campaigns competing for the same users?",
       "Consider broader targeting or a switch to Advantage+ audience if creative is intact."
     ]
   },
@@ -291,7 +291,7 @@ export var ANOMALY_DEFS = {
     word: "Frequency Cliff",
     color: "yellow",
     severity: 1,
-    caption: "Frequency jumped to 3.5x or higher and is 50%+ above the 7-day average. Audience pool is exhausting — saturation onset.",
+    caption: "Frequency jumped to 3.5x or higher and is 50%+ above the 7-day average. Audience pool is exhausting, saturation onset.",
     procedure: [
       "Open the campaign and check audience size estimate.",
       "Expand targeting (broader age, geo, interests) or switch to Advantage+ to widen the pool.",
@@ -305,10 +305,10 @@ export var ANOMALY_DEFS = {
     severity: 1,
     caption: "Cost per 1,000 impressions is 40%+ above the 7-day average. Either yesterday's auction was more crowded or relevance/quality score dropped.",
     procedure: [
-      "Open the campaign and check Quality Ranking, Engagement Rate Ranking, and Conversion Rate Ranking — any Below Average rating drives CPM up.",
+      "Open the campaign and check Quality Ranking, Engagement Rate Ranking, and Conversion Rate Ranking, any Below Average rating drives CPM up.",
       "Cross-reference with industry calendar (e.g. month-end, Black Friday, election noise) for known auction-pressure events.",
       "Consider Bid Cap to enforce a CPM ceiling, or pause the highest-CPM placement.",
-      "Compare against other active campaigns sharing the audience — overlap drives the auction price up."
+      "Compare against other active campaigns sharing the audience, overlap drives the auction price up."
     ]
   },
   impressions_cliff: {
@@ -317,11 +317,11 @@ export var ANOMALY_DEFS = {
     severity: 1,
     caption: "Impression delivery is 40%+ below the 7-day average while spend held. Delivery is throttled somewhere.",
     procedure: [
-      "Open the campaign — check Delivery column for limited learning or low learning flags.",
+      "Open the campaign, check Delivery column for limited learning or low learning flags.",
       "Verify bid cap isn't strangling delivery (raise by 10-15% to test).",
-      "Check audience size — if shrunk below ~50K, expand targeting.",
-      "Check ad approval status — a disapproved variant in a Dynamic Creative set can starve the whole set.",
-      "Frequency cap — if a per-user cap was tightened, delivery will throttle."
+      "Check audience size, if shrunk below ~50K, expand targeting.",
+      "Check ad approval status, a disapproved variant in a Dynamic Creative set can starve the whole set.",
+      "Frequency cap, if a per-user cap was tightened, delivery will throttle."
     ]
   }
 };

@@ -11,7 +11,7 @@ import {
   fetchCampaigns
 } from "./_pulseShared.js";
 
-// Daily Anomalies — anomaly-only watchlist for the GAS media team. Fires
+// Daily Anomalies, anomaly-only watchlist for the GAS media team. Fires
 // every morning at 08:15 SAST (06:15 UTC) via Vercel cron. Compares the
 // prior day's per-campaign metrics against the campaign's own rolling
 // 7-day baseline; emits one section per anomaly type with the affected
@@ -61,7 +61,7 @@ function buildHtml(opts) {
         '<div style="font-size:22px;font-weight:900;color:' + (medCount > 0 ? P.amber : P.mint) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + medCount + '</div></div></td>' +
     '</tr></table>';
 
-  // Empty state — render a clean "no anomalies" panel so the team knows
+  // Empty state, render a clean "no anomalies" panel so the team knows
   // the watcher ran successfully even when nothing fired.
   var anomaliesBlock = "";
   if (totalAnomalies === 0) {

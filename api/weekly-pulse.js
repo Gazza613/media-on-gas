@@ -11,7 +11,7 @@ import {
   fetchCampaigns, fetchAdsByCampaign
 } from "./_pulseShared.js";
 
-// Weekly Pulse — campaign performance summary for the GAS leadership +
+// Weekly Pulse, campaign performance summary for the GAS leadership +
 // media team. Fires every Monday at 08:00 SAST (06:00 UTC) via Vercel
 // cron, covering the prior 7 calendar days (Mon-Sun) compared against
 // the 7 days before that.
@@ -92,7 +92,7 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
     else if (pd <= -10) { wins.push("CPC " + fmtR(cpcY) + " down " + Math.abs(pd).toFixed(0) + "% vs last week"); }
   }
 
-  // Thin-sample handling — small prior-week samples are noisy.
+  // Thin-sample handling, small prior-week samples are noisy.
   if (sample7d < 50) {
     if (color === "red" || color === "orange") color = "yellow";
     context.push("Thin baseline: " + sample7d + " " + rmY.kind.toLowerCase() + " prior week");
@@ -102,7 +102,7 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
   return { color: color, tag: tag, flags: flags, wins: wins, context: context };
 }
 
-// Senior-analyst per-campaign read of the week — synthesised from the
+// Senior-analyst per-campaign read of the week, synthesised from the
 // week's spend, CTR, CPC, and objective-aligned result vs the prior week.
 function analystNote(thisWeek, lastWeek, rmY, ageDays) {
   var spendY = parseFloat(thisWeek.spend || 0);
@@ -138,7 +138,7 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
     return "Fatigue signature on the week: CTR down " + Math.abs(ctrDelta).toFixed(0) + "% to " + ctrY.toFixed(2) + "% while CPC climbed " + cpcDelta.toFixed(0) + "% to " + fmtR(cpcY) + ". Rotate creative going into next week before CPC compounds further.";
   }
   if (ctrDelta !== null && cpcDelta !== null && ctrDelta >= 10 && cpcDelta <= -10) {
-    return "Both efficiency vectors moving the right way: CTR up " + ctrDelta.toFixed(0) + "% to " + ctrY.toFixed(2) + "%, CPC down " + Math.abs(cpcDelta).toFixed(0) + "% to " + fmtR(cpcY) + ". This is the scale signal — lift the weekly budget 15-20% and let the algorithm extend the win.";
+    return "Both efficiency vectors moving the right way: CTR up " + ctrDelta.toFixed(0) + "% to " + ctrY.toFixed(2) + "%, CPC down " + Math.abs(cpcDelta).toFixed(0) + "% to " + fmtR(cpcY) + ". This is the scale signal, lift the weekly budget 15-20% and let the algorithm extend the win.";
   }
   if (ctrDelta !== null && ctrDelta <= -20) {
     return "CTR fell " + Math.abs(ctrDelta).toFixed(0) + "% wow to " + ctrY.toFixed(2) + "%. Top-of-funnel engagement is softening, which compresses downstream economics. Creative refresh is the first lever, broader targeting second.";
@@ -151,7 +151,7 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
     return fmtNum(resY) + " " + rmY.kind.toLowerCase() + " for the week at " + fmtR(cprY) + " per " + resWord + ", driven by " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR and " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Click-to-" + resWord + " conversion " + (clicksY > 0 ? (resY / clicksY * 100).toFixed(2) : "0.00") + "%, delivery profile steady.";
   }
   if (clicksY > 0 && ctrY > 0) {
-    return ctrY.toFixed(2) + "% CTR on " + fmtNum(clicksY) + " clicks at " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC for the week. Signals sit within band of last week — no creative or bid change indicated.";
+    return ctrY.toFixed(2) + "% CTR on " + fmtNum(clicksY) + " clicks at " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC for the week. Signals sit within band of last week, no creative or bid change indicated.";
   }
   return "Limited delivery this week, sample too thin to derive a confident read.";
 }

@@ -11,7 +11,7 @@ import { timingSafeStrEqual } from "./_createAuth.js";
 //   2. Reports sent to clients
 //   3. Clients currently overdue for their 7-day SLA report
 //
-// Recipients: gary@gasmarketing.co.za, sam@gasmarketing.co.za — both
+// Recipients: gary@gasmarketing.co.za, sam@gasmarketing.co.za, both
 // addressed on the TO line as primary recipients.
 
 var TO_EMAIL = "gary@gasmarketing.co.za, sam@gasmarketing.co.za";
@@ -250,7 +250,7 @@ function buildHtml(opts) {
     '<a href="' + origin + '" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
     '</td></tr></table></td></tr>' +
 
-    // Signoff — same author as the daily Pulse so EXCO sees a consistent
+    // Signoff, same author as the daily Pulse so EXCO sees a consistent
     // named voice across all automated reports.
     '<tr><td style="padding:28px 40px 4px;">' +
     '<div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +

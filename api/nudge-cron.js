@@ -77,7 +77,7 @@ function buildNudgeHtml(opts) {
   var daysOverdue = opts.daysOverdue;
   var dashboardUrl = opts.dashboardUrl;
   var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
-  // Nudge body intentionally does not name the internal GAS sender —
+  // Nudge body intentionally does not name the internal GAS sender,
   // matching is on the client recipient domain (so the same client is
   // tracked across any AM change) and the body addresses the team
   // collectively rather than calling out a single person.
@@ -257,9 +257,9 @@ export default async function handler(req, res) {
     if (!(await rateLimit(req, res, { maxPerMin: 6, maxPerHour: 30 }))) return;
     // Two manual-trigger paths:
     //
-    //   1. x-api-key matching DASHBOARD_API_KEY — for any dashboard page that
+    //   1. x-api-key matching DASHBOARD_API_KEY, for any dashboard page that
     //      already passes the static API key (legacy admin tools).
-    //   2. x-session-token from a logged-in SUPERADMIN — used by the
+    //   2. x-session-token from a logged-in SUPERADMIN, used by the
     //      Settings -> Reconcile pane "Reset SLA Baseline" button so the
     //      static API key never has to ship in the frontend bundle.
     //
@@ -286,7 +286,7 @@ export default async function handler(req, res) {
 
   var dryRun = req.query.dryRun === "1" || req.query.dry === "1";
 
-  // ?reset=1[&baseline=YYYY-MM-DD] — set a baseline date in Redis. All
+  // ?reset=1[&baseline=YYYY-MM-DD], set a baseline date in Redis. All
   // clients are treated as if they last sent on this date, so the SLA
   // counter restarts from there. The first nudges will fire SLA_DAYS +
   // BUFFER_HOURS after the baseline. With no &baseline= the reset uses
@@ -386,14 +386,14 @@ export default async function handler(req, res) {
 
   // Leadership distribution list, filtered through the team-domain
   // allowlist as defense-in-depth. Same list used for every overdue
-  // client this run — the loop builds the recipient list once.
+  // client this run, the loop builds the recipient list once.
   var leadershipList = filterTeamOnly(NUDGE_RECIPIENTS);
   if (leadershipList.length === 0) leadershipList = [SUPERADMIN_EMAIL];
 
   for (var i = 0; i < overdue.length; i++) {
     var c = overdue[i];
     // Resolve the responsible account manager from the recorded last
-    // sender. Only used for body accountability text, not routing — every
+    // sender. Only used for body accountability text, not routing, every
     // nudge goes to the full leadership list regardless.
     var rawAm = c.lastSenderEmail || "";
     var amEmail = isTeamEmail(rawAm) ? rawAm.toLowerCase() : "";

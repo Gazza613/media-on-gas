@@ -1,6 +1,6 @@
 // High-spend approval gate. When a campaign's daily budget exceeds
 // R3,000/day or lifetime exceeds R20,000, the team can't launch it
-// directly — they request approval here. A second-person approver
+// directly, they request approval here. A second-person approver
 // (currently gary@ and sam@) gets an email with a one-click approve
 // link. Once approved, the team's next submit includes the token and
 // the campaign create endpoint validates and proceeds.
@@ -17,7 +17,7 @@ import { checkCreateAuth } from "../_createAuth.js";
 export const config = { maxDuration: 30 };
 
 // Approvers list. Currently only Gary. Easy to extend later by adding
-// addresses here — every entry receives the same Approve link.
+// addresses here, every entry receives the same Approve link.
 var APPROVERS = ["gary@gasmarketing.co.za"];
 var TTL_SECONDS = 24 * 60 * 60;
 var ORIGIN = "https://media-on-gas.vercel.app";

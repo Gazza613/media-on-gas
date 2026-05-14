@@ -134,7 +134,7 @@ export function buildAuditHtml(opts) {
     hour: "2-digit", minute: "2-digit", hour12: false
   });
   return "<p style=\"font-family:Arial,sans-serif;font-size:14px;color:#13202C;line-height:1.7\">" +
-    "<strong>MEDIA ON GAS — Password reset requested</strong></p>" +
+    "<strong>MEDIA ON GAS, Password reset requested</strong></p>" +
     "<p style=\"font-family:Arial,sans-serif;font-size:13px;color:#13202C;line-height:1.7\">" +
     "User: <strong>" + who + "</strong><br>" +
     "Source: " + src + "<br>" +
