@@ -193,6 +193,9 @@ function Wizard(props) {
   // so the team can validate, fix, validate again without losing the
   // success banner from a prior real submit.
   var valS = useState({ loading: false, ok: null, message: "", errors: [] }), validateState = valS[0], setValidateState = valS[1];
+  // Approval state for high-spend campaigns. token + status drive the
+  // UI between "request", "pending", and "approved" panels on Step 6.
+  var apS = useState({ loading: false, token: null, status: null, error: "" }), approvalState = apS[0], setApprovalState = apS[1];
 
   // -------- Wizard state ---------------------------------------------------
   var initial = {
@@ -444,6 +447,10 @@ function Wizard(props) {
       endDate: draft.endDate || null,
       pixelId: draft.pixelId || null,
       conversionEvent: draft.conversionEvent || null,
+      // Approval token attached when the campaign exceeds the
+      // high-spend threshold. Backend re-verifies the fingerprint
+      // before letting submit through.
+      approvalToken: approvalState && approvalState.status === "approved" ? approvalState.token : null,
       urlTags: draft.urlTags || null
     };
     return { payload: payload, campaignName: cName, adsetName: aName, nameErrors: nameErrors };
@@ -456,6 +463,67 @@ function Wizard(props) {
       body: JSON.stringify(payload)
     }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });
   };
+
+  // ------- High-spend approval helpers -------------------------------------
+  // Threshold mirrored on the backend at api/create/campaign.js — keep
+  // these two in sync if you ever raise/lower the bar.
+  var HIGH_DAILY_CENTS = 300000;
+  var HIGH_LIFETIME_CENTS = 2000000;
+  var requiresApproval = (function(){
+    if (draft.budgetMode === "lifetime") return draft.lifetimeBudgetRand * 100 > HIGH_LIFETIME_CENTS;
+    return draft.dailyBudgetRand * 100 > HIGH_DAILY_CENTS;
+  })();
+  var approvedNow = approvalState && approvalState.status === "approved";
+
+  var requestApproval = function(){
+    if (approvalState.loading) return;
+    setApprovalState({ loading: true, token: null, status: null, error: "" });
+    fetch(apiBase + "/api/create/request-approval", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({
+        accountId: draft.accountId,
+        accountName: draft.accountName,
+        campaignName: generatedCampaignName,
+        productName: draft.productName || draft.variant || "",
+        audienceLabel: (draft.audience && draft.audience.audienceLabel) || "",
+        objective: draft.objective,
+        budgetMode: draft.budgetMode,
+        funding: draft.funding,
+        dailyBudgetCents: draft.budgetMode === "daily" ? Math.round(draft.dailyBudgetRand * 100) : 0,
+        lifetimeBudgetCents: draft.budgetMode === "lifetime" ? Math.round(draft.lifetimeBudgetRand * 100) : 0
+      })
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setApprovalState({ loading: false, token: null, status: null, error: (x.data && x.data.error) || "Request failed" }); return; }
+        setApprovalState({ loading: false, token: x.data.token, status: "pending", error: x.data.emailSent ? "" : ("Email failed: " + (x.data.emailReason || "unknown")) });
+      })
+      .catch(function(){ setApprovalState({ loading: false, token: null, status: null, error: "Network error" }); });
+  };
+
+  var checkApproval = function(){
+    if (!approvalState.token) return;
+    fetch(apiBase + "/api/create/check-approval?token=" + encodeURIComponent(approvalState.token), {
+      headers: { "Authorization": "Bearer " + token }
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok || !x.data) return;
+        if (x.data.status === "approved") setApprovalState({ loading: false, token: approvalState.token, status: "approved", error: "" });
+        else if (x.data.status === "expired") setApprovalState({ loading: false, token: null, status: null, error: "Approval token expired, request a fresh approval." });
+      })
+      .catch(function(){});
+  };
+
+  // Poll every 5s while pending so the team sees the green state as soon
+  // as the approver clicks the email link, without a manual refresh.
+  useEffect(function(){
+    if (step !== 6) return;
+    if (!approvalState.token || approvalState.status === "approved") return;
+    var iv = setInterval(checkApproval, 5000);
+    return function(){ clearInterval(iv); };
+  }, [step, approvalState.token, approvalState.status]);
 
   // Pre-flight validate-only. Runs the naming-convention regex first
   // (cheap, local), then asks Meta to validate just the campaign-level
@@ -690,12 +758,32 @@ function Wizard(props) {
           style={{background:"transparent",border:"1px solid "+P.cyan,borderRadius:10,padding:"10px 22px",color:P.cyan,fontSize:11,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:(validateState.loading||submitting)?"default":"pointer",textTransform:"uppercase"}}>
           {validateState.loading ? "Validating…" : "Validate first"}
         </button>}
-        {step === 6 && <button onClick={submit} disabled={submitting}
-          style={{background:submitting?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:submitting?"default":"pointer",boxShadow:submitting?"none":"0 6px 20px rgba(249,98,3,0.35)"}}>
-          {submitting ? "Creating..." : "🚀 Create campaign (PAUSED)"}
+        {step === 6 && <button onClick={submit} disabled={submitting || (requiresApproval && !approvedNow)}
+          title={requiresApproval && !approvedNow ? "Approval required before launch" : ""}
+          style={{background:(submitting || (requiresApproval && !approvedNow))?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:(submitting||(requiresApproval&&!approvedNow))?"default":"pointer",boxShadow:(submitting||(requiresApproval&&!approvedNow))?"none":"0 6px 20px rgba(249,98,3,0.35)"}}>
+          {submitting ? "Creating..." : (requiresApproval && !approvedNow ? "🔒 Approval required" : "🚀 Create campaign (PAUSED)")}
         </button>}
       </div>
     </div>
+
+    {step === 6 && requiresApproval && <div style={{marginTop:14,padding:"14px 18px",background:approvedNow?(P.mint+"15"):((P.amber||"#FBBF24")+"15"),border:"1px solid "+(approvedNow?(P.mint+"40"):((P.amber||"#FBBF24")+"40")),borderLeft:"3px solid "+(approvedNow?P.mint:(P.amber||"#FBBF24")),borderRadius:"0 10px 10px 0"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:11,fontWeight:800,color:approvedNow?P.mint:(P.amber||"#FBBF24"),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{approvedNow ? "✓ Approved by second person" : "High-spend approval required"}</div>
+          <div style={{fontSize:12,color:P.txt,fontFamily:fm,lineHeight:1.55}}>
+            {approvedNow ? "Cleared for launch. Hit Create campaign whenever ready." :
+              (approvalState.status === "pending"
+                ? "Email sent to Gary and Sam. The Launch button unlocks the moment one of them clicks Approve. Polls every 5 seconds."
+                : "Daily budgets over R3,000 or lifetime over R20,000 need a second-person approval from Gary or Sam. Click Request approval below to send the email.")}
+          </div>
+          {approvalState.error && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginTop:6}}>{approvalState.error}</div>}
+        </div>
+        {!approvedNow && <button onClick={requestApproval} disabled={approvalState.loading || approvalState.status === "pending"}
+          style={{background:(approvalState.loading||approvalState.status==="pending")?P.dim:"linear-gradient(135deg,#FF6B00,#A855F7)",border:"none",borderRadius:10,padding:"10px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,letterSpacing:1.5,cursor:(approvalState.loading||approvalState.status==="pending")?"default":"pointer",textTransform:"uppercase",whiteSpace:"nowrap"}}>
+          {approvalState.loading ? "Sending…" : (approvalState.status === "pending" ? "Awaiting Approver" : "Request approval")}
+        </button>}
+      </div>
+    </div>}
     {step === 6 && (validateState.ok === true || validateState.ok === false) && <div style={{marginTop:14,padding:"12px 16px",background:validateState.ok?(P.mint+"15"):(P.critical||"#ef4444")+"15",border:"1px solid "+(validateState.ok?(P.mint+"40"):(P.critical||"#ef4444")+"40"),borderLeft:"3px solid "+(validateState.ok?P.mint:(P.critical||"#ef4444")),borderRadius:"0 10px 10px 0"}}>
       <div style={{fontSize:11,fontWeight:800,color:validateState.ok?P.mint:(P.critical||"#ef4444"),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{validateState.ok ? "Validated" : "Validation failed"}</div>
       <div style={{fontSize:12,color:P.txt,fontFamily:fm,lineHeight:1.6}}>{validateState.message}</div>

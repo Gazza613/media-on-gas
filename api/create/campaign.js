@@ -45,6 +45,36 @@ export default async function handler(req, res) {
   if (v.error) { res.status(400).json({ error: v.error }); return; }
   var p = v.payload;
 
+  // High-spend approval gate. Daily > R3,000 OR lifetime > R20,000
+  // requires a one-click approval from gary@ or sam@ before launch.
+  // Approval tokens are scoped to the exact campaign config via a
+  // SHA-256 fingerprint — if any of the budget / account / name
+  // fields change after approval is granted, the fingerprint differs
+  // and submit is rejected, forcing a fresh approval.
+  var HIGH_DAILY_CENTS = 300000;       // R3,000
+  var HIGH_LIFETIME_CENTS = 2000000;   // R20,000
+  var highDaily = p.budgetMode === "daily" && p.dailyBudgetCents > HIGH_DAILY_CENTS;
+  var highLifetime = p.budgetMode === "lifetime" && p.lifetimeBudgetCents > HIGH_LIFETIME_CENTS;
+  if (highDaily || highLifetime) {
+    var approvalToken = String(body.approvalToken || "").trim();
+    if (!approvalToken) {
+      res.status(403).json({
+        error: "approval_required",
+        message: "Daily budget over R3,000 or lifetime over R20,000 requires a second-person approval before launch.",
+        threshold: { dailyCents: HIGH_DAILY_CENTS, lifetimeCents: HIGH_LIFETIME_CENTS }
+      });
+      return;
+    }
+    var approvalOk = await verifyApproval(approvalToken, p);
+    if (!approvalOk.ok) {
+      res.status(403).json({
+        error: "approval_invalid",
+        message: approvalOk.reason || "Approval token did not validate against this campaign configuration."
+      });
+      return;
+    }
+  }
+
   var graphBase = "https://graph.facebook.com/" + META_API_VERSION;
   var acct = encodeURIComponent(p.accountId);
 
@@ -264,6 +294,49 @@ function creativeFormFromBody(body, p, token, name) {
   });
   form.set("access_token", token);
   return form;
+}
+
+// Read the Redis approval record for a token and verify it matches the
+// current campaign config's fingerprint. Returns { ok: true } or
+// { ok: false, reason }.
+async function verifyApproval(token, p) {
+  var url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
+  var tok = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
+  if (!url || !tok) return { ok: false, reason: "Approval store unavailable" };
+  try {
+    var r = await fetch(url.replace(/\/$/, ""), {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" },
+      body: JSON.stringify(["GET", "approval:" + token])
+    });
+    if (!r.ok) return { ok: false, reason: "Approval lookup failed" };
+    var d = await r.json();
+    if (!d || !d.result) return { ok: false, reason: "Approval token expired or unknown" };
+    var record;
+    try { record = JSON.parse(d.result); } catch (_) { record = null; }
+    if (!record) return { ok: false, reason: "Approval record corrupt" };
+    if (record.status !== "approved") return { ok: false, reason: "Approval is still pending" };
+
+    // Re-compute fingerprint from p and compare. Inlined here rather
+    // than imported to avoid pulling crypto into a Vercel cold-start
+    // graph it didn't otherwise need.
+    var crypto = await import("crypto");
+    var parts = [
+      String(p.accountId || ""),
+      String(p.campaignName || ""),
+      String(p.dailyBudgetCents || 0),
+      String(p.lifetimeBudgetCents || 0),
+      String(p.budgetMode || ""),
+      String(p.funding || "")
+    ].join("|");
+    var fp = crypto.createHash("sha256").update(parts).digest("hex").slice(0, 32);
+    if (fp !== record.fingerprint) {
+      return { ok: false, reason: "Campaign config changed since approval was granted, request a fresh approval" };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: String(err && err.message || err) };
+  }
 }
 
 function fail(res, code, msg, detail, ids, sentForm) {
