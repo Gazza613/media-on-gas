@@ -27,8 +27,6 @@ function buildHtml(opts) {
   var anomaliesByType = opts.anomaliesByType || {};
   var totalAnomalies = opts.totalAnomalies || 0;
   var totalCampaignsWatched = opts.totalCampaignsWatched || 0;
-  var totalCampaignsLive = opts.totalCampaignsLive || totalCampaignsWatched;
-  var silentCampaigns = opts.silentCampaigns || [];
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   // Severity counts for the totals strip
@@ -47,10 +45,8 @@ function buildHtml(opts) {
     '<tr>' +
       '<td width="25%" style="padding:0 4px 0 0;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Campaigns live</div>' +
-        '<div style="font-size:22px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalCampaignsLive + '</div>' +
-        (totalCampaignsLive > totalCampaignsWatched ? '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:1.5px;margin-top:3px;font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalCampaignsWatched + ' delivered, ' + (totalCampaignsLive - totalCampaignsWatched) + ' silent</div>' : '') +
-        '</div></td>' +
+        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Campaigns watched</div>' +
+        '<div style="font-size:22px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalCampaignsWatched + '</div></div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
         '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Critical</div>' +
@@ -160,31 +156,6 @@ function buildHtml(opts) {
       '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>' +
     '</div>';
 
-  // Silent-campaigns block. Lists every active campaign that spent R0
-  // yesterday so the team can decide if each is intentionally paused
-  // (no action) or quietly failed to deliver (investigate).
-  var silentBlock = "";
-  if (silentCampaigns.length > 0) {
-    var silentRows = silentCampaigns.map(function(s) {
-      var link = s.adsManagerUrl ? '<a href="' + escapeHtml(s.adsManagerUrl) + '" target="_blank" rel="noopener" style="font-size:10px;color:' + P.cyan + ';text-decoration:none;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;margin-left:6px;">Open &rarr;</a>' : '';
-      var statusChip = s.status ? '<span style="display:inline-block;margin-left:8px;padding:2px 7px;background:rgba(255,255,255,0.06);border:1px solid ' + P.rule + ';color:' + P.caption + ';font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;border-radius:5px;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(s.status) + '</span>' : '';
-      return '<div style="padding:9px 14px;border-top:1px solid ' + P.rule + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
-        '<span style="font-size:11px;font-weight:700;color:' + P.txt + ';word-break:break-word;">' + escapeHtml(s.campaignName || "(unnamed)") + '</span>' +
-        '<span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:8px;">' + escapeHtml(s.platform || "") + '</span>' +
-        statusChip + link +
-      '</div>';
-    }).join("");
-    silentBlock = '<tr><td style="padding:24px 36px 0;">' +
-      '<div style="border:1px solid ' + P.rule + ';border-left:4px solid ' + P.caption + ';border-radius:10px;overflow:hidden;background:rgba(0,0,0,0.20);">' +
-        '<div style="padding:14px 16px;">' +
-          '<div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;">Silent campaigns &middot; ' + silentCampaigns.length + '</div>' +
-          '<div style="font-size:11px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:6px;line-height:1.55;">These campaigns are active in their ads manager but spent R0 yesterday, so they were excluded from anomaly detection (no delivery means no signal to compare against). Verify whether each is intentionally paused or has a delivery issue.</div>' +
-        '</div>' +
-        silentRows +
-      '</div>' +
-    '</td></tr>';
-  }
-
   return '<!DOCTYPE html>' +
     '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Anomalies</title>' +
     glowStyles +
@@ -207,7 +178,6 @@ function buildHtml(opts) {
       '<tr><td style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
 
       anomaliesBlock +
-      silentBlock +
 
       '<tr><td style="padding:24px 36px 8px;" align="center">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
@@ -291,29 +261,16 @@ export default async function handler(req, res) {
     if (k) baseByKey[k] = c;
   });
 
-  // Run anomaly detection per campaign, aggregate by type. We track
-  // three counts:
-  //   totalLive   - every active campaign Meta/TikTok/Google returned
-  //   watched     - those that actually delivered (spend > 0)
-  //   silent      - those that exist but spent R0 yesterday. Listed
-  //                 separately at the bottom of the email so the team
-  //                 can decide whether each is intentionally paused
-  //                 (no action) or genuinely failed to deliver
-  //                 (needs investigation).
+  // Run anomaly detection on every live campaign returned from the
+  // platforms. No segregation by spend: campaigns that delivered R0
+  // are still passed through the anomaly engine. Existing rules
+  // (spend_collapse, click_collapse, impressions_cliff) naturally
+  // flag a campaign that went from real delivery to zero, while
+  // brand-new R0 campaigns with no baseline produce no anomaly
+  // (correct behaviour, nothing to compare against yet).
   var anomaliesByType = {};
   var watchedCount = 0;
-  var silentCampaigns = [];
   (yesterdayData.campaigns || []).forEach(function(c) {
-    var spend = parseFloat(c.spend || 0);
-    if (spend <= 0) {
-      silentCampaigns.push({
-        campaignName: c.campaignName,
-        platform: c.platform,
-        status: c.status || "",
-        adsManagerUrl: adsManagerUrl(c)
-      });
-      return;
-    }
     watchedCount++;
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
@@ -333,7 +290,6 @@ export default async function handler(req, res) {
       });
     });
   });
-  var totalLive = watchedCount + silentCampaigns.length;
 
   var totalAnomalies = Object.keys(anomaliesByType).reduce(function(a, k) { return a + anomaliesByType[k].length; }, 0);
 
@@ -341,9 +297,7 @@ export default async function handler(req, res) {
     dateLabel: dateLabel,
     anomaliesByType: anomaliesByType,
     totalAnomalies: totalAnomalies,
-    totalCampaignsWatched: watchedCount,
-    totalCampaignsLive: totalLive,
-    silentCampaigns: silentCampaigns
+    totalCampaignsWatched: watchedCount
   });
 
   if (dryRun) {
@@ -351,8 +305,6 @@ export default async function handler(req, res) {
       ok: true, dryRun: true, dateLabel: dateLabel,
       yFrom: yFrom, yTo: yTo, bFrom: bFrom, bTo: bTo,
       campaignsWatched: watchedCount,
-      campaignsLive: totalLive,
-      silentCampaigns: silentCampaigns,
       totalAnomalies: totalAnomalies,
       anomalies: Object.keys(anomaliesByType).map(function(k) {
         return { type: k, count: anomaliesByType[k].length, items: anomaliesByType[k] };
