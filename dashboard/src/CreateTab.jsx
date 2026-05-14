@@ -189,6 +189,10 @@ function Wizard(props) {
   var subS = useState(false), submitting = subS[0], setSubmitting = subS[1];
   var resS = useState(null), result = resS[0], setResult = resS[1];
   var errS = useState(null), submitErr = errS[0], setSubmitErr = errS[1];
+  // Pre-flight (validate-only) state. Distinct from submit/submitErr
+  // so the team can validate, fix, validate again without losing the
+  // success banner from a prior real submit.
+  var valS = useState({ loading: false, ok: null, message: "", errors: [] }), validateState = valS[0], setValidateState = valS[1];
 
   // -------- Wizard state ---------------------------------------------------
   var initial = {
@@ -453,6 +457,72 @@ function Wizard(props) {
     }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });
   };
 
+  // Pre-flight validate-only. Runs the naming-convention regex first
+  // (cheap, local), then asks Meta to validate just the campaign-level
+  // configuration via execution_options=["validate_only"]. Reach +
+  // audience targeting are covered separately by the ReachPreview panel
+  // (delivery_estimate) on the same Step 6 screen.
+  var validate = function(){
+    if (validateState.loading) return;
+
+    var creativesAll = (draft.creatives || []);
+    var buckets = ratioBuckets(creativesAll);
+    var bucketRatios = Object.keys(buckets).filter(function(r){ return r && buckets[r].length > 0; });
+    var doSplit = draft.autoSplitByRatio && bucketRatios.length >= 2 && draft.creativeMode !== "carousel";
+    var jobs = doSplit
+      ? bucketRatios.sort().map(function(r){ return Object.assign({ ratio: r }, buildPayloadForBucket(buckets[r], r)); })
+      : [Object.assign({ ratio: null }, buildPayloadForBucket(creativesAll, null))];
+
+    var nameErrors = [];
+    jobs.forEach(function(j){
+      (j.nameErrors || []).forEach(function(e){
+        nameErrors.push((j.ratio ? "[" + j.ratio + "] " : "") + e);
+      });
+    });
+    if (nameErrors.length > 0) {
+      setValidateState({ loading: false, ok: false, message: "Naming convention violations", errors: nameErrors });
+      return;
+    }
+
+    setValidateState({ loading: true, ok: null, message: "", errors: [] });
+    // Validate each bucket sequentially; first failure stops the run.
+    var idx = 0;
+    var firstFail = null;
+    var oks = [];
+    var runNext = function(){
+      if (idx >= jobs.length || firstFail) {
+        if (firstFail) {
+          setValidateState({ loading: false, ok: false, message: "Meta rejected the configuration", errors: firstFail.errors });
+          return;
+        }
+        var msg = doSplit
+          ? "All " + jobs.length + " ratio buckets validated by Meta — safe to launch."
+          : "Validated by Meta — safe to launch.";
+        setValidateState({ loading: false, ok: true, message: msg, errors: [] });
+        return;
+      }
+      var p = jobs[idx].payload;
+      fetch(apiBase + "/api/create/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify(p)
+      })
+        .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+        .then(function(x){
+          if (!x.ok) { firstFail = { errors: [(x.data && x.data.error) || "Validate failed"] }; idx = jobs.length; runNext(); return; }
+          if (x.data && x.data.ok === false) {
+            var errs = x.data.errors || ["Meta returned an error"];
+            firstFail = { errors: (jobs[idx].ratio ? errs.map(function(e){ return "[" + jobs[idx].ratio + "] " + e; }) : errs) };
+            idx = jobs.length; runNext(); return;
+          }
+          oks.push(jobs[idx].ratio || "single");
+          idx++; runNext();
+        })
+        .catch(function(){ firstFail = { errors: ["Network error during validate"] }; idx = jobs.length; runNext(); });
+    };
+    runNext();
+  };
+
   var submit = function(){
     if (submitting) return;
 
@@ -615,12 +685,23 @@ function Wizard(props) {
           style={{background:canAdvance?"linear-gradient(135deg,#FF3D00,#FF6B00)":P.dim,border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:canAdvance?"pointer":"default",boxShadow:canAdvance?"0 6px 20px rgba(249,98,3,0.35)":"none"}}>
           Next →
         </button>}
+        {step === 6 && <button onClick={validate} disabled={validateState.loading || submitting}
+          style={{background:"transparent",border:"1px solid "+P.cyan,borderRadius:10,padding:"10px 22px",color:P.cyan,fontSize:11,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:(validateState.loading||submitting)?"default":"pointer",textTransform:"uppercase"}}>
+          {validateState.loading ? "Validating…" : "Validate first"}
+        </button>}
         {step === 6 && <button onClick={submit} disabled={submitting}
           style={{background:submitting?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:submitting?"default":"pointer",boxShadow:submitting?"none":"0 6px 20px rgba(249,98,3,0.35)"}}>
           {submitting ? "Creating..." : "🚀 Create campaign (PAUSED)"}
         </button>}
       </div>
     </div>
+    {step === 6 && (validateState.ok === true || validateState.ok === false) && <div style={{marginTop:14,padding:"12px 16px",background:validateState.ok?(P.mint+"15"):(P.critical||"#ef4444")+"15",border:"1px solid "+(validateState.ok?(P.mint+"40"):(P.critical||"#ef4444")+"40"),borderLeft:"3px solid "+(validateState.ok?P.mint:(P.critical||"#ef4444")),borderRadius:"0 10px 10px 0"}}>
+      <div style={{fontSize:11,fontWeight:800,color:validateState.ok?P.mint:(P.critical||"#ef4444"),fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{validateState.ok ? "Validated" : "Validation failed"}</div>
+      <div style={{fontSize:12,color:P.txt,fontFamily:fm,lineHeight:1.6}}>{validateState.message}</div>
+      {validateState.errors && validateState.errors.length > 0 && <ul style={{margin:"8px 0 0",padding:"0 0 0 18px",color:P.txt}}>
+        {validateState.errors.map(function(e, i){ return <li key={i} style={{fontSize:11,fontFamily:fm,margin:"3px 0"}}>{e}</li>; })}
+      </ul>}
+    </div>}
   </div>;
 }
 
