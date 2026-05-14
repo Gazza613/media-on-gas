@@ -226,6 +226,11 @@ function Wizard(props) {
     creativeMode: "single",
     multiAdvertiserAds: false,
     creatives: [emptyCreative()],
+    // When 2+ distinct ratios are uploaded in the same batch, the team
+    // can opt into one campaign per ratio (cleaner per-format
+    // reporting + better Meta optimization). Default off so existing
+    // single-campaign behaviour is preserved.
+    autoSplitByRatio: false,
 
     // Budget
     funding: "ABO",       // CBO | ABO
@@ -378,23 +383,28 @@ function Wizard(props) {
   })();
 
   // -------- Submit ---------------------------------------------------------
-  var submit = function(){
-    if (submitting) return;
-
-    // Hard naming-convention gate. Block submit if any campaign / ad-set /
-    // ad name doesn't match the agency regex. The wizard auto-fills these
-    // names from draft state, so a failure here usually means a draft
-    // field is missing (no product name, no audience, start date unset).
-    var nameErrors = validateNamingConvention(draft, generatedCampaignName, generatedAdsetName, draft.creatives || []);
-    if (nameErrors.length > 0) {
-      setSubmitErr({ status: 0, body: { error: "Naming convention violations", details: nameErrors } });
-      return;
+  // Builds a payload for a given subset of creatives + an optional
+  // ratio suffix on the productName. When the suffix is set the
+  // campaign/ad-set names are rebuilt off a draft snapshot whose
+  // productName has the ratio appended, e.g. "MoMoDeals-9x16".
+  // Returns { payload, campaignName, adsetName, nameErrors }.
+  var buildPayloadForBucket = function(bucketCreatives, ratioSuffix){
+    var bucketDraft = draft;
+    if (ratioSuffix) {
+      var origProduct = draft.productName || draft.variant || "";
+      bucketDraft = Object.assign({}, draft, {
+        productName: origProduct + "-" + ratioSuffix,
+        creatives: bucketCreatives
+      });
+    } else {
+      bucketDraft = Object.assign({}, draft, { creatives: bucketCreatives });
     }
+    var cName = composeCampaignName(bucketDraft);
+    var aName = composeAdsetName(bucketDraft);
+    var nameErrors = validateNamingConvention(bucketDraft, cName, aName, bucketCreatives);
 
-    setSubmitting(true); setSubmitErr(null);
-
-    var creativesPayload = (draft.creatives || []).map(function(c, idx){
-      var adName = composeAdName(c, idx, draft);
+    var creativesPayload = bucketCreatives.map(function(c, idx){
+      var adName = composeAdName(c, idx, bucketDraft);
       return {
         imageHash: c.imageHash || null,
         videoId: c.videoId || null,
@@ -412,8 +422,8 @@ function Wizard(props) {
       accountName: draft.accountName,
       objective: draft.objective,
       specialAdCategories: draft.specialAdCategories,
-      campaignName: generatedCampaignName,
-      adsetName: generatedAdsetName,
+      campaignName: cName,
+      adsetName: aName,
       platformMode: draft.platformMode,
       pageId: draft.pageId,
       instagramId: draft.instagramId || null,
@@ -432,20 +442,99 @@ function Wizard(props) {
       conversionEvent: draft.conversionEvent || null,
       urlTags: draft.urlTags || null
     };
-    fetch(apiBase + "/api/create/campaign", {
+    return { payload: payload, campaignName: cName, adsetName: aName, nameErrors: nameErrors };
+  };
+
+  var postCampaign = function(payload){
+    return fetch(apiBase + "/api/create/campaign", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: JSON.stringify(payload)
-    })
-      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); })
-      .then(function(x){
+    }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });
+  };
+
+  var submit = function(){
+    if (submitting) return;
+
+    var creativesAll = (draft.creatives || []);
+    var buckets = ratioBuckets(creativesAll);
+    var bucketRatios = Object.keys(buckets).filter(function(r){ return r && buckets[r].length > 0; });
+    var doSplit = draft.autoSplitByRatio && bucketRatios.length >= 2 && draft.creativeMode !== "carousel";
+
+    // Build all payloads first so we can run the naming gate across
+    // every campaign/ad-set/ad in the run before firing any network.
+    var jobs = doSplit
+      ? bucketRatios.sort().map(function(r){ return Object.assign({ ratio: r }, buildPayloadForBucket(buckets[r], r)); })
+      : [Object.assign({ ratio: null }, buildPayloadForBucket(creativesAll, null))];
+
+    var allNameErrors = [];
+    jobs.forEach(function(j){
+      (j.nameErrors || []).forEach(function(e){
+        allNameErrors.push((j.ratio ? "[" + j.ratio + "] " : "") + e);
+      });
+    });
+    if (allNameErrors.length > 0) {
+      setSubmitErr({ status: 0, body: { error: "Naming convention violations", details: allNameErrors } });
+      return;
+    }
+
+    setSubmitting(true); setSubmitErr(null);
+
+    // Sequential so partial-failure state is clear: if job #3 fails,
+    // jobs #1 and #2 are already live in Meta. Backend create endpoint
+    // already leaves partial state PAUSED on failure for recovery.
+    var idx = 0;
+    var collected = [];
+    var failed = null;
+    var runNext = function(){
+      if (idx >= jobs.length) {
         setSubmitting(false);
-        if (x.status === 401) { props.onLogout(); return; }
-        if (!x.ok) { setSubmitErr({ status: x.status, body: x.data || { error: "Submit failed" } }); return; }
+        if (failed) {
+          setSubmitErr({
+            status: failed.status,
+            body: Object.assign({}, failed.data || {}, {
+              error: failed.data && failed.data.error ? failed.data.error : "Submit failed",
+              details: collected.length > 0
+                ? ["Succeeded: " + collected.map(function(s){ return s.campaignName; }).join(", ")].concat(failed.data && failed.data.details ? failed.data.details : [])
+                : undefined
+            })
+          });
+          return;
+        }
         clearSavedDraft();
-        setResult(x.data);
-      })
-      .catch(function(){ setSubmitting(false); setSubmitErr({ status: 0, body: { error: "Network error. Try again." } }); });
+        // For split, surface a combined result; otherwise pass through
+        // the single-call response shape so the existing success UI
+        // works unchanged.
+        if (doSplit) {
+          setResult({
+            split: true,
+            ratios: bucketRatios,
+            campaigns: collected
+          });
+        } else {
+          setResult(collected[0].data);
+        }
+        return;
+      }
+      var job = jobs[idx];
+      postCampaign(job.payload).then(function(x){
+        if (x.status === 401) { setSubmitting(false); props.onLogout(); return; }
+        if (!x.ok) {
+          failed = { status: x.status, data: x.data, ratio: job.ratio };
+          idx = jobs.length; // stop further attempts
+          runNext();
+          return;
+        }
+        collected.push({ ratio: job.ratio, campaignName: job.campaignName, data: x.data });
+        idx++;
+        runNext();
+      }).catch(function(){
+        failed = { status: 0, data: { error: "Network error. Try again." }, ratio: job.ratio };
+        idx = jobs.length;
+        runNext();
+      });
+    };
+    runNext();
   };
 
   // -------- Result screen --------------------------------------------------
@@ -1016,6 +1105,28 @@ function Step3(props) {
         update({ creativeMode: combined.length > 1 ? "multi" : draft.creativeMode, creatives: combined });
       }}/>}
 
+    {/* Auto-split toggle — only when the current batch contains 2+
+        distinct ratios. Splits the submit into N campaigns (one per
+        ratio) which gives cleaner per-format reporting and lets
+        Meta's optimization compound within ratio-homogeneous sets. */}
+    {(function(){
+      var buckets = ratioBuckets(creatives);
+      var ratios = Object.keys(buckets).filter(function(r){ return r && buckets[r].length > 0; });
+      if (ratios.length < 2 || draft.creativeMode === "carousel") return null;
+      return <div style={{margin:"-4px 0 16px",padding:"12px 16px",background:P.cyan+"10",border:"1px solid "+P.cyan+"40",borderLeft:"3px solid "+P.cyan,borderRadius:"0 10px 10px 0",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>Auto-split by ratio detected: {ratios.join(", ")}</div>
+          <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,marginTop:4,lineHeight:1.55}}>
+            Toggle ON to create <strong style={{color:P.txt}}>{ratios.length} campaigns</strong> instead of one — each ratio gets its own campaign + ad set with a <code style={{color:P.cyan}}>-{ratios[0]}</code>-style suffix on the Product segment so Meta's algorithm optimizes per-format.
+          </div>
+        </div>
+        <div onClick={function(){ update({ autoSplitByRatio: !draft.autoSplitByRatio }); }}
+          style={{width:46,height:24,borderRadius:12,background:draft.autoSplitByRatio?P.cyan:P.dim,position:"relative",cursor:"pointer",flexShrink:0,transition:"background 0.2s"}}>
+          <div style={{position:"absolute",top:2,left:draft.autoSplitByRatio?24:2,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+        </div>
+      </div>;
+    })()}
+
     {/* Per-creative cards */}
     {creatives.map(function(c, idx){
       var adName = composeAdName(c, idx, draft);
@@ -1550,6 +1661,46 @@ function Step6(props) {
 
 function SuccessScreen(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, result = props.result;
+
+  // Split-result shape (one campaign per ratio bucket). Renders one card
+  // per campaign so the team can verify each id + jump to Ads Manager.
+  if (result && result.split) {
+    return <div>
+      <Glass accent={P.mint} st={{padding:28}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          {Ic.check(P.mint,22)}
+          <span style={{fontSize:14,fontWeight:900,color:P.mint,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>{result.campaigns.length} campaigns created (PAUSED)</span>
+        </div>
+        <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.7,marginBottom:18}}>
+          One campaign per ratio bucket: {result.ratios.join(", ")}. Each created paused so you can review in Ads Manager and unpause when ready.
+        </div>
+        {result.campaigns.map(function(c, i){
+          var r = c.data || {};
+          var ads = r.ads || (r.adId ? [{ adId: r.adId, name: "Ad" }] : []);
+          return <div key={i} style={{padding:"14px 16px",background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:10,marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>
+              {c.ratio} &middot; {c.campaignName}
+            </div>
+            <div style={{fontFamily:fm,fontSize:11,color:P.label||P.sub,lineHeight:1.9}}>
+              <div>campaign_id: <span style={{color:P.txt}}>{r.campaignId}</span></div>
+              <div>adset_id: <span style={{color:P.txt}}>{r.adsetId}</span></div>
+              {ads.map(function(a, j){
+                return <div key={j}>ad #{j+1} ({a.name}): <span style={{color:P.txt}}>{a.adId}</span></div>;
+              })}
+            </div>
+            {r.adsManagerUrl && <a href={r.adsManagerUrl} target="_blank" rel="noreferrer" style={{display:"inline-block",marginTop:10,fontSize:10,color:P.cyan,textDecoration:"none",fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm}}>Open in Ads Manager &rarr;</a>}
+          </div>;
+        })}
+        <div style={{marginTop:12}}>
+          <button onClick={props.onAnother} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 22px",color:P.label||P.sub,fontSize:11,fontWeight:700,fontFamily:fm,letterSpacing:2,cursor:"pointer"}}>
+            Create another
+          </button>
+        </div>
+      </Glass>
+    </div>;
+  }
+
+  // Single-campaign result (the original shape).
   var ads = result.ads || (result.adId ? [{ adId: result.adId, name: "Ad" }] : []);
   return <div>
     <Glass accent={P.mint} st={{padding:28}}>
@@ -2590,6 +2741,21 @@ function formatCode(c) {
   if (c.videoId) return "VID";
   if (c.imageHash && c.filename && /\.gif$/i.test(c.filename)) return "GIF";
   return "IMG";
+}
+
+// Group creatives by their detected ratioSize. Returns a map of
+// { "9x16": [creative,…], "1x1": [creative,…] }. Creatives without a
+// ratio (e.g. legacy drafts) bucket under "" and are usually displayed
+// as a single bucket so the team can intervene before submitting.
+function ratioBuckets(creatives) {
+  var out = {};
+  (creatives || []).forEach(function(c){
+    if (!c.imageHash && !c.videoId) return; // skip placeholders
+    var r = c.ratioSize || "";
+    if (!out[r]) out[r] = [];
+    out[r].push(c);
+  });
+  return out;
 }
 
 // Naming-convention validators. Each level has a regex that requires
