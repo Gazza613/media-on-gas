@@ -1019,12 +1019,27 @@ function Step3(props) {
     {/* Per-creative cards */}
     {creatives.map(function(c, idx){
       var adName = composeAdName(c, idx, draft);
+      // Apply-to-all copies one field's value from card #0 to every
+      // other card in the list. Only meaningful when there are 2+
+      // cards and only exposed on card #0. Returns the count of cards
+      // changed so the UI can flash "applied to N cards".
+      var applyToAll = function(field, value){
+        var next = creatives.map(function(other, i){
+          if (i === 0) return other;
+          var patch = {}; patch[field] = value;
+          return Object.assign({}, other, patch);
+        });
+        update({ creatives: next });
+        return creatives.length - 1;
+      };
       return <CreativeCard key={idx} idx={idx} creative={c} P={P} ff={ff} fm={fm}
         creativeMode={draft.creativeMode}
         accountId={draft.accountId} apiBase={apiBase} token={token}
         adName={adName}
         onChange={function(patch){ updateCreative(idx, patch); }}
         onRemove={creatives.length > 1 ? function(){ removeCreative(idx); } : null}
+        siblingCount={creatives.length - 1}
+        onApplyToAll={idx === 0 && creatives.length > 1 ? applyToAll : null}
         sharedPrimaryText={draft.creativeMode === "carousel" && idx > 0 ? creatives[0].primaryText : null}/>;
     })}
 
@@ -1262,10 +1277,14 @@ function CreativeCard(props) {
     </Field>
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-      <Field label="Headline" fm={fm} P={P} hint="Bold line above primary text. Max 200 chars.">
+      <Field label="Headline" fm={fm} P={P} hint="Bold line above primary text. Max 200 chars."
+        actionBtn={<ApplyAllBtn P={P} fm={fm} siblingCount={props.siblingCount||0}
+          onApply={props.onApplyToAll ? function(){ props.onApplyToAll("headline", c.headline); } : null}/>}>
         <input value={c.headline} onChange={function(e){ props.onChange({ headline: e.target.value }); }} maxLength={200} style={inputStyle(P, fm)}/>
       </Field>
-      <Field label="Call to action button" fm={fm} P={P}>
+      <Field label="Call to action button" fm={fm} P={P}
+        actionBtn={<ApplyAllBtn P={P} fm={fm} siblingCount={props.siblingCount||0}
+          onApply={props.onApplyToAll ? function(){ props.onApplyToAll("callToAction", c.callToAction); } : null}/>}>
         <Select P={P} fm={fm}
           value={c.callToAction}
           options={CTAS.map(function(x){ return { value: x, label: x.replace(/_/g," ") }; })}
@@ -1273,7 +1292,9 @@ function CreativeCard(props) {
       </Field>
     </div>
 
-    {!hidePrimary && <Field label={carouselCard ? "Primary text (used for the whole carousel)" : "Primary text"} fm={fm} P={P} hint="Main body of the ad. Max 1,500 chars. First 125 show before 'See more' on most placements.">
+    {!hidePrimary && <Field label={carouselCard ? "Primary text (used for the whole carousel)" : "Primary text"} fm={fm} P={P} hint="Main body of the ad. Max 1,500 chars. First 125 show before 'See more' on most placements."
+      actionBtn={<ApplyAllBtn P={P} fm={fm} siblingCount={props.siblingCount||0}
+        onApply={props.onApplyToAll ? function(){ props.onApplyToAll("primaryText", c.primaryText); } : null}/>}>
       <textarea value={c.primaryText} onChange={function(e){ props.onChange({ primaryText: e.target.value }); }} maxLength={1500} style={Object.assign({}, inputStyle(P, fm), { minHeight: 90 })}/>
     </Field>}
     {hidePrimary && <div style={{padding:"10px 14px",background:"rgba(20,12,30,0.6)",border:"1px solid "+P.rule,borderRadius:10,fontSize:11,color:P.label||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:18}}>
@@ -1281,10 +1302,14 @@ function CreativeCard(props) {
     </div>}
 
     <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
-      <Field label="Destination URL" fm={fm} P={P} hint="Where users land when they tap the CTA. Include https://">
+      <Field label="Destination URL" fm={fm} P={P} hint="Where users land when they tap the CTA. Include https://"
+        actionBtn={<ApplyAllBtn P={P} fm={fm} siblingCount={props.siblingCount||0}
+          onApply={props.onApplyToAll ? function(){ props.onApplyToAll("linkUrl", c.linkUrl); } : null}/>}>
         <input value={c.linkUrl} onChange={function(e){ props.onChange({ linkUrl: e.target.value }); }} placeholder="https://..." style={inputStyle(P, fm)}/>
       </Field>
-      <Field label="Description (optional)" fm={fm} P={P} hint="Sub-line under the headline on some placements.">
+      <Field label="Description (optional)" fm={fm} P={P} hint="Sub-line under the headline on some placements."
+        actionBtn={<ApplyAllBtn P={P} fm={fm} siblingCount={props.siblingCount||0}
+          onApply={props.onApplyToAll ? function(){ props.onApplyToAll("description", c.description); } : null}/>}>
         <input value={c.description} onChange={function(e){ props.onChange({ description: e.target.value }); }} maxLength={200} style={inputStyle(P, fm)}/>
       </Field>
     </div>
@@ -1306,7 +1331,9 @@ function CreativeCard(props) {
             placeholder="9x16"
             style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
         </Field>
-        <Field label="Product &amp; Action" fm={fm} P={P} hint='Talent-or-concept-plus-product. E.g. AyandaUGC-ElectricityAdvance, OfferHero-MoMoDeals.'>
+        <Field label="Product &amp; Action" fm={fm} P={P} hint='Talent-or-concept-plus-product. E.g. AyandaUGC-ElectricityAdvance, OfferHero-MoMoDeals.'
+          actionBtn={<ApplyAllBtn P={P} fm={fm} siblingCount={props.siblingCount||0}
+            onApply={props.onApplyToAll ? function(){ props.onApplyToAll("productAction", c.productAction || c.concept || ""); } : null}/>}>
           <input value={c.productAction || c.concept || ""} onChange={function(e){ props.onChange({ productAction: sanitiseLoose(e.target.value, 40) }); }}
             placeholder="AyandaUGC-ElectricityAdvance"
             style={Object.assign({}, inputStyle(P, fm), { letterSpacing: 0.5 })}/>
@@ -1558,10 +1585,29 @@ function SuccessScreen(props) {
 
 function Field(props) {
   return <div style={{marginBottom:18}}>
-    <div style={{fontSize:11,fontWeight:700,color:props.P.label||props.P.sub,letterSpacing:1.5,fontFamily:props.fm,textTransform:"uppercase",marginBottom:8}}>{props.label}</div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8}}>
+      <span style={{fontSize:11,fontWeight:700,color:props.P.label||props.P.sub,letterSpacing:1.5,fontFamily:props.fm,textTransform:"uppercase"}}>{props.label}</span>
+      {props.actionBtn}
+    </div>
     {props.children}
     {props.hint && <div style={{fontSize:11,color:props.P.caption||props.P.sub,fontFamily:props.fm,marginTop:6,lineHeight:1.5}}>{props.hint}</div>}
   </div>;
+}
+
+// Small "→ apply to all N cards" pill shown next to a Field label on
+// creative card #0 when there are siblings. Onclick copies the field's
+// current value to every other card and flashes "Applied to N" for
+// ~1.4s so the user sees the result.
+function ApplyAllBtn(props) {
+  var P = props.P, fm = props.fm;
+  var ts = useState(0), tick = ts[0], setTick = ts[1];
+  if (!props.onApply || props.siblingCount <= 0) return null;
+  var label = tick > 0 ? "✓ applied to " + props.siblingCount : "→ apply to all";
+  return <button type="button" onClick={function(){
+    props.onApply();
+    setTick(Date.now());
+    setTimeout(function(){ setTick(0); }, 1400);
+  }} style={{background:"transparent",border:"1px solid "+P.fuchsia+"50",color:P.fuchsia,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",padding:"3px 9px",borderRadius:6,cursor:"pointer",fontFamily:fm,whiteSpace:"nowrap"}}>{label}</button>;
 }
 function inputStyle(P, fm, extra) {
   return Object.assign({
