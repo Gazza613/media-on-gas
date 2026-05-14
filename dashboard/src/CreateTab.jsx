@@ -551,6 +551,7 @@ function Wizard(props) {
 
     <div style={{marginTop:20}}>
       {step === 0 && <Step0 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
+        apiBase={apiBase} token={token}
         draft={draft} update={update} accounts={accounts}
         generatedCampaignName={generatedCampaignName}/>}
       {step === 1 && <Step1 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
@@ -686,9 +687,150 @@ function NamePreview(props) {
 // ---------------------------------------------------------------------------
 // Step 0: Account & Objective + Campaign-name parts (Client + Variant).
 
+// Saved-templates panel. Sits above the rest of Step 0 so the team
+// can either load a preset for a recurring client (e.g. "MTN MoMo
+// Lead Gen Standard") or start fresh. Loading a template merges the
+// snapshot's whitelisted fields into the current draft via the
+// standard `update()` patcher — uploaded creatives, start/end dates
+// and the live Step state are preserved.
+function TemplatesPanel(props) {
+  var P = props.P, fm = props.fm, ff = props.ff, Glass = props.Glass;
+  var apiBase = props.apiBase, token = props.token;
+  var draft = props.draft, applyTemplate = props.applyTemplate;
+  var ts = useState({ loading: true, items: [], error: "" }), tplState = ts[0], setTplState = ts[1];
+  var ns = useState(""), saveName = ns[0], setSaveName = ns[1];
+  var bs = useState(false), busy = bs[0], setBusy = bs[1];
+  var es = useState(""), err = es[0], setErr = es[1];
+  var ms = useState(""), msg = ms[0], setMsg = ms[1];
+  var pS = useState(false), panelOpen = pS[0], setPanelOpen = pS[1];
+
+  var loadList = function(){
+    if (!token) { setTplState({ loading: false, items: [], error: "Not authenticated" }); return; }
+    setTplState({ loading: true, items: [], error: "" });
+    fetch(apiBase + "/api/create/templates", { headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setTplState({ loading: false, items: [], error: (x.data && x.data.error) || "Failed to load" }); return; }
+        setTplState({ loading: false, items: (x.data && x.data.templates) || [], error: "" });
+      })
+      .catch(function(){ setTplState({ loading: false, items: [], error: "Network error" }); });
+  };
+  useEffect(loadList, [token]);
+
+  var doSave = function(){
+    if (!saveName.trim()) { setErr("Give the template a short name first."); return; }
+    if (busy) return;
+    setBusy(true); setErr(""); setMsg("");
+    fetch(apiBase + "/api/create/templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ name: saveName.trim(), draft: draft })
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        setBusy(false);
+        if (!x.ok) { setErr((x.data && x.data.error) || "Save failed"); return; }
+        setSaveName(""); setMsg("Saved.");
+        setTimeout(function(){ setMsg(""); }, 1800);
+        loadList();
+      })
+      .catch(function(){ setBusy(false); setErr("Network error"); });
+  };
+
+  var doDelete = function(id, name){
+    if (!window.confirm("Delete template '" + name + "'?")) return;
+    setBusy(true); setErr(""); setMsg("");
+    fetch(apiBase + "/api/create/templates?id=" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + token }
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        setBusy(false);
+        if (!x.ok) { setErr((x.data && x.data.error) || "Delete failed"); return; }
+        setMsg("Deleted.");
+        setTimeout(function(){ setMsg(""); }, 1500);
+        loadList();
+      })
+      .catch(function(){ setBusy(false); setErr("Network error"); });
+  };
+
+  var doLoad = function(tpl){
+    if (!tpl || !tpl.draft) return;
+    applyTemplate(tpl);
+    setMsg("Loaded '" + tpl.name + "'.");
+    setTimeout(function(){ setMsg(""); }, 1800);
+  };
+
+  return <Glass accent={P.orchid} st={{padding:22,marginBottom:18}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}
+      onClick={function(){ setPanelOpen(!panelOpen); }}>
+      <div>
+        <div style={{fontSize:13,fontWeight:800,color:P.orchid,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Templates</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,marginTop:4}}>
+          Snapshot the wizard state for repeat clients. Load a preset to fill the next 80% in one click. {tplState.items.length > 0 && <span style={{color:P.orchid,fontWeight:700}}>· {tplState.items.length} saved</span>}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:P.orchid,fontFamily:fm,fontWeight:800,letterSpacing:1.5}}>{panelOpen ? "− HIDE" : "+ SHOW"}</div>
+    </div>
+
+    {panelOpen && <div style={{marginTop:18}}>
+      {tplState.loading && <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm}}>Loading saved templates…</div>}
+      {tplState.error && <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm}}>{tplState.error}</div>}
+
+      {!tplState.loading && tplState.items.length === 0 && <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,padding:"10px 0"}}>
+        No templates yet. Fill in Step 0–4 the way you want them, then come back here and save as a named template.
+      </div>}
+
+      {!tplState.loading && tplState.items.length > 0 && <div style={{marginBottom:14}}>
+        <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Load a template</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {tplState.items.map(function(tpl){
+            return <div key={tpl.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:10}}>
+              <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+                <div style={{fontSize:13,color:P.txt,fontFamily:fm,fontWeight:700,letterSpacing:0.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{tpl.name}</div>
+                <div style={{fontSize:10,color:P.caption||P.sub,fontFamily:fm,marginTop:3,letterSpacing:0.5}}>
+                  {tpl.draft && tpl.draft.accountName ? tpl.draft.accountName + " · " : ""}
+                  {tpl.draft && tpl.draft.objective ? tpl.draft.objective.replace(/^OUTCOME_/, "") : ""}
+                  {tpl.savedBy ? " · " + tpl.savedBy : ""}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={function(){ doLoad(tpl); }} disabled={busy} style={{background:P.orchid+"20",border:"1px solid "+P.orchid+"60",borderRadius:8,padding:"6px 12px",color:P.orchid,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Load</button>
+                <button onClick={function(){ doDelete(tpl.id, tpl.name); }} disabled={busy} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"6px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Del</button>
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>}
+
+      <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Save current draft as template</div>
+          <input value={saveName} onChange={function(e){ setSaveName(e.target.value); }} placeholder="e.g. MTN MoMo Lead Gen Standard"
+            style={Object.assign({}, inputStyle(P, fm))}/>
+        </div>
+        <button onClick={doSave} disabled={busy || !saveName.trim()} style={{background:busy?P.dim:"linear-gradient(135deg,#A855F7,#7C3AED)",border:"none",borderRadius:10,padding:"11px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{busy ? "Saving…" : "Save"}</button>
+      </div>
+
+      {msg && <div style={{marginTop:10,fontSize:11,color:P.mint,fontFamily:fm,fontWeight:700}}>{msg}</div>}
+      {err && <div style={{marginTop:10,fontSize:11,color:P.critical||"#ef4444",fontFamily:fm}}>{err}</div>}
+    </div>}
+  </Glass>;
+}
+
 function Step0(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
   var draft = props.draft, update = props.update, accounts = props.accounts;
+  var apiBase = props.apiBase, token = props.token;
+
+  // Apply a loaded template — merge whitelisted fields onto the current
+  // draft. Uploaded creatives and date fields are intentionally NOT
+  // touched so the team can build a fresh campaign on top of a preset.
+  var applyTemplate = function(tpl){
+    if (!tpl || !tpl.draft) return;
+    update(tpl.draft);
+  };
 
   var objMatch = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
   // Live-preview chips for the new naming convention:
@@ -704,6 +846,10 @@ function Step0(props) {
   return <div>
     <NamePreview P={P} fm={fm} accent={P.ember} label="Campaign name (live preview)"
       name={props.generatedCampaignName} parts={nameParts}/>
+
+    <TemplatesPanel P={P} fm={fm} ff={ff} Glass={Glass}
+      apiBase={apiBase} token={token}
+      draft={draft} applyTemplate={applyTemplate}/>
 
     <Glass accent={P.ember} st={{padding:26,marginBottom:18}}>
       <div style={{fontSize:13,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,marginBottom:14,textTransform:"uppercase"}}>1. Pick your account</div>
