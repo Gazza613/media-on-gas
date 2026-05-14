@@ -573,6 +573,7 @@ function Wizard(props) {
       {step === 5 && <Step5 P={P} ff={ff} fm={fm} Glass={Glass}
         draft={draft} update={update} pixels={pixels}/>}
       {step === 6 && <Step6 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
+        apiBase={apiBase} token={token}
         draft={draft} accounts={accounts} pages={pages} instagrams={instagrams} pixels={pixels}
         savedAudiences={savedAudiences}
         generatedCampaignName={generatedCampaignName}
@@ -1709,8 +1710,113 @@ function Step5(props) {
 // ---------------------------------------------------------------------------
 // Step 6: Review.
 
+// Reach + delivery preview. Auto-fires on Step6 mount and on draft
+// changes so the team always sees the up-to-date estimate before
+// hitting "Launch". Caches the last response while a new one is in
+// flight so the panel doesn't flicker to "loading…" between paints.
+function ReachPreview(props) {
+  var P = props.P, fm = props.fm, ff = props.ff;
+  var apiBase = props.apiBase, token = props.token, draft = props.draft;
+  var ss = useState({ loading: false, data: null, error: "" }), state = ss[0], setState = ss[1];
+
+  // Reset when account / objective / audience / budget meaningfully change.
+  var depKey = JSON.stringify({
+    accountId: draft.accountId, objective: draft.objective,
+    platformMode: draft.platformMode, placement: draft.placement,
+    audience: draft.audience,
+    dailyBudgetRand: draft.dailyBudgetRand, budgetMode: draft.budgetMode,
+    lifetimeBudgetRand: draft.lifetimeBudgetRand
+  });
+
+  useEffect(function(){
+    if (!token || !draft.accountId) return;
+    setState(function(s){ return Object.assign({}, s, { loading: true, error: "" }); });
+    fetch(apiBase + "/api/create/preflight", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({
+        accountId: draft.accountId,
+        objective: draft.objective,
+        audience: draft.audience,
+        placement: draft.placement,
+        platformMode: draft.platformMode,
+        budgetMode: draft.budgetMode,
+        dailyBudgetRand: draft.dailyBudgetRand,
+        lifetimeBudgetRand: draft.lifetimeBudgetRand,
+        lifetimeDays: draft.endDate && draft.startDate ? Math.max(1, Math.round((Date.parse(draft.endDate) - Date.parse(draft.startDate)) / 86400000)) : 7
+      })
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setState({ loading: false, data: null, error: (x.data && x.data.error) || "Preflight failed" }); return; }
+        setState({ loading: false, data: x.data, error: "" });
+      })
+      .catch(function(){ setState({ loading: false, data: null, error: "Network error" }); });
+  }, [depKey]);
+
+  // Friendly number formatter for audience-size buckets.
+  var fmtN = function(n){ if (n == null) return "—"; var v = parseFloat(n); if (!isFinite(v)) return "—"; if (v >= 1e6) return (v / 1e6).toFixed(2) + "M"; if (v >= 1e3) return Math.round(v / 100) / 10 + "K"; return Math.round(v).toString(); };
+  var data = state.data;
+
+  // Audience-size assessment: too narrow (< 25K), tight (25K-200K),
+  // healthy (200K-2M), broad (2M+). Drives the colour of the chip.
+  var sizeAssessment = (function(){
+    if (!data || !data.audience) return null;
+    var lower = parseFloat(data.audience.estimateDau || 0);
+    var upper = parseFloat(data.audience.estimateMau || 0);
+    var mid = upper > 0 ? upper : lower;
+    if (!mid) return null;
+    if (mid < 25000) return { color: P.lava||"#FF2222", text: "Narrow audience, projected delivery may be slow" };
+    if (mid < 200000) return { color: P.amber||"#FBBF24", text: "Tight audience, watch frequency" };
+    if (mid < 2000000) return { color: P.mint||"#34D399", text: "Healthy audience size for steady delivery" };
+    return { color: P.cyan||"#22D3EE", text: "Broad audience, consider tightening for efficiency" };
+  })();
+
+  return <Glass accent={P.cyan} st={{padding:22,marginBottom:18}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,fontWeight:800,color:P.cyan,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Reach &amp; delivery estimate</span>
+        {state.loading && <span style={{fontSize:10,color:P.label||P.sub,fontFamily:fm,letterSpacing:1}}>refreshing…</span>}
+      </div>
+      {sizeAssessment && <span style={{padding:"3px 9px",background:sizeAssessment.color+"25",border:"1px solid "+sizeAssessment.color+"60",color:sizeAssessment.color,fontSize:9,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase",borderRadius:6,fontFamily:fm}}>{sizeAssessment.text}</span>}
+    </div>
+
+    {state.error && <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm}}>{state.error}</div>}
+
+    {data && data.ok && data.audience && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginTop:6}}>
+      <div>
+        <div style={{fontSize:9,fontWeight:800,color:P.caption||P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Daily active in audience</div>
+        <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmtN(data.audience.estimateDau)}</div>
+      </div>
+      <div>
+        <div style={{fontSize:9,fontWeight:800,color:P.caption||P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Monthly active in audience</div>
+        <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmtN(data.audience.estimateMau)}</div>
+      </div>
+      <div>
+        <div style={{fontSize:9,fontWeight:800,color:P.caption||P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Optimization goal</div>
+        <div style={{fontSize:13,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:0.5}}>{data.optimizationGoal}</div>
+      </div>
+    </div>}
+
+    {data && data.ok && data.dailyOutcomes && Array.isArray(data.dailyOutcomes) && data.dailyOutcomes.length > 0 && <div style={{marginTop:14,padding:"10px 12px",background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:8}}>
+      <div style={{fontSize:9,fontWeight:800,color:P.caption||P.sub,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Projected daily delivery at current budget</div>
+      <pre style={{margin:0,fontSize:11,color:P.label||P.sub,fontFamily:fm,whiteSpace:"pre-wrap"}}>{JSON.stringify(data.dailyOutcomes, null, 2)}</pre>
+    </div>}
+
+    {data && data.warnings && data.warnings.length > 0 && <div style={{marginTop:12,padding:"10px 12px",background:(P.amber||"#FBBF24")+"15",border:"1px solid "+(P.amber||"#FBBF24")+"40",borderLeft:"3px solid "+(P.amber||"#FBBF24"),borderRadius:"0 8px 8px 0"}}>
+      <div style={{fontSize:10,fontWeight:800,color:P.amber||"#FBBF24",letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Meta returned</div>
+      {data.warnings.map(function(w, i){
+        return <div key={i} style={{fontSize:12,color:P.txt,fontFamily:ff,marginBottom:4}}>{w}</div>;
+      })}
+    </div>}
+
+    {!data && !state.loading && !state.error && <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff}}>Waiting for account + audience config…</div>}
+  </Glass>;
+}
+
 function Step6(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
+  var apiBase = props.apiBase, token = props.token;
   var draft = props.draft, accounts = props.accounts, pages = props.pages, instagrams = props.instagrams, pixels = props.pixels;
   var savedAudiences = props.savedAudiences || { items: [] };
 
@@ -1777,7 +1883,9 @@ function Step6(props) {
   rows.push(["Pixel", pxName]);
   rows.push(["URL params", draft.urlTags || "(none)"]);
 
-  return <Glass accent={P.ember} st={{padding:22}}>
+  return <div>
+    <ReachPreview P={P} fm={fm} ff={ff} apiBase={apiBase} token={token} draft={draft}/>
+    <Glass accent={P.ember} st={{padding:22}}>
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
       {Ic.bolt(P.ember,16)}
       <span style={{fontSize:11,fontWeight:800,color:P.ember,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Review and launch</span>
@@ -1799,7 +1907,8 @@ function Step6(props) {
         <li>An email summary is drafted in Gary's Gmail inbox so the team has a record of every campaign created.</li>
       </ul>
     </div>
-  </Glass>;
+  </Glass>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------

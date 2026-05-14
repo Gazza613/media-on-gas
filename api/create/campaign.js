@@ -420,7 +420,8 @@ function formatSastIso(date) {
          pad(sast.getUTCSeconds()) + "+0200";
 }
 
-function buildTargeting(p) {
+export function buildTargeting(p) { return buildTargetingImpl(p); }
+function buildTargetingImpl(p) {
   var a = p.audience || {};
   var geo = {};
   var excludedGeo = {};
