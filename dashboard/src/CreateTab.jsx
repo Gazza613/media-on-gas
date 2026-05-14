@@ -1371,6 +1371,15 @@ function Step3(props) {
         update({ creatives: next });
         return creatives.length - 1;
       };
+      // Context passed into Sami so the suggestions match this run.
+      var objMatchS3 = OBJECTIVES.find(function(o){ return o.id === draft.objective; });
+      var samiContext = {
+        clientName: draft.clientCode || "",
+        productName: draft.productName || draft.variant || "",
+        productAction: c.productAction || c.concept || "",
+        audienceLabel: (draft.audience && draft.audience.audienceLabel) || "",
+        objective: objMatchS3 ? objMatchS3.naming : draft.objective
+      };
       return <CreativeCard key={idx} idx={idx} creative={c} P={P} ff={ff} fm={fm}
         creativeMode={draft.creativeMode}
         accountId={draft.accountId} apiBase={apiBase} token={token}
@@ -1379,6 +1388,7 @@ function Step3(props) {
         onRemove={creatives.length > 1 ? function(){ removeCreative(idx); } : null}
         siblingCount={creatives.length - 1}
         onApplyToAll={idx === 0 && creatives.length > 1 ? applyToAll : null}
+        samiContext={samiContext}
         sharedPrimaryText={draft.creativeMode === "carousel" && idx > 0 ? creatives[0].primaryText : null}/>;
     })}
 
@@ -1546,6 +1556,24 @@ function CreativeCard(props) {
   var idx = props.idx, creativeMode = props.creativeMode;
   var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
   var fileRef = useRef(null);
+  // Sami copy-assist state, scoped per card so two cards can hold
+  // separate suggestion panels open if the team wants to compare.
+  var samiS = useState({ open: false, loading: false, error: "", headlines: [], primaryTexts: [] }), sami = samiS[0], setSami = samiS[1];
+  var fetchSami = function(){
+    if (sami.loading) return;
+    setSami(Object.assign({}, sami, { loading: true, error: "", open: true }));
+    fetch(apiBase + "/api/create/copy-assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify(props.samiContext || {})
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setSami({ open: true, loading: false, error: (x.data && x.data.error) || "Sami failed", headlines: [], primaryTexts: [] }); return; }
+        setSami({ open: true, loading: false, error: "", headlines: x.data.headlines || [], primaryTexts: x.data.primaryTexts || [] });
+      })
+      .catch(function(){ setSami({ open: true, loading: false, error: "Network error", headlines: [], primaryTexts: [] }); });
+  };
   var upS = useState({ uploading: false, error: "" }), uploadState = upS[0], setUploadState = upS[1];
 
   var onFile = function(e){
@@ -1599,10 +1627,35 @@ function CreativeCard(props) {
           → <span style={{color:P.txt,fontWeight:700}}>{props.adName}</span>
         </span>
       </div>
-      {props.onRemove && <button onClick={props.onRemove} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"4px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
-        Remove
-      </button>}
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <button onClick={fetchSami} disabled={sami.loading} style={{background:sami.loading?P.dim:P.orchid+"20",border:"1px solid "+P.orchid+"60",borderRadius:8,padding:"4px 10px",color:P.orchid,fontSize:10,fontWeight:800,fontFamily:fm,cursor:sami.loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
+          {sami.loading ? "Sami…" : "✨ Sami copy"}
+        </button>
+        {props.onRemove && <button onClick={props.onRemove} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"4px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
+          Remove
+        </button>}
+      </div>
     </div>
+
+    {sami.open && <div style={{padding:"12px 14px",background:P.orchid+"10",border:"1px solid "+P.orchid+"40",borderLeft:"3px solid "+P.orchid,borderRadius:"0 10px 10px 0",marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <span style={{fontSize:10,fontWeight:800,color:P.orchid,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>Sami suggestions {sami.loading ? "· loading…" : ""}</span>
+        <button onClick={function(){ setSami(Object.assign({}, sami, { open: false })); }} style={{background:"transparent",border:"none",color:P.label||P.sub,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1.2}}>close</button>
+      </div>
+      {sami.error && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm,marginBottom:8}}>{sami.error}</div>}
+      {sami.headlines.length > 0 && <div style={{marginBottom:10}}>
+        <div style={{fontSize:9,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Headlines · click to apply</div>
+        {sami.headlines.map(function(h, i){
+          return <div key={"h"+i} onClick={function(){ props.onChange({ headline: h }); }} style={{padding:"7px 10px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:8,marginBottom:5,fontSize:12,color:P.txt,fontFamily:fm,cursor:"pointer",lineHeight:1.4}}>{h}</div>;
+        })}
+      </div>}
+      {sami.primaryTexts.length > 0 && <div>
+        <div style={{fontSize:9,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Primary texts · click to apply</div>
+        {sami.primaryTexts.map(function(t, i){
+          return <div key={"t"+i} onClick={function(){ props.onChange({ primaryText: t }); }} style={{padding:"8px 11px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:8,marginBottom:5,fontSize:12,color:P.txt,fontFamily:ff,cursor:"pointer",lineHeight:1.55}}>{t}</div>;
+        })}
+      </div>}
+    </div>}
 
     <Field label="Upload asset" fm={fm} P={P} hint={carouselCard ? "Image only for carousel cards. PNG / JPG / WebP, square 1080×1080 ideal." : "Image (PNG/JPG/WebP/GIF) or Video (MP4/MOV). Max ~3 MB."}>
       <input ref={fileRef} type="file" accept={allowedAccept} onChange={onFile} disabled={!accountId || uploadState.uploading}
