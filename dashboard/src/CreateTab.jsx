@@ -641,6 +641,7 @@ function Wizard(props) {
         generatedCampaignName={generatedCampaignName}
         generatedAdsetName={generatedAdsetName}/>}
       {step === 5 && <Step5 P={P} ff={ff} fm={fm} Glass={Glass}
+        apiBase={apiBase} token={token}
         draft={draft} update={update} pixels={pixels}/>}
       {step === 6 && <Step6 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
         apiBase={apiBase} token={token}
@@ -1818,16 +1819,71 @@ function Step4(props) {
 // ---------------------------------------------------------------------------
 // Step 5: Tracking.
 
+// Per-pixel health check. Fires when a pixel is chosen + the
+// objective expects pixel signal (Leads or Sales). Surfaces a
+// HEALTHY / THIN / STALE chip and the 7-day event count for the
+// target event so the team doesn't run paid traffic into a pixel
+// that's not firing.
+function PixelHealth(props) {
+  var P = props.P, fm = props.fm;
+  var apiBase = props.apiBase, token = props.token;
+  var pixelId = props.pixelId, targetEvent = props.targetEvent;
+  var ss = useState({ loading: false, data: null, error: "" }), state = ss[0], setState = ss[1];
+
+  useEffect(function(){
+    if (!pixelId || !token) { setState({ loading: false, data: null, error: "" }); return; }
+    setState({ loading: true, data: null, error: "" });
+    var qs = "?pixelId=" + encodeURIComponent(pixelId) + (targetEvent ? "&event=" + encodeURIComponent(targetEvent) : "");
+    fetch(apiBase + "/api/create/pixel-verify" + qs, { headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setState({ loading: false, data: null, error: (x.data && x.data.error) || "Health check failed" }); return; }
+        setState({ loading: false, data: x.data, error: "" });
+      })
+      .catch(function(){ setState({ loading: false, data: null, error: "Network error" }); });
+  }, [pixelId, targetEvent]);
+
+  if (!pixelId) return null;
+  var data = state.data;
+  var verdict = data && data.verdict;
+  var col = verdict === "HEALTHY" ? P.mint : (verdict === "THIN" ? (P.amber||"#FBBF24") : (P.critical||"#ef4444"));
+  var label = verdict === "HEALTHY" ? "Healthy" : (verdict === "THIN" ? "Thin signal" : (verdict === "STALE" ? "No signal" : (verdict === "UNKNOWN" ? "Couldn't check" : "Checking…")));
+  var subline = "";
+  if (data && data.ok) {
+    var event = targetEvent || "all events";
+    subline = data.compareCount + " " + event + " in last 7 days. Pixel total: " + data.total + ".";
+    if (verdict === "STALE") subline += " Campaign won't optimize without signal — verify pixel + CAPI before launch.";
+    else if (verdict === "THIN") subline += " Optimization may be slow until volume builds.";
+  } else if (data && data.message) {
+    subline = data.message;
+  } else if (state.error) {
+    subline = state.error;
+  } else if (state.loading) {
+    subline = "Asking Meta…";
+  }
+
+  return <div style={{marginTop:10,padding:"10px 13px",background:col+"15",border:"1px solid "+col+"40",borderLeft:"3px solid "+col,borderRadius:"0 10px 10px 0"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+      <span style={{fontSize:10,fontWeight:800,color:col,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Pixel health · {label}</span>
+    </div>
+    {subline && <div style={{fontSize:11,color:P.label||P.sub,fontFamily:fm,lineHeight:1.55}}>{subline}</div>}
+  </div>;
+}
+
 function Step5(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
+  var apiBase = props.apiBase, token = props.token;
   var draft = props.draft, update = props.update, pixels = props.pixels;
+  var needsPixelCheck = draft.objective === "OUTCOME_SALES" || draft.objective === "OUTCOME_LEADS";
+  var targetEvent = draft.objective === "OUTCOME_LEADS" ? "Lead" : (draft.objective === "OUTCOME_SALES" ? (draft.conversionEvent || "Purchase") : "");
   return <Glass accent={P.mint} st={{padding:26}}>
-    <Field label="Pixel" fm={fm} P={P} hint="Optional. Required only for the Sales objective.">
+    <Field label="Pixel" fm={fm} P={P} hint="Optional. Required for Sales and Leads optimization.">
       <Select P={P} fm={fm}
         value={draft.pixelId}
         placeholder={pixels.loading ? "Loading..." : "— No pixel —"}
         options={[{ value: "", label: "— No pixel —" }].concat((pixels.items || []).map(function(p){ return { value: p.pixelId, label: p.name }; }))}
         onChange={function(v){ update({ pixelId: v }); }}/>
+      {needsPixelCheck && draft.pixelId && <PixelHealth P={P} fm={fm} apiBase={apiBase} token={token} pixelId={draft.pixelId} targetEvent={targetEvent}/>}
     </Field>
     {draft.objective === "OUTCOME_SALES" && <Field label="Conversion event" fm={fm} P={P} hint="Should match an event your pixel actually fires.">
       <Select P={P} fm={fm}
