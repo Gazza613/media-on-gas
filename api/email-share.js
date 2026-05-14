@@ -433,7 +433,28 @@ function buildEmailHtml(opts) {
   // name on the form (a person or company), use that. Falls back to the
   // derived client name so old flows still work.
   var greetingName = escapeHtml((opts.recipientName || "").trim() || clientName);
-  var dateRange = opts.from + " to " + opts.to;
+  // Client-facing period label. Team often sets the date range to a full
+  // month-end window (e.g. 2026-05-01 to 2026-05-31) even when they're
+  // sending a weekly snapshot, because the pacing calculations need the
+  // full month. The client only wants to see the month name, not the
+  // raw range. So:
+  //   - Same calendar month  -> "May 2026"
+  //   - Cross-month same year -> "April to May 2026"
+  //   - Cross-year            -> "December 2025 to January 2026"
+  //   - Anything malformed    -> fall back to the raw range
+  var dateRange = (function(from, to){
+    var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ""))) {
+      return (from || "") + " to " + (to || "");
+    }
+    var fY = parseInt(from.slice(0, 4), 10);
+    var fM = parseInt(from.slice(5, 7), 10) - 1;
+    var tY = parseInt(to.slice(0, 4), 10);
+    var tM = parseInt(to.slice(5, 7), 10) - 1;
+    if (fY === tY && fM === tM) return MONTHS[fM] + " " + fY;
+    if (fY === tY)              return MONTHS[fM] + " to " + MONTHS[tM] + " " + fY;
+    return MONTHS[fM] + " " + fY + " to " + MONTHS[tM] + " " + tY;
+  })(opts.from, opts.to);
   var url = opts.shareUrl;
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
   var origin = opts.origin || "https://media-on-gas.vercel.app";
