@@ -216,9 +216,10 @@ export var ANOMALY_DEFS = {
     word: "Spend Spike",
     color: "orange",
     severity: 2,
-    caption: "Daily spend is 2.5x or more of the 7-day daily average. Verify daily-budget caps and bid strategies haven't shifted unintentionally.",
+    caption: "Daily spend is 2.5x or more of the 7-day daily average. Often a real anomaly (budget cap raised, bid strategy changed), but can also be a lifetime-budget campaign in the final days where Meta accelerates to complete the budget, which is rational pacing, not a problem. Verify the cause before acting.",
     procedure: [
-      "Open the campaign and confirm the daily budget cap matches the brief.",
+      "FIRST, check whether this is a lifetime-budget campaign (Willowbrook etc.) in its final days. Meta deliberately spends faster as the end date approaches to complete the remaining lifetime budget. If yes, this is normal pacing, no action needed.",
+      "If daily-budget or far from the end date: open the campaign and confirm the daily budget cap matches the brief.",
       "Check whether the bid strategy was changed (e.g. Lowest Cost vs Bid Cap vs Cost Cap).",
       "Verify Advantage+ campaign budget settings haven't been toggled on if not intended.",
       "Cross-reference with the client's monthly budget runway, if today's spend pace projects an over-spend, lower the cap or pause until reset."
@@ -367,11 +368,40 @@ export function detectAnomalies(yesterday, baseline, rmY) {
   }
 
   if (spendDaily >= 50 && spendY > spendDaily * 2.5) {
-    var spendLift = ((spendY - spendDaily) / spendDaily * 100);
-    out.push({
-      type: "spend_spike",
-      message: fmtR(spendY) + " yesterday vs " + fmtR(spendDaily) + " 7d daily average (up " + spendLift.toFixed(0) + "%)."
-    });
+    // Lifetime-budget end-of-flight acceleration is rational, not an
+    // anomaly. Meta deliberately spends harder in the final days to
+    // complete the lifetime budget. We suppress the spike when:
+    //   - budgetMode is lifetime
+    //   - and we're inside the final 25% of the flight, OR the campaign
+    //     has 7 or fewer days remaining
+    // Pick the more conservative of the two so short campaigns (3-week
+    // flights) and longer ones (3-month flights) both get covered.
+    var isLifetimeAcceleration = false;
+    var budgetMode = String(yesterday.budgetMode || "").toLowerCase();
+    var startRaw = yesterday.startDate || "";
+    var endRaw = yesterday.endDate || "";
+    if (budgetMode === "lifetime" && startRaw && endRaw) {
+      var startMs = Date.parse(startRaw);
+      var endMs = Date.parse(endRaw);
+      var nowMs = Date.now();
+      if (isFinite(startMs) && isFinite(endMs) && endMs > startMs) {
+        var totalMs = endMs - startMs;
+        var remainingMs = endMs - nowMs;
+        var DAY = 24 * 60 * 60 * 1000;
+        var daysRemaining = remainingMs / DAY;
+        var pctRemaining = remainingMs / totalMs;
+        if (daysRemaining > 0 && (daysRemaining <= 7 || pctRemaining <= 0.25)) {
+          isLifetimeAcceleration = true;
+        }
+      }
+    }
+    if (!isLifetimeAcceleration) {
+      var spendLift = ((spendY - spendDaily) / spendDaily * 100);
+      out.push({
+        type: "spend_spike",
+        message: fmtR(spendY) + " yesterday vs " + fmtR(spendDaily) + " 7d daily average (up " + spendLift.toFixed(0) + "%)."
+      });
+    }
   }
 
   if (spendDaily >= 100 && spendY < spendDaily * 0.3) {
