@@ -52,6 +52,32 @@ export function isFreeMailDomain(domain) {
   return !!FREE_MAIL_DOMAINS[String(domain || "").toLowerCase()];
 }
 
+// Canonical client slug. Collapses the period / cycle / casing variants
+// the team types into the share modal so the SAME real client always
+// maps to the SAME key:
+//
+//   "MTN MoMo"                -> "mtnmomo"
+//   "MTN MOMO APRIL 2026"     -> "mtnmomo"   (month + year stripped)
+//   "MTNMoMo"                 -> "mtnmomo"
+//   "Willowbrook Village Cycle2" -> "willowbrookvillage" (cycle tag stripped)
+//   "MTN MoMo POS - May 2026" -> "mtnmomopos"
+//
+// Strips, in order: month names (full + 3-letter), 4-digit years
+// 2020-2099, and recurring-period tags (cycle/phase/wave/round/flight
+// + optional number). Then removes every non-alphanumeric char and
+// lowercases. Pure function, safe to call anywhere.
+var MONTH_RE = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/g;
+var YEAR_RE = /\b20\d{2}\b/g;
+var PERIOD_TAG_RE = /\b(cycle|phase|wave|round|flight|q[1-4])\s*-?\s*\d*\b/g;
+export function canonicalClientSlug(raw) {
+  var s = String(raw || "").toLowerCase();
+  s = s.replace(MONTH_RE, " ");
+  s = s.replace(YEAR_RE, " ");
+  s = s.replace(PERIOD_TAG_RE, " ");
+  s = s.replace(/[^a-z0-9]+/g, "");
+  return s;
+}
+
 // Produces the identity we group by. For corporate domains it is just the
 // registered domain. For free-mail addresses we pair the domain with a
 // slug hint so two unrelated clients using gmail don't merge.
@@ -59,7 +85,7 @@ export function clientIdentity(email, slugHint) {
   var dom = registeredDomain(email);
   if (!dom) return null;
   if (isFreeMailDomain(dom)) {
-    var s = String(slugHint || "").toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
+    var s = canonicalClientSlug(slugHint);
     return s ? (s + "@" + dom) : ("unknown@" + dom);
   }
   return dom;

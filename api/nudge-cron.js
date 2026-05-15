@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog } from "./_audit.js";
-import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain } from "./_clientIdentity.js";
+import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain, canonicalClientSlug } from "./_clientIdentity.js";
 import { listUsers, normalizeEmail, isSuperadminEmail } from "./_users.js";
 import { getSession } from "./auth.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
@@ -173,9 +173,11 @@ function isInternalTestSend(entry, teamEmailSet) {
 }
 
 // Normalise a slug the same way clientIdentity() does so that
-// "mtn-momo", "MTN MOMO", "mtn momo" all collapse to "mtnmomo".
+// "mtn-momo", "MTN MOMO", "MTN MOMO APRIL 2026", "Willowbrook Cycle2"
+// all collapse to one canonical client. Delegates to the shared
+// canonicalClientSlug so every SLA path agrees.
 function normalizeSlug(s) {
-  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return canonicalClientSlug(s);
 }
 
 // Groups audit entries by client identity, returns the last-send record

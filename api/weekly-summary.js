@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog, readUsageEvents } from "./_audit.js";
-import { registeredDomain, clientIdentity, displayNameFromIdentity } from "./_clientIdentity.js";
+import { registeredDomain, clientIdentity, displayNameFromIdentity, canonicalClientSlug } from "./_clientIdentity.js";
 import { listUsers, normalizeEmail } from "./_users.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
 
@@ -102,16 +102,7 @@ function buildHtml(opts) {
   var origin = opts.origin;
   var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
-  var loginTableRows = loginRows.length === 0
-    ? '<tr><td colspan="4" style="padding:14px;color:#8B7FA3;text-align:center;font-size:12px;">No admin logins this week.</td></tr>'
-    : loginRows.map(function(r) {
-        return '<tr>' +
-          '<td style="padding:10px 12px;color:#FFFBF8;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);">' + escapeHtml(r.user) + '</td>' +
-          '<td style="padding:10px 12px;color:#F96203;font-weight:700;font-size:13px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + r.logins + '</td>' +
-          '<td style="padding:10px 12px;color:#FFFBF8;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + fmtDur(r.totalMin) + '</td>' +
-          '<td style="padding:10px 12px;color:#8B7FA3;font-size:11px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + escapeHtml(r.lastLogin) + '</td>' +
-          '</tr>';
-      }).join("");
+  // (per-member login table removed, Team adoption scorecards cover it)
 
   var reportTableRows = reportRows.length === 0
     ? '<tr><td colspan="4" style="padding:14px;color:#8B7FA3;text-align:center;font-size:12px;">No reports sent this week.</td></tr>'
@@ -186,19 +177,8 @@ function buildHtml(opts) {
     '<div style="font-size:24px;font-weight:900;color:' + (overdueRows.length > 0 ? '#FF3D00' : '#34D399') + ';">' + overdueRows.length + '</div></div></td>' +
     '</tr></table></td></tr>' +
 
-    // Section 1: Team logins
-    '<tr><td style="padding:28px 40px 8px;">' +
-    '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:12px;">Dashboard activity by team member</div>' +
-    '<div style="border:1px solid rgba(168,85,247,0.18);border-radius:10px;overflow:hidden;">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
-    '<tr>' +
-    '<th style="' + thStyle + '">User</th>' +
-    '<th style="' + thStyle + 'text-align:center;">Logins</th>' +
-    '<th style="' + thStyle + 'text-align:center;">Session time</th>' +
-    '<th style="' + thStyle + 'text-align:center;">Last active</th>' +
-    '</tr>' +
-    loginTableRows +
-    '</table></div></td></tr>' +
+    // Section 1 (Dashboard activity by team member) removed, the Team
+    // adoption scorecards below already cover per-member engagement.
 
     // Section 2: Reports sent
     '<tr><td style="padding:28px 40px 8px;">' +
@@ -418,14 +398,14 @@ export default async function handler(req, res) {
   var bySlug = {};
   Object.keys(byIdentity).forEach(function(id) {
     var rec = byIdentity[id];
-    var ns = String(rec.lastSlug || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    var ns = canonicalClientSlug(rec.lastSlug);
     if (!ns) return;
     var prev = bySlug[ns];
     if (!prev || rec.lastSentTs > prev.lastSentTs) bySlug[ns] = rec;
   });
   Object.keys(byIdentity).forEach(function(id) {
     var rec = byIdentity[id];
-    var ns = String(rec.lastSlug || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    var ns = canonicalClientSlug(rec.lastSlug);
     if (ns && bySlug[ns] && bySlug[ns] !== rec) delete byIdentity[id];
   });
 
