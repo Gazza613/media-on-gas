@@ -8,8 +8,16 @@ import {
   resultMetricFor,
   adsManagerUrl,
   ANOMALY_DEFS, detectAnomalies,
-  fetchCampaigns
+  fetchCampaigns, fetchAdsByCampaign
 } from "./_pulseShared.js";
+
+// A campaign counts as "live" for anomaly purposes if it's actually
+// serving today. Meta's effective_status, TikTok's status, Google's
+// status all normalize to one of: active, paused, scheduled,
+// with_issues, archived, deleted, etc. Only "active" qualifies.
+function isLive(c) {
+  return String(c && c.status || "").toLowerCase() === "active";
+}
 
 // Daily Anomalies, anomaly-only watchlist for the GAS media team. Fires
 // every morning at 08:15 SAST (06:15 UTC) via Vercel cron. Compares the
@@ -88,21 +96,40 @@ function buildHtml(opts) {
       var col = DISP_COLORS[def.color] || DISP_COLORS.yellow;
       var items = anomaliesByType[k];
 
-      // Per-campaign rows. Each row leads with the campaign name + platform
-      // and the one-line anomaly message; right-rail "Open in Ads Manager"
-      // link deep-links into the platform-native UI for the campaign.
+      // Per-campaign rows. Each row leads with a thumbnail of the top-
+      // spending ad in the affected campaign, the campaign name +
+      // platform, the one-line anomaly message, and an Open-in-Ads-
+      // Manager deep link. Uses a 2-column table for solid alignment
+      // across Gmail / Outlook / Apple Mail (flex / grid is fragile in
+      // email clients).
       var itemsHtml = items.map(function(it) {
         var link = it.adsManagerUrl ? it.adsManagerUrl : "";
         var linkHtml = link
           ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:10px;color:' + P.cyan + ';text-decoration:none;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open in ' + escapeHtml(it.platform || "") + ' Ads Manager &rarr;</a>'
           : '';
-        return '<div style="padding:12px 16px;border-top:1px solid ' + P.rule + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
-          '<div style="font-size:12px;font-weight:800;color:' + P.txt + ';line-height:1.4;word-break:break-word;">' + escapeHtml(it.campaignName) +
-            ' <span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:6px;">' + escapeHtml(it.platform || "") + '</span>' +
-          '</div>' +
-          '<div style="font-size:12px;color:' + P.label + ';margin-top:5px;line-height:1.6;">' + escapeHtml(it.message) + '</div>' +
-          linkHtml +
-        '</div>';
+        // Thumbnail tile. When we have a creative URL show the image
+        // (linked through to the public ad permalink if known);
+        // otherwise show a gradient placeholder so the row layout
+        // stays consistent. 56x56 is small enough to be unobtrusive
+        // and big enough that the team can recognise the asset.
+        var thumbBody = it.thumbnail
+          ? '<img src="' + escapeHtml(it.thumbnail) + '" alt="" width="56" height="56" style="width:56px;height:56px;display:block;border-radius:8px;object-fit:cover;border:1px solid ' + P.rule + ';"/>'
+          : '<div style="width:56px;height:56px;display:block;border-radius:8px;background:linear-gradient(135deg,' + P.ember + '40,' + P.lava + '40);border:1px solid ' + P.rule + ';"></div>';
+        var thumbCell = it.previewUrl
+          ? '<a href="' + escapeHtml(it.previewUrl) + '" target="_blank" rel="noopener" style="display:block;text-decoration:none;">' + thumbBody + '</a>'
+          : thumbBody;
+        return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border-top:1px solid ' + P.rule + ';">' +
+          '<tr>' +
+            '<td valign="top" style="width:72px;padding:12px 0 12px 16px;">' + thumbCell + '</td>' +
+            '<td valign="top" style="padding:12px 16px 12px 12px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
+              '<div style="font-size:12px;font-weight:800;color:' + P.txt + ';line-height:1.4;word-break:break-word;">' + escapeHtml(it.campaignName) +
+                ' <span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:6px;">' + escapeHtml(it.platform || "") + '</span>' +
+              '</div>' +
+              '<div style="font-size:12px;color:' + P.label + ';margin-top:5px;line-height:1.6;">' + escapeHtml(it.message) + '</div>' +
+              linkHtml +
+            '</td>' +
+          '</tr>' +
+        '</table>';
       }).join("");
 
       // Corrective procedure list, rendered as a numbered SOP under the
@@ -241,14 +268,16 @@ export default async function handler(req, res) {
     return;
   }
 
-  var yesterdayData, baselineData;
+  var yesterdayData, baselineData, adsByCampaign;
   try {
-    var pair = await Promise.all([
+    var triple = await Promise.all([
       fetchCampaigns(yFrom, yTo, dashKey),
-      fetchCampaigns(bFrom, bTo, dashKey)
+      fetchCampaigns(bFrom, bTo, dashKey),
+      fetchAdsByCampaign(yFrom, yTo, dashKey)
     ]);
-    yesterdayData = pair[0];
-    baselineData = pair[1];
+    yesterdayData = triple[0];
+    baselineData = triple[1];
+    adsByCampaign = triple[2] || {};
   } catch (err) {
     console.error("daily-anomalies fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
@@ -261,16 +290,17 @@ export default async function handler(req, res) {
     if (k) baseByKey[k] = c;
   });
 
-  // Run anomaly detection on every live campaign returned from the
-  // platforms. No segregation by spend: campaigns that delivered R0
-  // are still passed through the anomaly engine. Existing rules
-  // (spend_collapse, click_collapse, impressions_cliff) naturally
-  // flag a campaign that went from real delivery to zero, while
-  // brand-new R0 campaigns with no baseline produce no anomaly
-  // (correct behaviour, nothing to compare against yet).
+  // Run anomaly detection on every LIVE campaign returned from the
+  // platforms. Paused / scheduled / archived / with-issues campaigns
+  // are excluded from the watchedCount and from the anomaly pass since
+  // they're not delivering and shouldn't be compared against history.
+  // Existing rules (spend_collapse, click_collapse, impressions_cliff)
+  // still flag any live campaign that went from real delivery to zero
+  // against its baseline.
   var anomaliesByType = {};
   var watchedCount = 0;
   (yesterdayData.campaigns || []).forEach(function(c) {
+    if (!isLive(c)) return;
     watchedCount++;
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
@@ -280,13 +310,22 @@ export default async function handler(req, res) {
     if (anomalies.length === 0) return;
 
     var amUrl = adsManagerUrl(c);
+    // Top-spending ad's creative as the thumbnail for this campaign's
+    // anomaly row. fetchAdsByCampaign keys on raw Meta/TikTok campaign
+    // id; same identifier the dashboard uses internally.
+    var topAd = (adsByCampaign && adsByCampaign[String(c.rawCampaignId || "")]) || null;
+    var thumbnail = topAd ? topAd.thumbnail : "";
+    var previewUrl = topAd ? topAd.previewUrl : "";
+
     anomalies.forEach(function(an) {
       if (!anomaliesByType[an.type]) anomaliesByType[an.type] = [];
       anomaliesByType[an.type].push({
         campaignName: c.campaignName,
         platform: c.platform,
         message: an.message,
-        adsManagerUrl: amUrl
+        adsManagerUrl: amUrl,
+        thumbnail: thumbnail,
+        previewUrl: previewUrl
       });
     });
   });
