@@ -44,6 +44,24 @@ async function redisSetIfAbsent(key, ttlSeconds) {
     return d && d.result === "OK"; // true = key was set (we're first), false = already there
   } catch (_) { return null; }
 }
+// Generic GET. Used to read the SLA baseline the dashboard's
+// "Reset SLA Baseline" button writes (key: nudge:baseline) so the
+// weekly summary's overdue list honours the same reset the daily
+// nudge cron does. Without this the two SLA views disagree.
+async function redisGet(key) {
+  var creds = getRedisCreds();
+  if (!creds) return null;
+  try {
+    var r = await fetch(creds.url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + creds.token, "Content-Type": "application/json" },
+      body: JSON.stringify(["GET", key])
+    });
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d && d.result ? d.result : null;
+  } catch (_) { return null; }
+}
 
 // Friday-of-the-week ISO key for idempotency. Computes the Friday that
 // the summary covers (today if cron fires on Friday, last Friday otherwise).
@@ -410,6 +428,24 @@ export default async function handler(req, res) {
     var ns = String(rec.lastSlug || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
     if (ns && bySlug[ns] && bySlug[ns] !== rec) delete byIdentity[id];
   });
+
+  // Apply the SLA baseline reset the dashboard writes to nudge:baseline.
+  // Identical semantics to nudge-cron.js: any client whose last real
+  // send predates the baseline is treated as if they sent on the
+  // baseline date, so a reset clears historic overdue from BOTH the
+  // daily nudge and this weekly summary. Without this the two views
+  // disagree, which is exactly the inaccuracy reported.
+  var baselineTs = 0;
+  try {
+    var baselineRaw = await redisGet("nudge:baseline");
+    if (baselineRaw) baselineTs = Date.parse(baselineRaw) || 0;
+  } catch (_) {}
+  if (baselineTs > 0) {
+    Object.keys(byIdentity).forEach(function(id) {
+      var c = byIdentity[id];
+      if (c.lastSentTs < baselineTs) c.lastSentTs = baselineTs;
+    });
+  }
 
   var overdueRows = Object.keys(byIdentity).map(function(id) { return byIdentity[id]; })
     .filter(function(c) { return (now.getTime() - c.lastSentTs) > slaMs; })
