@@ -254,8 +254,8 @@ function buildHtml(opts) {
     // named voice across all automated reports.
     '<tr><td style="padding:28px 40px 4px;">' +
     '<div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
-    '<div style="font-size:11px;color:#F96203;font-weight:700;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1.5px;text-transform:uppercase;">AI Expert Agent</div>' +
-    '<div style="font-size:10px;color:#8B7FA3;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>' +
+    '<div style="font-size:11px;color:#F96203;font-weight:700;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
+    '<div style="font-size:10px;color:#8B7FA3;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
     '</td></tr>' +
 
     // Divider
