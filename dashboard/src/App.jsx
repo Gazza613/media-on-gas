@@ -6399,6 +6399,92 @@ export default function MediaOnGas(){
                 {story.map(function(s,i){return <div key={i} style={{marginBottom:i<story.length-1?10:0}}>{s}</div>;})}
               </Insight>
 
+              {/* Shopper behaviour: abandonment + engagement standouts
+                  and the real ecommerce micro-funnel. Cart abandonment
+                  is the headline. All best-effort, renders only when GA4
+                  returned the funnel/engagement data. */}
+              {(ecoData.funnel||ecoData.engagement)&&(function(){
+                var ecf=ecoData.funnel||{},eng=ecoData.engagement||{};
+                var dur=function(s){s=Math.round(s||0);return Math.floor(s/60)+"m "+(s%60)+"s";};
+                var caCol=ecf.cartAbandonmentPct>=82?P.rose:ecf.cartAbandonmentPct>=70?P.solar:P.mint;
+                var coCol=ecf.checkoutAbandonmentPct>=60?P.rose:ecf.checkoutAbandonmentPct>=45?P.solar:P.mint;
+                var enCol=eng.engagementRatePct>=60?P.mint:eng.engagementRatePct>=45?P.solar:P.rose;
+                var box=function(lbl,val,c,sub){return <Glass accent={c} hv={true} st={{padding:18,textAlign:"center"}}>
+                  <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:6,fontWeight:800}}>{lbl}</div>
+                  <div style={{fontSize:24,fontWeight:900,color:c,fontFamily:fm,lineHeight:1}}>{val}</div>
+                  {sub&&<div style={{fontSize:9.5,color:P.caption,fontFamily:fm,marginTop:6,lineHeight:1.5}}>{sub}</div>}
+                </Glass>;};
+                var fSteps=[{l:"Items viewed",v:ecf.itemsViewed,c:P.cyan},{l:"Added to cart",v:ecf.addToCarts,c:P.orchid},{l:"Reached checkout",v:ecf.checkouts,c:P.solar},{l:"Purchased",v:ecf.purchases,c:P.mint}].filter(function(s){return s.v!=null;});
+                var fM=Math.max.apply(null,fSteps.map(function(s){return s.v||0;}).concat([1]));
+                return <Reveal minHeight={160}><div style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.cart(P.solar,18)}<span style={{fontSize:13,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Shopper Behaviour</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:18}}>
+                    {ecf.addToCarts!=null&&box("CART ABANDONMENT",ecf.cartAbandonmentPct.toFixed(2)+"%",caCol,fmt(ecf.addToCarts)+" carts, "+fmt(ecf.purchases)+" bought")}
+                    {ecf.checkouts!=null&&box("CHECKOUT ABANDONMENT",ecf.checkoutAbandonmentPct.toFixed(2)+"%",coCol,fmt(ecf.checkouts)+" started checkout")}
+                    {eng.avgSessionDurationSec!=null&&box("AVG TIME ON SITE",dur(eng.avgSessionDurationSec),P.cyan,"per session")}
+                    {eng.pagesPerSession!=null&&box("PAGES / SESSION",String(eng.pagesPerSession),P.orchid,"browsing depth")}
+                    {eng.engagementRatePct!=null&&box("ENGAGEMENT RATE",eng.engagementRatePct.toFixed(2)+"%",enCol,(100-eng.engagementRatePct).toFixed(2)+"% bounced")}
+                  </div>
+                  {fSteps.length>=2&&<div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20}}>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:16}}>Purchase Funnel</div>
+                    {fSteps.map(function(s,i){var w=Math.max(5,(s.v||0)/fM*100);return <div key={i} style={{marginBottom:14}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontFamily:fm,marginBottom:5}}><span style={{color:P.label,letterSpacing:1,fontWeight:700,textTransform:"uppercase"}}>{s.l}</span><span style={{color:s.c,fontWeight:900,fontSize:14}}>{fmt(s.v||0)}</span></div>
+                      <div style={{height:14,background:P.rule+"40",borderRadius:7,overflow:"hidden"}}><div style={{width:w+"%",height:"100%",background:"linear-gradient(90deg,"+s.c+"AA,"+s.c+")",borderRadius:7}}/></div>
+                      {i<fSteps.length-1&&fSteps[i].v>0&&<div style={{fontSize:9.5,color:P.caption,fontFamily:fm,marginTop:5}}>{(fSteps[i+1].v/fSteps[i].v*100).toFixed(2)}% continue, {(100-fSteps[i+1].v/fSteps[i].v*100).toFixed(2)}% drop off</div>}
+                    </div>;})}
+                  </div>}
+                </div></Reveal>;
+              })()}
+
+              {/* Independent ecommerce audit: a senior analyst's honest
+                  read, derived from the GA4 numbers against retail
+                  benchmarks. Strengths, what is costing sales, and a
+                  prioritised fix list. */}
+              {(function(){
+                var eng=ecoData.engagement||{},ecf=ecoData.funnel||{};
+                var S=[],W=[],FIX=[];
+                var convR=parseFloat(e.conversionRate||0);
+                if(convR>=2.5)S.push({t:"Strong conversion rate",d:"At "+convR.toFixed(2)+"% the store converts above the typical 1.50 to 2.50% apparel ecommerce range. Traffic and offer are well matched."});
+                else if(convR>0&&convR<1){W.push({t:"Conversion rate below par",d:"At "+convR.toFixed(2)+"% the store sits under the ~1.50% apparel floor. Most sessions leave without buying; the gap is product-page persuasion, price clarity or checkout friction, not traffic volume."});FIX.push("Lift conversion off "+convR.toFixed(2)+"%: make price and delivery cost visible early, add trust signals on product pages, and shorten the path to cart.");}
+                else if(convR>0)S.push({t:"Conversion rate within range",d:convR.toFixed(2)+"% is inside the normal apparel band; further gains come from product-page and checkout optimisation."});
+                if(ecf.addToCarts!=null){var ca=ecf.cartAbandonmentPct;
+                  if(ca>=82){W.push({t:"Severe cart abandonment",d:ca.toFixed(2)+"% of carts never convert versus a ~70% industry norm. Shoppers want the product enough to add it, then leave, the classic signature of surprise cost at checkout, forced sign-up or payment friction."});FIX.push("Attack the "+ca.toFixed(2)+"% cart abandonment: show delivery cost and ETA before checkout, allow guest checkout, add an abandoned-cart email flow, and offer a trusted local payment option.");}
+                  else if(ca>0&&ca<=65)S.push({t:"Healthy cart conversion",d:"Cart abandonment at "+ca.toFixed(2)+"% is below the ~70% norm; the checkout is doing its job."});
+                  else if(ca>0)S.push({t:"Cart abandonment at market norm",d:ca.toFixed(2)+"% is around the ~70% average; an abandoned-cart email flow is the highest-ROI lever from here."});
+                }
+                if(ecf.checkouts!=null&&ecf.checkoutAbandonmentPct>=60){W.push({t:"Checkout leaks badly",d:ecf.checkoutAbandonmentPct.toFixed(2)+"% who start checkout do not finish. Once a shopper reaches checkout the persuasion is done; losing this many is almost always form length, payment options or surprise totals."});FIX.push("Audit the checkout step by step on mobile: count form fields, expose total cost upfront, and add the payment methods this market expects.");}
+                if(eng.avgSessionDurationSec!=null){var ds=eng.avgSessionDurationSec;
+                  if(ds>=120)S.push({t:"Strong on-site engagement",d:"Average "+Math.floor(ds/60)+"m "+(ds%60)+"s per session shows the catalogue and content hold attention."});
+                  else if(ds<45)W.push({t:"Shallow sessions",d:"Average session is only "+ds+"s. Visitors are not getting far enough to build intent, usually landing-page relevance or page speed."});
+                }
+                if(eng.engagementRatePct!=null&&eng.engagementRatePct<45)W.push({t:"Low engagement rate",d:"Only "+eng.engagementRatePct.toFixed(2)+"% of sessions are engaged; "+(100-eng.engagementRatePct).toFixed(2)+"% bounce or leave fast. Traffic quality or first-impression relevance needs work."});
+                if(eng.pagesPerSession!=null&&eng.pagesPerSession>=3.5)S.push({t:"Good browsing depth",d:eng.pagesPerSession+" pages per session, shoppers explore rather than one-and-done."});
+                if(parseFloat(ps.revenueSharePct||0)>0)S.push({t:"Paid social is contributing",d:"Paid social is assisting "+pc(ps.revenueSharePct)+" of revenue ("+fR(ps.revenue)+"). For an awareness brief that is upper-funnel working harder than awareness usually does."});
+                if((ecoData.channels||[]).length){var chs=ecoData.channels.slice().sort(function(a,b){return b.sessions-a.sessions;});var totS=chs.reduce(function(x,c){return x+(c.sessions||0);},0);if(totS>0){var sh=chs[0].sessions/totS*100;if(sh>=70){W.push({t:"Traffic concentrated in one channel",d:chs[0].channel+" drives "+sh.toFixed(2)+"% of sessions. Single-channel dependency is fragile; an algorithm or budget change there would hit the whole business."});FIX.push("Diversify acquisition: build a second meaningful channel so the store is not "+sh.toFixed(0)+"% reliant on "+chs[0].channel+".");}}}
+                if(prods.length){var tot=prods.reduce(function(x,p){return x+(p.revenue||0);},0);if(tot>0){var topShare=prods[0].revenue/tot*100;if(topShare>=40)W.push({t:"Revenue leans on one product",d:prods[0].name+" is "+topShare.toFixed(2)+"% of tracked product revenue. It selling well is good, but the rest of the catalogue is not pulling its weight; merchandising the next tier de-risks this."});else S.push({t:"Healthy product spread",d:"Revenue is spread across the catalogue rather than one hero product, a sign of a resilient assortment."});}}
+                if((ecoData.devices||[]).length){var dv={};ecoData.devices.forEach(function(x){dv[String(x.device||"").toLowerCase()]=x;});var mob=dv.mobile,desk=dv.desktop;if(mob&&desk&&mob.sessions>0&&desk.sessions>0){var mc=mob.transactions/mob.sessions,dc=desk.transactions/desk.sessions;var tot2=(mob.users||0)+(desk.users||0)+((dv.tablet&&dv.tablet.users)||0);var mobShare=tot2>0?mob.users/tot2*100:0;if(mobShare>=55&&dc>0&&mc<dc*0.7){W.push({t:"Mobile is the majority but converts worse",d:mobShare.toFixed(2)+"% of users are on mobile yet mobile converts about "+((1-mc/dc)*100).toFixed(0)+"% lower than desktop. The mobile product and checkout experience is leaving money on the table."});FIX.push("Fix the mobile experience: it is "+mobShare.toFixed(0)+"% of users but converts well below desktop, test the mobile product page and checkout end to end.");}}}
+                if(users>0&&nl>0){var nlr=nl/users*100;if(nlr<1)W.push({t:"Weak email capture",d:"Only "+nlr.toFixed(2)+"% of visitors sign up. Email is the cheapest owned channel; a stronger incentive and a better-placed prompt compounds over time."});else if(nlr>=3)S.push({t:"Solid email capture",d:nlr.toFixed(2)+"% of visitors sign up, you are building an owned audience that lowers future acquisition cost."});}
+                if(S.length===0&&W.length===0)return null;
+                var col=function(title,arr,c){return <div style={{flex:"1 1 320px"}}>
+                  <div style={{fontSize:11,fontWeight:900,color:c,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>{title}</div>
+                  {arr.length===0?<div style={{fontSize:11,color:P.caption,fontFamily:ff}}>Nothing material this period.</div>:arr.map(function(x,i){return <div key={i} style={{marginBottom:14,paddingLeft:12,borderLeft:"2px solid "+c+"66"}}>
+                    <div style={{fontSize:12.5,fontWeight:800,color:P.txt,fontFamily:ff,marginBottom:3}}>{x.t}</div>
+                    <div style={{fontSize:11.5,color:P.label,fontFamily:ff,lineHeight:1.65}}>{x.d}</div>
+                  </div>;})}
+                </div>;};
+                return <Reveal minHeight={200}><div style={{marginBottom:24,padding:"24px 26px",background:"linear-gradient(135deg,"+P.cyan+"0C 0%, transparent 70%)",border:"1px solid "+P.cyan+"30",borderLeft:"4px solid "+P.cyan,borderRadius:"0 16px 16px 0"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>{Ic.target(P.cyan,20)}<div><div style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Independent Ecommerce Audit</div><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginTop:3}}>An honest analyst read of this period against retail benchmarks</div></div></div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:28,marginTop:18}}>
+                    {col("Strengths",S,P.mint)}
+                    {col("Costing you sales",W,P.rose)}
+                  </div>
+                  {FIX.length>0&&<div style={{marginTop:20,paddingTop:16,borderTop:"1px solid "+P.rule}}>
+                    <div style={{fontSize:11,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>What I would fix first</div>
+                    {FIX.slice(0,4).map(function(x,i){return <div key={i} style={{display:"flex",gap:10,marginBottom:9,fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.6}}><span style={{color:P.solar,fontWeight:900}}>{(i+1)+"."}</span><span>{x}</span></div>;})}
+                  </div>}
+                </div></Reveal>;
+              })()}
+
               {/* Revenue mix donut + conversion funnel, side by side, the
                   way Deep Dive pairs a chart with a structural read. */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,margin:"24px 0"}}>
@@ -6509,6 +6595,21 @@ export default function MediaOnGas(){
                       <div style={{display:"flex",gap:14,padding:"8px 0 10px",fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1}}><div style={{width:120}}>MARKET</div><div style={{flex:1}}/><div style={{width:74,textAlign:"right"}}>USERS</div><div style={{width:96,textAlign:"right"}}>REVENUE</div></div>
                     </div>
                   </div></Reveal>}
+                  {(ecoData.topPages||[]).length>0&&(function(){
+                    var tp=ecoData.topPages,tpMax=Math.max.apply(null,tp.map(function(p){return p.views;}).concat([1]));
+                    return <Reveal minHeight={140}><div style={{marginBottom:24}}>
+                      <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Most-Viewed Pages</div>
+                      <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"6px 18px"}}>
+                        {tp.slice(0,8).map(function(p,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 0",borderBottom:i<Math.min(8,tp.length)-1?"1px solid "+P.rule+"50":"none"}}>
+                          <div title={p.path} style={{width:230,fontSize:12,color:P.txt,fontFamily:fm,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.path}</div>
+                          <div style={{flex:1,height:10,background:P.rule+"40",borderRadius:5,overflow:"hidden"}}><div style={{width:Math.max(4,p.views/tpMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.orchid+"AA,"+P.orchid+")",borderRadius:5}}/></div>
+                          <div style={{width:84,textAlign:"right",fontSize:12,color:P.orchid,fontFamily:fm,fontWeight:800}}>{fmt(p.views)}</div>
+                          <div style={{width:84,textAlign:"right",fontSize:11,color:P.label,fontFamily:fm,fontWeight:700}}>{fmt(p.users)} users</div>
+                        </div>;})}
+                        <div style={{display:"flex",gap:14,padding:"8px 0 10px",fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1}}><div style={{width:230}}>PAGE</div><div style={{flex:1}}/><div style={{width:84,textAlign:"right"}}>VIEWS</div><div style={{width:84,textAlign:"right"}}>USERS</div></div>
+                      </div>
+                    </div></Reveal>;
+                  })()}
                 </div>;
               })()}
 

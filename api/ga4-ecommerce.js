@@ -289,7 +289,7 @@ export default async function handler(req, res) {
   // at 5 reports and the first batch already uses all 5, so this is a
   // separate call. Enrichment only: if it fails the core payload still
   // returns, the breakdown sections just don't render.
-  var channels = [], devices = [], countries = [];
+  var channels = [], devices = [], countries = [], funnel = null, engagement = null;
   try {
     var r2body = {
       requests: [
@@ -316,6 +316,18 @@ export default async function handler(req, res) {
           metrics: [{ name: "activeUsers" }, { name: "purchaseRevenue" }, { name: "ecommercePurchases" }],
           orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
           limit: 8
+        },
+        // 3. Ecommerce micro-funnel totals (drives cart/checkout
+        //    abandonment, the headline behaviour metric).
+        {
+          dateRanges: dateRanges,
+          metrics: [{ name: "addToCarts" }, { name: "checkouts" }, { name: "ecommercePurchases" }, { name: "itemsViewed" }]
+        },
+        // 4. Engagement quality totals (time on site, pages/session,
+        //    engagement & bounce).
+        {
+          dateRanges: dateRanges,
+          metrics: [{ name: "averageSessionDuration" }, { name: "screenPageViewsPerSession" }, { name: "engagementRate" }, { name: "bounceRate" }, { name: "engagedSessions" }]
         }
       ]
     };
@@ -343,12 +355,65 @@ export default async function handler(req, res) {
         return { country: dim0(row), users: Math.round(mv(row, 0)), revenue: parseFloat(mv(row, 1).toFixed(2)), transactions: Math.round(mv(row, 2)) };
       }).filter(function(c) { return c.users > 0; });
     }
+    var fr = rep2[3] && rep2[3].rows && rep2[3].rows[0];
+    if (fr) {
+      var fAdd = parseFloat((fr.metricValues[0] && fr.metricValues[0].value) || 0);
+      var fChk = parseFloat((fr.metricValues[1] && fr.metricValues[1].value) || 0);
+      var fPur = parseFloat((fr.metricValues[2] && fr.metricValues[2].value) || 0);
+      var fView = parseFloat((fr.metricValues[3] && fr.metricValues[3].value) || 0);
+      funnel = {
+        itemsViewed: Math.round(fView),
+        addToCarts: Math.round(fAdd),
+        checkouts: Math.round(fChk),
+        purchases: Math.round(fPur),
+        cartAbandonmentPct: fAdd > 0 ? parseFloat(((fAdd - fPur) / fAdd * 100).toFixed(2)) : 0,
+        checkoutAbandonmentPct: fChk > 0 ? parseFloat(((fChk - fPur) / fChk * 100).toFixed(2)) : 0
+      };
+    }
+    var er = rep2[4] && rep2[4].rows && rep2[4].rows[0];
+    if (er) {
+      // GA4 returns engagementRate / bounceRate as 0-1 fractions.
+      engagement = {
+        avgSessionDurationSec: Math.round(parseFloat((er.metricValues[0] && er.metricValues[0].value) || 0)),
+        pagesPerSession: parseFloat(parseFloat((er.metricValues[1] && er.metricValues[1].value) || 0).toFixed(2)),
+        engagementRatePct: parseFloat((parseFloat((er.metricValues[2] && er.metricValues[2].value) || 0) * 100).toFixed(2)),
+        bounceRatePct: parseFloat((parseFloat((er.metricValues[3] && er.metricValues[3].value) || 0) * 100).toFixed(2)),
+        engagedSessions: Math.round(parseFloat((er.metricValues[4] && er.metricValues[4].value) || 0))
+      };
+    }
   } catch (_) { /* enrichment is best-effort */ }
+
+  // Third best-effort call: top pages by views (where attention goes).
+  var topPages = [];
+  try {
+    var r3 = await fetch(GA4 + "/properties/" + propertyId + ":runReport", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + auth.token, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dateRanges: dateRanges,
+        dimensions: [{ name: "pagePath" }],
+        metrics: [{ name: "screenPageViews" }, { name: "activeUsers" }],
+        orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+        limit: 8
+      })
+    });
+    var d3 = await r3.json();
+    if (r3.ok && !d3.error && d3.rows) {
+      topPages = d3.rows.map(function(row) {
+        return {
+          path: (row.dimensionValues && row.dimensionValues[0] && row.dimensionValues[0].value) || "(not set)",
+          views: Math.round(parseFloat((row.metricValues && row.metricValues[0] && row.metricValues[0].value) || 0)),
+          users: Math.round(parseFloat((row.metricValues && row.metricValues[1] && row.metricValues[1].value) || 0))
+        };
+      }).filter(function(p) { return p.views > 0; });
+    }
+  } catch (_) { /* best-effort */ }
 
   var payload = {
     ok: true, enabled: true,
     client: clientName, propertyId: propertyId, from: from, to: to,
     channels: channels, devices: devices, countries: countries,
+    funnel: funnel, engagement: engagement, topPages: topPages,
     newsletterEvent: newsletterEvent || null,
     newsletterPagePath: newsletterPath || null,
     newsletterSource: newsletterPath ? "pagePath" : (newsletterEvent ? "event" : "none"),
