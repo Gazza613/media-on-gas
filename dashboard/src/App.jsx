@@ -954,6 +954,32 @@ function AdPreviewModal(props){
     return function(){cancelled=true;};
   },[ad&&ad.adId,mixedCapable,platformKey]);
 
+  // The winning creative inside a MIXED ad can itself be a video
+  // (Psycho Bunny "Burst" MP4 sets). assets[0] carries its videoId,
+  // so resolve and PLAY that, otherwise a mixed video ad only ever
+  // showed its poster. Reuses the same videoSrc/err state + <video>
+  // element as the normal path; for a MIXED ad isVideo is false so the
+  // normal resolver no-ops and there is no race.
+  var mixWinVid=(mixedCapable&&assetBk&&assetBk.data&&assetBk.data.ok&&assetBk.data.assets&&assetBk.data.assets[0]&&String(assetBk.data.assets[0].kind||"").toLowerCase()==="video")?String(assetBk.data.assets[0].videoId||""):"";
+  useEffect(function(){
+    if(!ad||!mixWinVid||platformKey!=="meta")return;
+    setVideoSrc(null);setVideoType("video");setVideoErr(null);
+    hasPlayedRef.current=false;retryCountRef.current=0;
+    adGenRef.current=adGenRef.current+1;
+    var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
+    var cid=String((ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+    var url=props.apiBase+"/api/ad-video?platform=meta&id="+encodeURIComponent(mixWinVid)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(cid?("&campaignId="+encodeURIComponent(cid)):"")+authQ+"&resolveOnly=1";
+    var cancelled=false;
+    var timer=setTimeout(function(){if(!cancelled)setVideoErr("timeout");},15000);
+    fetch(url).then(function(r){return r.text();}).then(function(t){
+      if(cancelled)return;clearTimeout(timer);
+      var parsed=null;try{parsed=t?JSON.parse(t):null;}catch(_){}
+      if(parsed&&parsed.url){setVideoSrc(parsed.url);setVideoType(parsed.type||"video");}
+      else setVideoErr("no_url");
+    }).catch(function(){if(cancelled)return;clearTimeout(timer);setVideoErr("network");});
+    return function(){cancelled=true;clearTimeout(timer);};
+  },[ad&&ad.adId,mixWinVid,platformKey]);
+
   if(!props.ad)return null;
   var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
   var accent=platAccent[ad.platform]||P.ember;
@@ -983,12 +1009,15 @@ function AdPreviewModal(props){
       {sub&&<div style={{fontSize:11,fontFamily:fm,color:"rgba(255,255,255,0.7)",letterSpacing:0.5,lineHeight:1.5,maxWidth:400}}>{sub}</div>}
     </div>;
   };
+  // Effective video id: the ad's own (normal MP4) or, for a MIXED ad,
+  // the winning creative's. Used by the player branch + retry refetch.
+  var effVidId=(isVideo&&ad.videoId)?String(ad.videoId):mixWinVid;
   var mediaBlock=null;
   if(isText){
     mediaBlock=placeholder("TEXT AD","Search campaigns use headline/description copy only, no visual creative is uploaded.");
   } else if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
     mediaBlock=<iframe title="Ad preview" src={"https://www.youtube.com/embed/"+encodeURIComponent(ad.youtubeId)} style={{width:"100%",aspectRatio:"16/9",border:"none",borderRadius:10,background:"#000"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>;
-  } else if(isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId){
+  } else if((isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId)||(mixWinVid&&platformKey==="meta")){
     // Video src is resolved asynchronously via the useEffect above and set
     // directly on the element — serving a 302 redirect via <source> broke
     // playback because the browser's byte-range requests didn't follow the
@@ -1037,7 +1066,7 @@ function AdPreviewModal(props){
           hasPlayedRef.current=false;
           console.warn("[GAS] Video mid-playback error, refetching fresh URL\n"+JSON.stringify({code:code,retry:retryCountRef.current,mediaErrorCode:me&&me.code,mediaErrorMsg:me&&me.message,adId:ad.adId,videoId:ad.videoId,adName:ad.adName,platform:ad.platform,videoSrc:videoSrc},null,2));
           var rAuthQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
-          var rUrl=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(ad.videoId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+rAuthQ+"&resolveOnly=1&bust=1&t="+Date.now();
+          var rUrl=props.apiBase+"/api/ad-video?platform="+platformKey+"&id="+encodeURIComponent(effVidId)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+rAuthQ+"&resolveOnly=1&bust=1&t="+Date.now();
           // Capture the generation at fire time. If the modal closes or the
           // user opens a different ad before this fetch resolves, adGenRef
           // will have moved and we skip the setState rather than leak a stale

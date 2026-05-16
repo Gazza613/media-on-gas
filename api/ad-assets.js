@@ -238,6 +238,7 @@ export async function computeAssetBreakdown(adId, from, to) {
         kind: a.kind,
         name: a.name,
         thumbnail: a.thumbnail || "",
+        videoId: a.videoId || "",
         impressions: a.impressions,
         clicks: a.clicks,
         spend: a.spend,
