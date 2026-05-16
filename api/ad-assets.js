@@ -96,50 +96,27 @@ async function resolveVideoThumb(videoId, token) {
   return "";
 }
 
-export default async function handler(req, res) {
-  if (!(await rateLimit(req, res, { maxPerMin: 120, maxPerHour: 1200 }))) return;
-  if (!(await checkAuth(req, res))) return;
-
-  var platform = String(req.query.platform || "meta").toLowerCase();
-  var adId = String(req.query.adId || req.query.id || "").trim();
-  var campaignId = String(req.query.campaignId || "").trim();
-  var from = String(req.query.from || "").trim();
-  var to = String(req.query.to || "").trim();
-
-  if (!adId) { res.status(400).json({ error: "adId required" }); return; }
-
-  // Asset breakdown is a Meta-only concept. TikTok/Google flexible
-  // formats don't expose an equivalent, so tell the UI plainly.
-  if (platform !== "meta") {
-    res.status(200).json({ ok: false, supported: false, reason: "Per-asset breakdown is only available for Meta flexible ads." });
-    return;
-  }
-
-  var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role === "client") {
-    if (!campaignId) { res.status(400).json({ error: "campaignId required for client requests" }); return; }
-    if (!isCampaignAllowed(principal, campaignId, "")) {
-      res.status(403).json({ error: "Not allowed for this campaign" });
-      return;
-    }
-  }
+// Core breakdown computation, framework-free so both the HTTP handler
+// AND the client-report email (api/email-share.js) can call it
+// directly without an internal round-trip. Returns the same payload
+// shape the handler responds with. Pure aside from Meta fetches +
+// the shared in-memory cache.
+export async function computeAssetBreakdown(adId, from, to) {
+  if (!adId) return { ok: false, error: "adId required" };
 
   // Default to last 30 days when the caller doesn't pass a window.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-    var now = new Date();
-    to = ymd(now);
-    from = ymd(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ""))) {
+    var now0 = new Date();
+    to = ymd(now0);
+    from = ymd(new Date(now0.getTime() - 30 * 24 * 60 * 60 * 1000));
   }
 
   var cacheKey = adId + "|" + from + "|" + to;
   var hit = assetCache[cacheKey];
-  if (hit && Date.now() - hit.ts < CACHE_TTL_MS) {
-    res.status(200).json(hit.payload);
-    return;
-  }
+  if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.payload;
 
   var token = process.env.META_ACCESS_TOKEN;
-  if (!token) { res.status(500).json({ error: "META_ACCESS_TOKEN not configured" }); return; }
+  if (!token) return { ok: false, error: "META_ACCESS_TOKEN not configured" };
 
   // account_id is needed to resolve image-hash thumbnails.
   var accountId = "";
@@ -207,8 +184,7 @@ export default async function handler(req, res) {
       note: "Meta has not yet returned a per-asset breakdown for this ad. This is normal in the first 24 to 48 hours after launch, before each creative has enough delivery to measure. Check back tomorrow."
     };
     assetCache[cacheKey] = { ts: Date.now(), payload: emptyPayload };
-    res.status(200).json(emptyPayload);
-    return;
+    return emptyPayload;
   }
 
   // Pick the primary "result" metric the same way the dashboard does
@@ -256,5 +232,41 @@ export default async function handler(req, res) {
     note: "Spend, impressions, clicks and CTR per creative are exact. Result counts are Meta's modelled attribution, the platform optimises combinations rather than running clean isolated splits, so treat results as a strong directional signal rather than a lab test."
   };
   assetCache[cacheKey] = { ts: Date.now(), payload: payload };
+  return payload;
+}
+
+export default async function handler(req, res) {
+  if (!(await rateLimit(req, res, { maxPerMin: 120, maxPerHour: 1200 }))) return;
+  if (!(await checkAuth(req, res))) return;
+
+  var platform = String(req.query.platform || "meta").toLowerCase();
+  var adId = String(req.query.adId || req.query.id || "").trim();
+  var campaignId = String(req.query.campaignId || "").trim();
+  var from = String(req.query.from || "").trim();
+  var to = String(req.query.to || "").trim();
+
+  if (!adId) { res.status(400).json({ error: "adId required" }); return; }
+
+  // Asset breakdown is a Meta-only concept. TikTok/Google flexible
+  // formats don't expose an equivalent, so tell the UI plainly.
+  if (platform !== "meta") {
+    res.status(200).json({ ok: false, supported: false, reason: "Per-asset breakdown is only available for Meta flexible ads." });
+    return;
+  }
+
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role === "client") {
+    if (!campaignId) { res.status(400).json({ error: "campaignId required for client requests" }); return; }
+    if (!isCampaignAllowed(principal, campaignId, "")) {
+      res.status(403).json({ error: "Not allowed for this campaign" });
+      return;
+    }
+  }
+
+  var payload = await computeAssetBreakdown(adId, from, to);
+  if (payload && payload.ok === false && payload.error) {
+    res.status(payload.error === "META_ACCESS_TOKEN not configured" ? 500 : 400).json(payload);
+    return;
+  }
   res.status(200).json(payload);
 }

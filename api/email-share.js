@@ -5,6 +5,7 @@ import { issueToken } from "./_jwt.js";
 import { logEmailSend } from "./_audit.js";
 import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain } from "./_clientIdentity.js";
+import { computeAssetBreakdown } from "./ad-assets.js";
 
 // Admin-only endpoint. Issues a signed share token, fetches the campaign summary,
 // and emails a branded HTML report from grow@gasmarketing.co.za via Gmail SMTP.
@@ -392,6 +393,41 @@ function renderTopAdsBlock(topAds) {
         '<div style="font-size:18px;font-weight:900;color:#FFFBF8;font-family:Helvetica,Arial,sans-serif;line-height:1;margin-bottom:4px;">' + fmtNum(results) + ' <span style="font-size:10px;color:' + accent + ';font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + resultLabel(ad.resultType) + '</span></div>' +
         '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend / results) + ' ' + costPerLabel(ad.resultType) + '</div>' :
         '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">Still collecting results</div>';
+      // Per-creative breakdown for a MIXED (Flexible) ad. Flat table,
+      // no interactivity, survives in the email itself. Plain-language
+      // intro so a client understands why the headline numbers are a
+      // blend and what they're now looking at.
+      var bk = ad._assetBreakdown;
+      var breakdownBlock = "";
+      if (bk && bk.assets && bk.assets.length > 0) {
+        var rLab = bk.resultLabel || "Results";
+        var rows = bk.assets.slice(0, 4).map(function(as, i) {
+          var top = i === 0;
+          var asThumb = as.thumbnail && String(as.thumbnail).indexOf("http") === 0
+            ? '<img src="' + escapeHtml(as.thumbnail) + '" alt="" width="54" height="54" style="width:54px;height:54px;object-fit:cover;border-radius:8px;display:block;border:0;background:#1a0f2a;"/>'
+            : '<div style="width:54px;height:54px;border-radius:8px;background:linear-gradient(135deg,' + accent + '55,' + accent + '15);display:table-cell;vertical-align:middle;text-align:center;color:#fff;font-size:8px;font-weight:800;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml((as.kind || "AD").toUpperCase()) + '</div>';
+          return '<tr>' +
+            '<td valign="top" style="width:62px;padding:8px 10px 8px 0;">' + asThumb + '</td>' +
+            '<td valign="top" style="padding:8px 0;">' +
+              '<div style="font-size:11px;color:#FFFBF8;font-weight:700;font-family:Helvetica,Arial,sans-serif;margin-bottom:3px;">Creative #' + (i + 1) +
+                (top ? ' <span style="background:#34D399;color:#062014;font-size:8px;font-weight:900;padding:2px 6px;border-radius:3px;letter-spacing:1px;text-transform:uppercase;">Top Performer</span>' : '') +
+              '</div>' +
+              '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;line-height:1.6;">' +
+                '<strong style="color:' + (top ? '#34D399' : '#FFFBF8') + ';">' + fmtNum(as.results || 0) + '</strong> ' + escapeHtml(rLab) +
+                (as.results > 0 ? ' &middot; ' + fmtR(as.costPerResult) + ' each' : '') +
+                ' &middot; ' + fmtR(as.spend || 0) + ' spent &middot; ' + fmtNum(as.impressions || 0) + ' served &middot; ' + fmtPct(as.ctr || 0) + ' CTR' +
+              '</div>' +
+            '</td>' +
+          '</tr>';
+        }).join("");
+        breakdownBlock =
+          '<div style="margin-top:12px;padding:12px 14px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.16);border-radius:10px;">' +
+            '<div style="font-size:10px;color:#A855F7;letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;margin-bottom:4px;">What\'s inside this mixed ad</div>' +
+            '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:8px;">Several creatives were loaded into this one ad and Meta showed each person the version most likely to work for them. The numbers above are the blended total, below is how each individual creative performed.</div>' +
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + rows + '</table>' +
+            (bk.note ? '<div style="font-size:9px;color:#6b6280;font-family:Helvetica,Arial,sans-serif;line-height:1.5;margin-top:8px;font-style:italic;">' + escapeHtml(bk.note) + '</div>' : '') +
+          '</div>';
+      }
       return '<tr><td style="padding:10px 0;border-bottom:1px solid rgba(168,85,247,0.08);">' +
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
         '<tr>' +
@@ -402,6 +438,7 @@ function renderTopAdsBlock(topAds) {
           '<div style="font-size:11px;color:#8B7FA3;margin-top:8px;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend) + ' spent, ' + fmtNum(impressions) + ' ads served, ' + fmtPct(ctr) + ' CTR</div>' +
         '</td>' +
         '</tr></table>' +
+        breakdownBlock +
       '</td></tr>';
     }).join("");
 
@@ -654,6 +691,32 @@ export default async function handler(req, res) {
     ]);
     var summary = results[0];
     var topAds = results[1];
+
+    // Enrich any MIXED Meta ad in the Top Ads block with its
+    // per-creative breakdown so the static email shows which creative
+    // won, the same evidence the live dashboard modal shows. Only
+    // MIXED + Facebook/Instagram ads trigger the Meta call; capped so
+    // a noisy account can't blow the email's compute budget.
+    try {
+      if (Array.isArray(topAds)) {
+        var mixedJobs = [];
+        topAds.forEach(function(pl) {
+          var plat = String(pl.platform || "").toLowerCase();
+          if (plat !== "facebook" && plat !== "instagram") return;
+          (pl.ads || []).forEach(function(ad) {
+            if (String(ad.format || "").toUpperCase() === "MIXED" && ad.adId && mixedJobs.length < 6) {
+              mixedJobs.push(ad);
+            }
+          });
+        });
+        await Promise.all(mixedJobs.map(async function(ad) {
+          try {
+            var bk = await computeAssetBreakdown(ad.adId, from, to);
+            if (bk && bk.ok && bk.assets && bk.assets.length > 0) ad._assetBreakdown = bk;
+          } catch (_) {}
+        }));
+      }
+    } catch (_) {}
 
     var html = buildEmailHtml({
       clientSlug: clientSlug,
