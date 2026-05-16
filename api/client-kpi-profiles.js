@@ -32,7 +32,7 @@ function sanitiseKpiList(arr) {
   if (!Array.isArray(arr)) return [];
   return arr.map(function(s) { return String(s || "").trim(); })
     .filter(function(s) { return s && KNOWN_KPIS[s]; })
-    .slice(0, 8);
+    .slice(0, 12);
 }
 
 export default async function handler(req, res) {
