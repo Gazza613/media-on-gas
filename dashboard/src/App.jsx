@@ -80,6 +80,20 @@ var QUIRKY_AD_LOADERS=[
   "Dusting off the video posters, they photograph better in good light",
   "Meta took the long way round, it usually does"
 ];
+var QUIRKY_ECOMMERCE_LOADERS=[
+  "Counting the till, every sale leaves a trail in Google Analytics",
+  "Ringing up revenue, the basket totals are still settling",
+  "Lining up the best sellers, the winners never label themselves",
+  "Reading the store its sales report, it sells better than it reads",
+  "Tallying transactions and average order value, no cent left behind",
+  "Tracing which sessions turned into checkouts",
+  "Asking Google Analytics who the sales winners are this period",
+  "Working out paid social's slice of the revenue pie",
+  "Tracking the newsletter sign-ups, they trickle in quietly",
+  "Following the shopper from first visit to confirmed order",
+  "Converting the currency so the revenue reads in clean Rands",
+  "Polishing the conversion rate, it photographs better cleaned up"
+];
 // Pure helper, pick a random quirky loader. Rotates in components via
 // useEffect + setInterval.
 function pickQuirky(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
@@ -3119,6 +3133,15 @@ export default function MediaOnGas(){
   var ecoD=useState(null),ecoData=ecoD[0],setEcoData=ecoD[1];
   var ecoL=useState(false),ecoLoading=ecoL[0],setEcoLoading=ecoL[1];
   var ecoE=useState(""),ecoErr=ecoE[0],setEcoErr=ecoE[1];
+  // Ecommerce-tab loader quip. Separate rotation so the copy is about
+  // sales/revenue/best-sellers, not generic platform pulling.
+  var eq1=useState(QUIRKY_ECOMMERCE_LOADERS[0]),ecoQuip=eq1[0],setEcoQuip=eq1[1];
+  useEffect(function(){
+    if(!ecoLoading)return;
+    setEcoQuip(pickQuirky(QUIRKY_ECOMMERCE_LOADERS));
+    var ivE=setInterval(function(){setEcoQuip(pickQuirky(QUIRKY_ECOMMERCE_LOADERS));},5000);
+    return function(){clearInterval(ivE);};
+  },[ecoLoading]);
 
   useEffect(function(){
     var params=new URLSearchParams(window.location.search);
@@ -4827,16 +4850,31 @@ export default function MediaOnGas(){
               conversion_rate:ec.conversionRate>0?pc(ec.conversionRate):D
             };
             var ACC=[P.orchid,P.mint,P.cyan,P.solar,P.ember,P.blaze];
-            var keys=ecoProfile.primaryKpis.filter(function(k){return k!=="top_products"&&LBL[k];}).slice(0,6);
-            if(keys.length===0)return null;
-            return <div style={{marginBottom:24}}>
-              <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Headline KPIs</div>
+            var clean=function(arr){return (Array.isArray(arr)?arr:[]).filter(function(k){return k!=="top_products"&&LBL[k];}).slice(0,6);};
+            var pri=clean(ecoProfile.primaryKpis),sec=clean(ecoProfile.secondaryKpis),ter=clean(ecoProfile.tertiaryKpis);
+            // De-dupe across tiers, a KPI only shows in its highest tier.
+            var seenK={};pri.forEach(function(k){seenK[k]=1;});
+            sec=sec.filter(function(k){return !seenK[k]&&(seenK[k]=1);});
+            ter=ter.filter(function(k){return !seenK[k]&&(seenK[k]=1);});
+            if(pri.length===0&&sec.length===0&&ter.length===0)return null;
+            // The profile's three tiers ARE this client's objectives. Each
+            // renders at a size that signals its priority: primary big,
+            // secondary medium, tertiary compact. Fully profile-driven, so
+            // setting the profile in Settings reshapes this section for
+            // that client only.
+            var tier=function(keys,title,vSize,pad){return keys.length===0?null:<div style={{marginBottom:16}}>
+              <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10,opacity:0.85}}>{title}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat("+keys.length+",1fr)",gap:10}}>
-                {keys.map(function(k,i){var a=ACC[i%ACC.length];return <Glass key={k} accent={a} hv={true} st={{padding:16,textAlign:"center"}}>
+                {keys.map(function(k,i){var a=ACC[i%ACC.length];return <Glass key={k} accent={a} hv={true} st={{padding:pad,textAlign:"center"}}>
                   <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:6}}>{LBL[k]}</div>
-                  <div style={{fontSize:20,fontWeight:900,color:a,fontFamily:fm,lineHeight:1}}>{V[k]}</div>
+                  <div style={{fontSize:vSize,fontWeight:900,color:a,fontFamily:fm,lineHeight:1}}>{V[k]}</div>
                 </Glass>;})}
               </div>
+            </div>;};
+            return <div style={{marginBottom:24}}>
+              {tier(pri,"Headline KPIs",20,16)}
+              {tier(sec,"Secondary KPIs",16,13)}
+              {tier(ter,"Supporting KPIs",13,11)}
             </div>;
           })()}
           {/* Condensed ecommerce pull-through: only when the client's KPI
@@ -6232,7 +6270,11 @@ export default function MediaOnGas(){
 
         {tab==="ecommerce"&&ecoOn&&(<div>
           <SH icon={Ic.cart(P.mint,20)} title="Ecommerce" sub={df+" to "+dt+" | Site & online store performance from Google Analytics"} accent={P.mint}/>
-          {ecoLoading&&!ecoData&&<div style={{padding:40,textAlign:"center",color:P.label,fontFamily:fm,fontSize:13}}>Pulling Google Analytics ecommerce data...</div>}
+          {ecoLoading&&!ecoData&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}>
+            <div style={{width:46,height:46,border:"3px solid "+P.rule,borderTop:"3px solid "+P.mint,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+            <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+            <div key={ecoQuip} style={{fontSize:15,color:"rgba(255,251,248,0.72)",fontFamily:ff,fontStyle:"italic",textAlign:"center",maxWidth:540,lineHeight:1.6,letterSpacing:0.2}}>{ecoQuip}<span style={{display:"inline-block",width:20}}>…</span></div>
+          </div>}
           {!ecoLoading&&!ecoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 28px",textAlign:"center",fontFamily:fm,lineHeight:1.8}}>
             <div style={{fontSize:24,marginBottom:10}}>{"🛒"}</div>
             <div style={{fontSize:14,color:P.txt,fontWeight:700,marginBottom:8}}>No ecommerce connection yet</div>
@@ -6241,52 +6283,102 @@ export default function MediaOnGas(){
           </div>}
           {ecoData&&(function(){
             var e=ecoData.ecommerce||{},st=ecoData.site||{},ps=ecoData.paidSocial||{};
+            var rev=parseFloat(e.revenue||0),tx=parseFloat(e.transactions||0),aov=parseFloat(e.aov||0);
+            var users=parseFloat(st.users||0),sess=parseFloat(st.sessions||0);
+            var nl=parseFloat(ecoData.newsletterSignups||0);
+            var psRev=parseFloat(ps.revenue||0),psShare=parseFloat(ps.revenueSharePct||0);
+            var prods=(ecoData.topProducts||[]).slice(0,8);
+            var topP=prods[0]||null;
+            var nlRate=users>0?(nl/users*100):0;
+            // Plain-English story, the same narrative voice the Summary
+            // Insight block uses. Commas not em dashes; percentages 2dp.
+            var story=[];
+            story.push("Over "+df+" to "+dt+", the online store generated "+fR(rev)+" from "+fmt(tx)+" orders, an average basket of "+fR(aov)+".");
+            story.push(fmt(users)+" people visited the site"+(sess>0?(" across "+fmt(sess)+" sessions"):"")+", and "+pc(e.conversionRate)+" of sessions converted to a sale.");
+            if(psRev>0)story.push("Paid social assisted "+fR(psRev)+", "+pc(psShare)+" of total store revenue, from "+fmt(ps.sessions)+" attributed sessions. For an awareness campaign treat that as an assisted, view-through contribution rather than the campaign's optimisation target.");
+            if(topP)story.push("The standout seller was "+topP.name+" at "+fR(topP.revenue)+(prods[1]?(", followed by "+prods[1].name+" at "+fR(prods[1].revenue)):"")+".");
+            if(nl>0)story.push(fmt(nl)+" newsletter sign-ups were captured"+(nlRate>0?(", "+nlRate.toFixed(2)+"% of all site visitors"):"")+", building the owned audience for future campaigns.");
+            var revSplit=[{name:"Paid social assisted",value:Math.max(0,psRev),_currency:true},{name:"Other channels",value:Math.max(0,rev-psRev),_currency:true}];
+            var funnel=[{label:"Site users",v:users,c:P.cyan},{label:"Sessions",v:sess,c:P.orchid},{label:"Transactions",v:tx,c:P.mint}];
+            var fMax=Math.max(users,sess,tx,1);
+            var lbl={fontSize:10,fill:P.txt,fontFamily:fm,fontWeight:700};
             return <div>
-              {/* Total-site headline: the full business picture the client
-                  cares about. The Paid Social line below is our slice. */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:14}}>
-                <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>REVENUE</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>{fR(e.revenue)}</div></Glass>
-                <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>TRANSACTIONS</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fmt(e.transactions)}</div></Glass>
-                <Glass accent={P.solar} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>AVERAGE ORDER VALUE</div><div style={{fontSize:18,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(e.aov)}</div></Glass>
-                <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>SITE USERS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(st.users)}</div></Glass>
-                <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>CONVERSION RATE</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{pc(e.conversionRate)}</div></Glass>
-                <Glass accent={P.orchid} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>NEWSLETTER SIGN-UPS</div><div style={{fontSize:18,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(ecoData.newsletterSignups)}</div></Glass>
+              {/* Hero: the three commercial headline metrics with context,
+                  then a site/audience strip. Metric carries a sub-line so
+                  each number arrives with its "so what". */}
+              <Reveal minHeight={120}><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12}}>
+                <Metric icon={Ic.cart(P.mint,14)} label="Ecommerce Revenue" value={fR(rev)} accent={P.mint} sub={psRev>0?("Paid social assisted "+fR(psRev)+", "+pc(psShare)+" of total"):"Total online store revenue, all channels"}/>
+                <Metric icon={Ic.bolt(P.ember,14)} label="Transactions" value={fmt(tx)} accent={P.ember} sub={"Average basket "+fR(aov)}/>
+                <Metric icon={Ic.target(P.solar,14)} label="Conversion Rate" value={pc(e.conversionRate)} accent={P.solar} sub={fmt(users)+" visitors to "+fmt(tx)+" orders"}/>
+              </div></Reveal>
+              <Reveal minHeight={92} delay={60}><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:22}}>
+                <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>SITE USERS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(users)}</div></Glass>
+                <Glass accent={P.orchid} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>SESSIONS</div><div style={{fontSize:18,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(sess)}</div></Glass>
+                <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>NEWSLETTER SIGN-UPS</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{fmt(nl)}</div></Glass>
+                <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>PAID SOCIAL SHARE</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{pc(psShare)}</div></Glass>
+              </div></Reveal>
+
+              <Insight accent={P.mint} title="The Ecommerce Story" icon={Ic.cart(P.mint,16)}>
+                {story.map(function(s,i){return <div key={i} style={{marginBottom:i<story.length-1?10:0}}>{s}</div>;})}
+              </Insight>
+
+              {/* Revenue mix donut + conversion funnel, side by side, the
+                  way Deep Dive pairs a chart with a structural read. */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,margin:"24px 0"}}>
+                <Reveal minHeight={300}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                  <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Revenue Mix</div>
+                  <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:10}}>{fR(rev)} total, paid social's assisted slice highlighted</div>
+                  {rev>0?<ChartReveal><ResponsiveContainer width="100%" height={230}>
+                    <PieChart>
+                      <Pie data={revSplit} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={56} outerRadius={88} paddingAngle={2} stroke="none">
+                        {revSplit.map(function(s,i){return <Cell key={i} fill={i===0?P.ember:P.mint}/>;})}
+                      </Pie>
+                      <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
+                      <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:10,fontFamily:fm,paddingTop:10}}/>
+                    </PieChart>
+                  </ResponsiveContainer></ChartReveal>:<div style={{padding:"40px 0",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No revenue recorded in this period.</div>}
+                </div></Reveal>
+                <Reveal minHeight={300} delay={80}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                  <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Path To Purchase</div>
+                  <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:18}}>How site traffic narrows down to paying orders</div>
+                  {funnel.map(function(f,i){var w=Math.max(6,f.v/fMax*100);return <div key={i} style={{marginBottom:16}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,marginBottom:5}}><span style={{color:P.label,letterSpacing:1.2,fontWeight:700}}>{f.label.toUpperCase()}</span><span style={{color:f.c,fontWeight:900,fontSize:13}}>{fmt(f.v)}</span></div>
+                    <div style={{height:14,background:P.rule+"40",borderRadius:7,overflow:"hidden"}}><div style={{width:w+"%",height:"100%",background:"linear-gradient(90deg,"+f.c+"AA,"+f.c+")",borderRadius:7,transition:"width 0.6s ease"}}/></div>
+                    {i<funnel.length-1&&funnel[i].v>0&&<div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:5,letterSpacing:0.5}}>{(funnel[i+1].v/funnel[i].v*100).toFixed(2)}% continue to {funnel[i+1].label.toLowerCase()}</div>}
+                  </div>;})}
+                </div></Reveal>
               </div>
 
-              {/* Paid Social assisted line: the slice GA4 attributes to
-                  paid social sessions. Framed as a contribution to the
-                  total above, not the campaign's optimisation target. */}
-              <div style={{marginBottom:22,padding:"18px 22px",background:"linear-gradient(135deg,"+P.ember+"10 0%, transparent 70%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0"}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{Ic.bolt(P.ember,16)}<span style={{fontSize:11,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Paid Social assisted</span></div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"8px 32px",alignItems:"baseline"}}>
-                  <div><span style={{fontSize:20,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(ps.revenue)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>revenue ({pc(ps.revenueSharePct)} of total)</span></div>
-                  <div><span style={{fontSize:16,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.transactions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>transactions</span></div>
-                  <div><span style={{fontSize:16,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.sessions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>sessions</span></div>
+              {prods.length>0&&<Reveal minHeight={220}><div style={{marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Sales Winners</span></div>
+                <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:14}}>Top {prods.length} products by revenue for the period</div>
+                <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"18px 14px 14px"}}>
+                  <ChartReveal><ResponsiveContainer width="100%" height={prods.length*46+20}>
+                    <BarChart data={prods.map(function(p){return {name:String(p.name||"(unknown)").length>28?String(p.name).slice(0,28)+"…":String(p.name||"(unknown)"),revenue:parseFloat(p.revenue||0),units:parseInt(p.units||0,10),_currency:true};})} layout="vertical" margin={{top:0,right:64,left:8,bottom:0}}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
+                      <XAxis type="number" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
+                      <YAxis type="category" dataKey="name" width={160} tick={{fontSize:10,fill:P.txt,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                      <Bar dataKey="revenue" radius={[0,6,6,0]} fill={P.mint} barSize={16}><LabelList dataKey="revenue" position="right" formatter={function(v){return "R"+fmt(v);}} style={lbl}/></Bar>
+                    </BarChart>
+                  </ResponsiveContainer></ChartReveal>
                 </div>
-                <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.7,marginTop:12,borderTop:"1px solid "+P.rule,paddingTop:10}}>{ecoData.note}</div>
-              </div>
+              </div></Reveal>}
 
-              {ecoData.topProducts&&ecoData.topProducts.length>0&&<div style={{marginBottom:22}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,16)}<span style={{fontSize:12,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>SALES WINNERS</span></div>
-                <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:14,overflow:"hidden"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontFamily:fm}}>
-                    <thead><tr style={{borderBottom:"1px solid "+P.rule}}>
-                      <th style={{textAlign:"left",padding:"12px 16px",fontSize:9,color:P.label,letterSpacing:1.5,fontWeight:700}}>PRODUCT</th>
-                      <th style={{textAlign:"right",padding:"12px 16px",fontSize:9,color:P.label,letterSpacing:1.5,fontWeight:700}}>REVENUE</th>
-                      <th style={{textAlign:"right",padding:"12px 16px",fontSize:9,color:P.label,letterSpacing:1.5,fontWeight:700}}>UNITS</th>
-                    </tr></thead>
-                    <tbody>{ecoData.topProducts.map(function(p,i){return <tr key={i} style={{borderBottom:i<ecoData.topProducts.length-1?"1px solid "+P.rule+"60":"none"}}>
-                      <td style={{padding:"11px 16px",fontSize:12,color:P.txt,fontWeight:600}}>{p.name}</td>
-                      <td style={{padding:"11px 16px",fontSize:12,color:P.mint,fontWeight:800,textAlign:"right"}}>{fR(p.revenue)}</td>
-                      <td style={{padding:"11px 16px",fontSize:12,color:P.label,textAlign:"right"}}>{fmt(p.units)}</td>
-                    </tr>;})}</tbody>
-                  </table>
+              {/* Paid social contribution, framed as assisted, with the
+                  GA4 attribution caveat as a footnote. */}
+              <Reveal minHeight={120}><div style={{marginBottom:22,padding:"20px 24px",background:"linear-gradient(135deg,"+P.ember+"12 0%, transparent 70%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>{Ic.bolt(P.ember,16)}<span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Our Contribution, Paid Social Assisted</span></div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"10px 40px",alignItems:"baseline"}}>
+                  <div><span style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(psRev)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>revenue, {pc(psShare)} of total</span></div>
+                  <div><span style={{fontSize:18,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.transactions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>transactions</span></div>
+                  <div><span style={{fontSize:18,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.sessions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>sessions</span></div>
                 </div>
-              </div>}
+                <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.7,marginTop:14,borderTop:"1px solid "+P.rule,paddingTop:10}}>{ecoData.note}</div>
+              </div></Reveal>
 
-              {/* Admin-only: lets the team confirm the real GA4 newsletter
-                  event name and wire it into the KPI profile. Never shown
-                  to a client view. */}
+              {/* Admin-only: confirm the real GA4 newsletter event name and
+                  wire it into the KPI profile. Never shown to a client. */}
               {!isClient&&ecoData.discoveredEvents&&ecoData.discoveredEvents.length>0&&<div style={{marginBottom:8,padding:"16px 20px",background:P.glass,border:"1px dashed "+P.rule,borderRadius:14}}>
                 <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:4,fontWeight:700}}>GA4 EVENTS (TEAM ONLY)</div>
                 <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.6,marginBottom:12}}>Property {ecoData.propertyId}. Newsletter event currently set to {ecoData.newsletterEvent?("“"+ecoData.newsletterEvent+"”"):"(none)"}. Pick the real sign-up event from this list and set it in Settings, KPI Profiles.</div>
