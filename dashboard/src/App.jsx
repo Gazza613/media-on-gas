@@ -5737,8 +5737,19 @@ export default function MediaOnGas(){
                   if(ff2==="TEXT")return{label:"TEXT",color:P.caption};
                   return{label:"STATIC",color:P.cyan};
                 };
-                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
-                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
+                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
+                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
+                // Awareness/reach campaigns must NOT be judged on landing-page
+                // clicks (Phase 1 rule). Same detection the backend
+                // isAwarenessObjective uses: objective field or a name token.
+                // Strictly name/objective gated, so lead/POS clients (MoMo,
+                // MoMo POS, Willowbrook, ...) never match and are untouched.
+                var isAwarenessAd=function(a){
+                  var o=String(a.objective||"").toLowerCase();
+                  if(o.indexOf("aware")>=0||o.indexOf("reach")>=0||o.indexOf("brand")>=0)return true;
+                  var n=String(a.campaignName||"").toLowerCase();
+                  return /(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/.test(n);
+                };
 
                 var platGroups=[
                   {key:"Facebook",label:"FACEBOOK",accent:P.fb,short:"FB"},
@@ -5821,6 +5832,17 @@ export default function MediaOnGas(){
                       });
                     } else if(og.key==="landingpage"){
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
+                        // Awareness ads land in the LANDING PAGE bucket (no
+                        // dedicated awareness objective), but their job is
+                        // reach, not clicks. Lead the card with reach (or
+                        // impressions when ad-level reach is absent) so an
+                        // awareness creative isn't ranked/headlined on a
+                        // metric it was never optimised for. Non-awareness
+                        // traffic ads keep the LP-clicks headline exactly.
+                        if(isAwarenessAd(a)){
+                          var rch=parseFloat(a.reach||0),imp=parseFloat(a.impressions||0);
+                          return Object.assign({},a,{results:rch>0?rch:imp,resultType:rch>0?"reach":"impressions"});
+                        }
                         var clicks=parseFloat(a.clicks||0);
                         return Object.assign({},a,{results:clicks,resultType:"lp_clicks"});
                       });
@@ -5842,6 +5864,14 @@ export default function MediaOnGas(){
 
                 var renderAdCard=function(ad,rank,pgAccent,pgShort,objAccent){
                   var fm2=fmtMeta(ad.format);
+                  // Awareness cards lead with reach/impressions, so the cost
+                  // sub-line is CPM (cost per 1,000 impressions), not a
+                  // meaningless spend/reach. Every other objective is
+                  // unchanged: same spend/result + CPL/CPC/CPF/etc.
+                  var crAwr=ad.resultType==="reach"||ad.resultType==="impressions";
+                  var crImp=parseFloat(ad.impressions||0);
+                  var crVal=crAwr?(crImp>0?ad.spend/crImp*1000:0):(ad.results>0?ad.spend/ad.results:0);
+                  var crStr=fR(crVal)+" "+(crAwr?"CPM":costPerLabelS(ad.resultType));
                   return <div key={ad.adId+"_"+pgShort+"_"+rank} style={{background:"rgba(0,0,0,0.35)",borderRadius:12,border:"1px solid "+objAccent+"35",overflow:"hidden",display:"flex",flexDirection:"column"}}>
                     <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                       <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,"+pgAccent+"55,"+pgAccent+"15 55%,#0a0618 100%)",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -5849,7 +5879,7 @@ export default function MediaOnGas(){
                         {!hasThumb(ad)&&<div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 10px"}}>
                           <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
                           <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
-                          {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>}
+                          {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{crStr}</div>}
                         </div>}
                       </div>
                       {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
@@ -5862,7 +5892,7 @@ export default function MediaOnGas(){
                             never blank and FB/IG cards stay visually paired. */}
                         <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?resultLabelS(ad.resultType):"IMPRESSIONS"}</div>
                         <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{ad.results>0?fmt(ad.results):fmt(ad.impressions)}</div>
-                        <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
+                        <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(crStr):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
                       </div>}
                       <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                       <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:textOnAccent(fm2.color),padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
@@ -5873,7 +5903,7 @@ export default function MediaOnGas(){
                       <div style={{fontSize:10,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:6,lineHeight:1.3,minHeight:26,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName||"Unnamed ad"}</div>
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:6,padding:"5px 7px",background:objAccent+"10",border:"1px solid "+objAccent+"30",borderRadius:6}}>
                         <span style={{color:objAccent,fontWeight:800}}>{(ad.results>0?fmt(ad.results):"0")+" "+resultLabelS(ad.resultType).split(" ")[0]}</span>
-                        <span style={{color:objAccent,fontWeight:800}}>{ad.results>0?fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType):"-"}</span>
+                        <span style={{color:objAccent,fontWeight:800}}>{ad.results>0?crStr:"-"}</span>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,fontSize:8,fontFamily:fm,marginBottom:8}}>
                         <div><div style={{color:"rgba(255,255,255,0.7)",fontSize:8,letterSpacing:0.8,fontWeight:700}}>IMPRESSIONS</div><div style={{color:"#fff",fontWeight:800,fontSize:11}}>{fmt(ad.impressions)}</div></div>
