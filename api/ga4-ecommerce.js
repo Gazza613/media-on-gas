@@ -366,8 +366,11 @@ export default async function handler(req, res) {
         addToCarts: Math.round(fAdd),
         checkouts: Math.round(fChk),
         purchases: Math.round(fPur),
-        cartAbandonmentPct: fAdd > 0 ? parseFloat(((fAdd - fPur) / fAdd * 100).toFixed(2)) : 0,
-        checkoutAbandonmentPct: fChk > 0 ? parseFloat(((fChk - fPur) / fChk * 100).toFixed(2)) : 0
+        // Clamp 0..100: GA4 cross-day attribution can book more
+        // purchases than carts/checkouts in a short window, which would
+        // otherwise show a negative abandonment % to the client.
+        cartAbandonmentPct: fAdd > 0 ? parseFloat(Math.min(100, Math.max(0, (fAdd - fPur) / fAdd * 100)).toFixed(2)) : 0,
+        checkoutAbandonmentPct: fChk > 0 ? parseFloat(Math.min(100, Math.max(0, (fChk - fPur) / fChk * 100)).toFixed(2)) : 0
       };
     }
     var er = rep2[4] && rep2[4].rows && rep2[4].rows[0];

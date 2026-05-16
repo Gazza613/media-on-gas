@@ -139,6 +139,20 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
       return idSet[virtualCid] === true;
     });
     if (filtered.length === 0) return null;
+    // Awareness/reach ads must headline on reach (CPM), not link
+    // clicks, exactly as the live dashboard remaps them. Without this
+    // the client email showed an awareness creative's cost as CPC.
+    filtered.forEach(function(a) {
+      var o = String(a.objective || "").toLowerCase();
+      var nm = String(a.campaignName || "").toLowerCase();
+      var awr = o.indexOf("aware") >= 0 || o.indexOf("reach") >= 0 || o.indexOf("brand") >= 0
+        || /(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/.test(nm);
+      if (awr) {
+        var rch = parseFloat(a.reach || 0), imp = parseFloat(a.impressions || 0);
+        a.results = rch > 0 ? rch : imp;
+        a.resultType = rch > 0 ? "reach" : "impressions";
+      }
+    });
     // Group by platform, pick top 3 by results then spend
     var byPlat = {};
     filtered.forEach(function(a) {
@@ -440,7 +454,7 @@ function renderCommentaryBlock(summary) {
 function renderTopAdsBlock(topAds) {
   if (!topAds || topAds.length === 0) return "";
   var platColors = { "Facebook": "#4599FF", "Instagram": "#E1306C", "TikTok": "#00F2EA", "Google Display": "#34A853", "YouTube": "#FF0000", "Google Search": "#FFAA00", "Performance Max": "#7C3AED", "Demand Gen": "#D946EF" };
-  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "App Clicks" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "App Clicks" : rt === "lp_clicks" ? "LP Clicks" : rt === "clicks" ? "Clicks" : "Results"; };
+  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "App Clicks" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "App Clicks" : rt === "lp_clicks" ? "LP Clicks" : rt === "reach" ? "Reach" : rt === "impressions" ? "Impressions" : rt === "clicks" ? "Clicks" : "Results"; };
   var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "installs" ? "per click" : rt === "follows" ? "per follower" : "per click"; };
 
   var platformBlocks = topAds.map(function(pl) {
@@ -456,9 +470,13 @@ function renderTopAdsBlock(topAds) {
       var thumbCell = hasThumb ?
         '<img src="' + escapeHtml(ad.thumbnail) + '" alt="" width="120" height="120" style="width:120px;height:120px;object-fit:cover;border-radius:10px;display:block;border:0;background:#1a0f2a;"/>' :
         '<div style="width:120px;height:120px;border-radius:10px;background:linear-gradient(135deg,' + accent + '55,' + accent + '15 55%,#0a0618 100%);display:table-cell;vertical-align:middle;text-align:center;color:#fff;font-size:11px;font-weight:800;letter-spacing:1px;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml(pl.platform) + '</div>';
+      var awrAd = ad.resultType === "reach" || ad.resultType === "impressions";
+      var costStr = awrAd
+        ? (impressions > 0 ? fmtR(spend / impressions * 1000) + ' CPM' : '')
+        : (fmtR(spend / results) + ' ' + costPerLabel(ad.resultType));
       var metricBlock = results > 0 ?
         '<div style="font-size:18px;font-weight:900;color:#FFFBF8;font-family:Helvetica,Arial,sans-serif;line-height:1;margin-bottom:4px;">' + fmtNum(results) + ' <span style="font-size:10px;color:' + accent + ';font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + resultLabel(ad.resultType) + '</span></div>' +
-        '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend / results) + ' ' + costPerLabel(ad.resultType) + '</div>' :
+        '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">' + costStr + '</div>' :
         '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">Still collecting results</div>';
       // Per-creative breakdown for a MIXED (Flexible) ad. Flat table,
       // no interactivity, survives in the email itself. Plain-language
@@ -481,7 +499,7 @@ function renderTopAdsBlock(topAds) {
               '</div>' +
               '<div style="font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;line-height:1.6;">' +
                 '<strong style="color:' + (top ? '#34D399' : '#FFFBF8') + ';">' + fmtNum(as.results || 0) + '</strong> ' + escapeHtml(rLab) +
-                (as.results > 0 ? ' &middot; ' + fmtR(as.costPerResult) + ' each' : '') +
+                (as.results > 0 ? ' &middot; ' + fmtR(as.costPerResult) + (bk.basis === "reach" ? ' CPM' : ' each') : '') +
                 ' &middot; ' + fmtR(as.spend || 0) + ' spent &middot; ' + fmtNum(as.impressions || 0) + ' served &middot; ' + fmtPct(as.ctr || 0) + ' CTR' +
               '</div>' +
             '</td>' +
