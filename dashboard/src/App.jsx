@@ -6151,7 +6151,12 @@ export default function MediaOnGas(){
         {tab==="ecommerce"&&ecoOn&&(<div>
           <SH icon={Ic.cart(P.mint,20)} title="Ecommerce" sub={df+" to "+dt+" | Site & online store performance from Google Analytics"} accent={P.mint}/>
           {ecoLoading&&!ecoData&&<div style={{padding:40,textAlign:"center",color:P.label,fontFamily:fm,fontSize:13}}>Pulling Google Analytics ecommerce data...</div>}
-          {!ecoLoading&&!ecoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.label,fontFamily:fm,fontSize:13,lineHeight:1.7}}>{ecoErr||"No ecommerce data returned for this period yet."}</div>}
+          {!ecoLoading&&!ecoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 28px",textAlign:"center",fontFamily:fm,lineHeight:1.8}}>
+            <div style={{fontSize:24,marginBottom:10}}>{"🛒"}</div>
+            <div style={{fontSize:14,color:P.txt,fontWeight:700,marginBottom:8}}>No ecommerce connection yet</div>
+            <div style={{fontSize:12,color:P.label,maxWidth:520,margin:"0 auto"}}>Ecommerce insights appear here once a client has connected their analytics store. So far only Psycho Bunny has a connection and material ecommerce insights.</div>
+            {!isClient&&ecoErr&&<div style={{fontSize:10,color:P.caption,fontStyle:"italic",marginTop:14,borderTop:"1px solid "+P.rule,paddingTop:10,maxWidth:520,marginLeft:"auto",marginRight:"auto"}}>Team note: {ecoErr}</div>}
+          </div>}
           {ecoData&&(function(){
             var e=ecoData.ecommerce||{},st=ecoData.site||{},ps=ecoData.paidSocial||{};
             return <div>

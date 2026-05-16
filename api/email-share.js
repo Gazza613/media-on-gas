@@ -622,7 +622,6 @@ function buildEmailHtml(opts) {
       </td></tr>
 
       ${summaryBlock}
-      ${ecommerceBlock}
       ${commentaryBlock}
       ${topAdsBlock}
 
@@ -644,6 +643,12 @@ function buildEmailHtml(opts) {
           Link stays active until <strong style="color:#F96203;">${expiresDisplay}</strong>.
         </div>
       </td></tr>
+
+      ${ecommerceBlock ? `
+      <tr><td style="padding:8px 40px 0;">
+        <div style="font-size:11px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Final ecommerce summary for your team</div>
+      </td></tr>
+      <tr><td style="padding:0 40px;">${ecommerceBlock}</td></tr>` : ""}
 
       <tr><td style="padding:28px 40px 8px;">
         <div style="height:1px;background:rgba(168,85,247,0.16);"></div>
