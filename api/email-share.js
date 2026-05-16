@@ -150,10 +150,14 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
     // per-creative breakdown. True de-duplicated reach is reported at
     // the campaign level in the Performance Summary, not here.
     filtered.forEach(function(a) {
-      var o = String(a.objective || "").toLowerCase();
-      var nm = String(a.campaignName || "").toLowerCase();
-      var awr = o.indexOf("aware") >= 0 || o.indexOf("reach") >= 0 || o.indexOf("brand") >= 0
-        || /(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/.test(nm);
+      // Test objective AND campaign name AND ad name. Awareness has no
+      // dedicated objective bucket (it classifies as "landingpage"), so
+      // the only reliable signal is the awareness/reach token in the
+      // names, and on this account it lives in the AD name
+      // (..._Mixed_Gateway_Awareness_...), not the campaign name.
+      var hay = (String(a.objective || "") + " " + String(a.campaignName || "") + " " + String(a.adName || "")).toLowerCase();
+      var awr = hay.indexOf("aware") >= 0 || hay.indexOf("brand") >= 0
+        || /(^|[_\s||-])(awr|awareness|reach|brand)([_\s||-]|$)/.test(hay);
       if (awr) {
         a.results = parseFloat(a.impressions || 0);
         a.resultType = "impressions";
