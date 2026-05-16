@@ -97,6 +97,17 @@ export default async function handler(req, res) {
     to = ymd(now);
     from = ymd(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
   }
+  // The team sets a full calendar-month range (e.g. to 2026-05-31) while
+  // the month is still running. This GA4 property reports in USD but the
+  // store transacts in ZAR, so every revenue metric needs a daily
+  // currency-exchange rate. GA4 has NO rate for today or any future day,
+  // and one missing day fails the ENTIRE batched report ("Future
+  // currency exchange rate not exist"). Clamp the end to yesterday (the
+  // last fully-settled, rate-available day); an ecommerce summary never
+  // needs the current partial day. String compare is safe on YYYY-MM-DD.
+  var yest = ymd(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  if (to > yest) to = yest;
+  if (from > to) from = to;
 
   var cacheKey = propertyId + "|" + from + "|" + to + "|" + newsletterEvent;
   var hit = cache[cacheKey];
@@ -166,7 +177,15 @@ export default async function handler(req, res) {
     });
     var d = await r.json();
     if (!r.ok || d.error) {
-      res.status(200).json({ ok: false, enabled: true, reason: (d.error && d.error.message) || "GA4 report request failed", meta: d.error || null });
+      // GA4 error messages can be a multi-KB protobuf debug dump. Never
+      // surface that verbatim (it rendered as a wall of text in the UI).
+      // Map the known classes to a human sentence, else a short snippet.
+      var rawMsg = String((d.error && d.error.message) || "GA4 report request failed").replace(/\s+/g, " ").trim();
+      var reason = rawMsg;
+      if (/currency exchange/i.test(rawMsg)) reason = "GA4 could not convert revenue for part of this date range (currency exchange rate unavailable for recent/future days). Try a date range that ends before today.";
+      else if (/permission|PERMISSION_DENIED|insufficient/i.test(rawMsg)) reason = "GA4 access was denied for this property. Re-check the connected account's permission on property " + propertyId + ".";
+      else if (rawMsg.length > 180) reason = rawMsg.slice(0, 180) + "…";
+      res.status(200).json({ ok: false, enabled: true, reason: reason });
       return;
     }
     reports = d.reports || [];
