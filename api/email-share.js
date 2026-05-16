@@ -140,18 +140,23 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
       return idSet[virtualCid] === true;
     });
     if (filtered.length === 0) return null;
-    // Awareness/reach ads must headline on reach (CPM), not link
-    // clicks, exactly as the live dashboard remaps them. Without this
-    // the client email showed an awareness creative's cost as CPC.
+    // Awareness/reach ads headline on IMPRESSIONS with CPM, not link
+    // clicks. Deliberately NOT reach: these Top Ads rows are per-ad and
+    // split per publisher_platform, and Meta's per-ad reach under that
+    // breakdown is unreliable for MIXED / Dynamic Creative ads (the
+    // same dedup limitation that makes per-creative reach impossible) —
+    // it produced nonsense like 11K impressions / 539 reach. Impressions
+    // is the trustworthy per-ad awareness proxy, matching the
+    // per-creative breakdown. True de-duplicated reach is reported at
+    // the campaign level in the Performance Summary, not here.
     filtered.forEach(function(a) {
       var o = String(a.objective || "").toLowerCase();
       var nm = String(a.campaignName || "").toLowerCase();
       var awr = o.indexOf("aware") >= 0 || o.indexOf("reach") >= 0 || o.indexOf("brand") >= 0
         || /(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/.test(nm);
       if (awr) {
-        var rch = parseFloat(a.reach || 0), imp = parseFloat(a.impressions || 0);
-        a.results = rch > 0 ? rch : imp;
-        a.resultType = rch > 0 ? "reach" : "impressions";
+        a.results = parseFloat(a.impressions || 0);
+        a.resultType = "impressions";
       }
     });
     // Group by platform, pick top 3 by results then spend
