@@ -6618,11 +6618,28 @@ export default function MediaOnGas(){
                   </div></Reveal>}
                   {(ecoData.topPages||[]).length>0&&(function(){
                     var tp=ecoData.topPages,tpMax=Math.max.apply(null,tp.map(function(p){return p.views;}).concat([1]));
+                    // Turn raw GA4 paths into human page names. Generic
+                    // rule (homepage, drop shop wrapper segments, last
+                    // segment Title-Cased) + a small extendable alias map
+                    // for the few that read better with exact wording.
+                    var PG_LBL={"shop":"Shop","t-shirts":"T-Shirts","tops":"Tops","sweatshirts-hoodies":"Sweatshirts & Hoodies","hoodies":"Hoodies","hats-caps":"Hats & Caps","accessories":"Accessories","kids":"Kids","mens":"Mens","womens":"Womens","about-us":"About Us","contact":"Contact","contact-us":"Contact Us","cart":"Cart","checkout":"Checkout","my-account":"My Account","sale":"Sale","new-in":"New In","polo-shirts":"Polo Shirts","shorts":"Shorts"};
+                    var prettyPath=function(raw){
+                      var s=String(raw||"").split("?")[0].split("#")[0];
+                      try{s=decodeURIComponent(s);}catch(_){}
+                      s=s.replace(/^\/+|\/+$/g,"");
+                      if(!s)return "Homepage";
+                      var WRAP={"product-category":1,"product":1,"products":1,"collections":1,"collection":1,"category":1,"pages":1,"page":1};
+                      var parts=s.split("/").filter(Boolean);
+                      var meaningful=parts.filter(function(x){return !WRAP[x.toLowerCase()];});
+                      var seg=String((meaningful[meaningful.length-1]||parts[parts.length-1]||"")).toLowerCase();
+                      if(PG_LBL[seg])return PG_LBL[seg];
+                      return seg.replace(/[-_]+/g," ").replace(/\s+/g," ").trim().replace(/\b\w/g,function(ch){return ch.toUpperCase();})||"Homepage";
+                    };
                     return <Reveal minHeight={140}><div style={{marginBottom:24}}>
                       <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Most-Viewed Pages</div>
                       <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"6px 18px"}}>
                         {tp.slice(0,8).map(function(p,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 0",borderBottom:i<Math.min(8,tp.length)-1?"1px solid "+P.rule+"50":"none"}}>
-                          <div title={p.path} style={{width:230,fontSize:12,color:P.txt,fontFamily:fm,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.path}</div>
+                          <div title={p.path} style={{width:230,fontSize:12.5,color:P.txt,fontFamily:fm,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{prettyPath(p.path)}</div>
                           <div style={{flex:1,height:10,background:P.rule+"40",borderRadius:5,overflow:"hidden"}}><div style={{width:Math.max(4,p.views/tpMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.orchid+"AA,"+P.orchid+")",borderRadius:5}}/></div>
                           <div style={{width:84,textAlign:"right",fontSize:12,color:P.orchid,fontFamily:fm,fontWeight:800}}>{fmt(p.views)}</div>
                           <div style={{width:84,textAlign:"right",fontSize:11,color:P.label,fontFamily:fm,fontWeight:700}}>{fmt(p.users)} users</div>
