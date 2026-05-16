@@ -5342,7 +5342,55 @@ export default function MediaOnGas(){
               </div>
 
               {/* ═══ 5. OBJECTIVE HIGHLIGHTS ═══ */}
-              {objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+              {/* Profiled client (Psycho Bunny): this IS the objectives
+                  section, so render the profile's tiered KPIs as glass
+                  callout boxes with a plain-English description under
+                  each, instead of the campaign-derived bottom-of-funnel
+                  objective cards. Fully profile-gated; non-profiled
+                  clients fall through to the original block unchanged. */}
+              {ecoProfile?(function(){
+                var rch=(m.reach||0)+(t.reach||0)+(computed.gd.reach||0);
+                var g=computed.grand||{};
+                var ec=(ecoData&&ecoData.ecommerce)||{};
+                var stt=(ecoData&&ecoData.site)||{};
+                var roas=(computed.totalSpend>0&&ec.revenue>0)?ec.revenue/computed.totalSpend:0;
+                var D="—";
+                var fNum=function(n){return n>0?fmt(n):D;};
+                var LBL={unique_reach:"UNIQUE REACH",reach:"REACH",frequency:"FREQUENCY",cpm:"COST PER 1,000",impressions:"IMPRESSIONS",clicks:"CLICKS TO WEBSITE",ctr:"CLICK THROUGH RATE",cpc:"COST PER CLICK",newsletter_signups:"NEWSLETTER SIGN-UPS",leads:"LEADS",installs:"INSTALLS",follows:"FOLLOWS & LIKES",revenue:"ECOMMERCE SALES",roas:"RETURN ON AD SPEND",transactions:"TRANSACTIONS",aov:"AVERAGE ORDER VALUE",site_users:"SITE USERS",conversion_rate:"CONVERSION RATE"};
+                var DESC={unique_reach:"How many unique people saw your ads",reach:"How many people saw your ads",frequency:"Average times each person saw your ads",cpm:"Cost per 1,000 ad impressions",impressions:"How many times your ads were shown",clicks:"How many people clicked through to the website",ctr:"Share of people who clicked after seeing an ad",cpc:"Average cost for each click to the website",newsletter_signups:"How many newsletter sign-ups were captured",leads:"How many leads were captured",installs:"How many app installs were driven",follows:"New follows and likes earned",revenue:"Ecommerce sales on the website for the period",roas:"Revenue earned for every R1 of ad spend",transactions:"Number of online orders placed",aov:"Average value of each online order",site_users:"How many people visited the website",conversion_rate:"Share of sessions that became a sale"};
+                var V={
+                  unique_reach:fNum(rch),reach:fNum(rch),
+                  frequency:blFreq>0?blFreq.toFixed(2)+"x":D,
+                  cpm:computed.blendedCpm>0?fR(computed.blendedCpm):D,
+                  impressions:fNum(computed.totalImps),clicks:fNum(computed.totalClicks),
+                  ctr:g.ctr>0?pc(g.ctr):D,cpc:g.cpc>0?fR(g.cpc):D,
+                  newsletter_signups:ecoData?fNum(ecoData.newsletterSignups):D,
+                  leads:fNum(g.leads),installs:fNum(g.appInstalls),
+                  follows:fNum((g.follows||0)+(g.pageLikes||0)+(g.likes||0)),
+                  revenue:ec.revenue>0?fR(ec.revenue):D,
+                  roas:roas>0?roas.toFixed(2)+"x":D,
+                  transactions:ec.transactions>0?fmt(ec.transactions):D,
+                  aov:ec.aov>0?fR(ec.aov):D,
+                  site_users:stt.users>0?fmt(stt.users):D,
+                  conversion_rate:ec.conversionRate>0?pc(ec.conversionRate):D
+                };
+                var ACC=[P.orchid,P.mint,P.cyan,P.solar,P.ember,P.blaze];
+                var cl=function(arr){return (Array.isArray(arr)?arr:[]).filter(function(k){return k!=="top_products"&&LBL[k];});};
+                var seen={},ordered=[];
+                [].concat(cl(ecoProfile.primaryKpis),cl(ecoProfile.secondaryKpis),cl(ecoProfile.tertiaryKpis)).forEach(function(k){if(!seen[k]){seen[k]=1;ordered.push(k);}});
+                ordered=ordered.slice(0,6);
+                if(ordered.length===0)return null;
+                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(P.rose,"OBJECTIVE HIGHLIGHTS",Ic.target(P.rose,18))}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,ordered.length)+",1fr)",gap:14}}>
+                    {ordered.map(function(k,i){var a=ACC[i%ACC.length];return <Glass key={k} accent={a} hv={true} st={{padding:"22px 20px",borderLeft:"3px solid "+a}}>
+                      <div style={{fontSize:10,fontWeight:800,color:a,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>{LBL[k]}</div>
+                      <div style={{fontSize:30,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1,marginBottom:8}}>{V[k]}</div>
+                      <div style={{fontSize:10.5,color:P.label,fontFamily:fm,lineHeight:1.55}}>{DESC[k]||""}</div>
+                    </Glass>;})}
+                  </div>
+                </div>;
+              })():(objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14,marginBottom:20}}>
                   {objKeys.filter(function(k){return objectives4[k];}).map(function(objName){
@@ -5407,7 +5455,7 @@ export default function MediaOnGas(){
                   });
                   return <Insight title="Objective Insights" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
                 })()}
-              </div>}
+              </div>)}
 
               {/* Performance Trendlines, slotted between Objective Insights
                   and Objective Demographics so the same matrix surfaced on
@@ -7217,61 +7265,7 @@ export default function MediaOnGas(){
             <Insight title="Engagement Key Metrics" accent={P.mint} icon={Ic.pulse(P.mint,16)}>{(function(){var parts=[];var blendedCpc=computed.totalClicks>0?computed.totalSpend/computed.totalClicks:0;var clickToImpRate=computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):0;parts.push("The campaign generated "+fmt(computed.totalClicks)+" total click actions across all platforms, converting "+clickToImpRate.toFixed(2)+"% of "+fmt(computed.totalImps)+" impressions into measurable engagement signals. The cross-platform blended Cost Per Click of "+fR(blendedCpc)+" confirms efficient translation of awareness into intent.");if(computed.fb.clicks>0){var fbClickShare=computed.totalClicks>0?((computed.fb.clicks/computed.totalClicks)*100).toFixed(2):"0.00";parts.push("Facebook drives "+fbClickShare+"% of total click volume with "+fmt(computed.fb.clicks)+" clicks at "+fR(computed.fb.cpc)+" Cost Per Click and "+pc(computed.fb.ctr)+" Click Through Rate. "+(computed.fb.ctr>3?"The Click Through Rate exceeding 3% places this campaign in the top 10% of Facebook engagement benchmarks for the paid social market, indicating exceptional creative-audience resonance. The ad creative is not only stopping the scroll but compelling users to take deliberate action.":computed.fb.ctr>1.5?"CTR at "+pc(computed.fb.ctr)+" exceeds the 1.5% performance benchmark, confirming the creative messaging is effectively converting passive impressions into active engagement. The hook and value proposition are landing with the target audience.":"CTR at "+pc(computed.fb.ctr)+" reflects the current creative-audience engagement level for this campaign period."));}if(computed.ig.clicks>0){parts.push("Instagram delivered "+fmt(computed.ig.clicks)+" clicks at "+fR(computed.ig.cpc)+" Cost Per Click with "+pc(computed.ig.ctr)+" Click Through Rate."+(computed.ig.cpc<computed.fb.cpc&&computed.fb.cpc>0?" Instagram\'s "+((1-computed.ig.cpc/computed.fb.cpc)*100).toFixed(2)+"% CPC advantage over Facebook reflects the platform\'s stronger visual engagement environment, where users are predisposed to interact with compelling creative content.":"")+"");}if(computed.gd.clicks>0){parts.push("Google Display generated "+fmt(computed.gd.clicks)+" clicks at "+fR(computed.gd.cpc)+" Cost Per Click with "+pc(computed.gd.ctr)+" Click Through Rate, extending campaign reach across Google's display network and partner sites.");}if(t.clicks>0){parts.push("TikTok contributed "+fmt(t.clicks)+" clicks"+(t.cpc>0?" at "+fR(t.cpc)+" Cost Per Click":"")+(t.ctr>0?" with "+pc(t.ctr)+" Click Through Rate":"")+". Beyond the direct click metrics, TikTok engagement carries multiplicative value: each interaction signals content quality to the recommendation algorithm, which can extend organic distribution to non-targeted users at zero marginal cost.");}if(computed.totalClicks===0){parts.push("No click engagement was recorded for the selected campaigns in this period. The campaigns are configured for awareness and reach objectives, building brand visibility across the target audience.");}return parts.join(" ");})()}</Insight>
           </div>
 
-          {/* Profiled client: the KPI objectives ARE the objectives
-              section. Rendered here (where the legacy OBJECTIVE KEY
-              METRICS card sits for everyone else) as glass standout
-              boxes so it reads as the standout-objective section, not a
-              detached strip at the top of the page. Fully profile-gated,
-              non-profiled clients fall through to the legacy block. */}
-          {ecoProfile&&(function(){
-            var rch=(m.reach||0)+(t.reach||0)+(computed.gd.reach||0);
-            var g=computed.grand||{};
-            var ec=(ecoData&&ecoData.ecommerce)||{};
-            var stt=(ecoData&&ecoData.site)||{};
-            var roas=(computed.totalSpend>0&&ec.revenue>0)?ec.revenue/computed.totalSpend:0;
-            var D="—";
-            var fNum=function(n){return n>0?fmt(n):D;};
-            var LBL={unique_reach:"UNIQUE REACH",reach:"REACH",frequency:"FREQUENCY",cpm:"COST PER 1,000",impressions:"IMPRESSIONS",clicks:"CLICKS TO WEBSITE",ctr:"CLICK THROUGH RATE",cpc:"COST PER CLICK",newsletter_signups:"NEWSLETTER SIGN-UPS",leads:"LEADS",installs:"INSTALLS",follows:"FOLLOWS & LIKES",revenue:"WEBSITE SALES",roas:"RETURN ON AD SPEND",transactions:"TRANSACTIONS",aov:"AVERAGE ORDER VALUE",site_users:"SITE USERS",conversion_rate:"CONVERSION RATE"};
-            var V={
-              unique_reach:fNum(rch),reach:fNum(rch),
-              frequency:blFreq>0?blFreq.toFixed(2)+"x":D,
-              cpm:computed.blendedCpm>0?fR(computed.blendedCpm):D,
-              impressions:fNum(computed.totalImps),clicks:fNum(computed.totalClicks),
-              ctr:g.ctr>0?pc(g.ctr):D,cpc:g.cpc>0?fR(g.cpc):D,
-              newsletter_signups:ecoData?fNum(ecoData.newsletterSignups):D,
-              leads:fNum(g.leads),installs:fNum(g.appInstalls),
-              follows:fNum((g.follows||0)+(g.pageLikes||0)+(g.likes||0)),
-              revenue:ec.revenue>0?fR(ec.revenue):D,
-              roas:roas>0?roas.toFixed(2)+"x":D,
-              transactions:ec.transactions>0?fmt(ec.transactions):D,
-              aov:ec.aov>0?fR(ec.aov):D,
-              site_users:stt.users>0?fmt(stt.users):D,
-              conversion_rate:ec.conversionRate>0?pc(ec.conversionRate):D
-            };
-            var ACC=[P.orchid,P.mint,P.cyan,P.solar,P.ember,P.blaze];
-            var clean=function(arr){return (Array.isArray(arr)?arr:[]).filter(function(k){return k!=="top_products"&&LBL[k];}).slice(0,6);};
-            var pri=clean(ecoProfile.primaryKpis),sec=clean(ecoProfile.secondaryKpis),ter=clean(ecoProfile.tertiaryKpis);
-            var seenK={};pri.forEach(function(k){seenK[k]=1;});
-            sec=sec.filter(function(k){return !seenK[k]&&(seenK[k]=1);});
-            ter=ter.filter(function(k){return !seenK[k]&&(seenK[k]=1);});
-            if(pri.length===0&&sec.length===0&&ter.length===0)return null;
-            // Glass box, standout-objective styling (left accent bar +
-            // colored uppercase label), sized by tier priority.
-            var box=function(k,i,vSize,pad,minW){var a=ACC[i%ACC.length];return <Glass key={k} accent={a} hv={true} st={{flex:"1 1 "+minW+"px",minWidth:minW,padding:pad,borderLeft:"3px solid "+a}}>
-              <div style={{fontSize:9,fontWeight:800,color:a,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{LBL[k]}</div>
-              <div style={{fontSize:vSize,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{V[k]}</div>
-            </Glass>;};
-            var tierRow=function(keys,title,vSize,pad,minW){return keys.length===0?null:<div style={{marginBottom:18}}>
-              <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10,opacity:0.85}}>{title}</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:10}}>{keys.map(function(k,i){return box(k,i,vSize,pad,minW);})}</div>
-            </div>;};
-            return <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 22px",marginBottom:28,border:"1px solid "+P.rule}}>
-              <div style={{textAlign:"center",padding:"18px 0 18px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>OBJECTIVE KEY METRICS</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>THE KPIs THIS CLIENT IS MEASURED ON</div></div>
-              {tierRow(pri,"Primary objective",26,"18px 20px",220)}
-              {tierRow(sec,"Secondary objective",19,"15px 18px",190)}
-              {tierRow(ter,"Supporting objective",15,"13px 16px",170)}
-            </div>;
-          })()}
+          {/* Profiled KPI objectives now render in the OBJECTIVE HIGHLIGHTS section above. Legacy OBJECTIVE KEY METRICS below is non-profiled clients only. */}
           {/* OBJECTIVE KEY METRICS. Hidden for a client that has a KPI
               profile: their objectives are defined by the profile tiers
               above (rendered as the glass standout block). This
