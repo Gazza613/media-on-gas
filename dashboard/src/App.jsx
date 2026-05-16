@@ -5853,10 +5853,16 @@ export default function MediaOnGas(){
                         </div>}
                       </div>
                       {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
-                      {hasThumb(ad)&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
-                        <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabelS(ad.resultType)}</div>
-                        <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
-                        <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)}</div>
+                      {hasThumb(ad)&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
+                        {/* Meta does not attribute conversion actions to the
+                            Instagram publisher_platform row (it books them to
+                            the Facebook split), so an IG card's ad.results is
+                            often 0 even though it delivered. Fall back to the
+                            reach headline IG actually earned so the overlay is
+                            never blank and FB/IG cards stay visually paired. */}
+                        <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?resultLabelS(ad.resultType):"IMPRESSIONS"}</div>
+                        <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{ad.results>0?fmt(ad.results):fmt(ad.impressions)}</div>
+                        <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(fR(ad.spend/ad.results)+" "+costPerLabelS(ad.resultType)):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
                       </div>}
                       <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                       <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:textOnAccent(fm2.color),padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
@@ -6404,10 +6410,14 @@ export default function MediaOnGas(){
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
                   {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
-                  {hasThumb(ad)&&ad.results>0&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
-                    <div style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{resultLabel(ad.resultType)}</div>
-                    <div style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{fmt(ad.results)}</div>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)}</div>
+                  {hasThumb(ad)&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
+                    {/* IG publisher rows often carry ad.results=0 because Meta
+                        books conversion actions to the Facebook split; fall
+                        back to the impressions headline so the overlay never
+                        disappears on Instagram thumbnails. */}
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?resultLabel(ad.resultType):"IMPRESSIONS"}</div>
+                    <div style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{ad.results>0?fmt(ad.results):fmt(ad.impressions)}</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
                   </div>}
                   <div style={{position:"absolute",top:10,left:10,background:isTop?P.mint:"rgba(255,255,255,0.18)",color:isTop?"#062014":P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                   <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:textOnAccent(adPlatC),padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
