@@ -878,6 +878,18 @@ export default async function handler(req, res) {
             if (ot === "PHOTO" || ot === "SHARE" || ot === "") return "STATIC";
             return ot;
           })(),
+          // Behaviour flag (NOT a format reclassification — the displayed
+          // format still follows the name tag per the team rule). True
+          // when Meta's Dynamic Creative loaded more than one swappable
+          // asset on this ad. Drives the winner-thumbnail + per-creative
+          // breakdown for EVERY multi-creative Meta ad, any client, past
+          // or future, even when the name has no "mixed" tag.
+          multiCreative: (function(){
+            var afs = cr.asset_feed_spec || {};
+            var ni = (afs.images && afs.images.length) || 0;
+            var nv = (afs.videos && afs.videos.length) || 0;
+            return (ni + nv) > 1;
+          })(),
           spend: ins.spend,
           impressions: ins.impressions,
           clicks: ins.clicks,

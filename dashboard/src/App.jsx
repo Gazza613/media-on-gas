@@ -918,9 +918,16 @@ function AdPreviewModal(props){
   // API for ordinary single-creative ads.
   var abS=useState({loading:false,loaded:false,data:null,error:""}),assetBk=abS[0],setAssetBk=abS[1];
   var isMixed=format==="MIXED";
+  // Treat ANY multi-creative Meta ad as mixed-capable, not only ones
+  // whose name carries the "mixed" tag. ad.multiCreative is set by
+  // ads.js when Meta's Dynamic Creative loaded >1 swappable asset, so
+  // the winner thumbnail + per-creative breakdown applies to every
+  // client (MTN MoMo etc), past and future, without touching the
+  // displayed format label.
+  var mixedCapable=(isMixed||!!(ad&&ad.multiCreative));
   useEffect(function(){
     setAssetBk({loading:false,loaded:false,data:null,error:""});
-    if(!ad||!isMixed||platformKey!=="meta"||!ad.adId)return;
+    if(!ad||!mixedCapable||platformKey!=="meta"||!ad.adId)return;
     setAssetBk({loading:true,loaded:false,data:null,error:""});
     var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
     var cid=String((ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
@@ -937,7 +944,7 @@ function AdPreviewModal(props){
       setAssetBk({loading:false,loaded:true,data:null,error:"Could not load the creative breakdown."});
     });
     return function(){cancelled=true;};
-  },[ad&&ad.adId,isMixed,platformKey]);
+  },[ad&&ad.adId,mixedCapable,platformKey]);
 
   if(!props.ad)return null;
   var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
@@ -957,7 +964,7 @@ function AdPreviewModal(props){
     // For a MIXED Meta ad, the hero image is the winning creative in
     // the set (matches the card thumbnail the user clicked), not a
     // random largest asset.
-    var winQ=(isMixed&&platformKey==="meta")?"&winner=1":"";
+    var winQ=(mixedCapable&&platformKey==="meta")?"&winner=1":"";
     proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+winQ+authQs;
   }
   var imageSrc=proxyImage||ad.thumbnail||"";
@@ -1145,7 +1152,7 @@ function AdPreviewModal(props){
         </div>
       </div>
 
-      {isMixed&&platformKey==="meta"&&(function(){
+      {mixedCapable&&platformKey==="meta"&&(function(){
         var d=assetBk.data;
         var hdr=<div style={{marginTop:22,marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:900,color:P.fuchsia,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>What's inside this mixed ad</div>
@@ -1156,7 +1163,11 @@ function AdPreviewModal(props){
         if(assetBk.loading)return <div>{hdr}<div style={{padding:"18px 0",fontSize:12,color:P.caption,fontFamily:fm}}>Pulling the per creative breakdown from Meta…</div></div>;
         if(assetBk.error)return <div>{hdr}<div style={{padding:"14px 16px",background:P.rose+"12",border:"1px solid "+P.rose+"30",borderRadius:10,fontSize:12,color:P.rose,fontFamily:fm}}>{assetBk.error}</div></div>;
         if(d&&d.supported===false)return <div>{hdr}<div style={{padding:"14px 16px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.6}}>{d.reason||"Per creative breakdown is not available for this ad."}</div></div>;
-        if(d&&d.ok&&(!d.assets||d.assets.length===0))return <div>{hdr}<div style={{padding:"14px 16px",background:P.warning+"12",border:"1px solid "+P.warning+"30",borderRadius:10,fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.6}}>{d.note||"Meta has not returned a per creative breakdown yet. This is normal in the first day or two after launch."}</div></div>;
+        // Fewer than 2 creatives = not actually a split. A name-tagged
+        // mixed ad that Meta hasn't split yet still gets the info note;
+        // an auto-detected multi-creative ad that resolved to a single
+        // creative just renders nothing (it behaves as a normal ad).
+        if(d&&d.ok&&(!d.assets||d.assets.length<2))return isMixed?<div>{hdr}<div style={{padding:"14px 16px",background:P.warning+"12",border:"1px solid "+P.warning+"30",borderRadius:10,fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.6}}>{d.note||"Meta has not returned a per creative breakdown yet. This is normal in the first day or two after launch."}</div></div>:null;
         if(!d||!d.ok||!d.assets)return null;
         var rLabel=d.resultLabel||"Results";
         // Awareness/reach ads are ranked on impressions and cost is CPM.
@@ -3266,7 +3277,7 @@ export default function MediaOnGas(){
       // the proxy for the WINNING creative in the set (best by results)
       // instead of the largest-by-area asset, so the card thumbnail is
       // the creative that actually performed. Meta-only concept.
-      var win=(pKey==="meta"&&String(ad.format||"").toUpperCase()==="MIXED")?"&winner=1":"";
+      var win=(pKey==="meta"&&(String(ad.format||"").toUpperCase()==="MIXED"||ad.multiCreative))?"&winner=1":"";
       return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+win+auth;
     }
     return ad.thumbnail||"";
