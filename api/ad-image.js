@@ -222,20 +222,29 @@ export default async function handler(req, res) {
   }
 
   var cdnUrl = null;
+  var winnerHit = false;
   try {
     if (platform === "meta") {
       var metaToken = process.env.META_ACCESS_TOKEN;
       if (!metaToken) { res.status(500).json({ error: "META_ACCESS_TOKEN not configured" }); return; }
       if (wantWinner) {
         // Ask the per-creative breakdown which asset actually won
-        // (assets are returned ranked by results then spend, so [0]
-        // is the winner with a resolved thumbnail). Falls through to
-        // the normal resolver if Meta hasn't split the ad yet.
+        // (assets ranked by results then spend, so [0] is the winner
+        // with a resolved thumbnail). This call hits Meta several
+        // times, so it is cached 30 min by computeAssetBreakdown — but
+        // the FIRST resolution for a grid full of MIXED ads is slow.
+        // Race it against a tight timeout so a slow breakdown never
+        // leaves the tile blank: we fall straight back to the fast
+        // standard resolver, and because we don't cache that fallback
+        // the winner appears once the breakdown cache is warm.
         try {
-          var bk = await computeAssetBreakdown(adId, String(req.query.from || ""), String(req.query.to || ""));
+          var bk = await Promise.race([
+            computeAssetBreakdown(adId, String(req.query.from || ""), String(req.query.to || "")),
+            new Promise(function(resolve) { setTimeout(function(){ resolve(null); }, 3500); })
+          ]);
           if (bk && bk.ok && Array.isArray(bk.assets)) {
             for (var bi = 0; bi < bk.assets.length; bi++) {
-              if (bk.assets[bi] && bk.assets[bi].thumbnail) { cdnUrl = bk.assets[bi].thumbnail; break; }
+              if (bk.assets[bi] && bk.assets[bi].thumbnail) { cdnUrl = bk.assets[bi].thumbnail; winnerHit = true; break; }
             }
           }
         } catch (_) { /* fall back to the default resolver below */ }
@@ -255,6 +264,12 @@ export default async function handler(req, res) {
 
   if (!cdnUrl) { res.status(404).json({ error: "Image not available" }); return; }
 
-  resolveCache[cacheKey] = { url: cdnUrl, ts: Date.now() };
+  // Don't cache a winner-mode fallback: if the breakdown timed out we
+  // served the standard thumbnail, but the next request should retry
+  // the winner (computeAssetBreakdown's own cache is likely warm by
+  // then) instead of being pinned to the fallback for 10 minutes.
+  if (!(wantWinner && !winnerHit)) {
+    resolveCache[cacheKey] = { url: cdnUrl, ts: Date.now() };
+  }
   res.redirect(302, cdnUrl);
 }

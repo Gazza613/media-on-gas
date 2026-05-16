@@ -3382,6 +3382,19 @@ export default function MediaOnGas(){
         var activeMap={};
         d.campaigns.forEach(function(x){if(parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0)activeMap[x.campaignId]=true;});
         var activeIds=Object.keys(activeMap);
+        // Normalised template key: campaign name minus month/year tags +
+        // platform family. Monthly-replicated campaigns get a fresh id
+        // each month, so a raw-id match alone would drop the user's
+        // selection every time they change month. Matching on the
+        // template keeps "the same campaign, other month" selected.
+        var tmplKey=function(c){
+          var s=String(c.campaignName||"").toLowerCase();
+          s=s.replace(/\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\s*\d{0,4}\b/g,"");
+          s=s.replace(/\b20\d{2}\b/g,"").replace(/[|_\-\s]+/g," ").trim();
+          var fam=String(c.platform||"").toLowerCase();
+          fam=fam.indexOf("face")>=0||fam.indexOf("insta")>=0||fam.indexOf("meta")>=0?"meta":fam.indexOf("tiktok")>=0?"tiktok":fam.indexOf("google")>=0||fam.indexOf("youtube")>=0?"google":fam;
+          return fam+"::"+s;
+        };
         // Share-link views: respect the URL-specified selection but only
         // its intersection with active-in-window so a stale share link
         // can't show zero-data campaigns. If the intersection is empty,
@@ -3389,6 +3402,23 @@ export default function MediaOnGas(){
         if(urlSelected&&urlSelected.length>0){
           var validUrl=urlSelected.filter(function(id){return activeMap[id]===true;});
           setSelected(validUrl.length>0?validUrl:activeIds);
+        } else if(selected&&selected.length>0&&campaigns&&campaigns.length>0){
+          // The user already had a selection and is changing the date.
+          // Preserve it by remapping the previously-selected campaigns
+          // onto the new window (exact id, then raw id, then template),
+          // so a date change refines the SAME view instead of resetting
+          // it to the whole portfolio. Only auto-select everything if
+          // nothing carried over (e.g. an entirely different period).
+          var prevSel={};campaigns.forEach(function(c){if(selected.indexOf(c.campaignId)>=0)prevSel[c.campaignId]=c;});
+          var prevRaw={},prevTmpl={};
+          Object.keys(prevSel).forEach(function(id){var c=prevSel[id];if(c.rawCampaignId)prevRaw[String(c.rawCampaignId)]=true;prevTmpl[tmplKey(c)]=true;});
+          var carried=d.campaigns.filter(function(c){
+            if(!(activeMap[c.campaignId])) return false;
+            if(prevSel[c.campaignId]) return true;
+            if(c.rawCampaignId&&prevRaw[String(c.rawCampaignId)]) return true;
+            return !!prevTmpl[tmplKey(c)];
+          }).map(function(c){return c.campaignId;});
+          setSelected(carried.length>0?carried:activeIds);
         } else {
           setSelected(activeIds);
         }
