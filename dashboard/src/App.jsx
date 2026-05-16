@@ -871,6 +871,7 @@ function AdPreviewModal(props){
     setVideoSrc(null);
     setVideoType("video");
     setVideoErr(null);
+    setPicked({vid:"",thumb:""});
     hasPlayedRef.current=false;
     retryCountRef.current=0;
     adGenRef.current=adGenRef.current+1;
@@ -917,6 +918,10 @@ function AdPreviewModal(props){
   // actually won. Only fired for Meta + MIXED so we don't hammer the
   // API for ordinary single-creative ads.
   var abS=useState({loading:false,loaded:false,data:null,error:""}),assetBk=abS[0],setAssetBk=abS[1];
+  // Which breakdown creative the user clicked to view in the hero.
+  // Empty = default (the winner). Resolution is on-click only, so the
+  // list stays cheap and the dashboard isn't slowed by the breakdown.
+  var bp=useState({vid:"",thumb:""}),picked=bp[0],setPicked=bp[1];
   var isMixed=format==="MIXED";
   // Treat ANY multi-creative Meta ad as mixed-capable, not only ones
   // whose name carries the "mixed" tag. ad.multiCreative is set by
@@ -961,14 +966,19 @@ function AdPreviewModal(props){
   // element as the normal path; for a MIXED ad isVideo is false so the
   // normal resolver no-ops and there is no race.
   var mixWinVid=(mixedCapable&&assetBk&&assetBk.data&&assetBk.data.ok&&assetBk.data.assets&&assetBk.data.assets[0]&&String(assetBk.data.assets[0].kind||"").toLowerCase()==="video")?String(assetBk.data.assets[0].videoId||""):"";
+  // The creative shown in the hero: a clicked breakdown creative wins,
+  // else the winner. picked.vid -> play that video; picked.thumb with
+  // no vid -> show that image (an image creative was clicked); nothing
+  // picked -> the winner's video (mixWinVid) as before.
+  var effWinVid=picked.vid?picked.vid:(picked.thumb?"":mixWinVid);
   useEffect(function(){
-    if(!ad||!mixWinVid||platformKey!=="meta")return;
+    if(!ad||!effWinVid||platformKey!=="meta")return;
     setVideoSrc(null);setVideoType("video");setVideoErr(null);
     hasPlayedRef.current=false;retryCountRef.current=0;
     adGenRef.current=adGenRef.current+1;
     var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
     var cid=String((ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
-    var url=props.apiBase+"/api/ad-video?platform=meta&id="+encodeURIComponent(mixWinVid)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(cid?("&campaignId="+encodeURIComponent(cid)):"")+authQ+"&resolveOnly=1";
+    var url=props.apiBase+"/api/ad-video?platform=meta&id="+encodeURIComponent(effWinVid)+(ad.adId?("&adId="+encodeURIComponent(ad.adId)):"")+(cid?("&campaignId="+encodeURIComponent(cid)):"")+authQ+"&resolveOnly=1";
     var cancelled=false;
     var timer=setTimeout(function(){if(!cancelled)setVideoErr("timeout");},15000);
     fetch(url).then(function(r){return r.text();}).then(function(t){
@@ -978,7 +988,7 @@ function AdPreviewModal(props){
       else setVideoErr("no_url");
     }).catch(function(){if(cancelled)return;clearTimeout(timer);setVideoErr("network");});
     return function(){cancelled=true;clearTimeout(timer);};
-  },[ad&&ad.adId,mixWinVid,platformKey]);
+  },[ad&&ad.adId,effWinVid,platformKey]);
 
   if(!props.ad)return null;
   var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
@@ -1002,6 +1012,10 @@ function AdPreviewModal(props){
     proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+winQ+authQs;
   }
   var imageSrc=proxyImage||ad.thumbnail||"";
+  // A clicked breakdown creative's own thumbnail overrides the hero
+  // image (so an image creative shows big, and a video creative's
+  // poster is its own frame).
+  var heroImg=picked.thumb||imageSrc;
 
   var placeholder=function(title,sub){
     return <div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:"linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%)",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:"#fff",padding:"28px 24px",textAlign:"center",gap:10}}>
@@ -1011,13 +1025,13 @@ function AdPreviewModal(props){
   };
   // Effective video id: the ad's own (normal MP4) or, for a MIXED ad,
   // the winning creative's. Used by the player branch + retry refetch.
-  var effVidId=(isVideo&&ad.videoId)?String(ad.videoId):mixWinVid;
+  var effVidId=(isVideo&&ad.videoId)?String(ad.videoId):effWinVid;
   var mediaBlock=null;
   if(isText){
     mediaBlock=placeholder("TEXT AD","Search campaigns use headline/description copy only, no visual creative is uploaded.");
   } else if(isVideo&&platformKey==="youtube"&&ad.youtubeId){
     mediaBlock=<iframe title="Ad preview" src={"https://www.youtube.com/embed/"+encodeURIComponent(ad.youtubeId)} style={{width:"100%",aspectRatio:"16/9",border:"none",borderRadius:10,background:"#000"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>;
-  } else if((isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId)||(mixWinVid&&platformKey==="meta")){
+  } else if((isVideo&&(platformKey==="meta"||platformKey==="tiktok")&&ad.videoId)||(effWinVid&&platformKey==="meta")){
     // Video src is resolved asynchronously via the useEffect above and set
     // directly on the element — serving a 302 redirect via <source> broke
     // playback because the browser's byte-range requests didn't follow the
@@ -1044,7 +1058,7 @@ function AdPreviewModal(props){
         </div>
       </div>;
     } else if(videoSrc){
-      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={imageSrc||""} src={videoSrc}
+      mediaBlock=<video key={videoSrc} controls playsInline preload="metadata" poster={heroImg||""} src={videoSrc}
         onPlaying={function(){hasPlayedRef.current=true;}}
         onError={function(e){
         var me=e.target&&e.target.error;
@@ -1096,7 +1110,7 @@ function AdPreviewModal(props){
       // disappears behind it, when it fails the gradient stays visible.
       if(imageSrc){
         mediaBlock=<div style={{position:"relative",width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:"linear-gradient(135deg,"+accent+"45,"+accent+"15 50%,#0a0618 100%)",borderRadius:10,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <img src={imageSrc} alt={ad.adName||"Ad"} onError={function(e){if(e.target)e.target.style.display="none";}} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",display:"block",position:"relative",zIndex:1}}/>
+          <img src={heroImg} alt={ad.adName||"Ad"} onError={function(e){if(e.target)e.target.style.display="none";}} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",display:"block",position:"relative",zIndex:1}}/>
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:0}}>
             <div style={{textAlign:"center",padding:24}}>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:3,textTransform:"uppercase",fontWeight:700}}>Preview Unavailable</div>
@@ -1113,13 +1127,13 @@ function AdPreviewModal(props){
         mediaBlock=placeholder("VIDEO UNAVAILABLE",errMsg);
       }
     } else {
-      mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:imageSrc?("url("+imageSrc+") center/contain no-repeat #000"):"#000",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontFamily:fm,letterSpacing:2,fontWeight:800}}><div style={{background:"rgba(0,0,0,0.6)",padding:"10px 18px",borderRadius:8,letterSpacing:3}}>LOADING VIDEO…</div></div>;
+      mediaBlock=<div style={{width:"100%",aspectRatio:"1/1",maxHeight:"60vh",background:heroImg?("url("+heroImg+") center/contain no-repeat #000"):"#000",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontFamily:fm,letterSpacing:2,fontWeight:800}}><div style={{background:"rgba(0,0,0,0.6)",padding:"10px 18px",borderRadius:8,letterSpacing:3}}>LOADING VIDEO…</div></div>;
     }
-  } else if(imageSrc){
+  } else if(heroImg){
     // Graceful fallback: if the refreshed image still fails to load (rare,
     // would mean the creative was deleted / archived), swap to a branded
     // placeholder rather than a broken-image icon.
-    mediaBlock=<img src={imageSrc} alt={ad.adName||"Ad"} onError={function(e){
+    mediaBlock=<img src={heroImg} alt={ad.adName||"Ad"} onError={function(e){
       var fallback=document.createElement("div");
       fallback.style.cssText="width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,"+accent+"55,"+accent+"15 55%,#0a0618 100%);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;letter-spacing:2px;font-weight:800;font-family:"+fm+";text-align:center;padding:24px;";
       fallback.textContent="PREVIEW UNAVAILABLE — creative may have been archived by the platform";
@@ -1144,7 +1158,7 @@ function AdPreviewModal(props){
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
       </div>
-      {mediaBlock}
+      <div id="gasAdHero">{mediaBlock}</div>
       <div style={{marginTop:16,fontSize:14,fontWeight:800,color:P.txt,fontFamily:ff,lineHeight:1.4}}>{ad.adName||"Unnamed ad"}</div>
       {ad.campaignName&&<div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:4}}>Campaign: {ad.campaignName}</div>}
       {(function(){
@@ -1225,10 +1239,20 @@ function AdPreviewModal(props){
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {d.assets.map(function(a,i){
               var top=i===0;
-              return <div key={a.assetId||i} style={{display:"flex",gap:14,padding:14,background:top?P.mint+"0E":"rgba(255,255,255,0.03)",border:"1px solid "+(top?P.mint+"45":P.rule),borderRadius:12,alignItems:"center"}}>
-                <div style={{position:"relative",width:84,height:84,flexShrink:0,borderRadius:10,overflow:"hidden",background:"linear-gradient(135deg,"+P.fuchsia+"40,"+P.violet+"20)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              var aVid=String(a.kind||"").toLowerCase()==="video"&&a.videoId?String(a.videoId):"";
+              var aCanClick=!!(aVid||a.thumbnail);
+              var aActive=(picked.vid&&picked.vid===aVid)||(!picked.vid&&picked.thumb&&picked.thumb===a.thumbnail);
+              var pickThis=function(){
+                if(!aCanClick)return;
+                setPicked(aVid?{vid:aVid,thumb:a.thumbnail||""}:{vid:"",thumb:a.thumbnail||""});
+                try{var h=document.getElementById("gasAdHero");if(h&&h.scrollIntoView)h.scrollIntoView({behavior:"smooth",block:"start"});}catch(_){}
+              };
+              return <div key={a.assetId||i} style={{display:"flex",gap:14,padding:14,background:aActive?accent+"1C":(top?P.mint+"0E":"rgba(255,255,255,0.03)"),border:"1px solid "+(aActive?accent+"70":(top?P.mint+"45":P.rule)),borderRadius:12,alignItems:"center"}}>
+                <div onClick={pickThis} title={aCanClick?(aVid?"Click to play this creative in the preview":"Click to view this creative in the preview"):""} style={{position:"relative",width:84,height:84,flexShrink:0,borderRadius:10,overflow:"hidden",background:"linear-gradient(135deg,"+P.fuchsia+"40,"+P.violet+"20)",display:"flex",alignItems:"center",justifyContent:"center",cursor:aCanClick?"pointer":"default",outline:aActive?("2px solid "+accent):"none"}}>
                   {a.thumbnail?<img src={a.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<span style={{fontSize:9,fontWeight:800,color:"#fff",fontFamily:fm,letterSpacing:1}}>{(a.kind||"AD").toUpperCase()}</span>}
+                  {aVid&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.32)",pointerEvents:"none"}}><div style={{width:30,height:30,borderRadius:"50%",background:"rgba(0,0,0,0.62)",border:"1px solid rgba(255,255,255,0.65)",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polygon points="8,6 18,12 8,18" fill="#fff"/></svg></div></div>}
                   <span style={{position:"absolute",top:6,left:6,background:"rgba(0,0,0,0.6)",color:"#fff",fontSize:8,fontWeight:800,padding:"2px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm}}>{(a.kind||"").toUpperCase()}</span>
+                  {aActive&&<span style={{position:"absolute",bottom:6,left:6,right:6,background:accent,color:"#062014",fontSize:7.5,fontWeight:900,padding:"2px 0",borderRadius:4,letterSpacing:1,fontFamily:fm,textAlign:"center"}}>IN PREVIEW</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
