@@ -104,6 +104,14 @@ export default async function handler(req, res) {
   // GET — admin auth, return recent snapshots.
   if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
   if (!(await checkAuth(req, res))) return;
+  // Admin-only: these snapshots span every IG business account across
+  // all clients. A client share-token authenticates via checkAuth but
+  // has no legitimate reason to read cross-client follower history.
+  var principal = req.authPrincipal || { role: "admin" };
+  if (principal.role !== "admin" && principal.role !== "superadmin") {
+    res.status(403).json({ error: "Admin-only endpoint" });
+    return;
+  }
 
   if (req.query.date) {
     var snap = await readSnapshot(String(req.query.date));

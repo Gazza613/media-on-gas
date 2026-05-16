@@ -90,11 +90,18 @@ export async function getKpiProfile(rawClient) {
   if (!slug) return null;
   var all = await getAllKpiProfiles();
   if (all[slug]) return all[slug];
+  // Prefix match only (not substring-anywhere). This still bridges an
+  // ad-account-derived slug to the superadmin profile name when one is
+  // the other plus a trailing token, e.g. "psychobunnyza" -> profile
+  // "psychobunny", or a profile keyed with the region suffix. Anchoring
+  // to the start prevents a short brand fragment from false-matching
+  // mid-string across a different client's slug (defence-in-depth: a
+  // wrong match here would surface that client's GA4 ecommerce data).
   var keys = Object.keys(all);
   for (var i = 0; i < keys.length; i++) {
     var k = keys[i];
     if (!k || k.length < 5 || slug.length < 5) continue;
-    if (slug.indexOf(k) >= 0 || k.indexOf(slug) >= 0) return all[k];
+    if (slug.indexOf(k) === 0 || k.indexOf(slug) === 0) return all[k];
   }
   return null;
 }

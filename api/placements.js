@@ -114,9 +114,29 @@ export default async function handler(req, res) {
       selectionIds[s.replace(/^google_/, "")] = true;
     });
   }
+  // Client share-token scoping. A client Bearer principal carries an
+  // allowlist of campaign IDs; it must never see placement rows for
+  // campaigns outside it. Without this, a client token with no
+  // ?campaignIds= selection received EVERY client's placement spend
+  // (hasSelection=false short-circuited the only filter). Admin /
+  // api-key principals are role:"admin" so this block is inert for
+  // them and behaviour is unchanged. Mirrors timeseries.js scoping.
+  var principal = req.authPrincipal || { role: "admin" };
+  var isClientScoped = principal.role === "client";
+  var allowedSet = {};
+  if (isClientScoped) {
+    (principal.allowedCampaignIds || []).forEach(function(raw) {
+      var s = String(raw || "").trim();
+      if (!s) return;
+      allowedSet[s] = true;
+      allowedSet[s.replace(/_(facebook|instagram)$/, "")] = true;
+      allowedSet[s.replace(/^google_/, "")] = true;
+    });
+  }
   var idAllowed = function(id) {
-    if (!hasSelection) return true;
     var sid = String(id || "");
+    if (isClientScoped && !(allowedSet[sid] || allowedSet[sid.replace(/^google_/, "")])) return false;
+    if (!hasSelection) return true;
     return !!(selectionIds[sid] || selectionIds[sid.replace(/^google_/, "")]);
   };
 
