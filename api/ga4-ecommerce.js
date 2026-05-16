@@ -109,11 +109,25 @@ export default async function handler(req, res) {
   // currency exchange rate not exist"). Clamp the end to yesterday (the
   // last fully-settled, rate-available day); an ecommerce summary never
   // needs the current partial day. String compare is safe on YYYY-MM-DD.
+  // The currency clamp ONLY matters for revenue metrics. Newsletter
+  // sign-ups (page views / event counts) need no exchange rate, so
+  // clamping them to yesterday was wrongly hiding today's sign-ups
+  // (GA4 had 3 on /thanks-page/, the dashboard showed 0). Keep the
+  // requested end (capped at today, since GA4 has no future data) for
+  // the newsletter report; clamp only the revenue reports.
+  var today = ymd(new Date());
+  var reqTo = to;
+  var nlEnd = reqTo < today ? reqTo : today;
   var yest = ymd(new Date(Date.now() - 24 * 60 * 60 * 1000));
   if (to > yest) to = yest;
   if (from > to) from = to;
+  if (nlEnd < from) nlEnd = from;
+  // Match the configured path tolerant of a trailing slash: GA4 may
+  // store "/thanks-page" or "/thanks-page/" depending on the route, so
+  // CONTAINS the slash-stripped value catches both.
+  var newsletterPathMatch = newsletterPath.replace(/\/+$/, "") || newsletterPath;
 
-  var cacheKey = propertyId + "|" + from + "|" + to + "|" + newsletterEvent + "|" + newsletterPath;
+  var cacheKey = propertyId + "|" + from + "|" + to + "|" + nlEnd + "|" + newsletterEvent + "|" + newsletterPath;
   var hit = cache[cacheKey];
   if (hit && Date.now() - hit.ts < TTL_MS) { res.status(200).json(hit.payload); return; }
 
@@ -137,15 +151,15 @@ export default async function handler(req, res) {
       //    thank-you page (deterministic). Fallback: count of the
       //    configured GA4 event.
       newsletterPath ? {
-        dateRanges: dateRanges,
+        dateRanges: [{ startDate: from, endDate: nlEnd }],
         dimensions: [{ name: "pagePath" }],
         metrics: [{ name: "screenPageViews" }],
         dimensionFilter: {
-          filter: { fieldName: "pagePath", stringFilter: { matchType: "CONTAINS", value: newsletterPath } }
+          filter: { fieldName: "pagePath", stringFilter: { matchType: "CONTAINS", value: newsletterPathMatch } }
         },
         limit: 20
       } : {
-        dateRanges: dateRanges,
+        dateRanges: [{ startDate: from, endDate: nlEnd }],
         dimensions: [{ name: "eventName" }],
         metrics: [{ name: "eventCount" }],
         dimensionFilter: newsletterEvent ? {
