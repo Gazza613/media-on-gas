@@ -2405,7 +2405,11 @@ function CampaignAuditModal(props){
           </div>;
         };
         var slugs=Object.keys(kpiProfiles[0]||{});
-        return <div>
+        // flex:1 + minHeight:0 + overflow:auto so the editor scrolls
+        // INSIDE the modal's flex column. Without this the panel grew
+        // past the modal's max height and the Save button was clipped
+        // off-screen with no scrollbar (same pattern as the audit view).
+        return <div style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",paddingRight:6}}>
           <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.6,marginBottom:14}}>
             A profile redefines which KPIs the dashboard leads with for <strong style={{color:P.txt}}>one client only</strong> and can switch on the GA4 Ecommerce tab. Clients with no profile keep the default objective layout. Client name is matched loosely, "Psycho Bunny", "PsychoBunny", "Psycho Bunny May 2026" all resolve to the same profile.
           </div>
