@@ -722,8 +722,8 @@ function buildEmailHtml(opts) {
       </td></tr>
 
       ${ecommerceBlock ? `
-      <tr><td style="padding:8px 40px 0;">
-        <div style="font-size:11px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Final ecommerce summary for your team</div>
+      <tr><td style="padding:38px 40px 0;">
+        <div style="border-top:1px solid rgba(168,85,247,0.16);padding-top:24px;font-size:11px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Final ecommerce summary for your team</div>
       </td></tr>
       <tr><td style="padding:0 40px;">${ecommerceBlock}</td></tr>` : ""}
 
