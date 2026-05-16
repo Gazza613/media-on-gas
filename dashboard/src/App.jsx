@@ -1763,7 +1763,7 @@ function CampaignAuditModal(props){
       .then(function(d){kpiLoading[1](false);if(d&&d.profiles)kpiProfiles[1](d.profiles);else kpiErr[1](d.error||"Could not load profiles");})
       .catch(function(){kpiLoading[1](false);kpiErr[1]("Connection error");});
   };
-  var blankKpiForm=function(){return{primaryKpis:[],secondaryKpis:[],tertiaryKpis:[],benchmarkBand:"default",ecommerce:{enabled:false,source:"ga4",ga4PropertyId:"",newsletterEvent:""}};};
+  var blankKpiForm=function(){return{primaryKpis:[],secondaryKpis:[],tertiaryKpis:[],benchmarkBand:"default",ecommerce:{enabled:false,source:"ga4",ga4PropertyId:"",newsletterEvent:"",newsletterPagePath:""}};};
   var editKpi=function(slug){
     var p=kpiProfiles[0][slug];
     kpiClient[1](slug);
@@ -2433,8 +2433,13 @@ function CampaignAuditModal(props){
                 <input value={form.ecommerce.ga4PropertyId} onChange={function(e){var nf=Object.assign({},form);nf.ecommerce=Object.assign({},form.ecommerce,{ga4PropertyId:e.target.value});kpiForm[1](nf);}} placeholder="481822031" style={inp}/>
               </div>
               <div>
-                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Newsletter event name</div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Newsletter event name <span style={{color:P.caption,fontWeight:600,textTransform:"none",letterSpacing:0}}>(fallback)</span></div>
                 <input value={form.ecommerce.newsletterEvent} onChange={function(e){var nf=Object.assign({},form);nf.ecommerce=Object.assign({},form.ecommerce,{newsletterEvent:e.target.value});kpiForm[1](nf);}} placeholder="newsletter_signup" style={inp}/>
+              </div>
+              <div style={{gridColumn:"1 / -1"}}>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Newsletter thank-you page path <span style={{color:P.mint,fontWeight:600,textTransform:"none",letterSpacing:0}}>(preferred, overrides the event)</span></div>
+                <input value={form.ecommerce.newsletterPagePath||""} onChange={function(e){var nf=Object.assign({},form);nf.ecommerce=Object.assign({},form.ecommerce,{newsletterPagePath:e.target.value});kpiForm[1](nf);}} placeholder="/thanks-page/" style={inp}/>
+                <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:5,lineHeight:1.5}}>GA4 page path shown only after a completed sign-up. Counting its views is a deterministic sign-up count, no event-name guessing. When set, this is used instead of the event name.</div>
               </div>
             </div>}
             <button onClick={saveKpiProfile} disabled={kpiBusy[0]} style={{background:kpiBusy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"11px 24px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:kpiBusy[0]?"wait":"pointer",letterSpacing:1.5}}>{kpiBusy[0]?"SAVING...":"SAVE PROFILE"}</button>
@@ -6449,7 +6454,7 @@ export default function MediaOnGas(){
                   wire it into the KPI profile. Never shown to a client. */}
               {!isClient&&ecoData.discoveredEvents&&ecoData.discoveredEvents.length>0&&<div style={{marginBottom:8,padding:"16px 20px",background:P.glass,border:"1px dashed "+P.rule,borderRadius:14}}>
                 <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:4,fontWeight:700}}>GA4 EVENTS (TEAM ONLY)</div>
-                <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.6,marginBottom:12}}>Property {ecoData.propertyId}. Newsletter event currently set to {ecoData.newsletterEvent?("“"+ecoData.newsletterEvent+"”"):"(none)"}. Pick the real sign-up event from this list and set it in Settings, KPI Profiles.</div>
+                <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.6,marginBottom:12}}>Property {ecoData.propertyId}. Newsletter sign-ups are counted from {ecoData.newsletterSource==="pagePath"?("the thank-you page path “"+ecoData.newsletterPagePath+"” (deterministic, recommended)"):ecoData.newsletterSource==="event"?("the GA4 event “"+ecoData.newsletterEvent+"”"):"(not configured yet)"}. The event list below is only a fallback helper for picking an event in Settings, KPI Profiles, the page-path method is preferred.</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{ecoData.discoveredEvents.map(function(ev,i){var on=ecoData.newsletterEvent&&ev.event===ecoData.newsletterEvent;return <span key={i} style={{fontSize:10,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:on?P.mint+"22":P.cosmos,border:"1px solid "+(on?P.mint+"55":P.rule),color:on?P.mint:P.label,fontWeight:on?800:600}}>{ev.event} <span style={{opacity:0.6}}>{fmt(ev.count)}</span></span>;})}</div>
               </div>}
             </div>;

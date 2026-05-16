@@ -96,7 +96,12 @@ export default async function handler(req, res) {
         enabled: !!ec.enabled,
         source: "ga4",
         ga4PropertyId: String(ec.ga4PropertyId || "").replace(/[^0-9]/g, "").slice(0, 20),
-        newsletterEvent: String(ec.newsletterEvent || "").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 60)
+        newsletterEvent: String(ec.newsletterEvent || "").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 60),
+        // Preferred newsletter signal: GA4 page path of the post-signup
+        // thank-you page (e.g. "/thanks-page/"). A hit there is a
+        // deterministic completed-signup, no event-name guessing. When
+        // set it overrides newsletterEvent. Allow path chars only.
+        newsletterPagePath: String(ec.newsletterPagePath || "").replace(/[^a-zA-Z0-9_\-\/]/g, "").slice(0, 120)
       }
     };
 

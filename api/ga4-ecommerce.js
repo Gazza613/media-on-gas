@@ -89,6 +89,10 @@ export default async function handler(req, res) {
     return;
   }
   var newsletterEvent = String(profile.ecommerce.newsletterEvent || "").trim();
+  // Preferred signal: page views of the post-signup thank-you page.
+  // Deterministic (you only land there after completing the signup),
+  // so it overrides the event-name path when set.
+  var newsletterPath = String(profile.ecommerce.newsletterPagePath || "").trim();
 
   var from = String(req.query.from || "").trim();
   var to = String(req.query.to || "").trim();
@@ -109,7 +113,7 @@ export default async function handler(req, res) {
   if (to > yest) to = yest;
   if (from > to) from = to;
 
-  var cacheKey = propertyId + "|" + from + "|" + to + "|" + newsletterEvent;
+  var cacheKey = propertyId + "|" + from + "|" + to + "|" + newsletterEvent + "|" + newsletterPath;
   var hit = cache[cacheKey];
   if (hit && Date.now() - hit.ts < TTL_MS) { res.status(200).json(hit.payload); return; }
 
@@ -129,8 +133,18 @@ export default async function handler(req, res) {
           { name: "ecommercePurchases" }, { name: "purchaseRevenue" }
         ]
       },
-      // 1. Newsletter event count (filtered to the configured event)
-      {
+      // 1. Newsletter signups. Preferred: views of the post-signup
+      //    thank-you page (deterministic). Fallback: count of the
+      //    configured GA4 event.
+      newsletterPath ? {
+        dateRanges: dateRanges,
+        dimensions: [{ name: "pagePath" }],
+        metrics: [{ name: "screenPageViews" }],
+        dimensionFilter: {
+          filter: { fieldName: "pagePath", stringFilter: { matchType: "CONTAINS", value: newsletterPath } }
+        },
+        limit: 20
+      } : {
         dateRanges: dateRanges,
         dimensions: [{ name: "eventName" }],
         metrics: [{ name: "eventCount" }],
@@ -198,15 +212,24 @@ export default async function handler(req, res) {
   var purchases = totals.ecommercePurchases || 0;
   var revenue = totals.purchaseRevenue || 0;
 
-  // Newsletter: sum the (filtered) eventCount rows.
+  // Newsletter signups. Page-path mode: GA4 already filtered to the
+  // thank-you path, so sum screenPageViews across whatever path variants
+  // came back (trailing slash, query string, etc). Event mode: sum the
+  // (filtered) eventCount rows as before.
   var newsletterCount = 0;
   if (reports[1] && reports[1].rows) {
-    reports[1].rows.forEach(function(row) {
-      var name = row.dimensionValues && row.dimensionValues[0] ? row.dimensionValues[0].value : "";
-      if (!newsletterEvent || name === newsletterEvent) {
+    if (newsletterPath) {
+      reports[1].rows.forEach(function(row) {
         newsletterCount += parseFloat((row.metricValues && row.metricValues[0] && row.metricValues[0].value) || 0);
-      }
-    });
+      });
+    } else {
+      reports[1].rows.forEach(function(row) {
+        var name = row.dimensionValues && row.dimensionValues[0] ? row.dimensionValues[0].value : "";
+        if (!newsletterEvent || name === newsletterEvent) {
+          newsletterCount += parseFloat((row.metricValues && row.metricValues[0] && row.metricValues[0].value) || 0);
+        }
+      });
+    }
   }
 
   var topProducts = [];
@@ -304,6 +327,8 @@ export default async function handler(req, res) {
     client: clientName, propertyId: propertyId, from: from, to: to,
     channels: channels, devices: devices, countries: countries,
     newsletterEvent: newsletterEvent || null,
+    newsletterPagePath: newsletterPath || null,
+    newsletterSource: newsletterPath ? "pagePath" : (newsletterEvent ? "event" : "none"),
     site: {
       users: Math.round(totals.activeUsers || 0),
       sessions: Math.round(totals.sessions || 0),

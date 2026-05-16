@@ -21,7 +21,10 @@
 //       enabled: true,
 //       source: "ga4",
 //       ga4PropertyId: "481822031",
-//       newsletterEvent: "newsletter_signup"   // GA4 event name
+//       newsletterEvent: "newsletter_signup",  // GA4 event (fallback)
+//       newsletterPagePath: "/thanks-page/"    // post-signup page path
+//                                              // (preferred; overrides
+//                                              // newsletterEvent)
 //     }
 //   }
 
