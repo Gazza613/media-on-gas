@@ -159,8 +159,11 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
       var awr = hay.indexOf("aware") >= 0 || hay.indexOf("brand") >= 0
         || /(^|[_\s||-])(awr|awareness|reach|brand)([_\s||-]|$)/.test(hay);
       if (awr) {
-        a.results = parseFloat(a.impressions || 0);
-        a.resultType = "impressions";
+        // Primary KPI for awareness is REACH, so rank + headline on
+        // reach (fall back to impressions only if reach is absent).
+        var rch = parseFloat(a.reach || 0), imp = parseFloat(a.impressions || 0);
+        a.results = rch > 0 ? rch : imp;
+        a.resultType = rch > 0 ? "reach" : "impressions";
       }
     });
     // Group by platform, pick top 3 by results then spend
@@ -510,8 +513,28 @@ function renderCommentaryBlock(summary) {
 }
 
 // Render top creative ads per platform with thumbnails + key metrics.
-function renderTopAdsBlock(topAds) {
+function renderTopAdsBlock(topAds, origin, token) {
   if (!topAds || topAds.length === 0) return "";
+  // Resolve thumbnails through our /api/ad-image proxy at OPEN time
+  // (carrying the share token) instead of baking a Meta CDN URL at
+  // send time, those signed URLs expire within ~1h so the client's
+  // email showed broken images. The proxy 302s to a fresh URL on
+  // every open; MIXED ads get the winning creative.
+  var proxyThumb = function(ad, accent, platLabel) {
+    var pl = String(ad.platform || "").toLowerCase();
+    var pk = (pl.indexOf("facebook") >= 0 || pl.indexOf("instagram") >= 0) ? "meta" : (pl.indexOf("tiktok") >= 0 ? "tiktok" : "");
+    var ph = '<div style="width:120px;height:120px;border-radius:10px;background:linear-gradient(135deg,' + accent + '55,' + accent + '15 55%,#0a0618 100%);display:table-cell;vertical-align:middle;text-align:center;color:#fff;font-size:11px;font-weight:800;letter-spacing:1px;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml(platLabel) + '</div>';
+    if (pk && ad.adId && origin && token) {
+      var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+      var win = (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative) ? "&winner=1" : "";
+      var src = origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&token=" + token;
+      return '<img src="' + escapeHtml(src) + '" alt="" width="120" height="120" style="width:120px;height:120px;object-fit:cover;border-radius:10px;display:block;border:0;background:#1a0f2a;"/>';
+    }
+    if (ad.thumbnail && String(ad.thumbnail).indexOf("http") === 0) {
+      return '<img src="' + escapeHtml(ad.thumbnail) + '" alt="" width="120" height="120" style="width:120px;height:120px;object-fit:cover;border-radius:10px;display:block;border:0;background:#1a0f2a;"/>';
+    }
+    return ph;
+  };
   var platColors = { "Facebook": "#4599FF", "Instagram": "#E1306C", "TikTok": "#00F2EA", "Google Display": "#34A853", "YouTube": "#FF0000", "Google Search": "#FFAA00", "Performance Max": "#7C3AED", "Demand Gen": "#D946EF" };
   var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "App Clicks" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "App Clicks" : rt === "lp_clicks" ? "LP Clicks" : rt === "reach" ? "Reach" : rt === "impressions" ? "Impressions" : rt === "clicks" ? "Clicks" : "Results"; };
   var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "installs" ? "per click" : rt === "follows" ? "per follower" : "per click"; };
@@ -525,10 +548,7 @@ function renderTopAdsBlock(topAds) {
       var impressions = parseFloat(ad.impressions || 0);
       var ctr = parseFloat(ad.ctr || 0);
       var adName = (ad.adName || "Unnamed ad").length > 44 ? (ad.adName || "").substring(0, 42) + "," : (ad.adName || "Unnamed ad");
-      var hasThumb = ad.thumbnail && String(ad.thumbnail).indexOf("http") === 0;
-      var thumbCell = hasThumb ?
-        '<img src="' + escapeHtml(ad.thumbnail) + '" alt="" width="120" height="120" style="width:120px;height:120px;object-fit:cover;border-radius:10px;display:block;border:0;background:#1a0f2a;"/>' :
-        '<div style="width:120px;height:120px;border-radius:10px;background:linear-gradient(135deg,' + accent + '55,' + accent + '15 55%,#0a0618 100%);display:table-cell;vertical-align:middle;text-align:center;color:#fff;font-size:11px;font-weight:800;letter-spacing:1px;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml(pl.platform) + '</div>';
+      var thumbCell = proxyThumb(ad, accent, pl.platform);
       var awrAd = ad.resultType === "reach" || ad.resultType === "impressions";
       var costStr = awrAd
         ? (impressions > 0 ? fmtR(spend / impressions * 1000) + ' CPM' : '')
@@ -645,7 +665,10 @@ function buildEmailHtml(opts) {
   var senderTitle = escapeHtml(opts.senderTitle || "");
   var summaryBlock = renderSummaryBlock(opts.summary, opts.profile, opts.ecommerce);
   var commentaryBlock = renderCommentaryBlock(opts.summary);
-  var topAdsBlock = renderTopAdsBlock(opts.topAds);
+  // Share token (already URL-encoded inside shareUrl) lets the email's
+  // <img> proxy calls authenticate as the client view on open.
+  var shareTok = String(opts.shareUrl || "").split("token=")[1] || "";
+  var topAdsBlock = renderTopAdsBlock(opts.topAds, origin, shareTok);
   var ecommerceBlock = renderEcommerceBlock(opts.ecommerce);
 
   return `<!DOCTYPE html>
