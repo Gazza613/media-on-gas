@@ -6967,7 +6967,7 @@ export default function MediaOnGas(){
                   <div style={{fontSize:11,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:10,lineHeight:1.4,minHeight:30,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}} title={ad.adName}>{ad.adName}</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10,padding:"8px 10px",background:sec.accent+"10",border:"1px solid "+sec.accent+"30",borderRadius:8}}>
                     <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{resultLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{ad.results>0?fmt(ad.results):"-"}</div></div>
-                    <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</div></div>
+                    <div><div style={{color:sec.accent,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>{costPerLabel(ad.resultType)}</div><div style={{color:sec.accent,fontWeight:900,fontSize:14}}>{(function(){var aw=ad.resultType==="reach"||ad.resultType==="impressions";var v=aw?(ad.impressions>0?ad.spend/ad.impressions*1000:0):(ad.results>0?ad.spend/ad.results:0);return v>0?fR(v):"-";})()}</div></div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10}}>
                     <div><div style={{color:P.label,marginBottom:2,letterSpacing:1,fontSize:8}}>SPEND</div><div style={{color:P.txt,fontWeight:700,fontSize:11}}>{fR(ad.spend)}</div></div>
@@ -7006,7 +7006,7 @@ export default function MediaOnGas(){
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}><span style={{background:adPlatC,color:textOnAccent(adPlatC),fontSize:9,fontWeight:800,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{adPlatShort}</span></td>
                 <td style={{padding:"8px 10px",textAlign:"center",border:"1px solid "+P.rule}}>{(function(){var fm2=fmtMeta(ad.format);return <span style={{background:fm2.color,color:textOnAccent(fm2.color),fontSize:9,fontWeight:900,padding:"3px 9px",borderRadius:5,fontFamily:fm,letterSpacing:1}}>{fm2.label}</span>;})()}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fmt(ad.results):"-"}</td>
-                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{ad.results>0?fR(ad.spend/ad.results):"-"}</td>
+                <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:900,color:sec.accent}}>{(function(){var aw=ad.resultType==="reach"||ad.resultType==="impressions";var v=aw?(ad.impressions>0?ad.spend/ad.impressions*1000:0):(ad.results>0?ad.spend/ad.results:0);return v>0?fR(v):"-";})()}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:P.txt}}>{fR(ad.spend)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,color:P.txt}}>{fmt(ad.impressions)}</td>
                 <td style={{padding:"8px 12px",textAlign:"center",border:"1px solid "+P.rule,fontFamily:fm,fontSize:11,fontWeight:700,color:ctrCol}}>{ad.ctr.toFixed(2)+"%"}</td>
@@ -7075,11 +7075,18 @@ export default function MediaOnGas(){
                 // Rank-based tagging: top 5 = SCALE, next 5 = TOP PERFORMER
                 sorted.forEach(function(a,i){a._scale=i<5&&a.results>0;a._topPerformer=i>=5&&i<10&&a.results>0;});
                 var bm=sec.bench;
+                // Awareness sections report cost as CPM (spend per 1,000
+                // impressions), NOT spend/result, which on a reach
+                // objective is spend/reach and shows a nonsense ~R0.01.
+                var awrSec=(function(){var rt=arr[0]?arr[0].resultType:sec.metric;return rt==="reach"||rt==="impressions";})();
+                var awrCpm=totals.imps>0?(totals.spend/totals.imps*1000):0;
+                var costV=awrSec?awrCpm:totals.cpr;
+                var bmV=awrSec?benchmarks.meta.cpm:bm;
                 var verdict="";
-                if(totals.cpr>0&&bm){
-                  if(totals.cpr<=bm.low)verdict="WELL BELOW INDUSTRY BENCHMARK";
-                  else if(totals.cpr<=bm.mid)verdict="WITHIN BENCHMARK RANGE";
-                  else if(totals.cpr<=bm.high)verdict="ABOVE BENCHMARK MIDPOINT";
+                if(costV>0&&bmV){
+                  if(costV<=bmV.low)verdict="WELL BELOW INDUSTRY BENCHMARK";
+                  else if(costV<=bmV.mid)verdict="WITHIN BENCHMARK RANGE";
+                  else if(costV<=bmV.high)verdict="ABOVE BENCHMARK MIDPOINT";
                   else verdict="ABOVE BENCHMARK CEILING";
                 }
 
@@ -7094,7 +7101,7 @@ export default function MediaOnGas(){
                 var headlineResults=sec.key==="followers"?creativeEarnedTotal:totals.results;
                 var headlineCpr=sec.key==="followers"
                   ? (creativeEarnedTotal>0?totals.spend/creativeEarnedTotal:0)
-                  : totals.cpr;
+                  : (awrSec?awrCpm:totals.cpr);
                 // Headline strip is locked to P.fb (icon box, label text,
                 // ADS IN SECTION count) so all four sections read in one
                 // consistent voice. KPI tiles + creatives table below
