@@ -238,9 +238,71 @@ export default async function handler(req, res) {
     });
   }
 
+  // Second batched call: acquisition + audience breakdowns (where
+  // visits/sales come from, device split, geography). GA4 caps a batch
+  // at 5 reports and the first batch already uses all 5, so this is a
+  // separate call. Enrichment only: if it fails the core payload still
+  // returns, the breakdown sections just don't render.
+  var channels = [], devices = [], countries = [];
+  try {
+    var r2body = {
+      requests: [
+        // 0. Channel: where visits AND sales come from, one report.
+        {
+          dateRanges: dateRanges,
+          dimensions: [{ name: "sessionDefaultChannelGroup" }],
+          metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "purchaseRevenue" }, { name: "ecommercePurchases" }],
+          orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+          limit: 12
+        },
+        // 1. Device category split.
+        {
+          dateRanges: dateRanges,
+          dimensions: [{ name: "deviceCategory" }],
+          metrics: [{ name: "activeUsers" }, { name: "sessions" }, { name: "purchaseRevenue" }, { name: "ecommercePurchases" }],
+          orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+          limit: 5
+        },
+        // 2. Top countries by users (with their revenue).
+        {
+          dateRanges: dateRanges,
+          dimensions: [{ name: "country" }],
+          metrics: [{ name: "activeUsers" }, { name: "purchaseRevenue" }, { name: "ecommercePurchases" }],
+          orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+          limit: 8
+        }
+      ]
+    };
+    var rr = await fetch(GA4 + "/properties/" + propertyId + ":batchRunReports", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + auth.token, "Content-Type": "application/json" },
+      body: JSON.stringify(r2body)
+    });
+    var dd = await rr.json();
+    var rep2 = (rr.ok && !dd.error && dd.reports) ? dd.reports : [];
+    var dim0 = function(row) { return (row.dimensionValues && row.dimensionValues[0] && row.dimensionValues[0].value) || "(unknown)"; };
+    var mv = function(row, i) { return parseFloat((row.metricValues && row.metricValues[i] && row.metricValues[i].value) || 0); };
+    if (rep2[0] && rep2[0].rows) {
+      channels = rep2[0].rows.map(function(row) {
+        return { channel: dim0(row), sessions: Math.round(mv(row, 0)), users: Math.round(mv(row, 1)), revenue: parseFloat(mv(row, 2).toFixed(2)), transactions: Math.round(mv(row, 3)) };
+      }).filter(function(c) { return c.sessions > 0 || c.revenue > 0; });
+    }
+    if (rep2[1] && rep2[1].rows) {
+      devices = rep2[1].rows.map(function(row) {
+        return { device: dim0(row), users: Math.round(mv(row, 0)), sessions: Math.round(mv(row, 1)), revenue: parseFloat(mv(row, 2).toFixed(2)), transactions: Math.round(mv(row, 3)) };
+      }).filter(function(d2) { return d2.users > 0; });
+    }
+    if (rep2[2] && rep2[2].rows) {
+      countries = rep2[2].rows.map(function(row) {
+        return { country: dim0(row), users: Math.round(mv(row, 0)), revenue: parseFloat(mv(row, 1).toFixed(2)), transactions: Math.round(mv(row, 2)) };
+      }).filter(function(c) { return c.users > 0; });
+    }
+  } catch (_) { /* enrichment is best-effort */ }
+
   var payload = {
     ok: true, enabled: true,
     client: clientName, propertyId: propertyId, from: from, to: to,
+    channels: channels, devices: devices, countries: countries,
     newsletterEvent: newsletterEvent || null,
     site: {
       users: Math.round(totals.activeUsers || 0),

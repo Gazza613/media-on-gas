@@ -4832,7 +4832,7 @@ export default function MediaOnGas(){
             var roas=(computed.totalSpend>0&&ec.revenue>0)?ec.revenue/computed.totalSpend:0;
             var D="—";
             var fNum=function(n){return n>0?fmt(n):D;};
-            var LBL={unique_reach:"UNIQUE REACH",reach:"REACH",frequency:"FREQUENCY",cpm:"COST PER 1,000",impressions:"IMPRESSIONS",clicks:"CLICKS TO WEBSITE",ctr:"CLICK THROUGH RATE",cpc:"COST PER CLICK",newsletter_signups:"NEWSLETTER SIGN-UPS",leads:"LEADS",installs:"INSTALLS",follows:"FOLLOWS & LIKES",revenue:"ECOMMERCE REVENUE",roas:"RETURN ON AD SPEND",transactions:"TRANSACTIONS",aov:"AVERAGE ORDER VALUE",site_users:"SITE USERS",conversion_rate:"CONVERSION RATE"};
+            var LBL={unique_reach:"UNIQUE REACH",reach:"REACH",frequency:"FREQUENCY",cpm:"COST PER 1,000",impressions:"IMPRESSIONS",clicks:"CLICKS TO WEBSITE",ctr:"CLICK THROUGH RATE",cpc:"COST PER CLICK",newsletter_signups:"NEWSLETTER SIGN-UPS",leads:"LEADS",installs:"INSTALLS",follows:"FOLLOWS & LIKES",revenue:"WEBSITE SALES",roas:"RETURN ON AD SPEND",transactions:"TRANSACTIONS",aov:"AVERAGE ORDER VALUE",site_users:"SITE USERS",conversion_rate:"CONVERSION RATE"};
             var V={
               unique_reach:fNum(rch),reach:fNum(rch),
               frequency:blFreq>0?blFreq.toFixed(2)+"x":D,
@@ -4877,22 +4877,11 @@ export default function MediaOnGas(){
               {tier(ter,"Supporting KPIs",13,11)}
             </div>;
           })()}
-          {/* Condensed ecommerce pull-through: only when the client's KPI
-              profile enables it and GA4 returned data. The full detail
-              lives on the Ecommerce tab — this is the headline. */}
-          {ecoOn&&ecoData&&(function(){
-            var e=ecoData.ecommerce||{},ps=ecoData.paidSocial||{};
-            return <div style={{marginBottom:24,padding:"18px 22px",background:"linear-gradient(135deg,"+P.mint+"0E 0%, transparent 70%)",border:"1px solid "+P.mint+"25",borderLeft:"4px solid "+P.mint,borderRadius:"0 14px 14px 0"}}>
-              <div onClick={function(){setTab("ecommerce");}} style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer"}}>{Ic.cart(P.mint,16)}<span style={{fontSize:11,fontWeight:900,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Online store</span><span style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1}}>view full ecommerce →</span></div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-                <Glass accent={P.mint} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>REVENUE</div><div style={{fontSize:17,fontWeight:900,color:P.mint,fontFamily:fm}}>{fR(e.revenue)}</div></Glass>
-                <Glass accent={P.ember} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>TRANSACTIONS</div><div style={{fontSize:17,fontWeight:900,color:P.ember,fontFamily:fm}}>{fmt(e.transactions)}</div></Glass>
-                <Glass accent={P.solar} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>AVERAGE ORDER VALUE</div><div style={{fontSize:17,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(e.aov)}</div></Glass>
-                <Glass accent={P.orchid} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>NEWSLETTER SIGN-UPS</div><div style={{fontSize:17,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(ecoData.newsletterSignups)}</div></Glass>
-              </div>
-              <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.7,marginTop:12}}>Paid social assisted {fR(ps.revenue)} ({pc(ps.revenueSharePct)} of total revenue), a directional view-through signal, not the awareness campaign's optimisation target.</div>
-            </div>;
-          })()}
+          {/* Ecommerce detail intentionally lives only on the Ecommerce
+              tab now. The Summary keeps the profile-driven Headline /
+              Secondary / Supporting KPI tiers above (which already carry
+              Website Sales etc); the duplicate Online Store strip was
+              removed to keep the Summary focused. */}
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view summary.</div>;
@@ -6365,6 +6354,76 @@ export default function MediaOnGas(){
                 </div>
               </div></Reveal>}
 
+              {/* Acquisition + audience: where visits come from, device
+                  split, where sales come from, top markets. All optional,
+                  each renders only if GA4 returned that breakdown. */}
+              {(function(){
+                var ch=(ecoData.channels||[]),dv=(ecoData.devices||[]),co=(ecoData.countries||[]);
+                if(ch.length===0&&dv.length===0&&co.length===0)return null;
+                var DCOL=[P.mint,P.cyan,P.orchid,P.solar,P.ember,P.blaze];
+                var chSess=ch.slice(0,7).map(function(c){return {name:c.channel,sessions:c.sessions,users:c.users};});
+                var chRev=ch.filter(function(c){return c.revenue>0;}).sort(function(a,b){return b.revenue-a.revenue;}).slice(0,7).map(function(c){return {name:c.channel,revenue:c.revenue,_currency:true};});
+                var devPie=dv.map(function(d2){return {name:d2.device,value:d2.users};});
+                var coMax=Math.max.apply(null,co.map(function(c){return c.users;}).concat([1]));
+                return <div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:24}}>
+                    {chSess.length>0&&<Reveal minHeight={260}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                      <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Where Visits Come From</div>
+                      <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:12}}>Sessions by acquisition channel</div>
+                      <ChartReveal><ResponsiveContainer width="100%" height={chSess.length*40+20}>
+                        <BarChart data={chSess} layout="vertical" margin={{top:0,right:54,left:8,bottom:0}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
+                          <XAxis type="number" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                          <YAxis type="category" dataKey="name" width={120} tick={{fontSize:10,fill:P.txt,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                          <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                          <Bar dataKey="sessions" name="Sessions" radius={[0,6,6,0]} fill={P.cyan} barSize={15}><LabelList dataKey="sessions" position="right" formatter={function(v){return fmt(v);}} style={lbl}/></Bar>
+                        </BarChart>
+                      </ResponsiveContainer></ChartReveal>
+                    </div></Reveal>}
+                    {devPie.length>0&&<Reveal minHeight={260} delay={80}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                      <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Device Used</div>
+                      <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:10}}>Visitors by device category</div>
+                      <ChartReveal><ResponsiveContainer width="100%" height={210}>
+                        <PieChart>
+                          <Pie data={devPie} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={82} paddingAngle={2} stroke="none">
+                            {devPie.map(function(s,i){return <Cell key={i} fill={DCOL[i%DCOL.length]}/>;})}
+                          </Pie>
+                          <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
+                          <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:10,fontFamily:fm,paddingTop:10}}/>
+                        </PieChart>
+                      </ResponsiveContainer></ChartReveal>
+                    </div></Reveal>}
+                  </div>
+                  {chRev.length>0&&<Reveal minHeight={200}><div style={{marginBottom:24}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>{Ic.bolt(P.solar,18)}<span style={{fontSize:13,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Where Sales Come From</span></div>
+                    <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:14}}>Revenue by acquisition channel</div>
+                    <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"18px 14px 14px"}}>
+                      <ChartReveal><ResponsiveContainer width="100%" height={chRev.length*44+20}>
+                        <BarChart data={chRev} layout="vertical" margin={{top:0,right:64,left:8,bottom:0}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
+                          <XAxis type="number" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
+                          <YAxis type="category" dataKey="name" width={130} tick={{fontSize:10,fill:P.txt,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                          <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
+                          <Bar dataKey="revenue" radius={[0,6,6,0]} fill={P.solar} barSize={16}><LabelList dataKey="revenue" position="right" formatter={function(v){return "R"+fmt(v);}} style={lbl}/></Bar>
+                        </BarChart>
+                      </ResponsiveContainer></ChartReveal>
+                    </div>
+                  </div></Reveal>}
+                  {co.length>0&&<Reveal minHeight={140}><div style={{marginBottom:24}}>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Top Markets</div>
+                    <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"6px 18px"}}>
+                      {co.slice(0,6).map(function(c,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 0",borderBottom:i<Math.min(6,co.length)-1?"1px solid "+P.rule+"50":"none"}}>
+                        <div style={{width:120,fontSize:12,color:P.txt,fontFamily:fm,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.country}</div>
+                        <div style={{flex:1,height:10,background:P.rule+"40",borderRadius:5,overflow:"hidden"}}><div style={{width:Math.max(4,c.users/coMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.cyan+"AA,"+P.cyan+")",borderRadius:5}}/></div>
+                        <div style={{width:74,textAlign:"right",fontSize:11,color:P.cyan,fontFamily:fm,fontWeight:800}}>{fmt(c.users)}</div>
+                        <div style={{width:96,textAlign:"right",fontSize:11,color:P.mint,fontFamily:fm,fontWeight:800}}>{c.revenue>0?fR(c.revenue):"—"}</div>
+                      </div>;})}
+                      <div style={{display:"flex",gap:14,padding:"8px 0 10px",fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1}}><div style={{width:120}}>MARKET</div><div style={{flex:1}}/><div style={{width:74,textAlign:"right"}}>USERS</div><div style={{width:96,textAlign:"right"}}>REVENUE</div></div>
+                    </div>
+                  </div></Reveal>}
+                </div>;
+              })()}
+
               {/* Paid social contribution, framed as assisted, with the
                   GA4 attribution caveat as a footnote. */}
               <Reveal minHeight={120}><div style={{marginBottom:22,padding:"20px 24px",background:"linear-gradient(135deg,"+P.ember+"12 0%, transparent 70%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0"}}>
@@ -7137,8 +7196,14 @@ export default function MediaOnGas(){
             <Insight title="Engagement Key Metrics" accent={P.mint} icon={Ic.pulse(P.mint,16)}>{(function(){var parts=[];var blendedCpc=computed.totalClicks>0?computed.totalSpend/computed.totalClicks:0;var clickToImpRate=computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):0;parts.push("The campaign generated "+fmt(computed.totalClicks)+" total click actions across all platforms, converting "+clickToImpRate.toFixed(2)+"% of "+fmt(computed.totalImps)+" impressions into measurable engagement signals. The cross-platform blended Cost Per Click of "+fR(blendedCpc)+" confirms efficient translation of awareness into intent.");if(computed.fb.clicks>0){var fbClickShare=computed.totalClicks>0?((computed.fb.clicks/computed.totalClicks)*100).toFixed(2):"0.00";parts.push("Facebook drives "+fbClickShare+"% of total click volume with "+fmt(computed.fb.clicks)+" clicks at "+fR(computed.fb.cpc)+" Cost Per Click and "+pc(computed.fb.ctr)+" Click Through Rate. "+(computed.fb.ctr>3?"The Click Through Rate exceeding 3% places this campaign in the top 10% of Facebook engagement benchmarks for the paid social market, indicating exceptional creative-audience resonance. The ad creative is not only stopping the scroll but compelling users to take deliberate action.":computed.fb.ctr>1.5?"CTR at "+pc(computed.fb.ctr)+" exceeds the 1.5% performance benchmark, confirming the creative messaging is effectively converting passive impressions into active engagement. The hook and value proposition are landing with the target audience.":"CTR at "+pc(computed.fb.ctr)+" reflects the current creative-audience engagement level for this campaign period."));}if(computed.ig.clicks>0){parts.push("Instagram delivered "+fmt(computed.ig.clicks)+" clicks at "+fR(computed.ig.cpc)+" Cost Per Click with "+pc(computed.ig.ctr)+" Click Through Rate."+(computed.ig.cpc<computed.fb.cpc&&computed.fb.cpc>0?" Instagram\'s "+((1-computed.ig.cpc/computed.fb.cpc)*100).toFixed(2)+"% CPC advantage over Facebook reflects the platform\'s stronger visual engagement environment, where users are predisposed to interact with compelling creative content.":"")+"");}if(computed.gd.clicks>0){parts.push("Google Display generated "+fmt(computed.gd.clicks)+" clicks at "+fR(computed.gd.cpc)+" Cost Per Click with "+pc(computed.gd.ctr)+" Click Through Rate, extending campaign reach across Google's display network and partner sites.");}if(t.clicks>0){parts.push("TikTok contributed "+fmt(t.clicks)+" clicks"+(t.cpc>0?" at "+fR(t.cpc)+" Cost Per Click":"")+(t.ctr>0?" with "+pc(t.ctr)+" Click Through Rate":"")+". Beyond the direct click metrics, TikTok engagement carries multiplicative value: each interaction signals content quality to the recommendation algorithm, which can extend organic distribution to non-targeted users at zero marginal cost.");}if(computed.totalClicks===0){parts.push("No click engagement was recorded for the selected campaigns in this period. The campaigns are configured for awareness and reach objectives, building brand visibility across the target audience.");}return parts.join(" ");})()}</Insight>
           </div>
 
-          {/* OBJECTIVE KEY METRICS */}
-          <div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+          {/* OBJECTIVE KEY METRICS. Hidden for a client that has a KPI
+              profile: their objectives are defined by the profile tiers
+              at the top of Summary (e.g. Reach / Newsletter / Website
+              Sales). This campaign-derived block classifies awareness
+              spend as "Landing Page Clicks" and would contradict that.
+              Non-profiled clients (MoMo, MoMo POS, Willowbrook, ...) have
+              ecoProfile=null so they keep this block unchanged. */}
+          {!ecoProfile&&(<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
             <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>OBJECTIVE KEY METRICS</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>BOTTOM OF FUNNEL, CAMPAIGN KPIs</div></div>
 
             {(function(){
@@ -7348,7 +7413,7 @@ export default function MediaOnGas(){
                 <Insight title="Objective Performance Assessment" accent={P.rose} icon={Ic.target(P.rose,16)}>{(function(){var p=[];var pacingNote="";if(pctElapsed>0){var spendPct=allSpend>0?(allSpend/projectedSpend*100):0;if(spendPct>pctElapsed*1.15){pacingNote=" Budget pacing is running "+(spendPct-pctElapsed).toFixed(2)+"% ahead of schedule at "+pctElapsed.toFixed(2)+"% through the period, indicating potential early budget depletion if not moderated.";}else if(spendPct<pctElapsed*0.85){pacingNote=" Budget pacing is running "+(pctElapsed-spendPct).toFixed(2)+"% behind schedule, suggesting underdelivery that may require bid or audience adjustments to fully utilise the remaining budget.";}else{pacingNote=" Budget pacing is on track at "+pctElapsed.toFixed(2)+"% through the period with proportionate spend.";}}var freqNote="";if(freqStatus==="critical"){freqNote=" Meta frequency at "+m.frequency.toFixed(2)+"x has breached the 4x fatigue ceiling. Audience saturation is actively eroding engagement quality and inflating costs. Creative rotation and audience expansion are urgently needed.";}else if(freqStatus==="warning"){freqNote=" Meta frequency at "+m.frequency.toFixed(2)+"x is approaching the fatigue threshold. Proactive creative rotation within the next 48-72 hours will prevent CTR decay and CPC inflation.";}else if(freqStatus==="healthy"){freqNote=" Meta frequency at "+m.frequency.toFixed(2)+"x is within the optimal 2-3x recall window, balancing brand retention with efficient delivery.";}p.push("The campaign's objective performance layer spans "+sel.length+" active placements with "+fR(allSpend)+" total investment, generating "+fmt(allClicks)+" measurable actions."+pacingNote+freqNote);if(tApp>0){var appEff=sApp>0?(tApp/sApp*1000).toFixed(0):"0";p.push("App install campaigns delivered "+fmt(tApp)+" clicks to the app store at "+fR(sApp/tApp)+" Cost Per Click, translating to approximately "+appEff+" app store clicks per R1,000 invested. Each click represents a user driven from ad exposure to the app store listing, the final measurable touchpoint before app download. The cost efficiency at "+fR(sApp/tApp)+" per app store click confirms strong acquisition economics for the campaign period.");}if(tLp>0){p.push("Landing page campaigns generated "+fmt(tLp)+" qualified site visits at "+fR(sLp/tLp)+" cost per visit. These are high-intent users who have actively chosen to learn more, representing the warmest segment of the campaign\'s audience for remarketing and conversion optimisation.");}if(tLeads>0){var lClicks=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.clicks;},0);var convR=lClicks>0?(tLeads/lClicks*100).toFixed(2):"0.00";p.push("Lead generation campaigns produced "+fmt(tLeads)+" qualified leads at "+fR(sLeads/tLeads)+" cost per lead, converting "+convR+"% of "+fmt(lClicks)+" clicks into form submissions. "+(parseFloat(convR)>8?"The conversion rate exceeding 8% indicates exceptional funnel alignment, the ad creative, targeting, and landing page experience are working in concert to drive high-quality lead capture.":parseFloat(convR)>3?"The "+convR+"% conversion rate sits within healthy parameters, confirming the landing page experience is effectively converting paid traffic into actionable leads. ":"The "+convR+"% conversion rate demonstrates active lead capture from the campaign traffic.")+" Each lead represents a qualified prospect who has actively expressed interest and shared contact information, the most valuable first-party data signal in the acquisition funnel.");}if(tFollows>0){p.push("Community growth campaigns acquired "+fmt(tFollows)+" new followers and likes at "+fR(sFollows/tFollows)+" cost per acquisition. Unlike paid impressions which are transient, each community member represents a permanent organic distribution channel. Each new community member increases future organic content distribution, compounding in value over time as the brand's owned audience grows.");}return p.join(" ");})()}</Insight>
               </div>;
             })()}
-          </div>
+          </div>)}
 
 
 
