@@ -1729,6 +1729,48 @@ function CampaignAuditModal(props){
       .then(function(d){teamLoading[1](false);if(Array.isArray(d.users))teamUsers[1](d.users);else teamErr[1](d.error||"Could not load users");})
       .catch(function(){teamLoading[1](false);teamErr[1]("Connection error");});
   };
+  // ---- Per-client KPI profiles (superadmin) ----------------------------
+  var kpiProfiles=useState({});      // { slug: profile }
+  var kpiLoading=useState(false);
+  var kpiErr=useState("");
+  var kpiBusy=useState(false);
+  var kpiMsg=useState("");
+  var kpiClient=useState("");        // raw client name being edited
+  var kpiForm=useState(null);        // working profile object
+  var loadKpiProfiles=function(){
+    kpiLoading[1](true);kpiErr[1]("");
+    fetch(props.apiBase+"/api/client-kpi-profiles",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){kpiLoading[1](false);if(d&&d.profiles)kpiProfiles[1](d.profiles);else kpiErr[1](d.error||"Could not load profiles");})
+      .catch(function(){kpiLoading[1](false);kpiErr[1]("Connection error");});
+  };
+  var blankKpiForm=function(){return{primaryKpis:[],secondaryKpis:[],tertiaryKpis:[],benchmarkBand:"default",ecommerce:{enabled:false,source:"ga4",ga4PropertyId:"",newsletterEvent:""}};};
+  var editKpi=function(slug){
+    var p=kpiProfiles[0][slug];
+    kpiClient[1](slug);
+    kpiForm[1](p?JSON.parse(JSON.stringify(p)):blankKpiForm());
+    kpiMsg[1]("");kpiErr[1]("");
+  };
+  var saveKpiProfile=function(){
+    if(kpiBusy[0])return;
+    var client=kpiClient[0].trim();
+    if(!client){kpiErr[1]("Enter a client name first.");return;}
+    kpiBusy[1](true);kpiErr[1]("");kpiMsg[1]("");
+    fetch(props.apiBase+"/api/client-kpi-profiles",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({client:client,profile:kpiForm[0]})})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(x){kpiBusy[1](false);if(x.status>=400){kpiErr[1]((x.data&&x.data.error)||"Save failed");return;}kpiMsg[1]("Saved.");setTimeout(function(){kpiMsg[1]("");},1800);loadKpiProfiles();})
+      .catch(function(){kpiBusy[1](false);kpiErr[1]("Connection error");});
+  };
+  var deleteKpiProfile=function(slug){
+    if(!window.confirm("Delete the KPI profile for '"+slug+"'? This client reverts to the default objective layout."))return;
+    kpiBusy[1](true);kpiErr[1]("");
+    fetch(props.apiBase+"/api/client-kpi-profiles",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({client:slug,profile:null})})
+      .then(function(r){return r.json();})
+      .then(function(){kpiBusy[1](false);kpiMsg[1]("Deleted.");setTimeout(function(){kpiMsg[1]("");},1500);if(kpiClient[0]===slug){kpiClient[1]("");kpiForm[1](null);}loadKpiProfiles();})
+      .catch(function(){kpiBusy[1](false);kpiErr[1]("Connection error");});
+  };
+  useEffect(function(){if(props.open&&view[0]==="kpi"&&props.isSuperadmin)loadKpiProfiles();},[props.open,view[0],props.isSuperadmin]);
+
   var sendInvite=function(){
     if(teamBusy[0])return;
     teamBusy[1](true);inviteNote[1]("");teamErr[1]("");
@@ -1910,6 +1952,7 @@ function CampaignAuditModal(props){
           <button onClick={function(){view[1]("reconcile");}} style={{background:view[0]==="reconcile"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="reconcile"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="reconcile"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>Ground Truth Audit{recSummary[0]&&recSummary[0].red>0?<span style={{background:P.critical,color:"#fff",fontSize:9,padding:"1px 6px",borderRadius:4}}>{recSummary[0].red}</span>:null}</button>
           <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage Audit</button>
           {props.isSuperadmin&&<button onClick={function(){view[1]("users");}} style={{background:view[0]==="users"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="users"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="users"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Team Access</button>}
+          {props.isSuperadmin&&<button onClick={function(){view[1]("kpi");}} style={{background:view[0]==="kpi"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="kpi"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="kpi"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>KPI Profiles</button>}
         </div>
         <div style={{display:"flex",gap:8}}>
           {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
@@ -2274,6 +2317,111 @@ function CampaignAuditModal(props){
             </div>
             <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
           </div>
+        </div>;
+      })()}
+
+      {view[0]==="kpi"&&props.isSuperadmin&&(function(){
+        var KPI_CATALOG=[
+          {k:"unique_reach",n:"Unique reach"},{k:"reach",n:"Reach"},{k:"frequency",n:"Frequency"},
+          {k:"cpm",n:"CPM"},{k:"impressions",n:"Impressions"},{k:"clicks",n:"Clicks"},
+          {k:"ctr",n:"CTR"},{k:"cpc",n:"CPC"},{k:"newsletter_signups",n:"Newsletter sign-ups"},
+          {k:"leads",n:"Leads"},{k:"installs",n:"Installs"},{k:"follows",n:"Follows & likes"},
+          {k:"revenue",n:"Revenue"},{k:"roas",n:"ROAS"},{k:"transactions",n:"Transactions"},
+          {k:"aov",n:"Avg order value"},{k:"top_products",n:"Top products"},
+          {k:"site_users",n:"Site users"},{k:"conversion_rate",n:"Conversion rate"}
+        ];
+        var form=kpiForm[0];
+        var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
+        var cell={padding:"9px 10px",fontSize:11,color:P.txt,fontFamily:fm,borderBottom:"1px solid "+P.rule};
+        var inp={width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none"};
+        var toggleKpi=function(group,k){
+          var arr=(form[group]||[]).slice();
+          var i=arr.indexOf(k);
+          if(i>=0)arr.splice(i,1);else arr.push(k);
+          var nf=Object.assign({},form);nf[group]=arr;kpiForm[1](nf);
+        };
+        var chipRow=function(group,label){
+          return <div style={{marginBottom:12}}>
+            <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>{label}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {KPI_CATALOG.map(function(o){
+                var on=(form[group]||[]).indexOf(o.k)>=0;
+                return <span key={o.k} onClick={function(){toggleKpi(group,o.k);}} style={{cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:fm,padding:"5px 10px",borderRadius:6,letterSpacing:0.5,border:"1px solid "+(on?P.ember:P.rule),background:on?P.ember+"22":"transparent",color:on?P.ember:P.label}}>{o.n}</span>;
+              })}
+            </div>
+          </div>;
+        };
+        var slugs=Object.keys(kpiProfiles[0]||{});
+        return <div>
+          <div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.6,marginBottom:14}}>
+            A profile redefines which KPIs the dashboard leads with for <strong style={{color:P.txt}}>one client only</strong> and can switch on the GA4 Ecommerce tab. Clients with no profile keep the default objective layout. Client name is matched loosely, "Psycho Bunny", "PsychoBunny", "Psycho Bunny May 2026" all resolve to the same profile.
+          </div>
+          {kpiErr[0]&&<div style={{color:P.critical,fontSize:12,fontFamily:fm,marginBottom:10}}>{kpiErr[0]}</div>}
+          {kpiMsg[0]&&<div style={{color:P.mint,fontSize:12,fontFamily:fm,marginBottom:10,fontWeight:700}}>{kpiMsg[0]}</div>}
+
+          {slugs.length>0&&<div style={{marginBottom:18,border:"1px solid "+P.rule,borderRadius:10,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr><th style={hdr}>Client slug</th><th style={hdr}>Benchmark</th><th style={hdr}>Ecommerce</th><th style={Object.assign({},hdr,{textAlign:"right"})}>Action</th></tr></thead>
+              <tbody>
+                {slugs.map(function(s){
+                  var p=kpiProfiles[0][s];
+                  return <tr key={s}>
+                    <td style={cell}><strong style={{color:P.ember}}>{s}</strong></td>
+                    <td style={Object.assign({},cell,{color:P.label})}>{(p.benchmarkBand||"default")}</td>
+                    <td style={Object.assign({},cell,{color:p.ecommerce&&p.ecommerce.enabled?P.mint:P.caption})}>{p.ecommerce&&p.ecommerce.enabled?("GA4 "+(p.ecommerce.ga4PropertyId||"")):"off"}</td>
+                    <td style={Object.assign({},cell,{textAlign:"right"})}>
+                      <button onClick={function(){editKpi(s);}} style={{background:P.ember+"20",border:"1px solid "+P.ember+"55",borderRadius:7,padding:"5px 11px",color:P.ember,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,marginRight:6}}>EDIT</button>
+                      <button onClick={function(){deleteKpiProfile(s);}} style={{background:"transparent",border:"1px solid "+P.critical+"40",borderRadius:7,padding:"5px 10px",color:P.critical,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>DEL</button>
+                    </td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>}
+
+          {!form&&<button onClick={function(){editKpi("");}} style={{background:gEmber,border:"none",borderRadius:10,padding:"10px 20px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>+ NEW PROFILE</button>}
+
+          {form&&<div style={{border:"1px solid "+P.ember+"40",borderRadius:12,padding:18,background:"rgba(249,98,3,0.04)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <span style={{fontSize:11,fontWeight:800,color:P.ember,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm}}>{kpiClient[0]?("Editing "+kpiClient[0]):"New profile"}</span>
+              <button onClick={function(){kpiForm[1](null);kpiClient[1]("");}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:7,padding:"4px 10px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>CLOSE</button>
+            </div>
+            <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Client name</div>
+            <input value={kpiClient[0]} onChange={function(e){kpiClient[1](e.target.value);}} placeholder="Psycho Bunny" style={Object.assign({},inp,{marginBottom:14})}/>
+            {chipRow("primaryKpis","Primary KPIs")}
+            {chipRow("secondaryKpis","Secondary KPIs")}
+            {chipRow("tertiaryKpis","Tertiary KPIs")}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:6,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Benchmark band</div>
+                <select value={form.benchmarkBand} onChange={function(e){var nf=Object.assign({},form);nf.benchmarkBand=e.target.value;kpiForm[1](nf);}} style={Object.assign({},inp)}>
+                  <option value="default" style={{background:P.cosmos}}>Default</option>
+                  <option value="awareness" style={{background:P.cosmos}}>Awareness (don't grade on CTR)</option>
+                  <option value="direct_response" style={{background:P.cosmos}}>Direct response</option>
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Ecommerce (GA4)</div>
+                <div onClick={function(){var nf=Object.assign({},form);nf.ecommerce=Object.assign({},form.ecommerce,{enabled:!form.ecommerce.enabled});kpiForm[1](nf);}} style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer",padding:"9px 12px",border:"1px solid "+P.rule,borderRadius:8}}>
+                  <span style={{width:34,height:18,borderRadius:9,background:form.ecommerce.enabled?P.mint:P.dim,position:"relative",flexShrink:0}}><span style={{position:"absolute",top:2,left:form.ecommerce.enabled?18:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/></span>
+                  <span style={{fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700}}>{form.ecommerce.enabled?"Enabled":"Off"}</span>
+                </div>
+              </div>
+            </div>
+            {form.ecommerce.enabled&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>GA4 property ID</div>
+                <input value={form.ecommerce.ga4PropertyId} onChange={function(e){var nf=Object.assign({},form);nf.ecommerce=Object.assign({},form.ecommerce,{ga4PropertyId:e.target.value});kpiForm[1](nf);}} placeholder="481822031" style={inp}/>
+              </div>
+              <div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Newsletter event name</div>
+                <input value={form.ecommerce.newsletterEvent} onChange={function(e){var nf=Object.assign({},form);nf.ecommerce=Object.assign({},form.ecommerce,{newsletterEvent:e.target.value});kpiForm[1](nf);}} placeholder="newsletter_signup" style={inp}/>
+              </div>
+            </div>}
+            <button onClick={saveKpiProfile} disabled={kpiBusy[0]} style={{background:kpiBusy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"11px 24px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:kpiBusy[0]?"wait":"pointer",letterSpacing:1.5}}>{kpiBusy[0]?"SAVING...":"SAVE PROFILE"}</button>
+          </div>}
+
+          {kpiLoading[0]&&<div style={{fontSize:12,color:P.label,fontFamily:fm,marginTop:12}}>Loading profiles...</div>}
         </div>;
       })()}
     </div>
