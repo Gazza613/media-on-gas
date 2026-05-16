@@ -5397,7 +5397,7 @@ export default function MediaOnGas(){
                 var cl=function(arr){return (Array.isArray(arr)?arr:[]).filter(function(k){return k!=="top_products"&&LBL[k];});};
                 var seen={},ordered=[];
                 [].concat(cl(ecoProfile.primaryKpis),cl(ecoProfile.secondaryKpis),cl(ecoProfile.tertiaryKpis)).forEach(function(k){if(!seen[k]){seen[k]=1;ordered.push(k);}});
-                ordered=ordered.slice(0,12);
+                ordered=ordered.slice(0,8); // 8 max = a clean 2 rows of 4
                 if(ordered.length===0)return null;
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.rose,"OBJECTIVE HIGHLIGHTS",Ic.target(P.rose,18))}
