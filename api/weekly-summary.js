@@ -108,10 +108,10 @@ function buildHtml(opts) {
     ? '<tr><td colspan="4" style="padding:14px;color:#8B7FA3;text-align:center;font-size:12px;">No reports sent this week.</td></tr>'
     : reportRows.map(function(r) {
         return '<tr>' +
-          '<td style="padding:10px 12px;color:#F96203;font-weight:700;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);">' + escapeHtml(r.clientName) + '</td>' +
-          '<td style="padding:10px 12px;color:#FFFBF8;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);">' + escapeHtml(r.sentBy) + '</td>' +
-          '<td style="padding:10px 12px;color:#8B7FA3;font-size:11px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + escapeHtml(r.sentDate) + '</td>' +
-          '<td style="padding:10px 12px;color:#8B7FA3;font-size:11px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;">' + escapeHtml(r.period) + '</td>' +
+          '<td style="padding:10px 12px;color:#F96203;font-weight:700;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);vertical-align:top;">' + escapeHtml(r.clientName) + '</td>' +
+          '<td style="padding:10px 12px;color:#FFFBF8;font-size:12px;border-bottom:1px solid rgba(168,85,247,0.12);vertical-align:top;">' + escapeHtml(r.sentBy) + '</td>' +
+          '<td style="padding:10px 12px;color:#8B7FA3;font-size:11px;border-bottom:1px solid rgba(168,85,247,0.12);vertical-align:top;word-break:break-all;">' + escapeHtml(r.recipients) + '</td>' +
+          '<td style="padding:10px 12px;color:#8B7FA3;font-size:11px;border-bottom:1px solid rgba(168,85,247,0.12);text-align:center;vertical-align:top;white-space:nowrap;">' + escapeHtml(r.sentWhen) + '</td>' +
           '</tr>';
       }).join("");
 
@@ -188,8 +188,8 @@ function buildHtml(opts) {
     '<tr>' +
     '<th style="' + thStyle.replace(/#F96203/g, "#22D3EE").replace(/249,98,3/g, "34,211,238") + '">Client</th>' +
     '<th style="' + thStyle.replace(/#F96203/g, "#22D3EE").replace(/249,98,3/g, "34,211,238") + '">Sent by</th>' +
-    '<th style="' + thStyle.replace(/#F96203/g, "#22D3EE").replace(/249,98,3/g, "34,211,238") + 'text-align:center;">Date</th>' +
-    '<th style="' + thStyle.replace(/#F96203/g, "#22D3EE").replace(/249,98,3/g, "34,211,238") + 'text-align:center;">Period</th>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#22D3EE").replace(/249,98,3/g, "34,211,238") + '">Recipients</th>' +
+    '<th style="' + thStyle.replace(/#F96203/g, "#22D3EE").replace(/249,98,3/g, "34,211,238") + 'text-align:center;">Sent (SAST)</th>' +
     '</tr>' +
     reportTableRows +
     '</table></div></td></tr>' +
@@ -348,27 +348,45 @@ export default async function handler(req, res) {
     users.forEach(function(u) { if (u && u.email) teamEmailSet[normalizeEmail(u.email)] = true; });
   } catch (_) {}
 
+  // An address is internal if it's a @gasmarketing.co.za address OR
+  // appears in the team user list. A send is excluded from the
+  // "reports sent" log only when EVERY recipient is internal (a test
+  // / round-trip send). Real client sends, even ones that CC a team
+  // member, stay in the list, and we show only the external (client)
+  // recipients in the Recipients column.
+  var isInternalAddr = function(addr) {
+    return isTeamEmail(addr) || !!teamEmailSet[normalizeEmail(addr)];
+  };
   var reportRows = emailLog.filter(function(e) {
     if (!e.sentAt || e.sentAt < weekAgoIso) return false;
-    // Skip internal test sends
     var to = Array.isArray(e.to) ? e.to : [];
     if (to.length === 0) return false;
-    var allInternal = true;
+    var hasExternal = false;
     for (var i = 0; i < to.length; i++) {
-      if (!teamEmailSet[normalizeEmail(to[i])]) { allInternal = false; break; }
+      if (!isInternalAddr(to[i])) { hasExternal = true; break; }
     }
-    return !allInternal;
+    return hasExternal; // drop sends where every recipient is internal
   }).map(function(e) {
+    var to = Array.isArray(e.to) ? e.to : [];
+    var clientRecipients = to.filter(function(a) { return !isInternalAddr(a); });
     return {
       clientName: e.clientName || e.clientSlug || "Unknown",
       sentBy: e.senderName || e.senderEmail || "Unknown",
-      sentDate: (function() {
-        try { return new Date(e.sentAt).toLocaleDateString("en-ZA", { month: "short", day: "numeric" }); }
-        catch (_) { return e.sentAt ? e.sentAt.substring(0, 10) : "-"; }
+      recipients: clientRecipients.join(", ") || "(none)",
+      sentTs: Date.parse(e.sentAt || "") || 0,
+      sentWhen: (function() {
+        // SAST date + time, e.g. "Mon 12 May, 14:32"
+        try {
+          var d = new Date(e.sentAt);
+          var sast = new Date(d.getTime() + 2 * 60 * 60 * 1000);
+          var datePart = sast.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+          var timePart = sast.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+          return datePart + ", " + timePart;
+        } catch (_) { return e.sentAt ? e.sentAt.substring(0, 16).replace("T", " ") : "-"; }
       })(),
       period: (e.fromDate || "?") + " to " + (e.toDate || "?")
     };
-  }).sort(function(a, b) { return (b.sentDate || "").localeCompare(a.sentDate || ""); });
+  }).sort(function(a, b) { return b.sentTs - a.sentTs; });
 
   // 3. Overdue SLA alerts (same logic as nudge-cron)
   var slaMs = SLA_DAYS * 24 * 60 * 60 * 1000;
