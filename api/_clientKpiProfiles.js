@@ -61,9 +61,9 @@ var _cacheTime = 0;
 var TTL_MS = 30 * 1000;
 
 // Returns { slug -> profileObject }. 30s instance cache.
-export async function getAllKpiProfiles() {
+export async function getAllKpiProfiles(force) {
   var now = Date.now();
-  if (_cache && (now - _cacheTime) < TTL_MS) return _cache;
+  if (!force && _cache && (now - _cacheTime) < TTL_MS) return _cache;
   var map = {};
   try {
     var r = await redisCmd(["HGETALL", REDIS_KEY]);
@@ -88,10 +88,10 @@ export async function getAllKpiProfiles() {
 //   2. one canonical slug contains the other (length-guarded >= 5 so
 //      short tokens can't false-match across clients)
 // Returns the profile or null (client has no profile = default).
-export async function getKpiProfile(rawClient) {
+export async function getKpiProfile(rawClient, force) {
   var slug = canonicalClientSlug(rawClient);
   if (!slug) return null;
-  var all = await getAllKpiProfiles();
+  var all = await getAllKpiProfiles(force);
   if (all[slug]) return all[slug];
   // Prefix match only (not substring-anywhere). This still bridges an
   // ad-account-derived slug to the superadmin profile name when one is

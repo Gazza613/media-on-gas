@@ -1811,7 +1811,7 @@ function CampaignAuditModal(props){
     kpiBusy[1](true);kpiErr[1]("");kpiMsg[1]("");
     fetch(props.apiBase+"/api/client-kpi-profiles",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({client:client,profile:kpiForm[0]})})
       .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
-      .then(function(x){kpiBusy[1](false);if(x.status>=400){kpiErr[1]((x.data&&x.data.error)||"Save failed");return;}kpiMsg[1]("Saved.");setTimeout(function(){kpiMsg[1]("");},1800);loadKpiProfiles();})
+      .then(function(x){kpiBusy[1](false);if(x.status>=400){kpiErr[1]((x.data&&x.data.error)||"Save failed");return;}kpiMsg[1]("Saved.");setTimeout(function(){kpiMsg[1]("");},1800);loadKpiProfiles();if(props.onKpiSaved)props.onKpiSaved();})
       .catch(function(){kpiBusy[1](false);kpiErr[1]("Connection error");});
   };
   var deleteKpiProfile=function(slug){
@@ -1819,7 +1819,7 @@ function CampaignAuditModal(props){
     kpiBusy[1](true);kpiErr[1]("");
     fetch(props.apiBase+"/api/client-kpi-profiles",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({client:slug,profile:null})})
       .then(function(r){return r.json();})
-      .then(function(){kpiBusy[1](false);kpiMsg[1]("Deleted.");setTimeout(function(){kpiMsg[1]("");},1500);if(kpiClient[0]===slug){kpiClient[1]("");kpiForm[1](null);}loadKpiProfiles();})
+      .then(function(){kpiBusy[1](false);kpiMsg[1]("Deleted.");setTimeout(function(){kpiMsg[1]("");},1500);if(kpiClient[0]===slug){kpiClient[1]("");kpiForm[1](null);}loadKpiProfiles();if(props.onKpiSaved)props.onKpiSaved();})
       .catch(function(){kpiBusy[1](false);kpiErr[1]("Connection error");});
   };
   useEffect(function(){if(props.open&&view[0]==="kpi"&&props.isSuperadmin)loadKpiProfiles();},[props.open,view[0],props.isSuperadmin]);
@@ -2393,14 +2393,25 @@ function CampaignAuditModal(props){
           if(i>=0)arr.splice(i,1);else arr.push(k);
           var nf=Object.assign({},form);nf[group]=arr;kpiForm[1](nf);
         };
+        var nameOfKpi=function(k){for(var i=0;i<KPI_CATALOG.length;i++){if(KPI_CATALOG[i].k===k)return KPI_CATALOG[i].n;}return k;};
         var chipRow=function(group,label){
-          return <div style={{marginBottom:12}}>
-            <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>{label}</div>
+          // Selected chips render FIRST, in the exact order they were
+          // clicked, each numbered, so the order shown on the dashboard
+          // is the order picked here. Click a numbered chip to remove it
+          // (the rest renumber); to reorder, remove and re-add in the
+          // sequence you want. Unselected chips sit below to add.
+          var sel=(form[group]||[]).filter(function(k){return KPI_CATALOG.some(function(o){return o.k===k;});});
+          var unsel=KPI_CATALOG.filter(function(o){return sel.indexOf(o.k)<0;});
+          return <div style={{marginBottom:14}}>
+            <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>{label} <span style={{color:P.caption,fontWeight:600,textTransform:"none",letterSpacing:0}}>· click in the order you want them shown on the dashboard</span></div>
+            {sel.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {sel.map(function(k,i){return <span key={k} onClick={function(){toggleKpi(group,k);}} title="Click to remove" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,fontSize:10,fontWeight:800,fontFamily:fm,padding:"5px 8px 5px 6px",borderRadius:6,letterSpacing:0.5,border:"1px solid "+P.ember,background:P.ember+"22",color:P.ember}}>
+                <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:15,height:15,borderRadius:"50%",background:P.ember,color:"#fff",fontSize:9,fontWeight:900}}>{i+1}</span>
+                {nameOfKpi(k)}<span style={{opacity:0.6,fontWeight:900}}>×</span>
+              </span>;})}
+            </div>}
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {KPI_CATALOG.map(function(o){
-                var on=(form[group]||[]).indexOf(o.k)>=0;
-                return <span key={o.k} onClick={function(){toggleKpi(group,o.k);}} style={{cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:fm,padding:"5px 10px",borderRadius:6,letterSpacing:0.5,border:"1px solid "+(on?P.ember:P.rule),background:on?P.ember+"22":"transparent",color:on?P.ember:P.label}}>{o.n}</span>;
-              })}
+              {unsel.map(function(o){return <span key={o.k} onClick={function(){toggleKpi(group,o.k);}} title="Click to add" style={{cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:fm,padding:"5px 10px",borderRadius:6,letterSpacing:0.5,border:"1px solid "+P.rule,background:"transparent",color:P.label}}>{o.n}</span>;})}
             </div>
           </div>;
         };
@@ -3177,6 +3188,10 @@ export default function MediaOnGas(){
   // server-side via /api/client-kpi-profiles?resolve=, so a client view
   // can't surface another client's ecommerce.
   var ecoP=useState(null),ecoProfile=ecoP[0],setEcoProfile=ecoP[1];
+  // Bumped whenever a KPI profile is saved in Settings, so the resolve
+  // fetch re-runs (with a cache bypass) and the new KPIs appear on the
+  // Summary in the same session without a reload.
+  var kr=useState(0),kpiRev=kr[0],setKpiRev=kr[1];
   var ecoD=useState(null),ecoData=ecoD[0],setEcoData=ecoD[1];
   var ecoL=useState(false),ecoLoading=ecoL[0],setEcoLoading=ecoL[1];
   var ecoE=useState(""),ecoErr=ecoE[0],setEcoErr=ecoE[1];
@@ -3724,11 +3739,11 @@ export default function MediaOnGas(){
     if(!isAuthed())return;
     if(!isClient&&!ecoClientName){setEcoProfile(null);return;}
     var name=isClient?(ecoClientName||"self"):ecoClientName;
-    fetch(API+"/api/client-kpi-profiles?resolve="+encodeURIComponent(name||"self"),{headers:authHeaders()})
+    fetch(API+"/api/client-kpi-profiles?resolve="+encodeURIComponent(name||"self")+(kpiRev>0?"&fresh=1":""),{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){setEcoProfile((d&&d.profile)||null);})
       .catch(function(){setEcoProfile(null);});
-  },[ecoClientName,isClient,session,viewToken]);
+  },[ecoClientName,isClient,session,viewToken,kpiRev]);
 
   var ecoOn=!!(ecoProfile&&ecoProfile.ecommerce&&ecoProfile.ecommerce.enabled);
 
@@ -3745,7 +3760,7 @@ export default function MediaOnGas(){
       .then(function(r){return r.json();})
       .then(function(d){setEcoLoading(false);if(d&&d.ok){setEcoData(d);}else{setEcoData(null);setEcoErr((d&&(d.reason||d.message||d.error))||"Ecommerce data unavailable");}})
       .catch(function(){setEcoLoading(false);setEcoData(null);setEcoErr("Ecommerce request failed");});
-  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName]);
+  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,kpiRev]);
 
   var benchmarks={
     meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
@@ -4869,7 +4884,7 @@ export default function MediaOnGas(){
         <div style={{marginTop:16,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
       </div>
     </div>}
-    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
+    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin} onKpiSaved={function(){setKpiRev(function(x){return x+1;});}}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} session={viewToken?"":session} viewToken={viewToken} dateFrom={df} dateTo={dt}/>
     {/* Chat FAB + panel scoped to the Summary tab. The chat is grounded in
         Summary's snapshot, so showing the FAB on Deep Dive / Creative /

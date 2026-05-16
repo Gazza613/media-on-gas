@@ -48,7 +48,11 @@ export default async function handler(req, res) {
     var principalR = req.authPrincipal || { role: "admin" };
     var resolveName = String(req.query.resolve || "").trim();
     var target = principalR.role === "client" ? String(principalR.clientSlug || "") : resolveName;
-    var prof = target ? await getKpiProfile(target) : null;
+    // ?fresh=1 bypasses the 30s instance cache so a profile just saved
+    // in Settings is reflected immediately on the dashboard (the editor
+    // appends ?fresh=1 right after a save).
+    var fresh = String(req.query.fresh || "") === "1";
+    var prof = target ? await getKpiProfile(target, fresh) : null;
     res.status(200).json({ profile: prof || null });
     return;
   }
