@@ -135,6 +135,22 @@ export function resultMetricFor(c) {
   return { kind: "Clicks", value: parseInt(c.clicks || 0), costLabel: "CPC" };
 }
 
+// An awareness / reach campaign is optimised by Meta for cheapest
+// unique reach, so it is DELIBERATELY served to people unlikely to
+// click. Judging it on CTR against direct-response thresholds is
+// apples-to-oranges and produces false "CTR collapse" alarms. This
+// detects awareness from the objective field or the name tag. A
+// client KPI profile with benchmarkBand === "awareness" also forces
+// this (handled at the call site).
+export function isAwarenessObjective(c) {
+  var obj = String(c && c.objective || "").toLowerCase();
+  var name = String(c && c.campaignName || "").toLowerCase();
+  if (obj.indexOf("awareness") >= 0 || obj.indexOf("reach") >= 0 || obj.indexOf("brand") >= 0) return true;
+  // Name-tag convention: "_AWR_", " Awareness ", "Reach" segment.
+  if (/(^|[_\s|-])(awr|awareness|reach)([_\s|-]|$)/i.test(name)) return true;
+  return false;
+}
+
 export function clientKeyOf(name) {
   var first = String(name || "").split("_")[0] || "";
   return first || "Unsorted";
@@ -327,9 +343,15 @@ export var ANOMALY_DEFS = {
   }
 };
 
-export function detectAnomalies(yesterday, baseline, rmY) {
+export function detectAnomalies(yesterday, baseline, rmY, opts) {
   if (!baseline) return [];
   var out = [];
+  // Awareness/reach campaigns are not graded on CTR or click volume,
+  // Meta optimises them for cheap reach so low/declining CTR is
+  // expected and not an anomaly. Forced on when the client's KPI
+  // profile sets benchmarkBand "awareness" (passed via opts), else
+  // auto-detected from the objective / name tag.
+  var awareness = (opts && opts.awareness) || isAwarenessObjective(yesterday);
 
   var spendY = parseFloat(yesterday.spend || 0);
   var spendB = parseFloat(baseline.spend || 0);
@@ -428,7 +450,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     });
   }
 
-  if (ctrB >= 0.3 && ctrY > 0 && ctrY < ctrB * 0.6) {
+  if (!awareness && ctrB >= 0.3 && ctrY > 0 && ctrY < ctrB * 0.6) {
     var ctrDrop = ((ctrB - ctrY) / ctrB * 100);
     out.push({
       type: "ctr_collapse",
@@ -436,7 +458,7 @@ export function detectAnomalies(yesterday, baseline, rmY) {
     });
   }
 
-  if (clicksDaily >= 20 && clicksY < clicksDaily * 0.5 && spendY >= spendDaily * 0.7) {
+  if (!awareness && clicksDaily >= 20 && clicksY < clicksDaily * 0.5 && spendY >= spendDaily * 0.7) {
     var clickDrop = ((clicksDaily - clicksY) / clicksDaily * 100);
     out.push({
       type: "click_collapse",

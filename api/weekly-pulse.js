@@ -6,7 +6,7 @@ import {
   ORIGIN, RECIPIENT_LIST, escapeHtml, pad2, ymd, fmtR, fmtNum, fmtShortDate, sastNow,
   redisSetIfAbsent,
   P, DISP_COLORS, COLOR_RANK, worse,
-  resultMetricFor, clientKeyOf, ageDaysFor,
+  resultMetricFor, clientKeyOf, ageDaysFor, isAwarenessObjective,
   adsManagerUrl,
   fetchCampaigns, fetchAdsByCampaign
 } from "./_pulseShared.js";
@@ -70,9 +70,12 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
     else if (freq >= 3) { color = worse(color, "yellow"); flags.push("Frequency " + freq.toFixed(2) + "x, elevated"); }
   }
 
+  // Awareness/reach campaigns are not graded on CTR (Meta optimises
+  // them for cheap reach, so soft CTR is expected, not a problem).
+  var awareness = isAwarenessObjective(thisWeek);
   var ctrY = parseFloat(thisWeek.ctr || 0);
   var ctrB = parseFloat(lastWeek.ctr || 0);
-  if (ctrY > 0 && ctrB > 0) {
+  if (!awareness && ctrY > 0 && ctrB > 0) {
     var cd = (ctrY - ctrB) / ctrB * 100;
     if (cd <= -40) { color = worse(color, "red"); flags.push("CTR " + ctrY.toFixed(2) + "% down " + Math.abs(cd).toFixed(0) + "% vs last week"); }
     else if (cd <= -20) { color = worse(color, "orange"); flags.push("CTR " + ctrY.toFixed(2) + "% down " + Math.abs(cd).toFixed(0) + "% vs last week"); }
