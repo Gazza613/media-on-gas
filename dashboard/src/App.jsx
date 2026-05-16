@@ -6367,7 +6367,18 @@ export default function MediaOnGas(){
             var revSplit=[{name:"Paid social assisted",value:Math.max(0,psRev),_currency:true},{name:"Other channels",value:Math.max(0,rev-psRev),_currency:true}];
             var funnel=[{label:"Site users",v:users,c:P.cyan},{label:"Sessions",v:sess,c:P.orchid},{label:"Transactions",v:tx,c:P.mint}];
             var fMax=Math.max(users,sess,tx,1);
-            var lbl={fontSize:10,fill:P.txt,fontFamily:fm,fontWeight:700};
+            var lbl={fontSize:13,fill:P.txt,fontFamily:fm,fontWeight:800};
+            var axN={fontSize:12,fill:P.caption,fontFamily:fm};
+            // Category-axis tick: never wraps (single <text>), truncates
+            // long names with an ellipsis, and carries an SVG <title> so
+            // the full label shows on hover.
+            var catTick=function(tp){
+              var x=tp.x,y=tp.y,pv=(tp.payload&&tp.payload.value)!=null?String(tp.payload.value):"";
+              var max=20,shown=pv.length>max?pv.slice(0,max-1)+"…":pv;
+              return <g transform={"translate("+x+","+y+")"}>
+                <text x={-8} y={0} dy={4} textAnchor="end" fontFamily={fm} fontSize={13} fontWeight={700} fill={P.txt}>{shown}<title>{pv}</title></text>
+              </g>;
+            };
             return <div>
               {/* Hero: the three commercial headline metrics with context,
                   then a site/audience strip. Metric carries a sub-line so
@@ -6400,7 +6411,7 @@ export default function MediaOnGas(){
                         {revSplit.map(function(s,i){return <Cell key={i} fill={i===0?P.ember:P.mint}/>;})}
                       </Pie>
                       <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
-                      <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:10,fontFamily:fm,paddingTop:10}}/>
+                      <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:13,fontFamily:fm,paddingTop:10}}/>
                     </PieChart>
                   </ResponsiveContainer></ChartReveal>:<div style={{padding:"40px 0",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No revenue recorded in this period.</div>}
                 </div></Reveal>
@@ -6422,8 +6433,8 @@ export default function MediaOnGas(){
                   <ChartReveal><ResponsiveContainer width="100%" height={prods.length*46+20}>
                     <BarChart data={prods.map(function(p){return {name:String(p.name||"(unknown)").length>28?String(p.name).slice(0,28)+"…":String(p.name||"(unknown)"),revenue:parseFloat(p.revenue||0),units:parseInt(p.units||0,10),_currency:true};})} layout="vertical" margin={{top:0,right:64,left:8,bottom:0}}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                      <XAxis type="number" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
-                      <YAxis type="category" dataKey="name" width={160} tick={{fontSize:10,fill:P.txt,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                      <XAxis type="number" tick={axN} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
+                      <YAxis type="category" dataKey="name" width={190} interval={0} tick={catTick} axisLine={false} tickLine={false}/>
                       <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                       <Bar dataKey="revenue" radius={[0,6,6,0]} fill={P.mint} barSize={16}><LabelList dataKey="revenue" position="right" formatter={function(v){return "R"+fmt(v);}} style={lbl}/></Bar>
                     </BarChart>
@@ -6450,8 +6461,8 @@ export default function MediaOnGas(){
                       <ChartReveal><ResponsiveContainer width="100%" height={chSess.length*40+20}>
                         <BarChart data={chSess} layout="vertical" margin={{top:0,right:54,left:8,bottom:0}}>
                           <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                          <XAxis type="number" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
-                          <YAxis type="category" dataKey="name" width={120} tick={{fontSize:10,fill:P.txt,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                          <XAxis type="number" tick={axN} axisLine={false} tickLine={false} tickFormatter={function(v){return fmt(v);}}/>
+                          <YAxis type="category" dataKey="name" width={150} interval={0} tick={catTick} axisLine={false} tickLine={false}/>
                           <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                           <Bar dataKey="sessions" name="Sessions" radius={[0,6,6,0]} fill={P.cyan} barSize={15}><LabelList dataKey="sessions" position="right" formatter={function(v){return fmt(v);}} style={lbl}/></Bar>
                         </BarChart>
@@ -6466,7 +6477,7 @@ export default function MediaOnGas(){
                             {devPie.map(function(s,i){return <Cell key={i} fill={DCOL[i%DCOL.length]}/>;})}
                           </Pie>
                           <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
-                          <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:10,fontFamily:fm,paddingTop:10}}/>
+                          <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:13,fontFamily:fm,paddingTop:10}}/>
                         </PieChart>
                       </ResponsiveContainer></ChartReveal>
                     </div></Reveal>}
@@ -6478,8 +6489,8 @@ export default function MediaOnGas(){
                       <ChartReveal><ResponsiveContainer width="100%" height={chRev.length*44+20}>
                         <BarChart data={chRev} layout="vertical" margin={{top:0,right:64,left:8,bottom:0}}>
                           <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                          <XAxis type="number" tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
-                          <YAxis type="category" dataKey="name" width={130} tick={{fontSize:10,fill:P.txt,fontFamily:fm}} axisLine={false} tickLine={false}/>
+                          <XAxis type="number" tick={axN} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
+                          <YAxis type="category" dataKey="name" width={160} interval={0} tick={catTick} axisLine={false} tickLine={false}/>
                           <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
                           <Bar dataKey="revenue" radius={[0,6,6,0]} fill={P.solar} barSize={16}><LabelList dataKey="revenue" position="right" formatter={function(v){return "R"+fmt(v);}} style={lbl}/></Bar>
                         </BarChart>
@@ -6513,13 +6524,33 @@ export default function MediaOnGas(){
                 <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.7,marginTop:14,borderTop:"1px solid "+P.rule,paddingTop:10}}>{ecoData.note}</div>
               </div></Reveal>
 
-              {/* Admin-only: confirm the real GA4 newsletter event name and
-                  wire it into the KPI profile. Never shown to a client. */}
-              {!isClient&&ecoData.discoveredEvents&&ecoData.discoveredEvents.length>0&&<div style={{marginBottom:8,padding:"16px 20px",background:P.glass,border:"1px dashed "+P.rule,borderRadius:14}}>
-                <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:4,fontWeight:700}}>GA4 EVENTS (TEAM ONLY)</div>
-                <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.6,marginBottom:12}}>Property {ecoData.propertyId}. Newsletter sign-ups are counted from {ecoData.newsletterSource==="pagePath"?("the thank-you page path “"+ecoData.newsletterPagePath+"” (deterministic, recommended)"):ecoData.newsletterSource==="event"?("the GA4 event “"+ecoData.newsletterEvent+"”"):"(not configured yet)"}. The event list below is only a fallback helper for picking an event in Settings, KPI Profiles, the page-path method is preferred.</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{ecoData.discoveredEvents.map(function(ev,i){var on=ecoData.newsletterEvent&&ev.event===ecoData.newsletterEvent;return <span key={i} style={{fontSize:10,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:on?P.mint+"22":P.cosmos,border:"1px solid "+(on?P.mint+"55":P.rule),color:on?P.mint:P.label,fontWeight:on?800:600}}>{ev.event} <span style={{opacity:0.6}}>{fmt(ev.count)}</span></span>;})}</div>
-              </div>}
+              {/* Admin-only newsletter diagnostic. Always shown for the
+                  team (not gated on data) so the configured signal and
+                  exactly what GA4 returned for it are visible, which is
+                  how you debug a 0. Never shown to a client. */}
+              {!isClient&&(function(){
+                var nw=ecoData.newsletterWindow||{};
+                var rows=ecoData.newsletterRows||[];
+                var src=ecoData.newsletterSource;
+                return <div style={{marginBottom:8,padding:"16px 20px",background:P.glass,border:"1px dashed "+P.rule,borderRadius:14}}>
+                  <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:6,fontWeight:800}}>NEWSLETTER SOURCE (TEAM ONLY)</div>
+                  <div style={{fontSize:11,color:P.caption,fontFamily:fm,lineHeight:1.7,marginBottom:10}}>
+                    GA4 property {ecoData.propertyId}. {src==="pagePath"
+                      ? <span>Counting page views where <strong style={{color:P.txt}}>pagePath contains “{ecoData.newsletterMatch}”</strong> (from the profile path “{ecoData.newsletterPagePath}” set in Settings → KPI Profiles).</span>
+                      : src==="event"
+                      ? <span>Counting the GA4 event <strong style={{color:P.txt}}>“{ecoData.newsletterEvent}”</strong> (set in Settings → KPI Profiles).</span>
+                      : <span style={{color:P.warning}}>No newsletter signal configured. Set a thank-you page path in Settings → KPI Profiles.</span>}
+                    {" "}Window {nw.from||"?"} to {nw.to||"?"}. Counted total: <strong style={{color:ecoData.newsletterSignups>0?P.mint:P.warning}}>{fmt(ecoData.newsletterSignups||0)}</strong>.
+                  </div>
+                  {src!=="none"&&(rows.length>0
+                    ? <div><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:6,fontWeight:700}}>GA4 RETURNED THESE {src==="pagePath"?"PAGES":"EVENTS"}</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{rows.map(function(r,i){return <span key={i} style={{fontSize:11,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:P.cosmos,border:"1px solid "+P.rule,color:P.txt}}>{r.label||"(empty)"} <span style={{opacity:0.6}}>{fmt(r.count)}</span></span>;})}</div></div>
+                    : <div style={{fontSize:11,color:P.warning,fontFamily:fm,lineHeight:1.7,padding:"10px 12px",background:P.warning+"12",border:"1px solid "+P.warning+"30",borderRadius:8}}>GA4 returned no {src==="pagePath"?"pages":"events"} matching this in the window. The {src==="pagePath"?"path":"event name"} likely does not match what GA4 actually records (open GA4 → Reports → Engagement → Pages and copy the exact path, it may be e.g. “/thank-you/” or differ by a slash), or there was no traffic in this period.</div>)}
+                  {src!=="pagePath"&&ecoData.discoveredEvents&&ecoData.discoveredEvents.length>0&&<div style={{marginTop:12}}>
+                    <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:6,fontWeight:700}}>OR PICK A GA4 EVENT (FALLBACK)</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{ecoData.discoveredEvents.map(function(ev,i){var on=ecoData.newsletterEvent&&ev.event===ecoData.newsletterEvent;return <span key={i} style={{fontSize:11,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:on?P.mint+"22":P.cosmos,border:"1px solid "+(on?P.mint+"55":P.rule),color:on?P.mint:P.label,fontWeight:on?800:600}}>{ev.event} <span style={{opacity:0.6}}>{fmt(ev.count)}</span></span>;})}</div>
+                  </div>}
+                </div>;
+              })()}
             </div>;
           })()}
         </div>)}
