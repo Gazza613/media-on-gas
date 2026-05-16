@@ -954,7 +954,11 @@ function AdPreviewModal(props){
   var authQs=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
   var proxyImage=null;
   if(ad.adId&&(platformKey==="meta"||platformKey==="tiktok")){
-    proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+authQs;
+    // For a MIXED Meta ad, the hero image is the winning creative in
+    // the set (matches the card thumbnail the user clicked), not a
+    // random largest asset.
+    var winQ=(isMixed&&platformKey==="meta")?"&winner=1":"";
+    proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+winQ+authQs;
   }
   var imageSrc=proxyImage||ad.thumbnail||"";
 
@@ -3246,7 +3250,12 @@ export default function MediaOnGas(){
     if(pKey&&ad.adId){
       var cId=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
       var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&session?("&st="+encodeURIComponent(session)):"");
-      return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+auth;
+      // MIXED (Meta DCO) ads bundle many creatives under one ad id. Ask
+      // the proxy for the WINNING creative in the set (best by results)
+      // instead of the largest-by-area asset, so the card thumbnail is
+      // the creative that actually performed. Meta-only concept.
+      var win=(pKey==="meta"&&String(ad.format||"").toUpperCase()==="MIXED")?"&winner=1":"";
+      return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+win+auth;
     }
     return ad.thumbnail||"";
   };

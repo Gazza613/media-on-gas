@@ -1,5 +1,6 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, isCampaignAllowed } from "./_auth.js";
+import { computeAssetBreakdown } from "./ad-assets.js";
 
 // Resolve a Meta or TikTok ad thumbnail to a fresh CDN URL, then 302-redirect
 // the client's <img> there. Mirrors the pattern in /api/ad-video: Meta and
@@ -193,6 +194,10 @@ export default async function handler(req, res) {
   var platform = String(req.query.platform || "").toLowerCase();
   var adId = String(req.query.adId || req.query.id || "").trim();
   var campaignId = String(req.query.campaignId || "").trim();
+  // winner=1 (Meta only): this is a MIXED / DCO ad and the caller wants
+  // the best-performing creative in the set as the thumbnail, not the
+  // largest-by-area asset. The frontend sends it only for MIXED ads.
+  var wantWinner = platform === "meta" && !!String(req.query.winner || "").trim();
 
   if (!adId) { res.status(400).json({ error: "adId required" }); return; }
   if (platform !== "meta" && platform !== "tiktok") { res.status(400).json({ error: "platform must be meta or tiktok" }); return; }
@@ -207,7 +212,9 @@ export default async function handler(req, res) {
     }
   }
 
-  var cacheKey = platform + "|" + adId;
+  // Winner mode gets its own cache slot so the winning-creative URL
+  // never overwrites (or is served as) the default largest-asset URL.
+  var cacheKey = platform + "|" + adId + (wantWinner ? "|w" : "");
   var cached = resolveCache[cacheKey];
   if (cached && Date.now() - cached.ts < RESOLVE_TTL_MS) {
     res.redirect(302, cached.url);
@@ -219,7 +226,21 @@ export default async function handler(req, res) {
     if (platform === "meta") {
       var metaToken = process.env.META_ACCESS_TOKEN;
       if (!metaToken) { res.status(500).json({ error: "META_ACCESS_TOKEN not configured" }); return; }
-      cdnUrl = await resolveMetaAdThumbnail(adId, metaToken);
+      if (wantWinner) {
+        // Ask the per-creative breakdown which asset actually won
+        // (assets are returned ranked by results then spend, so [0]
+        // is the winner with a resolved thumbnail). Falls through to
+        // the normal resolver if Meta hasn't split the ad yet.
+        try {
+          var bk = await computeAssetBreakdown(adId, String(req.query.from || ""), String(req.query.to || ""));
+          if (bk && bk.ok && Array.isArray(bk.assets)) {
+            for (var bi = 0; bi < bk.assets.length; bi++) {
+              if (bk.assets[bi] && bk.assets[bi].thumbnail) { cdnUrl = bk.assets[bi].thumbnail; break; }
+            }
+          }
+        } catch (_) { /* fall back to the default resolver below */ }
+      }
+      if (!cdnUrl) cdnUrl = await resolveMetaAdThumbnail(adId, metaToken);
     } else if (platform === "tiktok") {
       var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
       var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
