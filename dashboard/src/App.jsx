@@ -4793,6 +4793,52 @@ export default function MediaOnGas(){
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
           <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
+          {/* Per-client headline KPIs. Driven entirely by the resolved KPI
+              profile's primaryKpis, so it ONLY renders for a client that
+              has a profile (today: Psycho Bunny -> Reach, Clicks to
+              Website, Newsletter Sign-ups, Ecommerce Revenue). Clients
+              with no profile (MoMo, MoMo POS, Willowbrook, ...) get
+              ecoProfile=null and this block never renders, so every other
+              client's Summary is byte-for-byte unchanged. Ecommerce-sourced
+              values show an em-dash until GA4 data has loaded. */}
+          {ecoProfile&&Array.isArray(ecoProfile.primaryKpis)&&ecoProfile.primaryKpis.length>0&&(function(){
+            var rch=(m.reach||0)+(t.reach||0)+(computed.gd.reach||0);
+            var g=computed.grand||{};
+            var ec=(ecoData&&ecoData.ecommerce)||{};
+            var stt=(ecoData&&ecoData.site)||{};
+            var roas=(computed.totalSpend>0&&ec.revenue>0)?ec.revenue/computed.totalSpend:0;
+            var D="—";
+            var fNum=function(n){return n>0?fmt(n):D;};
+            var LBL={unique_reach:"UNIQUE REACH",reach:"REACH",frequency:"FREQUENCY",cpm:"COST PER 1,000",impressions:"IMPRESSIONS",clicks:"CLICKS TO WEBSITE",ctr:"CLICK THROUGH RATE",cpc:"COST PER CLICK",newsletter_signups:"NEWSLETTER SIGN-UPS",leads:"LEADS",installs:"INSTALLS",follows:"FOLLOWS & LIKES",revenue:"ECOMMERCE REVENUE",roas:"RETURN ON AD SPEND",transactions:"TRANSACTIONS",aov:"AVERAGE ORDER VALUE",site_users:"SITE USERS",conversion_rate:"CONVERSION RATE"};
+            var V={
+              unique_reach:fNum(rch),reach:fNum(rch),
+              frequency:blFreq>0?blFreq.toFixed(2)+"x":D,
+              cpm:computed.blendedCpm>0?fR(computed.blendedCpm):D,
+              impressions:fNum(computed.totalImps),clicks:fNum(computed.totalClicks),
+              ctr:g.ctr>0?pc(g.ctr):D,cpc:g.cpc>0?fR(g.cpc):D,
+              newsletter_signups:ecoData?fNum(ecoData.newsletterSignups):D,
+              leads:fNum(g.leads),installs:fNum(g.appInstalls),
+              follows:fNum((g.follows||0)+(g.pageLikes||0)+(g.likes||0)),
+              revenue:ec.revenue>0?fR(ec.revenue):D,
+              roas:roas>0?roas.toFixed(2)+"x":D,
+              transactions:ec.transactions>0?fmt(ec.transactions):D,
+              aov:ec.aov>0?fR(ec.aov):D,
+              site_users:stt.users>0?fmt(stt.users):D,
+              conversion_rate:ec.conversionRate>0?pc(ec.conversionRate):D
+            };
+            var ACC=[P.orchid,P.mint,P.cyan,P.solar,P.ember,P.blaze];
+            var keys=ecoProfile.primaryKpis.filter(function(k){return k!=="top_products"&&LBL[k];}).slice(0,6);
+            if(keys.length===0)return null;
+            return <div style={{marginBottom:24}}>
+              <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Headline KPIs</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat("+keys.length+",1fr)",gap:10}}>
+                {keys.map(function(k,i){var a=ACC[i%ACC.length];return <Glass key={k} accent={a} hv={true} st={{padding:16,textAlign:"center"}}>
+                  <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:6}}>{LBL[k]}</div>
+                  <div style={{fontSize:20,fontWeight:900,color:a,fontFamily:fm,lineHeight:1}}>{V[k]}</div>
+                </Glass>;})}
+              </div>
+            </div>;
+          })()}
           {/* Condensed ecommerce pull-through: only when the client's KPI
               profile enables it and GA4 returned data. The full detail
               lives on the Ecommerce tab — this is the headline. */}
