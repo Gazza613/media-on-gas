@@ -925,6 +925,14 @@ function AdPreviewModal(props){
   // client (MTN MoMo etc), past and future, without touching the
   // displayed format label.
   var mixedCapable=(isMixed||!!(ad&&ad.multiCreative));
+  // Awareness ad? (Psycho Bunny awareness today.) Used to surface the
+  // true ad-level Reach in the preview. Per-creative reach is not
+  // possible (Meta does not split reach per asset in a Dynamic
+  // Creative ad), but the AD's reach IS true, de-duplicated reach, so
+  // we show that prominently for the objective the client cares about.
+  var adAwareness=/(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/i.test(String((ad&&ad.campaignName)||""))
+    || /aware|reach|brand/i.test(String((ad&&ad.objective)||""))
+    || (assetBk&&assetBk.data&&assetBk.data.basis==="reach");
   useEffect(function(){
     setAssetBk({loading:false,loaded:false,data:null,error:""});
     if(!ad||!mixedCapable||platformKey!=="meta"||!ad.adId)return;
@@ -1129,6 +1137,11 @@ function AdPreviewModal(props){
         </div>;
       })()}
       <div style={{marginTop:14,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}}>
+        {adAwareness&&parseFloat(ad.reach||0)>0&&<div style={{background:P.orchid+"12",border:"1px solid "+P.orchid+"40",borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:P.orchid,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Reach (people)</div>
+          <div style={{fontSize:18,fontWeight:900,color:P.orchid,fontFamily:fm,lineHeight:1}}>{fmt(parseFloat(ad.reach||0))}</div>
+          <div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:4}}>{(function(){var rr=parseFloat(ad.reach||0),ii=parseFloat(ad.impressions||0);return rr>0?(ii/rr).toFixed(2)+"x frequency":"true de-duplicated reach";})()}</div>
+        </div>}
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
           <div style={{fontSize:8,color:accent,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>{resultLabel(ad.resultType)}</div>
           <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{results>0?fmt(results):"\u2014"}</div>
@@ -1159,6 +1172,9 @@ function AdPreviewModal(props){
           <div style={{fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.65,marginTop:6}}>
             This is a <strong style={{color:P.txt}}>mixed ad</strong>. Instead of one creative, several were loaded together and Meta automatically showed each person the version most likely to work for them. The single set of numbers above is the blended total. Below is how <strong style={{color:P.txt}}>each individual creative</strong> performed, so you can see exactly which one is winning.
           </div>
+          {adAwareness&&parseFloat(ad.reach||0)>0&&<div style={{fontSize:11,color:P.label,fontFamily:ff,lineHeight:1.65,marginTop:8,padding:"10px 14px",background:P.orchid+"0E",border:"1px solid "+P.orchid+"30",borderRadius:10}}>
+            Reach for the full ad is <strong style={{color:P.orchid}}>{fmt(parseFloat(ad.reach||0))} people</strong>, Meta's true de-duplicated count and the headline number for this awareness objective. Per-creative figures below are <strong style={{color:P.txt}}>impressions</strong>: Meta does not split reach per creative inside a mixed ad (the same person sees different versions), so impressions is the only honest per-creative measure of which one got in front of the most eyeballs.
+          </div>}
         </div>;
         if(assetBk.loading)return <div>{hdr}<div style={{padding:"18px 0",fontSize:12,color:P.caption,fontFamily:fm}}>Pulling the per creative breakdown from Meta…</div></div>;
         if(assetBk.error)return <div>{hdr}<div style={{padding:"14px 16px",background:P.rose+"12",border:"1px solid "+P.rose+"30",borderRadius:10,fontSize:12,color:P.rose,fontFamily:fm}}>{assetBk.error}</div></div>;
