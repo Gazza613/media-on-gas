@@ -5994,7 +5994,15 @@ export default function MediaOnGas(){
                     if(objAds.length===0)return;
                     var sorter;
                     if(og.key==="leads"||og.key==="followers")sorter=leadSort;
-                    else if(og.key==="landingpage")sorter=landingPageSort;
+                    else if(og.key==="landingpage"){
+                      // Awareness ads in the landing-page bucket carry
+                      // results=reach (resultType reach/impressions).
+                      // Rank them by reach desc (the client's KPI), not
+                      // by clicks. Non-awareness landing-page ads keep
+                      // the click-volume sort exactly.
+                      var anyAwr=objAds.some(function(a){return a.resultType==="reach"||a.resultType==="impressions";});
+                      sorter=anyAwr?function(a,b){return (parseFloat(b.results||0)-parseFloat(a.results||0))||(parseFloat(b.impressions||0)-parseFloat(a.impressions||0));}:landingPageSort;
+                    }
                     else sorter=engagementSort;
                     var sorted=objAds.slice().sort(sorter).slice(0,5);
                     groups.push({pg:pg,ads:sorted,total:objAds.length});
@@ -6642,6 +6650,24 @@ export default function MediaOnGas(){
                 return Object.assign({},a,{resultType:"follows"});
               });
             }
+            // Awareness ads land in the landing-page bucket (no awareness
+            // objective in the classifier). Their KPI is reach, not LP
+            // clicks, so remap results->reach (resultType "reach") the
+            // same way Followers is remapped above. The existing
+            // results-desc sort then ranks them by reach, the headline
+            // reads REACH, and non-awareness landing-page ads (other
+            // clients) are untouched.
+            if (byObj.landingpage && byObj.landingpage.length > 0) {
+              byObj.landingpage = byObj.landingpage.map(function(a){
+                var o=String(a.objective||"").toLowerCase();
+                var nm=String(a.campaignName||"").toLowerCase();
+                var awr=o.indexOf("aware")>=0||o.indexOf("reach")>=0||o.indexOf("brand")>=0
+                  ||/(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/.test(nm);
+                if(!awr)return a;
+                var rch=parseFloat(a.reach||0),imp=parseFloat(a.impressions||0);
+                return Object.assign({},a,{results:rch>0?rch:imp,resultType:rch>0?"reach":"impressions"});
+              });
+            }
 
             // Aggregate totals per objective
             var totalsForSec=function(arr){
@@ -6662,8 +6688,8 @@ export default function MediaOnGas(){
             filteredAds.forEach(function(a){totalSpend+=a.spend;totalImps+=a.impressions;totalClicks+=a.clicks;});
             var blendedCtr=totalImps>0?(totalClicks/totalImps*100):0;
 
-            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="clicks"?"CLICKS":"RESULTS";};
-            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="clicks"?"CPC":"CPR";};
+            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
+            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
             // Format badge color + label
             var fmtMeta=function(f){
               var ff=(f||"STATIC").toUpperCase();
