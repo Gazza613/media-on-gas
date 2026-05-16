@@ -6367,8 +6367,8 @@ export default function MediaOnGas(){
             var revSplit=[{name:"Paid social assisted",value:Math.max(0,psRev),_currency:true},{name:"Other channels",value:Math.max(0,rev-psRev),_currency:true}];
             var funnel=[{label:"Site users",v:users,c:P.cyan},{label:"Sessions",v:sess,c:P.orchid},{label:"Transactions",v:tx,c:P.mint}];
             var fMax=Math.max(users,sess,tx,1);
-            var lbl={fontSize:13,fill:P.txt,fontFamily:fm,fontWeight:800};
-            var axN={fontSize:12,fill:P.caption,fontFamily:fm};
+            var lbl={fontSize:14,fill:P.txt,fontFamily:fm,fontWeight:800};
+            var axN={fontSize:14,fill:P.caption,fontFamily:fm};
             // Category-axis tick: never wraps (single <text>), truncates
             // long names with an ellipsis, and carries an SVG <title> so
             // the full label shows on hover.
@@ -6376,7 +6376,7 @@ export default function MediaOnGas(){
               var x=tp.x,y=tp.y,pv=(tp.payload&&tp.payload.value)!=null?String(tp.payload.value):"";
               var max=20,shown=pv.length>max?pv.slice(0,max-1)+"…":pv;
               return <g transform={"translate("+x+","+y+")"}>
-                <text x={-8} y={0} dy={4} textAnchor="end" fontFamily={fm} fontSize={13} fontWeight={700} fill={P.txt}>{shown}<title>{pv}</title></text>
+                <text x={-8} y={0} dy={4} textAnchor="end" fontFamily={fm} fontSize={14} fontWeight={700} fill={P.txt}>{shown}<title>{pv}</title></text>
               </g>;
             };
             return <div>
@@ -6426,7 +6426,7 @@ export default function MediaOnGas(){
                     {eng.engagementRatePct!=null&&box("ENGAGEMENT RATE",eng.engagementRatePct.toFixed(2)+"%",enCol,(100-eng.engagementRatePct).toFixed(2)+"% bounced")}
                   </div>
                   {fSteps.length>=2&&<div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:16}}>Purchase Funnel</div>
+                    <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:16}}>Purchase Funnel</div>
                     {fSteps.map(function(s,i){var w=Math.max(5,(s.v||0)/fM*100);return <div key={i} style={{marginBottom:14}}>
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontFamily:fm,marginBottom:5}}><span style={{color:P.label,letterSpacing:1,fontWeight:700,textTransform:"uppercase"}}>{s.l}</span><span style={{color:s.c,fontWeight:900,fontSize:14}}>{fmt(s.v||0)}</span></div>
                       <div style={{height:14,background:P.rule+"40",borderRadius:7,overflow:"hidden"}}><div style={{width:w+"%",height:"100%",background:"linear-gradient(90deg,"+s.c+"AA,"+s.c+")",borderRadius:7}}/></div>
@@ -6489,7 +6489,7 @@ export default function MediaOnGas(){
                   way Deep Dive pairs a chart with a structural read. */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,margin:"24px 0"}}>
                 <Reveal minHeight={300}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
-                  <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Revenue Mix</div>
+                  <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Revenue Mix</div>
                   <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:10}}>{fR(rev)} total, paid social's assisted slice highlighted</div>
                   {rev>0?<ChartReveal><ResponsiveContainer width="100%" height={230}>
                     <PieChart>
@@ -6497,12 +6497,12 @@ export default function MediaOnGas(){
                         {revSplit.map(function(s,i){return <Cell key={i} fill={i===0?P.ember:P.mint}/>;})}
                       </Pie>
                       <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
-                      <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:13,fontFamily:fm,paddingTop:10}}/>
+                      <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:14,fontFamily:fm,paddingTop:12}}/>
                     </PieChart>
                   </ResponsiveContainer></ChartReveal>:<div style={{padding:"40px 0",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No revenue recorded in this period.</div>}
                 </div></Reveal>
                 <Reveal minHeight={300} delay={80}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
-                  <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Path To Purchase</div>
+                  <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Path To Purchase</div>
                   <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:18}}>How site traffic narrows down to paying orders</div>
                   {funnel.map(function(f,i){var w=Math.max(6,f.v/fMax*100);return <div key={i} style={{marginBottom:16}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,marginBottom:5}}><span style={{color:P.label,letterSpacing:1.2,fontWeight:700}}>{f.label.toUpperCase()}</span><span style={{color:f.c,fontWeight:900,fontSize:13}}>{fmt(f.v)}</span></div>
@@ -6563,7 +6563,7 @@ export default function MediaOnGas(){
                 return <div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:24}}>
                     {chSess.length>0&&<Reveal minHeight={260}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
-                      <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Where Visits Come From</div>
+                      <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Where Visits Come From</div>
                       <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:12}}>Sessions by acquisition channel</div>
                       <ChartReveal><ResponsiveContainer width="100%" height={chSess.length*40+20}>
                         <BarChart data={chSess} layout="vertical" margin={{top:0,right:54,left:8,bottom:0}}>
@@ -6576,7 +6576,7 @@ export default function MediaOnGas(){
                       </ResponsiveContainer></ChartReveal>
                     </div></Reveal>}
                     {devPie.length>0&&<Reveal minHeight={260} delay={80}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
-                      <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Device Used</div>
+                      <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Device Used</div>
                       <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:10}}>Visitors by device category</div>
                       <ChartReveal><ResponsiveContainer width="100%" height={210}>
                         <PieChart>
@@ -6584,7 +6584,7 @@ export default function MediaOnGas(){
                             {devPie.map(function(s,i){return <Cell key={i} fill={DCOL[i%DCOL.length]}/>;})}
                           </Pie>
                           <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}}/>
-                          <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:13,fontFamily:fm,paddingTop:10}}/>
+                          <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{fontSize:14,fontFamily:fm,paddingTop:12}}/>
                         </PieChart>
                       </ResponsiveContainer></ChartReveal>
                     </div></Reveal>}
@@ -6605,15 +6605,15 @@ export default function MediaOnGas(){
                     </div>
                   </div></Reveal>}
                   {co.length>0&&<Reveal minHeight={140}><div style={{marginBottom:24}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Top Markets</div>
-                    <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"6px 18px"}}>
-                      {co.slice(0,6).map(function(c,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 0",borderBottom:i<Math.min(6,co.length)-1?"1px solid "+P.rule+"50":"none"}}>
-                        <div style={{width:120,fontSize:12,color:P.txt,fontFamily:fm,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.country}</div>
-                        <div style={{flex:1,height:10,background:P.rule+"40",borderRadius:5,overflow:"hidden"}}><div style={{width:Math.max(4,c.users/coMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.cyan+"AA,"+P.cyan+")",borderRadius:5}}/></div>
-                        <div style={{width:74,textAlign:"right",fontSize:11,color:P.cyan,fontFamily:fm,fontWeight:800}}>{fmt(c.users)}</div>
-                        <div style={{width:96,textAlign:"right",fontSize:11,color:P.mint,fontFamily:fm,fontWeight:800}}>{c.revenue>0?fR(c.revenue):"—"}</div>
+                    <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Top Markets</div>
+                    <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"4px 24px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:18,padding:"14px 0 12px",borderBottom:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}><div style={{width:170}}>MARKET</div><div style={{flex:1}}>SHARE OF VISITORS</div><div style={{width:100,textAlign:"right"}}>USERS</div><div style={{width:130,textAlign:"right"}}>REVENUE</div></div>
+                      {co.slice(0,6).map(function(c,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:18,padding:"15px 0",borderBottom:i<Math.min(6,co.length)-1?"1px solid "+P.rule+"40":"none"}}>
+                        <div title={c.country} style={{width:170,fontSize:14,color:P.txt,fontFamily:ff,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.country}</div>
+                        <div style={{flex:1,height:12,background:P.rule+"40",borderRadius:6,overflow:"hidden"}}><div style={{width:Math.max(4,c.users/coMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.cyan+"AA,"+P.cyan+")",borderRadius:6,transition:"width 0.6s ease"}}/></div>
+                        <div style={{width:100,textAlign:"right",fontSize:14,color:P.cyan,fontFamily:fm,fontWeight:800}}>{fmt(c.users)}</div>
+                        <div style={{width:130,textAlign:"right",fontSize:14,color:P.mint,fontFamily:fm,fontWeight:800}}>{c.revenue>0?fR(c.revenue):"—"}</div>
                       </div>;})}
-                      <div style={{display:"flex",gap:14,padding:"8px 0 10px",fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1}}><div style={{width:120}}>MARKET</div><div style={{flex:1}}/><div style={{width:74,textAlign:"right"}}>USERS</div><div style={{width:96,textAlign:"right"}}>REVENUE</div></div>
                     </div>
                   </div></Reveal>}
                   {(ecoData.topPages||[]).length>0&&(function(){
@@ -6636,15 +6636,15 @@ export default function MediaOnGas(){
                       return seg.replace(/[-_]+/g," ").replace(/\s+/g," ").trim().replace(/\b\w/g,function(ch){return ch.toUpperCase();})||"Homepage";
                     };
                     return <Reveal minHeight={140}><div style={{marginBottom:24}}>
-                      <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:12}}>Most-Viewed Pages</div>
-                      <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"6px 18px"}}>
-                        {tp.slice(0,8).map(function(p,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 0",borderBottom:i<Math.min(8,tp.length)-1?"1px solid "+P.rule+"50":"none"}}>
-                          <div title={p.path} style={{width:230,fontSize:12.5,color:P.txt,fontFamily:fm,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{prettyPath(p.path)}</div>
-                          <div style={{flex:1,height:10,background:P.rule+"40",borderRadius:5,overflow:"hidden"}}><div style={{width:Math.max(4,p.views/tpMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.orchid+"AA,"+P.orchid+")",borderRadius:5}}/></div>
-                          <div style={{width:84,textAlign:"right",fontSize:12,color:P.orchid,fontFamily:fm,fontWeight:800}}>{fmt(p.views)}</div>
-                          <div style={{width:84,textAlign:"right",fontSize:11,color:P.label,fontFamily:fm,fontWeight:700}}>{fmt(p.users)} users</div>
+                      <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Most-Viewed Pages</div>
+                      <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"4px 24px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:18,padding:"14px 0 12px",borderBottom:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}><div style={{width:240}}>PAGE</div><div style={{flex:1}}>SHARE OF VIEWS</div><div style={{width:100,textAlign:"right"}}>VIEWS</div><div style={{width:100,textAlign:"right"}}>USERS</div></div>
+                        {tp.slice(0,8).map(function(p,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:18,padding:"15px 0",borderBottom:i<Math.min(8,tp.length)-1?"1px solid "+P.rule+"40":"none"}}>
+                          <div title={p.path} style={{width:240,fontSize:14,color:P.txt,fontFamily:ff,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{prettyPath(p.path)}</div>
+                          <div style={{flex:1,height:12,background:P.rule+"40",borderRadius:6,overflow:"hidden"}}><div style={{width:Math.max(4,p.views/tpMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+P.orchid+"AA,"+P.orchid+")",borderRadius:6,transition:"width 0.6s ease"}}/></div>
+                          <div style={{width:100,textAlign:"right",fontSize:14,color:P.orchid,fontFamily:fm,fontWeight:800}}>{fmt(p.views)}</div>
+                          <div style={{width:100,textAlign:"right",fontSize:14,color:P.label,fontFamily:fm,fontWeight:700}}>{fmt(p.users)}</div>
                         </div>;})}
-                        <div style={{display:"flex",gap:14,padding:"8px 0 10px",fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1}}><div style={{width:230}}>PAGE</div><div style={{flex:1}}/><div style={{width:84,textAlign:"right"}}>VIEWS</div><div style={{width:84,textAlign:"right"}}>USERS</div></div>
                       </div>
                     </div></Reveal>;
                   })()}
@@ -6663,33 +6663,6 @@ export default function MediaOnGas(){
                 <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.7,marginTop:14,borderTop:"1px solid "+P.rule,paddingTop:10}}>{ecoData.note}</div>
               </div></Reveal>
 
-              {/* Admin-only newsletter diagnostic. Always shown for the
-                  team (not gated on data) so the configured signal and
-                  exactly what GA4 returned for it are visible, which is
-                  how you debug a 0. Never shown to a client. */}
-              {!isClient&&(function(){
-                var nw=ecoData.newsletterWindow||{};
-                var rows=ecoData.newsletterRows||[];
-                var src=ecoData.newsletterSource;
-                return <div style={{marginBottom:8,padding:"16px 20px",background:P.glass,border:"1px dashed "+P.rule,borderRadius:14}}>
-                  <div style={{fontSize:11,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:6,fontWeight:800}}>NEWSLETTER SOURCE (TEAM ONLY)</div>
-                  <div style={{fontSize:11,color:P.caption,fontFamily:fm,lineHeight:1.7,marginBottom:10}}>
-                    GA4 property {ecoData.propertyId}. {src==="pagePath"
-                      ? <span>Counting page views where <strong style={{color:P.txt}}>pagePath contains “{ecoData.newsletterMatch}”</strong> (from the profile path “{ecoData.newsletterPagePath}” set in Settings → KPI Profiles).</span>
-                      : src==="event"
-                      ? <span>Counting the GA4 event <strong style={{color:P.txt}}>“{ecoData.newsletterEvent}”</strong> (set in Settings → KPI Profiles).</span>
-                      : <span style={{color:P.warning}}>No newsletter signal configured. Set a thank-you page path in Settings → KPI Profiles.</span>}
-                    {" "}Window {nw.from||"?"} to {nw.to||"?"}. Counted total: <strong style={{color:ecoData.newsletterSignups>0?P.mint:P.warning}}>{fmt(ecoData.newsletterSignups||0)}</strong>.
-                  </div>
-                  {src!=="none"&&(rows.length>0
-                    ? <div><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:6,fontWeight:700}}>GA4 RETURNED THESE {src==="pagePath"?"PAGES":"EVENTS"}</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{rows.map(function(r,i){return <span key={i} style={{fontSize:11,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:P.cosmos,border:"1px solid "+P.rule,color:P.txt}}>{r.label||"(empty)"} <span style={{opacity:0.6}}>{fmt(r.count)}</span></span>;})}</div></div>
-                    : <div style={{fontSize:11,color:P.warning,fontFamily:fm,lineHeight:1.7,padding:"10px 12px",background:P.warning+"12",border:"1px solid "+P.warning+"30",borderRadius:8}}>GA4 returned no {src==="pagePath"?"pages":"events"} matching this in the window. The {src==="pagePath"?"path":"event name"} likely does not match what GA4 actually records (open GA4 → Reports → Engagement → Pages and copy the exact path, it may be e.g. “/thank-you/” or differ by a slash), or there was no traffic in this period.</div>)}
-                  {src!=="pagePath"&&ecoData.discoveredEvents&&ecoData.discoveredEvents.length>0&&<div style={{marginTop:12}}>
-                    <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:6,fontWeight:700}}>OR PICK A GA4 EVENT (FALLBACK)</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{ecoData.discoveredEvents.map(function(ev,i){var on=ecoData.newsletterEvent&&ev.event===ecoData.newsletterEvent;return <span key={i} style={{fontSize:11,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:on?P.mint+"22":P.cosmos,border:"1px solid "+(on?P.mint+"55":P.rule),color:on?P.mint:P.label,fontWeight:on?800:600}}>{ev.event} <span style={{opacity:0.6}}>{fmt(ev.count)}</span></span>;})}</div>
-                  </div>}
-                </div>;
-              })()}
             </div>;
           })()}
         </div>)}
