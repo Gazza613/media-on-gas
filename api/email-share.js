@@ -208,6 +208,73 @@ async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
   }
 }
 
+// Pull the GA4 ecommerce summary for clients whose KPI profile enables
+// it (Psycho Bunny today). Returns null for everyone else / on any
+// failure so the email is unchanged for non-ecommerce clients. The
+// internal fetch uses the admin api-key, so ga4-ecommerce.js resolves
+// the property + newsletter event server-side from the client name.
+async function fetchEcommerce(req, from, to, clientSlug) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return null;
+    var clientName = String(clientSlug || "").replace(/-/g, " ").trim();
+    if (!clientName) return null;
+    var internalHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var url = "https://" + internalHost + "/api/ga4-ecommerce?client=" + encodeURIComponent(clientName) +
+      "&from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+    var r = await fetch(url, { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return null;
+    var d = await r.json();
+    if (!d || !d.ok || !d.enabled) return null;
+    return d;
+  } catch (err) {
+    console.error("Email ecommerce fetch error", err);
+    return null;
+  }
+}
+
+// Condensed ecommerce block for the client report email. Total-site
+// headline (the full business picture) plus a smaller paid-social
+// assisted line (our contribution). Table-based inline styles to match
+// the rest of the email. Returns "" when there's no ecommerce data.
+function renderEcommerceBlock(eco) {
+  if (!eco || !eco.ecommerce) return "";
+  var fR = function(n) {
+    var v = parseFloat(n); if (isNaN(v)) return "R0.00";
+    return "R" + v.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  var fI = function(n) { var v = parseFloat(n); return isNaN(v) ? "0" : Math.round(v).toLocaleString("en-ZA"); };
+  var e = eco.ecommerce, ps = eco.paidSocial || {};
+  var tile = function(label, val, color) {
+    return '<td width="25%" style="padding:6px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0C1622;border:1px solid #1C2A3A;border-radius:10px;"><tr><td style="padding:14px 10px;text-align:center;">' +
+      '<div style="font-size:9px;letter-spacing:1.4px;color:#7C8DA0;text-transform:uppercase;font-weight:700;margin-bottom:6px;">' + label + '</div>' +
+      '<div style="font-size:18px;font-weight:800;color:' + color + ';">' + val + '</div></td></tr></table></td>';
+  };
+  var winners = "";
+  if (eco.topProducts && eco.topProducts.length > 0) {
+    var rows = eco.topProducts.slice(0, 5).map(function(p) {
+      return '<tr><td style="padding:8px 12px;font-size:12px;color:#D6E0EC;border-top:1px solid #16222F;">' + escapeHtml(p.name || "(unknown)") +
+        '</td><td style="padding:8px 12px;font-size:12px;color:#3DDC91;font-weight:700;text-align:right;border-top:1px solid #16222F;">' + fR(p.revenue) + '</td></tr>';
+    }).join("");
+    winners = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;background:#0C1622;border:1px solid #1C2A3A;border-radius:10px;">' +
+      '<tr><td colspan="2" style="padding:12px 12px 4px;font-size:10px;letter-spacing:1.5px;color:#3DDC91;font-weight:800;text-transform:uppercase;">Sales winners</td></tr>' + rows + '</table>';
+  }
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 28px;">' +
+    '<tr><td style="padding:0 0 12px;font-size:13px;letter-spacing:2px;color:#3DDC91;font-weight:800;text-transform:uppercase;">Online Store</td></tr>' +
+    '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+      tile("Revenue", fR(e.revenue), "#3DDC91") +
+      tile("Transactions", fI(e.transactions), "#F96203") +
+      tile("Avg Order Value", fR(e.aov), "#FFB200") +
+      tile("Newsletter Sign-ups", fI(eco.newsletterSignups), "#C77DFF") +
+    '</tr></table></td></tr>' +
+    '<tr><td style="padding:14px 16px;background:rgba(249,98,3,0.07);border-left:3px solid #F96203;border-radius:0 8px 8px 0;margin-top:6px;">' +
+      '<div style="font-size:11px;font-weight:800;color:#F96203;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Paid social assisted</div>' +
+      '<div style="font-size:13px;color:#D6E0EC;line-height:1.7;">' + fR(ps.revenue) + ' revenue (' + (parseFloat(ps.revenueSharePct || 0).toFixed(2)) + '% of the total above), and ' + fI(ps.transactions) + ' transactions. ' +
+      'For an awareness campaign treat this as an assisted, view-through signal, a directional contribution rather than the campaign’s optimisation target.</div></td></tr>' +
+    (winners ? '<tr><td>' + winners + '</td></tr>' : '') +
+    '</table>';
+}
+
 // Render the KPI + platform + objective blocks. Table-based with inline styles so
 // Outlook, Gmail, Apple Mail, and mobile clients all render consistently.
 function renderSummaryBlock(summary) {
@@ -502,6 +569,7 @@ function buildEmailHtml(opts) {
   var summaryBlock = renderSummaryBlock(opts.summary);
   var commentaryBlock = renderCommentaryBlock(opts.summary);
   var topAdsBlock = renderTopAdsBlock(opts.topAds);
+  var ecommerceBlock = renderEcommerceBlock(opts.ecommerce);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -554,6 +622,7 @@ function buildEmailHtml(opts) {
       </td></tr>
 
       ${summaryBlock}
+      ${ecommerceBlock}
       ${commentaryBlock}
       ${topAdsBlock}
 
@@ -687,10 +756,12 @@ export default async function handler(req, res) {
     // If either fails the email still sends, just with fewer inline sections.
     var results = await Promise.all([
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
-      fetchTopAds(req, from, to, campaignIds, campaignNames)
+      fetchTopAds(req, from, to, campaignIds, campaignNames),
+      fetchEcommerce(req, from, to, clientSlug)
     ]);
     var summary = results[0];
     var topAds = results[1];
+    var ecommerce = results[2];
 
     // Enrich any MIXED Meta ad in the Top Ads block with its
     // per-creative breakdown so the static email shows which creative
@@ -730,7 +801,8 @@ export default async function handler(req, res) {
       recipientName: body.recipientName || "",
       origin: origin,
       summary: summary,
-      topAds: topAds
+      topAds: topAds,
+      ecommerce: ecommerce
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.

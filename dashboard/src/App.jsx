@@ -381,7 +381,8 @@ check:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" 
 flag:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" stroke={c} strokeWidth="1.5" fill={c+"15"}/><line x1="4" y1="22" x2="4" y2="15" stroke={c} strokeWidth="1.5"/></svg>;},
 alert:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={c} strokeWidth="1.5"/><line x1="12" y1="9" x2="12" y2="13" stroke={c} strokeWidth="1.5"/></svg>;},
 fire:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M12 2c0 4-4 6-4 10a6 6 0 0012 0c0-4-4-6-4-10z" stroke={c} strokeWidth="1.5" fill={c+"20"}/></svg>;},
-power:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M18.36 6.64a9 9 0 11-12.73 0" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><line x1="12" y1="2" x2="12" y2="12" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></svg>;}
+power:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M18.36 6.64a9 9 0 11-12.73 0" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><line x1="12" y1="2" x2="12" y2="12" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></svg>;},
+cart:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M2 3h2.5l2.3 12.4a1.5 1.5 0 001.5 1.2h8.9a1.5 1.5 0 001.5-1.2L21 7H6" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill={c+"12"}/><circle cx="9" cy="20" r="1.4" fill={c}/><circle cx="18" cy="20" r="1.4" fill={c}/></svg>;}
 };
 
 function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=props.hv;var s=useState(false);return(<div onMouseEnter={function(){s[1](true);}} onMouseLeave={function(){s[1](false);}} style={Object.assign({background:P.glass,border:"1px solid "+(s[0]&&hv?a+"50":P.rule),borderRadius:16,position:"relative",overflow:"hidden",transition:"all 0.3s ease",transform:s[0]&&hv?"translateY(-2px)":"none",boxShadow:s[0]&&hv?"0 12px 40px "+a+"15":"0 4px 20px rgba(0,0,0,0.25)"},st)}><div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:s[0]&&hv?1:0.4}}/>{props.children}</div>);}
@@ -3109,6 +3110,15 @@ export default function MediaOnGas(){
   var cf3=useState("all"),crFiltObj=cf3[0],setCrFiltObj=cf3[1];
   var tfs=useState(0),ttCumFollows=tfs[0],setTtCumFollows=tfs[1];
   var vt=useState(""),viewToken=vt[0],setViewToken=vt[1];
+  // Per-client ecommerce (GA4) state. ecoProfile is the resolved KPI
+  // profile for the active client (null = no profile = default behaviour,
+  // ecommerce tab hidden). ecoData is the GA4 payload. Resolved
+  // server-side via /api/client-kpi-profiles?resolve=, so a client view
+  // can't surface another client's ecommerce.
+  var ecoP=useState(null),ecoProfile=ecoP[0],setEcoProfile=ecoP[1];
+  var ecoD=useState(null),ecoData=ecoD[0],setEcoData=ecoD[1];
+  var ecoL=useState(false),ecoLoading=ecoL[0],setEcoLoading=ecoL[1];
+  var ecoE=useState(""),ecoErr=ecoE[0],setEcoErr=ecoE[1];
 
   useEffect(function(){
     var params=new URLSearchParams(window.location.search);
@@ -3584,6 +3594,54 @@ export default function MediaOnGas(){
   // (Summary, Deep Dive) so defined at outer scope to stay in range for
   // both. Google reach comes in at the 2x estimate api/campaigns.js sets.
   var blFreq=(m.reach+t.reach+computed.gd.reach)>0?(m.impressions+t.impressions+computed.gd.impressions)/(m.reach+t.reach+computed.gd.reach):0;
+
+  // Active client name, derived from the selected campaigns' account
+  // names (most-frequent, platform suffix stripped). Used only for the
+  // admin ?resolve=/?client= param — for a client viewToken the server
+  // forces its own slug and ignores whatever we pass.
+  var ecoClientName=useMemo(function(){
+    var PS=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+    var counts={};
+    (computed.allSelected||[]).forEach(function(c){
+      var clean=String(c.accountName||"").trim().replace(PS,"").replace(PS,"").trim();
+      if(clean)counts[clean]=(counts[clean]||0)+1;
+    });
+    var best="",bn=0;Object.keys(counts).forEach(function(k){if(counts[k]>bn){bn=counts[k];best=k;}});
+    return best;
+  },[computed]);
+
+  // Resolve the KPI profile for the active client. Server returns
+  // { profile } and forces a client principal to its own slug, so this
+  // is safe to call from a share view. Empty string for clients (server
+  // ignores it) but the resolve param must be non-empty to hit the
+  // checkAuth branch, so clients send "self".
+  useEffect(function(){
+    if(!isAuthed())return;
+    if(!isClient&&!ecoClientName){setEcoProfile(null);return;}
+    var name=isClient?(ecoClientName||"self"):ecoClientName;
+    fetch(API+"/api/client-kpi-profiles?resolve="+encodeURIComponent(name||"self"),{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){setEcoProfile((d&&d.profile)||null);})
+      .catch(function(){setEcoProfile(null);});
+  },[ecoClientName,isClient,session,viewToken]);
+
+  var ecoOn=!!(ecoProfile&&ecoProfile.ecommerce&&ecoProfile.ecommerce.enabled);
+
+  // Pull the GA4 ecommerce summary when ecommerce is enabled and the
+  // user is on a tab that shows it (Ecommerce tab, or the condensed
+  // Summary strip). Property ID + newsletter event are resolved
+  // server-side from the profile, never sent from here.
+  useEffect(function(){
+    if(!ecoOn||!isAuthed()){setEcoData(null);return;}
+    if(tab!=="ecommerce"&&tab!=="summary")return;
+    setEcoLoading(true);setEcoErr("");
+    var cq=isClient?"":("&client="+encodeURIComponent(ecoClientName||""));
+    fetch(API+"/api/ga4-ecommerce?from="+df+"&to="+dt+cq,{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){setEcoLoading(false);if(d&&d.ok){setEcoData(d);}else{setEcoData(null);setEcoErr((d&&(d.reason||d.message||d.error))||"Ecommerce data unavailable");}})
+      .catch(function(){setEcoLoading(false);setEcoData(null);setEcoErr("Ecommerce request failed");});
+  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName]);
+
   var benchmarks={
     meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
     tiktok:{cpm:{low:4,mid:8,high:15,label:"R4-R15"},cpc:{low:0.01,mid:0.05,high:0.20,label:"R0.01-R0.20"},cpf:{low:1.0,mid:2.5,high:5.0,label:"R1-R5"}},
@@ -3607,13 +3665,15 @@ export default function MediaOnGas(){
 
   var tabs;
   if(isClient){
-    // Clients only ever see Summary. Force the active tab to summary so a stale
-    // tab state from admin mode cannot leak through.
+    // Clients see Summary, plus Ecommerce when their KPI profile turns
+    // it on. Any other stale tab state from admin mode is forced back.
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)}];
+    if(ecoOn)tabs.push({id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
   } else {
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
+    if(ecoOn)tabs.splice(1,0,{id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
   }
-  useEffect(function(){if(isClient&&tab!=="summary")setTab("summary");},[isClient,tab]);
+  useEffect(function(){if(isClient&&tab!=="summary"&&!(ecoOn&&tab==="ecommerce"))setTab("summary");},[isClient,tab,ecoOn]);
   // Scroll to top whenever the tab changes so each page lands cleanly
   // at its header rather than wherever the previous scroll position was.
   useEffect(function(){try{window.scrollTo({top:0,behavior:"smooth"});}catch(_){window.scrollTo(0,0);}},[tab]);
@@ -4733,6 +4793,22 @@ export default function MediaOnGas(){
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
           <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
+          {/* Condensed ecommerce pull-through: only when the client's KPI
+              profile enables it and GA4 returned data. The full detail
+              lives on the Ecommerce tab — this is the headline. */}
+          {ecoOn&&ecoData&&(function(){
+            var e=ecoData.ecommerce||{},ps=ecoData.paidSocial||{};
+            return <div style={{marginBottom:24,padding:"18px 22px",background:"linear-gradient(135deg,"+P.mint+"0E 0%, transparent 70%)",border:"1px solid "+P.mint+"25",borderLeft:"4px solid "+P.mint,borderRadius:"0 14px 14px 0"}}>
+              <div onClick={function(){setTab("ecommerce");}} style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,cursor:"pointer"}}>{Ic.cart(P.mint,16)}<span style={{fontSize:11,fontWeight:900,color:P.mint,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Online store</span><span style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1}}>view full ecommerce →</span></div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                <Glass accent={P.mint} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>REVENUE</div><div style={{fontSize:17,fontWeight:900,color:P.mint,fontFamily:fm}}>{fR(e.revenue)}</div></Glass>
+                <Glass accent={P.ember} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>TRANSACTIONS</div><div style={{fontSize:17,fontWeight:900,color:P.ember,fontFamily:fm}}>{fmt(e.transactions)}</div></Glass>
+                <Glass accent={P.solar} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>AVERAGE ORDER VALUE</div><div style={{fontSize:17,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(e.aov)}</div></Glass>
+                <Glass accent={P.orchid} hv={true} st={{padding:12,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.6,marginBottom:5}}>NEWSLETTER SIGN-UPS</div><div style={{fontSize:17,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(ecoData.newsletterSignups)}</div></Glass>
+              </div>
+              <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.7,marginTop:12}}>Paid social assisted {fR(ps.revenue)} ({pc(ps.revenueSharePct)} of total revenue), a directional view-through signal, not the awareness campaign's optimisation target.</div>
+            </div>;
+          })()}
           {(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             if(sel.length===0)return <div style={{padding:30,textAlign:"center",color:P.caption,fontFamily:fm}}>Select campaigns to view summary.</div>;
@@ -6068,6 +6144,67 @@ export default function MediaOnGas(){
                 </div>;
               })()}
 
+            </div>;
+          })()}
+        </div>)}
+
+        {tab==="ecommerce"&&ecoOn&&(<div>
+          <SH icon={Ic.cart(P.mint,20)} title="Ecommerce" sub={df+" to "+dt+" | Site & online store performance from Google Analytics"} accent={P.mint}/>
+          {ecoLoading&&!ecoData&&<div style={{padding:40,textAlign:"center",color:P.label,fontFamily:fm,fontSize:13}}>Pulling Google Analytics ecommerce data...</div>}
+          {!ecoLoading&&!ecoData&&<div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.label,fontFamily:fm,fontSize:13,lineHeight:1.7}}>{ecoErr||"No ecommerce data returned for this period yet."}</div>}
+          {ecoData&&(function(){
+            var e=ecoData.ecommerce||{},st=ecoData.site||{},ps=ecoData.paidSocial||{};
+            return <div>
+              {/* Total-site headline: the full business picture the client
+                  cares about. The Paid Social line below is our slice. */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:14}}>
+                <Glass accent={P.mint} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>REVENUE</div><div style={{fontSize:18,fontWeight:900,color:P.mint,fontFamily:fm}}>{fR(e.revenue)}</div></Glass>
+                <Glass accent={P.ember} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>TRANSACTIONS</div><div style={{fontSize:18,fontWeight:900,color:P.ember,fontFamily:fm}}>{fmt(e.transactions)}</div></Glass>
+                <Glass accent={P.solar} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>AVERAGE ORDER VALUE</div><div style={{fontSize:18,fontWeight:900,color:P.solar,fontFamily:fm}}>{fR(e.aov)}</div></Glass>
+                <Glass accent={P.cyan} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>SITE USERS</div><div style={{fontSize:18,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(st.users)}</div></Glass>
+                <Glass accent={P.blaze} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>CONVERSION RATE</div><div style={{fontSize:18,fontWeight:900,color:P.blaze,fontFamily:fm}}>{pc(e.conversionRate)}</div></Glass>
+                <Glass accent={P.orchid} hv={true} st={{padding:14,textAlign:"center"}}><div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.8,marginBottom:5}}>NEWSLETTER SIGN-UPS</div><div style={{fontSize:18,fontWeight:900,color:P.orchid,fontFamily:fm}}>{fmt(ecoData.newsletterSignups)}</div></Glass>
+              </div>
+
+              {/* Paid Social assisted line: the slice GA4 attributes to
+                  paid social sessions. Framed as a contribution to the
+                  total above, not the campaign's optimisation target. */}
+              <div style={{marginBottom:22,padding:"18px 22px",background:"linear-gradient(135deg,"+P.ember+"10 0%, transparent 70%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{Ic.bolt(P.ember,16)}<span style={{fontSize:11,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Paid Social assisted</span></div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"8px 32px",alignItems:"baseline"}}>
+                  <div><span style={{fontSize:20,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(ps.revenue)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>revenue ({pc(ps.revenueSharePct)} of total)</span></div>
+                  <div><span style={{fontSize:16,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.transactions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>transactions</span></div>
+                  <div><span style={{fontSize:16,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.sessions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>sessions</span></div>
+                </div>
+                <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.7,marginTop:12,borderTop:"1px solid "+P.rule,paddingTop:10}}>{ecoData.note}</div>
+              </div>
+
+              {ecoData.topProducts&&ecoData.topProducts.length>0&&<div style={{marginBottom:22}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.crown(P.mint,16)}<span style={{fontSize:12,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:1.5}}>SALES WINNERS</span></div>
+                <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:14,overflow:"hidden"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontFamily:fm}}>
+                    <thead><tr style={{borderBottom:"1px solid "+P.rule}}>
+                      <th style={{textAlign:"left",padding:"12px 16px",fontSize:9,color:P.label,letterSpacing:1.5,fontWeight:700}}>PRODUCT</th>
+                      <th style={{textAlign:"right",padding:"12px 16px",fontSize:9,color:P.label,letterSpacing:1.5,fontWeight:700}}>REVENUE</th>
+                      <th style={{textAlign:"right",padding:"12px 16px",fontSize:9,color:P.label,letterSpacing:1.5,fontWeight:700}}>UNITS</th>
+                    </tr></thead>
+                    <tbody>{ecoData.topProducts.map(function(p,i){return <tr key={i} style={{borderBottom:i<ecoData.topProducts.length-1?"1px solid "+P.rule+"60":"none"}}>
+                      <td style={{padding:"11px 16px",fontSize:12,color:P.txt,fontWeight:600}}>{p.name}</td>
+                      <td style={{padding:"11px 16px",fontSize:12,color:P.mint,fontWeight:800,textAlign:"right"}}>{fR(p.revenue)}</td>
+                      <td style={{padding:"11px 16px",fontSize:12,color:P.label,textAlign:"right"}}>{fmt(p.units)}</td>
+                    </tr>;})}</tbody>
+                  </table>
+                </div>
+              </div>}
+
+              {/* Admin-only: lets the team confirm the real GA4 newsletter
+                  event name and wire it into the KPI profile. Never shown
+                  to a client view. */}
+              {!isClient&&ecoData.discoveredEvents&&ecoData.discoveredEvents.length>0&&<div style={{marginBottom:8,padding:"16px 20px",background:P.glass,border:"1px dashed "+P.rule,borderRadius:14}}>
+                <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:4,fontWeight:700}}>GA4 EVENTS (TEAM ONLY)</div>
+                <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.6,marginBottom:12}}>Property {ecoData.propertyId}. Newsletter event currently set to {ecoData.newsletterEvent?("“"+ecoData.newsletterEvent+"”"):"(none)"}. Pick the real sign-up event from this list and set it in Settings, KPI Profiles.</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{ecoData.discoveredEvents.map(function(ev,i){var on=ecoData.newsletterEvent&&ev.event===ecoData.newsletterEvent;return <span key={i} style={{fontSize:10,fontFamily:fm,padding:"5px 10px",borderRadius:8,background:on?P.mint+"22":P.cosmos,border:"1px solid "+(on?P.mint+"55":P.rule),color:on?P.mint:P.label,fontWeight:on?800:600}}>{ev.event} <span style={{opacity:0.6}}>{fmt(ev.count)}</span></span>;})}</div>
+              </div>}
             </div>;
           })()}
         </div>)}
