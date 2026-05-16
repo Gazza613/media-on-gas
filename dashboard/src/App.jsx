@@ -894,6 +894,36 @@ function AdPreviewModal(props){
     });
     return function(){cancelled=true;clearTimeout(timer);};
   },[ad&&ad.adId,ad&&ad.videoId,isVideo,platformKey]);
+
+  // Per-asset breakdown for Meta "mixed" (Flexible / Dynamic Creative)
+  // ads. One ad object holds many creatives; ad-level metrics blend
+  // them, so we ask /api/ad-assets which uses Meta's image_asset /
+  // video_asset insight breakdowns to show which specific creative
+  // actually won. Only fired for Meta + MIXED so we don't hammer the
+  // API for ordinary single-creative ads.
+  var abS=useState({loading:false,loaded:false,data:null,error:""}),assetBk=abS[0],setAssetBk=abS[1];
+  var isMixed=format==="MIXED";
+  useEffect(function(){
+    setAssetBk({loading:false,loaded:false,data:null,error:""});
+    if(!ad||!isMixed||platformKey!=="meta"||!ad.adId)return;
+    setAssetBk({loading:true,loaded:false,data:null,error:""});
+    var authQ=(props.viewToken?("&token="+encodeURIComponent(props.viewToken)):"")+(!props.viewToken&&props.session?("&st="+encodeURIComponent(props.session)):"");
+    var cid=String((ad.campaignId)||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+    var u=props.apiBase+"/api/ad-assets?platform=meta&adId="+encodeURIComponent(ad.adId)+
+      (cid?("&campaignId="+encodeURIComponent(cid)):"")+
+      (props.dateFrom?("&from="+encodeURIComponent(props.dateFrom)):"")+
+      (props.dateTo?("&to="+encodeURIComponent(props.dateTo)):"")+authQ;
+    var cancelled=false;
+    fetch(u).then(function(r){return r.json();}).then(function(d){
+      if(cancelled)return;
+      setAssetBk({loading:false,loaded:true,data:d,error:d&&d.error?d.error:""});
+    }).catch(function(){
+      if(cancelled)return;
+      setAssetBk({loading:false,loaded:true,data:null,error:"Could not load the creative breakdown."});
+    });
+    return function(){cancelled=true;};
+  },[ad&&ad.adId,isMixed,platformKey]);
+
   if(!props.ad)return null;
   var platAccent={"Facebook":"#4599FF","Instagram":"#E1306C","TikTok":"#00F2EA","Google Display":"#34A853","YouTube":"#FF0000","Google Search":"#FFAA00","Performance Max":"#7C3AED","Demand Gen":"#D946EF"};
   var accent=platAccent[ad.platform]||P.ember;
@@ -1095,6 +1125,50 @@ function AdPreviewModal(props){
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fR(parseFloat(ad.cpc||0))}</div>
         </div>
       </div>
+
+      {isMixed&&platformKey==="meta"&&(function(){
+        var d=assetBk.data;
+        var hdr=<div style={{marginTop:22,marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:900,color:P.fuchsia,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>What's inside this mixed ad</div>
+          <div style={{fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.65,marginTop:6}}>
+            This is a <strong style={{color:P.txt}}>mixed ad</strong>. Instead of one creative, several were loaded together and Meta automatically showed each person the version most likely to work for them. The single set of numbers above is the blended total. Below is how <strong style={{color:P.txt}}>each individual creative</strong> performed, so you can see exactly which one is winning.
+          </div>
+        </div>;
+        if(assetBk.loading)return <div>{hdr}<div style={{padding:"18px 0",fontSize:12,color:P.caption,fontFamily:fm}}>Pulling the per creative breakdown from Meta…</div></div>;
+        if(assetBk.error)return <div>{hdr}<div style={{padding:"14px 16px",background:P.rose+"12",border:"1px solid "+P.rose+"30",borderRadius:10,fontSize:12,color:P.rose,fontFamily:fm}}>{assetBk.error}</div></div>;
+        if(d&&d.supported===false)return <div>{hdr}<div style={{padding:"14px 16px",background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.6}}>{d.reason||"Per creative breakdown is not available for this ad."}</div></div>;
+        if(d&&d.ok&&(!d.assets||d.assets.length===0))return <div>{hdr}<div style={{padding:"14px 16px",background:P.warning+"12",border:"1px solid "+P.warning+"30",borderRadius:10,fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.6}}>{d.note||"Meta has not returned a per creative breakdown yet. This is normal in the first day or two after launch."}</div></div>;
+        if(!d||!d.ok||!d.assets)return null;
+        var rLabel=d.resultLabel||"Results";
+        return <div>
+          {hdr}
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {d.assets.map(function(a,i){
+              var top=i===0;
+              return <div key={a.assetId||i} style={{display:"flex",gap:14,padding:14,background:top?P.mint+"0E":"rgba(255,255,255,0.03)",border:"1px solid "+(top?P.mint+"45":P.rule),borderRadius:12,alignItems:"center"}}>
+                <div style={{position:"relative",width:84,height:84,flexShrink:0,borderRadius:10,overflow:"hidden",background:"linear-gradient(135deg,"+P.fuchsia+"40,"+P.violet+"20)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {a.thumbnail?<img src={a.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<span style={{fontSize:9,fontWeight:800,color:"#fff",fontFamily:fm,letterSpacing:1}}>{(a.kind||"AD").toUpperCase()}</span>}
+                  <span style={{position:"absolute",top:6,left:6,background:"rgba(0,0,0,0.6)",color:"#fff",fontSize:8,fontWeight:800,padding:"2px 6px",borderRadius:4,letterSpacing:1,fontFamily:fm}}>{(a.kind||"").toUpperCase()}</span>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:12,fontWeight:800,color:P.txt,fontFamily:fm}}>{"Creative #"+(i+1)}</span>
+                    {top&&<span style={{background:P.mint,color:"#062014",fontSize:8,fontWeight:900,padding:"3px 8px",borderRadius:4,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm}}>Top Performer</span>}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(78px,1fr))",gap:8}}>
+                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>{rLabel}</div><div style={{fontSize:14,fontWeight:900,color:top?P.mint:P.txt,fontFamily:fm}}>{fmt(a.results||0)}</div></div>
+                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Cost / {rLabel}</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{a.results>0?fR(a.costPerResult):"—"}</div></div>
+                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Spend</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{fR(a.spend||0)}</div></div>
+                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Impressions</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(a.impressions||0)}</div></div>
+                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>CTR</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{(parseFloat(a.ctr||0)).toFixed(2)+"%"}</div></div>
+                  </div>
+                </div>
+              </div>;
+            })}
+          </div>
+          {d.note&&<div style={{marginTop:12,fontSize:10.5,color:P.caption,fontFamily:ff,lineHeight:1.6,fontStyle:"italic"}}>{d.note}</div>}
+        </div>;
+      })()}
     </div>
   </div>;
 }
@@ -4483,7 +4557,7 @@ export default function MediaOnGas(){
       </div>
     </div>}
     <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin}/>
-    <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} session={viewToken?"":session} viewToken={viewToken}/>
+    <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} session={viewToken?"":session} viewToken={viewToken} dateFrom={df} dateTo={dt}/>
     {/* Chat FAB + panel scoped to the Summary tab. The chat is grounded in
         Summary's snapshot, so showing the FAB on Deep Dive / Creative /
         Demographics / etc. invited questions the bot can't answer in
