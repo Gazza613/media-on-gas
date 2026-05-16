@@ -6512,21 +6512,42 @@ export default function MediaOnGas(){
                 </div></Reveal>
               </div>
 
-              {prods.length>0&&<Reveal minHeight={220}><div style={{marginBottom:24}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Sales Winners</span></div>
-                <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:14}}>Top {prods.length} products by revenue for the period</div>
-                <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"18px 14px 14px"}}>
-                  <ChartReveal><ResponsiveContainer width="100%" height={prods.length*46+20}>
-                    <BarChart data={prods.map(function(p){return {name:String(p.name||"(unknown)").length>28?String(p.name).slice(0,28)+"…":String(p.name||"(unknown)"),revenue:parseFloat(p.revenue||0),units:parseInt(p.units||0,10),_currency:true};})} layout="vertical" margin={{top:0,right:64,left:8,bottom:0}}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
-                      <XAxis type="number" tick={axN} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+fmt(v);}}/>
-                      <YAxis type="category" dataKey="name" width={190} interval={0} tick={catTick} axisLine={false} tickLine={false}/>
-                      <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                      <Bar dataKey="revenue" radius={[0,6,6,0]} fill={P.mint} barSize={16}><LabelList dataKey="revenue" position="right" formatter={function(v){return "R"+fmt(v);}} style={lbl}/></Bar>
-                    </BarChart>
-                  </ResponsiveContainer></ChartReveal>
-                </div>
-              </div></Reveal>}
+              {prods.length>0&&(function(){
+                // Ranked podium cards. GA4 carries no product image
+                // (only itemName/revenue/qty), so each product gets a
+                // brand-coloured monogram tile as a clean stand-in. If a
+                // Merchant Center feed is wired later, swap the monogram
+                // for the real image_link keyed by itemId, the layout
+                // already reserves the tile slot.
+                var pTot=prods.reduce(function(x,p){return x+(parseFloat(p.revenue||0));},0);
+                var pMax=Math.max.apply(null,prods.map(function(p){return parseFloat(p.revenue||0);}).concat([1]));
+                var PAL=[P.mint,P.orchid,P.cyan,P.solar,P.ember,P.blaze,P.rose,P.fuchsia];
+                var medal=function(i){return i===0?"🥇":i===1?"🥈":i===2?"🥉":("#"+(i+1));};
+                var mono=function(n){var w=String(n||"").trim().split(/\s+/).filter(Boolean);if(w.length>=2)return (w[0][0]+w[1][0]).toUpperCase();return String(n||"?").slice(0,2).toUpperCase();};
+                return <Reveal minHeight={220}><div style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>{Ic.crown(P.mint,18)}<span style={{fontSize:13,fontWeight:900,color:P.mint,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Sales Winners</span></div>
+                  <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:14}}>Top {prods.length} products by revenue for the period</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {prods.map(function(p,i){
+                      var rv=parseFloat(p.revenue||0),un=parseInt(p.units||0,10);
+                      var share=pTot>0?(rv/pTot*100):0;
+                      var ac=PAL[i%PAL.length];var top=i===0;
+                      return <div key={i} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",borderRadius:14,background:top?"linear-gradient(135deg,"+ac+"14 0%, rgba(0,0,0,0.15) 60%)":"rgba(0,0,0,0.15)",border:"1px solid "+(top?ac+"45":P.rule)}}>
+                        <div style={{fontSize:top?20:13,fontWeight:900,color:ac,fontFamily:fm,width:34,textAlign:"center",flexShrink:0}}>{medal(i)}</div>
+                        <div style={{width:52,height:52,borderRadius:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,"+ac+"55,"+ac+"18 60%,#0a0618 100%)",border:"1px solid "+ac+"40",color:"#fff",fontSize:16,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:top?"0 4px 16px "+ac+"30":"none"}}>{mono(p.name)}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div title={p.name} style={{fontSize:13,fontWeight:800,color:P.txt,fontFamily:ff,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:7}}>{p.name||"(unknown)"}</div>
+                          <div style={{height:8,background:P.rule+"40",borderRadius:5,overflow:"hidden"}}><div style={{width:Math.max(3,rv/pMax*100)+"%",height:"100%",background:"linear-gradient(90deg,"+ac+"AA,"+ac+")",borderRadius:5,transition:"width 0.6s ease"}}/></div>
+                        </div>
+                        <div style={{textAlign:"right",flexShrink:0,minWidth:120}}>
+                          <div style={{fontSize:17,fontWeight:900,color:ac,fontFamily:fm,lineHeight:1}}>{fR(rv)}</div>
+                          <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:4}}>{share.toFixed(2)}% of sales{un>0?" · "+fmt(un)+" units":""}</div>
+                        </div>
+                      </div>;
+                    })}
+                  </div>
+                </div></Reveal>;
+              })()}
 
               {/* Acquisition + audience: where visits come from, device
                   split, where sales come from, top markets. All optional,
