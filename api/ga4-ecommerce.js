@@ -122,10 +122,15 @@ export default async function handler(req, res) {
   if (to > yest) to = yest;
   if (from > to) from = to;
   if (nlEnd < from) nlEnd = from;
-  // Match the configured path tolerant of a trailing slash: GA4 may
-  // store "/thanks-page" or "/thanks-page/" depending on the route, so
-  // CONTAINS the slash-stripped value catches both.
-  var newsletterPathMatch = newsletterPath.replace(/\/+$/, "") || newsletterPath;
+  // Build a forgiving matcher. The team may not know the exact GA4
+  // path, so: accept a comma-separated list of candidates, strip
+  // slashes, escape regex metachars, and match case-insensitively via
+  // PARTIAL_REGEXP so e.g. "thank-you, subscribed, success" all count.
+  var newsletterTokens = newsletterPath.split(",").map(function(s) {
+    return String(s || "").trim().replace(/^\/+|\/+$/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }).filter(function(s) { return s; });
+  var newsletterRegex = newsletterTokens.join("|");
+  var newsletterPathMatch = newsletterTokens.join(", ") || newsletterPath;
 
   var cacheKey = propertyId + "|" + from + "|" + to + "|" + nlEnd + "|" + newsletterEvent + "|" + newsletterPath;
   var hit = cache[cacheKey];
@@ -155,7 +160,7 @@ export default async function handler(req, res) {
         dimensions: [{ name: "pagePath" }],
         metrics: [{ name: "screenPageViews" }],
         dimensionFilter: {
-          filter: { fieldName: "pagePath", stringFilter: { matchType: "CONTAINS", value: newsletterPathMatch } }
+          filter: { fieldName: "pagePath", stringFilter: { matchType: "PARTIAL_REGEXP", value: newsletterRegex, caseSensitive: false } }
         },
         limit: 20
       } : {
