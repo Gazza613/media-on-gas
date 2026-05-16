@@ -1159,6 +1159,11 @@ function AdPreviewModal(props){
         if(d&&d.ok&&(!d.assets||d.assets.length===0))return <div>{hdr}<div style={{padding:"14px 16px",background:P.warning+"12",border:"1px solid "+P.warning+"30",borderRadius:10,fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.6}}>{d.note||"Meta has not returned a per creative breakdown yet. This is normal in the first day or two after launch."}</div></div>;
         if(!d||!d.ok||!d.assets)return null;
         var rLabel=d.resultLabel||"Results";
+        // Awareness/reach ads are ranked on impressions and cost is CPM.
+        // Render an awareness-appropriate column set (no duplicate
+        // Impressions column, cost labelled CPM) instead of the
+        // results/cost-per-result layout.
+        var awrBasis=d.basis==="reach";
         return <div>
           {hdr}
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -1176,9 +1181,11 @@ function AdPreviewModal(props){
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(78px,1fr))",gap:8}}>
                     <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>{rLabel}</div><div style={{fontSize:14,fontWeight:900,color:top?P.mint:P.txt,fontFamily:fm}}>{fmt(a.results||0)}</div></div>
-                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Cost / {rLabel}</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{a.results>0?fR(a.costPerResult):"—"}</div></div>
+                    {awrBasis
+                      ? <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>CPM</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{a.results>0?fR(a.costPerResult):"—"}</div></div>
+                      : <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Cost / {rLabel}</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{a.results>0?fR(a.costPerResult):"—"}</div></div>}
                     <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Spend</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{fR(a.spend||0)}</div></div>
-                    <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Impressions</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(a.impressions||0)}</div></div>
+                    {!awrBasis&&<div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>Impressions</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(a.impressions||0)}</div></div>}
                     <div><div style={{fontSize:7,color:P.label,letterSpacing:1.5,fontWeight:800,textTransform:"uppercase",fontFamily:fm}}>CTR</div><div style={{fontSize:13,fontWeight:900,color:P.txt,fontFamily:fm}}>{(parseFloat(a.ctr||0)).toFixed(2)+"%"}</div></div>
                   </div>
                 </div>

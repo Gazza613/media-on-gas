@@ -118,12 +118,22 @@ export async function computeAssetBreakdown(adId, from, to) {
   var token = process.env.META_ACCESS_TOKEN;
   if (!token) return { ok: false, error: "META_ACCESS_TOKEN not configured" };
 
-  // account_id is needed to resolve image-hash thumbnails.
+  // account_id resolves image-hash thumbnails; campaign objective/name
+  // decides which metric "winning" means. Awareness/reach campaigns
+  // must NOT be ranked on link clicks (Phase 1 rule) — for those the
+  // winner is the creative that delivered the most impressions (Meta's
+  // asset breakdown does not expose reach per creative, only at the
+  // ad/campaign level, so impressions is the correct per-asset proxy).
   var accountId = "";
+  var awareness = false;
   try {
-    var ar = await fetch(GRAPH + "/" + encodeURIComponent(adId) + "?fields=account_id&access_token=" + encodeURIComponent(token));
+    var ar = await fetch(GRAPH + "/" + encodeURIComponent(adId) + "?fields=account_id,campaign{name,objective}&access_token=" + encodeURIComponent(token));
     var ad = await ar.json();
     if (ar.ok && ad.account_id) accountId = "act_" + ad.account_id;
+    var campObj = String((ad.campaign && ad.campaign.objective) || "");
+    var campName = String((ad.campaign && ad.campaign.name) || "");
+    awareness = /AWARENESS|REACH|BRAND/i.test(campObj) ||
+      /(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/i.test(campName);
   } catch (_) {}
 
   // Pull both visual breakdowns in parallel. A mixed ad usually leads
@@ -193,12 +203,19 @@ export async function computeAssetBreakdown(adId, from, to) {
   var totalLeads = assets.reduce(function(s, a){ return s + a.leads; }, 0);
   var totalInstalls = assets.reduce(function(s, a){ return s + a.installs; }, 0);
   var totalFollows = assets.reduce(function(s, a){ return s + a.follows; }, 0);
-  var resultKey = totalLeads > 0 ? "leads" : totalInstalls > 0 ? "installs" : totalFollows > 0 ? "follows" : "linkClicks";
-  var resultLabel = resultKey === "leads" ? "Leads" : resultKey === "installs" ? "Installs" : resultKey === "follows" ? "Follows & Likes" : "Link Clicks";
+  // Awareness/reach: rank on impressions (the per-creative reach proxy)
+  // and report cost as CPM, never link clicks. Everything else keeps
+  // the leads/installs/follows/link-clicks ladder.
+  var resultKey = awareness ? "impressions" : totalLeads > 0 ? "leads" : totalInstalls > 0 ? "installs" : totalFollows > 0 ? "follows" : "linkClicks";
+  var resultLabel = awareness ? "Impressions" : resultKey === "leads" ? "Leads" : resultKey === "installs" ? "Installs" : resultKey === "follows" ? "Follows & Likes" : "Link Clicks";
 
   assets.forEach(function(a) {
     a.results = a[resultKey] || 0;
-    a.costPerResult = a.results > 0 ? parseFloat((a.spend / a.results).toFixed(2)) : 0;
+    // Awareness cost = CPM (cost per 1,000 impressions); spend/impr is
+    // a meaningless fraction otherwise.
+    a.costPerResult = awareness
+      ? (a.impressions > 0 ? parseFloat((a.spend / a.impressions * 1000).toFixed(2)) : 0)
+      : (a.results > 0 ? parseFloat((a.spend / a.results).toFixed(2)) : 0);
   });
   assets.sort(function(a, b) {
     if (b.results !== a.results) return b.results - a.results;
@@ -214,6 +231,7 @@ export async function computeAssetBreakdown(adId, from, to) {
   var payload = {
     ok: true, supported: true, adId: adId, from: from, to: to,
     resultLabel: resultLabel,
+    basis: awareness ? "reach" : "results",
     assets: assets.map(function(a, i) {
       return {
         rank: i + 1,
@@ -229,7 +247,9 @@ export async function computeAssetBreakdown(adId, from, to) {
         costPerResult: a.costPerResult
       };
     }),
-    note: "Spend, impressions, clicks and CTR per creative are exact. Result counts are Meta's modelled attribution, the platform optimises combinations rather than running clean isolated splits, so treat results as a strong directional signal rather than a lab test."
+    note: awareness
+      ? "This is an awareness campaign, so the winning creative is the one that delivered the most impressions (reach is not exposed per creative by Meta, impressions is the per-creative proxy). Cost is shown as CPM. Spend, impressions and CTR per creative are exact."
+      : "Spend, impressions, clicks and CTR per creative are exact. Result counts are Meta's modelled attribution, the platform optimises combinations rather than running clean isolated splits, so treat results as a strong directional signal rather than a lab test."
   };
   assetCache[cacheKey] = { ts: Date.now(), payload: payload };
   return payload;
