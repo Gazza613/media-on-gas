@@ -77,14 +77,26 @@ export async function getAllKpiProfiles() {
   return map;
 }
 
-// Resolve the profile for a given raw client name / slug. Returns the
-// profile object or null when the client has no profile (default
-// behaviour). Accepts any of the slug variants since it canonicalises.
+// Resolve the profile for a given raw client name / slug. Tolerant on
+// purpose: the dashboard derives client names from ad-account names
+// ("Psycho Bunny ZA") while the superadmin types the profile name
+// ("Psycho Bunny"), so an exact canonical match would miss. Order:
+//   1. exact canonical slug match
+//   2. one canonical slug contains the other (length-guarded >= 5 so
+//      short tokens can't false-match across clients)
+// Returns the profile or null (client has no profile = default).
 export async function getKpiProfile(rawClient) {
   var slug = canonicalClientSlug(rawClient);
   if (!slug) return null;
   var all = await getAllKpiProfiles();
-  return all[slug] || null;
+  if (all[slug]) return all[slug];
+  var keys = Object.keys(all);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (!k || k.length < 5 || slug.length < 5) continue;
+    if (slug.indexOf(k) >= 0 || k.indexOf(slug) >= 0) return all[k];
+  }
+  return null;
 }
 
 // Upsert a profile. `rawClient` is canonicalised to the storage key.

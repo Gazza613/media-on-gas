@@ -1,8 +1,9 @@
 import { rateLimit } from "./_rateLimit.js";
 import { getSession } from "./auth.js";
+import { checkAuth } from "./_auth.js";
 import { isSuperadminEmail } from "./_users.js";
 import { logUsageEvent } from "./_audit.js";
-import { getAllKpiProfiles, setKpiProfile } from "./_clientKpiProfiles.js";
+import { getAllKpiProfiles, setKpiProfile, getKpiProfile } from "./_clientKpiProfiles.js";
 
 // Per-client KPI profiles administered via Settings → KPI Profiles.
 // Superadmin-only writes by design: a profile changes which KPIs the
@@ -37,13 +38,28 @@ function sanitiseKpiList(arr) {
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
 
+  // ?resolve=<clientName> -> tolerant single-profile lookup, used by
+  // the dashboard (admin AND client share views) to decide if the
+  // Ecommerce tab shows. Uses checkAuth so a client viewToken works;
+  // client-role principals are forced to their own share-token slug
+  // so a client can't probe another client's profile.
+  if (req.method === "GET" && String(req.query.resolve || "").trim()) {
+    if (!(await checkAuth(req, res))) return;
+    var principalR = req.authPrincipal || { role: "admin" };
+    var resolveName = String(req.query.resolve || "").trim();
+    var target = principalR.role === "client" ? String(principalR.clientSlug || "") : resolveName;
+    var prof = target ? await getKpiProfile(target) : null;
+    res.status(200).json({ profile: prof || null });
+    return;
+  }
+
   var token = req.headers["x-session-token"] || "";
   var session = await getSession(token);
   if (!session) { res.status(401).json({ error: "Sign in required" }); return; }
 
   if (req.method === "GET") {
-    // Any signed-in admin can read profiles (the Settings editor + the
-    // dashboard gating both need them). Writes are gated below.
+    // Any signed-in admin can read all profiles (the Settings editor
+    // needs them). Writes are gated below.
     var profiles = await getAllKpiProfiles();
     res.status(200).json({ profiles: profiles });
     return;
