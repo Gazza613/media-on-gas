@@ -6,6 +6,7 @@ import { logEmailSend } from "./_audit.js";
 import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain } from "./_clientIdentity.js";
 import { computeAssetBreakdown } from "./ad-assets.js";
+import { getKpiProfile } from "./_clientKpiProfiles.js";
 
 // Admin-only endpoint. Issues a signed share token, fetches the campaign summary,
 // and emails a branded HTML report from grow@gasmarketing.co.za via Gmail SMTP.
@@ -281,17 +282,22 @@ function renderEcommerceBlock(eco) {
       tile("Avg Order Value", fR(e.aov), "#FFB200") +
       tile("Newsletter Sign-ups", fI(eco.newsletterSignups), "#C77DFF") +
     '</tr></table></td></tr>' +
-    '<tr><td style="padding:14px 16px;background:rgba(249,98,3,0.07);border-left:3px solid #F96203;border-radius:0 8px 8px 0;margin-top:6px;">' +
+    // Only surface the paid-social attribution line when it actually
+    // attributed revenue. For an awareness brief GA4 usually attributes
+    // nothing to paid social, and telling the client "paid social drove
+    // R0,00 / 0%" reads as a negative, not an honest "assisted" nuance.
+    (parseFloat(ps.revenue || 0) > 0 ?
+      '<tr><td style="padding:14px 16px;background:rgba(249,98,3,0.07);border-left:3px solid #F96203;border-radius:0 8px 8px 0;margin-top:6px;">' +
       '<div style="font-size:11px;font-weight:800;color:#F96203;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Paid social assisted</div>' +
       '<div style="font-size:13px;color:#D6E0EC;line-height:1.7;">' + fR(ps.revenue) + ' revenue (' + (parseFloat(ps.revenueSharePct || 0).toFixed(2)) + '% of the total above), and ' + fI(ps.transactions) + ' transactions. ' +
-      'For an awareness campaign treat this as an assisted, view-through signal, a directional contribution rather than the campaign’s optimisation target.</div></td></tr>' +
+      'For an awareness campaign treat this as an assisted, view-through signal, a directional contribution rather than the campaign’s optimisation target.</div></td></tr>' : '') +
     (winners ? '<tr><td>' + winners + '</td></tr>' : '') +
     '</table>';
 }
 
 // Render the KPI + platform + objective blocks. Table-based with inline styles so
 // Outlook, Gmail, Apple Mail, and mobile clients all render consistently.
-function renderSummaryBlock(summary) {
+function renderSummaryBlock(summary, profile, eco) {
   if (!summary) return "";
   var g = summary.grand;
 
@@ -351,7 +357,51 @@ function renderSummaryBlock(summary) {
     { label: "Clicks to App Store", value: appStoreValue, cost: appStoreValue > 0 ? fmtR(g.costPerAppStoreClick) + " per click" : "", accent: "#4599FF" },
     { label: "Clicks to Landing Page", value: lpClicksValue, cost: lpClicksValue > 0 ? fmtR(g.costPerLandingPageClick) + " per click" : "", accent: "#22D3EE" }
   ];
-  var outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
+  var outcomes;
+  // If this client has a KPI profile, the Objective Outcomes section
+  // mirrors the KPIs they nominated in Settings (same as the dashboard
+  // Objective Highlights), in their chosen order, instead of the
+  // generic campaign-derived tiles. Zero-value KPIs are dropped so a
+  // "no sales / no signups" line is never shown to the client.
+  var prof = profile && ((profile.primaryKpis && profile.primaryKpis.length) || (profile.secondaryKpis && profile.secondaryKpis.length) || (profile.tertiaryKpis && profile.tertiaryKpis.length)) ? profile : null;
+  if (prof) {
+    var ec = (eco && eco.ecommerce) || {};
+    var st = (eco && eco.site) || {};
+    var nlS = eco ? parseFloat(eco.newsletterSignups || 0) : 0;
+    var roasV = (g.spend > 0 && ec.revenue > 0) ? (ec.revenue / g.spend) : 0;
+    var KMAP = {
+      reach: { label: "Reach", num: g.reach, display: fmtNum(g.reach), sub: "people who saw the ads" },
+      unique_reach: { label: "Unique reach", num: g.reach, display: fmtNum(g.reach), sub: "unique people" },
+      impressions: { label: "Ads served", num: g.impressions, display: fmtNum(g.impressions), sub: "times shown" },
+      clicks: { label: "Clicks to website", num: g.clicks, display: fmtNum(g.clicks), sub: "to the website" },
+      ctr: { label: "Click-through rate", num: g.ctr, display: fmtPct(g.ctr), sub: "of ads clicked" },
+      cpc: { label: "Cost per click", num: g.cpc, display: fmtR(g.cpc), sub: "blended" },
+      cpm: { label: "Cost per 1,000", num: g.cpm, display: fmtR(g.cpm), sub: "per 1,000 ads served" },
+      frequency: { label: "Frequency", num: g.frequency, display: (parseFloat(g.frequency || 0)).toFixed(2) + "x", sub: "avg times seen" },
+      newsletter_signups: { label: "Newsletter sign-ups", num: nlS, display: fmtNum(nlS), sub: "captured this period" },
+      leads: { label: "Leads", num: g.leads, display: fmtNum(g.leads), sub: g.leads > 0 ? fmtR(g.costPerLead) + " per lead" : "" },
+      installs: { label: "Clicks to App Store", num: appStoreValue, display: fmtNum(appStoreValue), sub: "" },
+      follows: { label: "Followers & likes", num: totalFollows, display: fmtNum(totalFollows), sub: "" },
+      revenue: { label: "Website sales", num: ec.revenue, display: fmtR(ec.revenue), sub: "ecommerce revenue" },
+      roas: { label: "Revenue vs ad spend", num: roasV, display: roasV.toFixed(2) + "x", sub: "blended, not ad-attributed" },
+      transactions: { label: "Online orders", num: ec.transactions, display: fmtNum(ec.transactions), sub: "" },
+      aov: { label: "Avg order value", num: ec.aov, display: fmtR(ec.aov), sub: "" },
+      site_users: { label: "Site visitors", num: st.users, display: fmtNum(st.users), sub: "" },
+      conversion_rate: { label: "Conversion rate", num: ec.conversionRate, display: fmtPct(ec.conversionRate), sub: "sessions to sale" }
+    };
+    var ACC = ["#A855F7", "#3DDC91", "#22D3EE", "#FFAA00", "#F96203", "#FF6B6B", "#34D399", "#7C3AED"];
+    var seenK = {}, orderK = [];
+    [].concat(prof.primaryKpis || [], prof.secondaryKpis || [], prof.tertiaryKpis || []).forEach(function(k) {
+      if (k && k !== "top_products" && KMAP[k] && !seenK[k]) { seenK[k] = 1; orderK.push(k); }
+    });
+    var built = orderK.map(function(k, idx) {
+      var m = KMAP[k];
+      return { label: m.label, value: parseFloat(m.num || 0), display: m.display, cost: m.sub || "", accent: ACC[idx % ACC.length] };
+    }).filter(function(o) { return o.value > 0; }).slice(0, 8);
+    outcomes = built.length > 0 ? built : allOutcomes.filter(function(o) { return o.value > 0; });
+  } else {
+    outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
+  }
   var OUTCOME_TILE_HEIGHT = 110;
   var outcomeRows = "";
   // If only one outcome, render full-width. If 2+, use 2x2 (or 2x1 for exactly 2). Never render an empty tile.
@@ -361,7 +411,7 @@ function renderSummaryBlock(summary) {
       '<table role="presentation" width="100%" height="' + OUTCOME_TILE_HEIGHT + '" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.04);border:1px solid ' + solo.accent + '33;border-left:3px solid ' + solo.accent + ';border-radius:10px;height:' + OUTCOME_TILE_HEIGHT + 'px;">' +
       '<tr><td valign="top" style="padding:14px 16px;">' +
       '<div style="font-size:8px;color:' + solo.accent + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;min-height:20px;">' + solo.label + '</div>' +
-      '<div style="font-size:26px;font-weight:900;color:#FFFBF8;margin-top:4px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + fmtNum(solo.value) + '</div>' +
+      '<div style="font-size:26px;font-weight:900;color:#FFFBF8;margin-top:4px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + (solo.display != null ? solo.display : fmtNum(solo.value)) + '</div>' +
       '<div style="font-size:10px;color:#8B7FA3;margin-top:5px;font-family:Helvetica,Arial,sans-serif;">' + solo.cost + '</div>' +
       '</td></tr></table></td></tr>';
   } else if (outcomes.length >= 2) {
@@ -372,7 +422,7 @@ function renderSummaryBlock(summary) {
           '<table role="presentation" width="100%" height="' + OUTCOME_TILE_HEIGHT + '" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.04);border:1px solid ' + o.accent + '33;border-left:3px solid ' + o.accent + ';border-radius:10px;height:' + OUTCOME_TILE_HEIGHT + 'px;">' +
           '<tr><td valign="top" style="padding:14px 16px;">' +
           '<div style="font-size:8px;color:' + o.accent + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;min-height:20px;">' + o.label + '</div>' +
-          '<div style="font-size:22px;font-weight:900;color:#FFFBF8;margin-top:4px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + fmtNum(o.value) + '</div>' +
+          '<div style="font-size:22px;font-weight:900;color:#FFFBF8;margin-top:4px;line-height:1;font-family:Helvetica,Arial,sans-serif;">' + (o.display != null ? o.display : fmtNum(o.value)) + '</div>' +
           '<div style="font-size:10px;color:#8B7FA3;margin-top:5px;font-family:Helvetica,Arial,sans-serif;">' + o.cost + '</div>' +
           '</td></tr></table></td>';
       }).join("") + '</tr>';
@@ -584,7 +634,7 @@ function buildEmailHtml(opts) {
   var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
-  var summaryBlock = renderSummaryBlock(opts.summary);
+  var summaryBlock = renderSummaryBlock(opts.summary, opts.profile, opts.ecommerce);
   var commentaryBlock = renderCommentaryBlock(opts.summary);
   var topAdsBlock = renderTopAdsBlock(opts.topAds);
   var ecommerceBlock = renderEcommerceBlock(opts.ecommerce);
@@ -780,11 +830,13 @@ export default async function handler(req, res) {
     var results = await Promise.all([
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
       fetchTopAds(req, from, to, campaignIds, campaignNames),
-      fetchEcommerce(req, from, to, clientSlug)
+      fetchEcommerce(req, from, to, clientSlug),
+      getKpiProfile(clientSlug).catch(function(){ return null; })
     ]);
     var summary = results[0];
     var topAds = results[1];
     var ecommerce = results[2];
+    var kpiProfile = results[3];
 
     // Enrich any MIXED Meta ad in the Top Ads block with its
     // per-creative breakdown so the static email shows which creative
@@ -825,7 +877,8 @@ export default async function handler(req, res) {
       origin: origin,
       summary: summary,
       topAds: topAds,
-      ecommerce: ecommerce
+      ecommerce: ecommerce,
+      profile: kpiProfile
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
