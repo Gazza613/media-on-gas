@@ -1864,7 +1864,7 @@ function CampaignAuditModal(props){
     kpiBusy[1](true);kpiErr[1]("");kpiMsg[1]("");
     fetch(props.apiBase+"/api/client-kpi-profiles",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({client:client,profile:kpiForm[0]})})
       .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
-      .then(function(x){kpiBusy[1](false);if(x.status>=400){kpiErr[1]((x.data&&x.data.error)||"Save failed");return;}kpiMsg[1]("Saved.");setTimeout(function(){kpiMsg[1]("");},1800);loadKpiProfiles();if(props.onKpiSaved)props.onKpiSaved();})
+      .then(function(x){kpiBusy[1](false);if(x.status>=400){kpiErr[1]((x.data&&x.data.error)||"Save failed");return;}kpiMsg[1]("Saved.");setTimeout(function(){kpiMsg[1]("");},2400);loadKpiProfiles();if(props.onKpiSaved)props.onKpiSaved();})
       .catch(function(){kpiBusy[1](false);kpiErr[1]("Connection error");});
   };
   var deleteKpiProfile=function(slug){
@@ -2549,7 +2549,7 @@ function CampaignAuditModal(props){
               <input value={form.logoUrl||""} onChange={function(e){var nf=Object.assign({},form);nf.logoUrl=e.target.value;kpiForm[1](nf);}} placeholder="/clients/psycho-bunny.png  or  https://..." style={inp}/>
               <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:5,lineHeight:1.5}}>An https URL, or a file committed to dashboard/public (served at the site root, e.g. /clients/psycho-bunny.png). Leave blank for GAS-only branding.</div>
             </div>
-            <button onClick={saveKpiProfile} disabled={kpiBusy[0]} style={{background:kpiBusy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"11px 24px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:kpiBusy[0]?"wait":"pointer",letterSpacing:1.5}}>{kpiBusy[0]?"SAVING...":"SAVE PROFILE"}</button>
+            {(function(){var saved=kpiMsg[0]==="Saved.";return <button onClick={saveKpiProfile} disabled={kpiBusy[0]||saved} style={{background:kpiBusy[0]?"#555":(saved?P.mint:gEmber),border:"none",borderRadius:10,padding:"11px 24px",color:saved?"#062014":"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:kpiBusy[0]?"wait":(saved?"default":"pointer"),letterSpacing:1.5,transition:"background 0.25s ease"}}>{kpiBusy[0]?"SAVING...":(saved?"✓ SAVED":"SAVE PROFILE")}</button>;})()}
           </div>}
 
           {kpiLoading[0]&&<div style={{fontSize:12,color:P.label,fontFamily:fm,marginTop:12}}>Loading profiles...</div>}
