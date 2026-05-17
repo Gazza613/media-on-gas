@@ -8187,20 +8187,21 @@ export default function MediaOnGas(){
               var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
               var fbEarned=0;var ttEarned=0;var igEarned=0;
               var fbSpend=0;var ttSpend=0;var igSpend=0;
+              // Mirror the Summary's Community Growth EXACTLY: earned is
+              // NOT gated by a "followers" objective. Meta does not
+              // attribute the follow/like action to awareness campaigns,
+              // so IG growth is whole-account net growth from page
+              // metadata (set below from matchedPages2, same source as
+              // Summary's igGrowth), and FB/TT use the per-ad
+              // attribution the platform does provide. The old
+              // isFollowLike gate + findIgGrowth path zeroed everything
+              // for an awareness client (showed 0 here while Summary
+              // correctly showed +22 IG).
               sel.forEach(function(camp){
-                // Canonical-first match — mirrors Summary's classifier so a
-                // campaign with objective="followers" is included even if its
-                // name doesn't match the legacy like-patterns.
-                var canon=String(camp.objective||"").toLowerCase();
-                var n=(camp.campaignName||"").toLowerCase();
-                var isFollowLike=canon==="followers"||n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0;
-                if(isFollowLike){
-                  if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
-                  if(camp.platform==="Instagram"){var igG=findIgGrowth(camp.campaignName,pages);igEarned+=igG>0?igG:0;igSpend+=parseFloat(camp.spend||0);}
-                  if(camp.platform==="TikTok"){ttEarned+=parseFloat(camp.follows||0);ttSpend+=parseFloat(camp.spend||0);}
-                }
+                if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
+                else if(camp.platform==="Instagram"){igSpend+=parseFloat(camp.spend||0);}
+                else if(camp.platform==="TikTok"){ttEarned+=parseFloat(camp.follows||0);ttSpend+=parseFloat(camp.spend||0);}
               });
-              var totalEarned=fbEarned+igEarned+ttEarned;
               var totalSpend=fbSpend+igSpend+ttSpend;
               var fbPage=null;var igAccount=null;
               var bestScore3=0;
@@ -8226,10 +8227,14 @@ export default function MediaOnGas(){
               }
               var fbTotal=0;var igTotal=0;
               if(matchedPages2.length>0){
-                matchedPages2.forEach(function(mp){fbTotal+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;}});
+                matchedPages2.forEach(function(mp){fbTotal+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;igEarned+=mp.instagram_business_account.follower_growth||0;}});
                 fbPage=matchedPages2[0];
                 if(fbPage.instagram_business_account){igAccount=fbPage.instagram_business_account;}
               }
+              // IG earned = whole-account follower growth from the same
+              // matched page metadata the Summary uses, set after the
+              // page match so the two views always agree.
+              var totalEarned=fbEarned+igEarned+ttEarned;
               var ttTotal=(function(){var selNames2=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames2,ttEarned);})();var grandTotal=fbTotal+igTotal+ttTotal;
               return <div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
