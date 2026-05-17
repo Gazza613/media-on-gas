@@ -9,7 +9,7 @@
 
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
-import { fetchCampaigns } from "./_pulseShared.js";
+import { fetchCampaigns, fetchAdsByCampaign } from "./_pulseShared.js";
 import { readCampaignSeries, ymd } from "./_perfSnapshots.js";
 import { fetchAdsetPacing, paceAdset } from "./_adsetBudgets.js";
 
@@ -35,6 +35,29 @@ function endedInPast(c) {
   if (!c || !c.endDate) return false;
   var t = Date.parse(c.endDate);
   return isFinite(t) && t < Date.now();
+}
+// Best-effort deep link straight to this campaign in the right Ads
+// Manager. Meta is exact (account + campaign); TikTok/Google fall back
+// to the advertiser/account dashboard (no reliable public per-campaign
+// deep link). "" when we cannot build one.
+function adsManagerUrlFor(c) {
+  var plat = String(c.platform || "").toLowerCase();
+  var meta = plat.indexOf("facebook") >= 0 || plat.indexOf("instagram") >= 0 || String(c.metaPlatform || "") === "facebook";
+  var raw = String(c.rawCampaignId || c.campaignId || "").replace(/_facebook$|_instagram$/i, "");
+  if (meta) {
+    var actNum = String(c.accountId || "").replace(/[^0-9]/g, "");
+    if (!actNum) return "";
+    return "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" + actNum +
+      (raw ? "&selected_campaign_ids=" + encodeURIComponent(raw) : "");
+  }
+  if (plat.indexOf("tiktok") >= 0) {
+    var adv = String(c.accountId || "").replace(/[^0-9]/g, "");
+    return adv ? "https://ads.tiktok.com/i18n/perf?aadvid=" + adv : "https://ads.tiktok.com/i18n/perf";
+  }
+  if (plat.indexOf("google") >= 0 || plat.indexOf("youtube") >= 0) {
+    return "https://ads.google.com/aw/campaigns";
+  }
+  return "";
 }
 // Resolve a campaign's objective family and its CORRECT result metric,
 // so alerts + the headline tile speak the campaign's own KPI (installs
@@ -134,6 +157,11 @@ export default async function handler(req, res) {
     res.status(502).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
     return;
   }
+
+  // Top-ad thumbnail per campaign for the cockpit (best-effort; same
+  // source the daily anomaly email uses). Never fails the request.
+  var adsByCampaign = {};
+  try { adsByCampaign = await fetchAdsByCampaign(periodFrom, periodTo, dashKey) || {}; } catch (_) { adsByCampaign = {}; }
 
   var todaySpendById = {};
   (todayData && todayData.campaigns || []).forEach(function(c) {
@@ -280,7 +308,9 @@ export default async function handler(req, res) {
         costPer: parseFloat((ob.costPer || 0).toFixed(2))
       },
       pacing: pacing,
-      alerts: alerts
+      alerts: alerts,
+      thumbnail: (adsByCampaign[String(c.rawCampaignId || "")] || adsByCampaign[id] || {}).thumbnail || "",
+      adsManagerUrl: adsManagerUrlFor(c)
     };
     clients[cl].campaigns.push(entry);
     // Meta campaign with no campaign-level budget = ABO / ad-set-level.

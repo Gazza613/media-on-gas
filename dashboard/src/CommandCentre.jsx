@@ -32,6 +32,23 @@ export default function CommandCentre(props) {
       : sev === "medium" ? (P.warning || "#fbbf24")
       : (P.label || "#9ca3af");
   };
+  // Dependency-free severity glyph (white, drawn inside a coloured
+  // circle). triangle = high, exclamation = medium, info = low.
+  var sevIcon = function(sev, size) {
+    var s = size || 18;
+    var p = sev === "high"
+      ? <path d="M12 3 L22 20 H2 Z M12 10 V14 M12 17 h.01" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      : sev === "medium"
+      ? <g stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16h.01"/></g>
+      : <g stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g>;
+    return <svg width={s} height={s} viewBox="0 0 24 24">{p}</svg>;
+  };
+  var platShort = function(p) {
+    p = String(p || "").toLowerCase();
+    return p.indexOf("facebook") >= 0 ? "FB" : p.indexOf("instagram") >= 0 ? "IG"
+      : p.indexOf("tiktok") >= 0 ? "TT" : p.indexOf("google") >= 0 ? "GA"
+      : p.indexOf("youtube") >= 0 ? "YT" : (String(p).slice(0, 2).toUpperCase() || "AD");
+  };
   var R = function(n) { return "R" + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); };
   var N = function(n) { return Number(n || 0).toLocaleString(); };
 
@@ -121,9 +138,20 @@ export default function CommandCentre(props) {
 
           {grp.campaigns.map(function(c) {
             var hasAlert = c.alerts.length > 0;
+            var amUrl = c.adsManagerUrl || "";
+            var gradA = (P.cyan || "#22D3EE"), gradB = (P.ember || "#F96203");
+            var thumb = <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer"
+                title={amUrl ? "Open this campaign in Ads Manager" : "Ads Manager link unavailable"}
+                style={{ flexShrink: 0, width: 88, height: 88, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "#0c0716", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none" }}>
+              {c.thumbnail
+                ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>}
+              {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
+            </a>;
             return <Glass key={c.campaignId} accent={hasAlert ? sevColor(c.alerts[0].severity) : P.rule} st={{ padding: 16, marginBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+                {thumb}
+                <div style={{ flex: 1, minWidth: 220 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     {statusChip(c)}
                     <span style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{c.platform}</span>
@@ -141,12 +169,16 @@ export default function CommandCentre(props) {
                 </div>
               </div>
               <div style={{ marginTop: 12, maxWidth: c.pacing && c.pacing.mode === "adset" ? 520 : 360 }}>{pacingBar(c.pacing)}</div>
-              {hasAlert && <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              {hasAlert && <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
                 {c.alerts.map(function(a, i) {
                   var col = sevColor(a.severity);
-                  return <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 10px", background: col + "12", border: "1px solid " + col + "33", borderRadius: 8 }}>
-                    <span style={{ background: col, color: "#0b0716", fontSize: 8, fontWeight: 900, fontFamily: fm, letterSpacing: 1, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", flexShrink: 0, marginTop: 1 }}>{a.severity}</span>
-                    <span style={{ fontSize: 11.5, color: P.txt, fontFamily: ff, lineHeight: 1.5 }}>{a.message}</span>
+                  return <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: col + "18", border: "1px solid " + col + "55", borderLeft: "5px solid " + col, borderRadius: 12 }}>
+                    <span style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", background: col, display: "flex", alignItems: "center", justifyContent: "center" }}>{sevIcon(a.severity, 20)}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: col, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>{a.severity} · needs attention</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: P.txt, fontFamily: ff, lineHeight: 1.55 }}>{a.message}</div>
+                    </div>
+                    {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "9px 14px", color: col, fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Fix in Ads Manager ↗</a>}
                   </div>;
                 })}
               </div>}
