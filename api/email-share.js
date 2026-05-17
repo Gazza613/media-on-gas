@@ -527,7 +527,9 @@ function renderTopAdsBlock(topAds, origin, token) {
     if (pk && ad.adId && origin && token) {
       var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
       var win = (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative) ? "&winner=1" : "";
-      var src = origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&token=" + token;
+      // raw=1 so the proxy streams the image bytes (email clients don't
+      // reliably follow the 302-to-CDN the dashboard uses).
+      var src = origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&raw=1&token=" + token;
       return '<img src="' + escapeHtml(src) + '" alt="" width="120" height="120" style="width:120px;height:120px;object-fit:cover;border-radius:10px;display:block;border:0;background:#1a0f2a;"/>';
     }
     if (ad.thumbnail && String(ad.thumbnail).indexOf("http") === 0) {

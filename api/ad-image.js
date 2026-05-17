@@ -271,5 +271,27 @@ export default async function handler(req, res) {
   if (!(wantWinner && !winnerHit)) {
     resolveCache[cacheKey] = { url: cdnUrl, ts: Date.now() };
   }
+
+  // raw=1: stream the image bytes ourselves instead of 302-redirecting.
+  // Email clients (Gmail/Outlook image proxies) do not reliably follow
+  // a cross-domain redirect to a signed CDN URL, so emailed thumbnails
+  // broke while the browser dashboard (which follows the 302 fine) was
+  // OK. Streaming returns a normal same-origin image the mail proxy can
+  // just cache. On any failure fall back to the redirect.
+  if (String(req.query.raw || "").trim()) {
+    try {
+      var ir = await fetch(cdnUrl);
+      if (ir.ok) {
+        var ab = await ir.arrayBuffer();
+        var ct = ir.headers.get("content-type") || "image/jpeg";
+        res.setHeader("Content-Type", ct);
+        res.setHeader("Cache-Control", "public, max-age=600");
+        res.status(200).send(Buffer.from(ab));
+        return;
+      }
+    } catch (e) {
+      console.error("ad-image raw stream failed", String(e && e.message || e));
+    }
+  }
   res.redirect(302, cdnUrl);
 }
