@@ -7648,6 +7648,18 @@ export default function MediaOnGas(){
                 var obj=getObj(camp);var result=getResult(camp,obj);var spend=parseFloat(camp.spend||0);var clicks=parseFloat(camp.clicks||0);var costPer=result>0?spend/result:0;var convRate=clicks>0&&obj==="Leads"?(parseFloat(camp.leads||0)/clicks*100):0;
                 var imps=parseFloat(camp.impressions||0);var ctrVal=imps>0?(clicks/imps*100):0;var engagements=parseFloat(camp.follows||0)+parseFloat(camp.likes||0)+parseFloat(camp.pageLikes||0);if(engagements===0&&camp.platform==="Instagram"){var igEng=findIgGrowth(camp.campaignName,pages);if(igEng>0)engagements=igEng;}return{name:camp.campaignName,engagements:engagements,engCtr:imps>0?(engagements/imps*100):0,platform:camp.platform,objective:obj,spend:spend,clicks:clicks,impressions:imps,ctr:ctrVal,result:result,resultLabel:getResultLabel(obj),costPer:costPer,costLabel:getCostLabel(obj),convRate:convRate};
               });
+              // Followers & Likes reconciliation: per-campaign follows +
+              // pageLikes over-counts (post reactions fold into pageLikes,
+              // Meta does not attribute IG follows to ads). Summary,
+              // Community and Demographics all report whole-account net
+              // growth (FB snapshot + IG Insights + TikTok follows) as the
+              // truth. Deep Dive must use the SAME number or the client
+              // sees two different Followers totals. Mirror exactly.
+              var ovMatchedPages=[];var ovMatchedIds={};
+              for(var ovs=0;ovs<sel.length;ovs++){var ovBest=null;var ovSc=0;for(var ovp=0;ovp<pages.length;ovp++){var ovScore=autoMatchPage(sel[ovs].campaignName,pages[ovp].name);if(ovScore>ovSc){ovSc=ovScore;ovBest=pages[ovp];}}if(ovBest&&ovSc>=2&&!ovMatchedIds[ovBest.id]){ovMatchedPages.push(ovBest);ovMatchedIds[ovBest.id]=true;}}
+              var ovFbGrowth=0,ovIgGrowth=0;ovMatchedPages.forEach(function(mp){if(typeof mp.follower_growth==="number")ovFbGrowth+=mp.follower_growth;if(mp.instagram_business_account)ovIgGrowth+=parseFloat(mp.instagram_business_account.follower_growth||0);});
+              var ovTtE=0;sel.forEach(function(c){if(c.platform==="TikTok")ovTtE+=parseFloat(c.follows||0);});
+              var ovEarnedTotal=ovFbGrowth+ovIgGrowth+ovTtE;
               var platOrder={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
               var objOrder={"Clicks to App Store":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
               
@@ -7688,7 +7700,7 @@ export default function MediaOnGas(){
 
               objectives.forEach(function(objName){
                 var g=groups[objName];if(!g||g.length===0)return;
-                var totalSpend=g.reduce(function(a,r){return a+r.spend;},0);var totalClicks=g.reduce(function(a,r){return a+r.clicks;},0);var totalResults=g.reduce(function(a,r){return a+r.result;},0);var totalCostPer=totalResults>0?totalSpend/totalResults:0;var totalConv=totalClicks>0&&objName==="Leads"?(totalResults/totalClicks*100):0;var oc=objColors[objName]||P.ember;
+                var totalSpend=g.reduce(function(a,r){return a+r.spend;},0);var totalClicks=g.reduce(function(a,r){return a+r.clicks;},0);var totalResults=g.reduce(function(a,r){return a+r.result;},0);if(objName==="Followers & Likes"&&ovEarnedTotal>0)totalResults=ovEarnedTotal;var totalCostPer=totalResults>0?totalSpend/totalResults:0;var totalConv=totalClicks>0&&objName==="Leads"?(totalResults/totalClicks*100):0;var oc=objColors[objName]||P.ember;
                 var platBreakdown=breakdownsByObj[objName]||[];
 
                 sections.push(<div key={objName} style={{marginBottom:24}}>
@@ -7738,6 +7750,9 @@ export default function MediaOnGas(){
 
               var tLeads=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.result;},0);
               var tFollows=rows.filter(function(r){return r.objective==="Followers & Likes";}).reduce(function(a,r){return a+r.result;},0);
+              // Reconcile the headline + consolidated tile to the same
+              // whole-account earnedTotal Summary uses (see note above).
+              if(ovEarnedTotal>0)tFollows=ovEarnedTotal;
               
               var tApp=rows.filter(function(r){return r.objective==="Clicks to App Store";}).reduce(function(a,r){return a+r.result;},0);
               var tLp=rows.filter(function(r){return r.objective==="Landing Page Clicks"||r.objective==="Traffic";}).reduce(function(a,r){return a+r.result;},0);
