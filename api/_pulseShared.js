@@ -345,6 +345,16 @@ export var ANOMALY_DEFS = {
 
 export function detectAnomalies(yesterday, baseline, rmY, opts) {
   if (!baseline) return [];
+  // Campaign already ended: zero / collapsed delivery is the campaign
+  // finishing on schedule, not an anomaly. Without this an ended
+  // campaign (e.g. Willowbrook) with a still-warm 7-day baseline gets
+  // a false "spend collapse / zero results" flag in the daily email.
+  // There is nothing actionable about a finished campaign, so skip it.
+  var _endRaw = yesterday && yesterday.endDate ? String(yesterday.endDate) : "";
+  if (_endRaw) {
+    var _endMs = Date.parse(_endRaw);
+    if (isFinite(_endMs) && _endMs < Date.now()) return [];
+  }
   var out = [];
   // Awareness/reach campaigns are not graded on CTR or click volume,
   // Meta optimises them for cheap reach so low/declining CTR is
