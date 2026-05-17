@@ -153,12 +153,15 @@ export default async function handler(req, res) {
     var todaySpend = todaySpendById[id] || 0;
     var ended = endedInPast(c);
 
-    // The command centre is "what is in flight + what needs a human",
-    // not an archive: keep active, or anything that delivered this
-    // month / today, or an active-but-ended config (that IS an alert).
-    if (!statusActive && periodSpend === 0 && todaySpend === 0) continue;
-
     var impressions = num(c.impressions), clicks = num(c.clicks), leads = num(c.leads);
+    // The command centre is "what is actually in flight this period".
+    // Require SOME delivery in the selected window (spend, today spend,
+    // or impressions). A campaign left ENABLED on the platform but with
+    // no delivery in the window (e.g. a Feb/Mar/Apr TikTok campaign
+    // never switched off) is NOT in flight now and must not appear or
+    // be flagged "live but zero spend". This is the dormant-noise fix.
+    if (periodSpend === 0 && todaySpend === 0 && impressions === 0) continue;
+
     var ctr = num(c.ctr), cpm = num(c.cpm), cpc = num(c.cpc), frequency = num(c.frequency);
     var live = statusActive && !ended;
     var ob = resolveObjective(c);
@@ -203,13 +206,20 @@ export default async function handler(req, res) {
     if (statusActive && ended) {
       alerts.push({ severity: "high", code: "ended_still_active", message: "Status is active but the end date has passed. Turn it off or extend it." });
     }
-    if (live && periodSpend === 0) {
-      alerts.push({ severity: "high", code: "live_no_spend", message: "Live but zero spend in this period. Check delivery / approval / payment / budget." });
-    } else if (todayInWindow && live && periodSpend > 0 && todaySpend === 0 && !ended) {
+    if (todayInWindow && live && periodSpend > 0 && todaySpend === 0 && !ended) {
       alerts.push({ severity: "medium", code: "today_no_spend", message: "Was delivering in this period but no spend today. Check it has not stalled." });
     }
-    if (periodSpend >= 200 && clicks === 0) {
-      alerts.push({ severity: "high", code: "spend_no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with zero clicks. Creative or targeting problem." });
+    // Money out, nothing delivered (objective-agnostic). Zero clicks is
+    // NOT the signal — a follower / awareness campaign legitimately has
+    // zero link clicks. Zero IMPRESSIONS for real spend is the signal.
+    if (periodSpend >= 200 && impressions === 0) {
+      alerts.push({ severity: "high", code: "spend_no_delivery", message: "R" + periodSpend.toFixed(2) + " spent but zero impressions delivered. Check approval / targeting / account status." });
+    }
+    // Click break ONLY for click objectives (traffic / landing page),
+    // where clicks ARE the KPI. Followers / awareness / app installs
+    // are judged on their own metric below, never on clicks.
+    else if (ob.family === "traffic" && periodSpend >= 200 && impressions > 0 && clicks === 0) {
+      alerts.push({ severity: "high", code: "traffic_no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with impressions but zero landing-page clicks. Creative / targeting / landing-page problem." });
     }
     // Objective-aware "delivering but zero of its own KPI" check. Only
     // for objectives with a discrete conversion (app installs / leads /
@@ -222,7 +232,10 @@ export default async function handler(req, res) {
         : ob.family === "followers" ? "the follow CTA / destination" : "a landing page / tracking break";
       alerts.push({ severity: "medium", code: "no_results", message: Math.round(clicks) + " clicks, zero " + noun + ". Likely " + cause + "." });
     }
-    if (frequency >= 3) {
+    // TikTok tolerates much higher frequency than Meta before fatigue;
+    // only flag TikTok over 6, everything else over 3.
+    var freqLimit = /tiktok/i.test(String(c.platform || "")) ? 6 : 3;
+    if (frequency >= freqLimit) {
       alerts.push({ severity: "medium", code: "frequency_high", message: "Frequency " + frequency.toFixed(2) + ". Creative fatigue risk, refresh or widen audience." });
     }
     if (pacing && pacing.state === "behind") {
