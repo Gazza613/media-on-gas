@@ -10,6 +10,8 @@ Drop a client's logo here, then set it on their KPI profile
   `/clients/psycho-bunny.png` (works in both the dashboard header and
   the client email — email needs an absolute URL, which the server
   builds from this path automatically).
-- PNG with transparency or a square-ish logo works best. It renders
-  on a white rounded chip so dark/navy marks read fine.
+- Use a **transparent PNG**. It sits directly on the dark theme
+  background (no chip), so the mark must read on dark — supply the
+  white/light or full-colour version of the logo, not a dark-on-
+  transparent one.
 - Leave the profile field blank for GAS-only branding.

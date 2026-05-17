@@ -4970,8 +4970,8 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
-          {ecoProfile&&ecoProfile.logoUrl&&<div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
-            <div style={{width:60,height:60,borderRadius:14,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:8,boxSizing:"border-box",flexShrink:0,boxShadow:"0 4px 16px rgba(0,0,0,0.35)"}}><img src={ecoProfile.logoUrl} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>
+          {ecoProfile&&ecoProfile.logoUrl&&<div style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
+            <img src={ecoProfile.logoUrl} alt="" style={{width:64,height:64,objectFit:"contain",display:"block",flexShrink:0}} onError={function(e){e.target.style.display="none";}}/>
             <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Client report<div style={{fontSize:9,color:P.caption,marginTop:3,letterSpacing:1.5}}>Powered by GAS Marketing</div></div>
           </div>}
           <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
