@@ -1250,6 +1250,81 @@ function TemplatesPanel(props) {
   </Glass>;
 }
 
+// "What was created" table on Step 1. Read-only log of campaigns
+// launched through the builder (single or batch), so the team can see
+// at a glance what is already live-paused in Meta before starting the
+// next build. Pairs with DraftsPanel ("what is in draft").
+function CreatedPanel(props) {
+  var P = props.P, fm = props.fm, ff = props.ff, Glass = props.Glass;
+  var apiBase = props.apiBase, token = props.token, draftMeta = props.draftMeta || {};
+  var ls = useState({ loading: true, items: [], error: "" }), st = ls[0], setSt = ls[1];
+  var bs = useState(false), busy = bs[0], setBusy = bs[1];
+  var ps = useState(true), open = ps[0], setOpen = ps[1];
+
+  var loadList = function(){
+    if (!token) { setSt({ loading: false, items: [], error: "Not authenticated" }); return; }
+    setSt({ loading: true, items: [], error: "" });
+    fetch(apiBase + "/api/create/created", { headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setSt({ loading: false, items: [], error: (x.data && x.data.error) || "Failed to load" }); return; }
+        setSt({ loading: false, items: (x.data && x.data.created) || [], error: "" });
+      })
+      .catch(function(){ setSt({ loading: false, items: [], error: "Network error" }); });
+  };
+  useEffect(loadList, [token]);
+  // A launch just reset the wizard (draftMeta cleared) -> refresh so a
+  // newly created campaign appears without a manual reload.
+  useEffect(function(){ if (token) loadList(); }, [draftMeta.id, draftMeta.savedAt]);
+
+  var doDelete = function(it){
+    if (!window.confirm("Remove '" + it.campaignName + "' from this list? (Does not touch the campaign in Meta.)")) return;
+    setBusy(true);
+    fetch(apiBase + "/api/create/created?id=" + encodeURIComponent(it.id), { method: "DELETE", headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(){ setBusy(false); loadList(); })
+      .catch(function(){ setBusy(false); });
+  };
+  var when = function(iso){ try { return new Date(iso).toLocaleString(); } catch (_) { return iso || ""; } };
+
+  return <Glass accent={P.mint} st={{padding:22,marginBottom:18}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={function(){ setOpen(!open); }}>
+      <div>
+        <div style={{fontSize:13,fontWeight:800,color:P.mint,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Created campaigns</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,marginTop:4}}>
+          Launched through the builder (all paused in Meta until you unpause). {st.items.length > 0 && <span style={{color:P.mint,fontWeight:700}}>· {st.items.length}</span>}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:P.mint,fontFamily:fm,fontWeight:800,letterSpacing:1.5}}>{open ? "− HIDE" : "+ SHOW"}</div>
+    </div>
+
+    {open && <div style={{marginTop:16}}>
+      {st.loading && <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm}}>Loading…</div>}
+      {st.error && <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm}}>{st.error}</div>}
+      {!st.loading && !st.error && st.items.length === 0 && <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,padding:"8px 0"}}>
+        Nothing created yet. Campaigns you launch from this builder will be listed here.
+      </div>}
+      {!st.loading && st.items.length > 0 && <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {st.items.map(function(it){
+          return <div key={it.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:10}}>
+            <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+              <div style={{fontSize:12,color:P.txt,fontFamily:fm,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.campaignName || it.campaignId}{it.batch && <span style={{color:P.cyan,fontWeight:800}}> · matrix</span>}</div>
+              <div style={{fontSize:10,color:P.caption||P.sub,fontFamily:fm,marginTop:3}}>
+                {(it.accountName ? it.accountName + " · " : "")}{String(it.objective||"").replace(/^OUTCOME_/, "")} · {it.adsetCount||1} ad set{(it.adsetCount||1)===1?"":"s"} · {it.adCount||0} ad{(it.adCount||0)===1?"":"s"} · {when(it.createdAt)}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+              <span style={{background:(P.solar||"#fbbf24")+"22",border:"1px solid "+(P.solar||"#fbbf24")+"55",color:P.solar||"#fbbf24",fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,padding:"3px 8px",borderRadius:5}}>PAUSED</span>
+              {it.adsManagerUrl && <a href={it.adsManagerUrl} target="_blank" rel="noopener noreferrer" style={{background:P.mint+"20",border:"1px solid "+P.mint+"60",borderRadius:8,padding:"6px 12px",color:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",textDecoration:"none"}}>Ads Manager</a>}
+              <button onClick={function(){ doDelete(it); }} disabled={busy} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"6px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Del</button>
+            </div>
+          </div>;
+        })}
+      </div>}
+    </div>}
+  </Glass>;
+}
+
 // Team-shared DRAFTS panel. Unlike Templates (reusable config preset),
 // a draft is a full in-progress build, creatives + dates + the exact
 // step. Load = full resume. Sits beside Templates on Step 0 so the
@@ -1453,6 +1528,9 @@ function Step0(props) {
     <DraftsPanel P={P} fm={fm} ff={ff} Glass={Glass}
       apiBase={apiBase} token={token}
       applyServerDraft={props.applyServerDraft} saveServerDraft={props.saveServerDraft} draftMeta={props.draftMeta || {}}/>
+
+    <CreatedPanel P={P} fm={fm} ff={ff} Glass={Glass}
+      apiBase={apiBase} token={token} draftMeta={props.draftMeta || {}}/>
 
     <TemplatesPanel P={P} fm={fm} ff={ff} Glass={Glass}
       apiBase={apiBase} token={token}

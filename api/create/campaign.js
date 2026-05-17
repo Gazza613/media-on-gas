@@ -24,6 +24,7 @@ import {
   ALLOWED_OBJECTIVES,
   META_API_VERSION
 } from "../_createAuth.js";
+import { logCreated } from "./_createdLog.js";
 
 export const config = { maxDuration: 60 };
 
@@ -259,6 +260,23 @@ export default async function handler(req, res) {
     } catch (e) {
       draftResult = { skipped: true, reason: "draft error: " + (e && e.message || "unknown") };
     }
+
+    // Record the launch so Step 1 can show "what was created".
+    // Best-effort, never blocks the response.
+    try {
+      await logCreated({
+        campaignId: campaignId, campaignName: p.campaignName,
+        accountId: p.accountId, accountName: p.accountName || p.accountId,
+        objective: p.objective, platformMode: p.platformMode, funding: p.funding,
+        budgetMode: p.budgetMode,
+        dailyBudgetRand: Math.round((p.dailyBudgetCents || 0) / 100),
+        lifetimeBudgetRand: Math.round((p.lifetimeBudgetCents || 0) / 100),
+        adsetCount: 1, adCount: creativesPosted.length, batch: false,
+        adsManagerUrl: "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" +
+          encodeURIComponent(p.accountId.replace(/^act_/, "")) +
+          "&selected_campaign_ids=" + encodeURIComponent(campaignId)
+      });
+    } catch (_) {}
 
     res.status(200).json({
       ok: true,

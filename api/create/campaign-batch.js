@@ -28,6 +28,7 @@ import {
   scrubForm,
   verifyApproval
 } from "./campaign.js";
+import { logCreated } from "./_createdLog.js";
 
 export const config = { maxDuration: 60 };
 
@@ -196,16 +197,32 @@ export default async function handler(req, res) {
       done.adsets.push({ adsetId: adsetId, adsetName: p.adsetName, ads: adsForThis });
     }
 
+    var bAdCount = done.adsets.reduce(function(s, x){ return s + x.ads.length; }, 0);
+    var bUrl = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" +
+      encodeURIComponent(p0.accountId.replace(/^act_/, "")) +
+      "&selected_campaign_ids=" + encodeURIComponent(campaignId);
+    // Record the launch for Step 1's "what was created" table.
+    try {
+      await logCreated({
+        campaignId: campaignId, campaignName: p0.campaignName,
+        accountId: p0.accountId, accountName: p0.accountName || p0.accountId,
+        objective: p0.objective, platformMode: p0.platformMode, funding: p0.funding,
+        budgetMode: p0.budgetMode,
+        dailyBudgetRand: Math.round((p0.dailyBudgetCents || 0) / 100),
+        lifetimeBudgetRand: Math.round((p0.lifetimeBudgetCents || 0) / 100),
+        adsetCount: done.adsets.length, adCount: bAdCount, batch: true,
+        adsManagerUrl: bUrl
+      });
+    } catch (_) {}
+
     res.status(200).json({
       ok: true,
       campaignId: campaignId,
       adsets: done.adsets,
       adsetCount: done.adsets.length,
-      adCount: done.adsets.reduce(function(s, x){ return s + x.ads.length; }, 0),
+      adCount: bAdCount,
       status: "PAUSED",
-      adsManagerUrl: "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=" +
-        encodeURIComponent(p0.accountId.replace(/^act_/, "")) +
-        "&selected_campaign_ids=" + encodeURIComponent(campaignId)
+      adsManagerUrl: bUrl
     });
   } catch (e) {
     console.error("[create/campaign-batch] unexpected:", e && e.stack || e);
