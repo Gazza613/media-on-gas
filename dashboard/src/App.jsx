@@ -8592,7 +8592,7 @@ export default function MediaOnGas(){
           <Insight title="Optimisation Summary" accent={P.warning} icon={Ic.alert(P.warning,16)}>{flags.length} flags generated from selected campaign data. {openFlags} require attention. Review recommendations and take action to maintain optimal performance. Flags refresh when you change dates or campaign selection.</Insight>
         </div>)}
 
-        {tab==="command"&&!isClient&&(<CommandCentre apiBase={API} P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} SH={SH} session={session}/>)}
+        {tab==="command"&&!isClient&&(<CommandCentre apiBase={API} P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} SH={SH} session={session} dateFrom={df} dateTo={dt}/>)}
         {tab==="create"&&!isClient&&(<CreateTab apiBase={API} P={P} ff={ff} fm={fm} gFire={gFire} gEmber={gEmber} Ic={Ic} Glass={Glass} SH={SH}/>)}
 
         </>)}

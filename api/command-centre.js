@@ -75,16 +75,30 @@ export default async function handler(req, res) {
   if (!dashKey) { res.status(500).json({ error: "DASHBOARD_API_KEY not configured" }); return; }
 
   var todayStr = ymd(sast(0));
-  var monthStart = todayStr.slice(0, 8) + "01";
-  var dayOfMonth = parseInt(todayStr.slice(8, 10), 10) || 1;
+  // Honour the operator's selected dashboard period. Only fall back to
+  // month-to-date when no valid range is supplied. (Previously this
+  // endpoint always used month-to-date and ignored the date picker,
+  // so it surfaced campaigns/issues outside the selected window.)
+  var validYmd = function(x) { return /^\d{4}-\d{2}-\d{2}$/.test(String(x || "")); };
+  var qFrom = String(req.query.from || "").trim();
+  var qTo = String(req.query.to || "").trim();
+  var periodFrom = validYmd(qFrom) ? qFrom : (todayStr.slice(0, 8) + "01");
+  var periodTo = validYmd(qTo) ? qTo : todayStr;
+  if (periodFrom > periodTo) { var _t = periodFrom; periodFrom = periodTo; periodTo = _t; }
+  // Days elapsed within the window up to today, for budget pacing.
+  var pacingEnd = periodTo < todayStr ? periodTo : todayStr;
+  var elapsedDays = Math.max(1, Math.round(
+    (Date.parse(pacingEnd + "T00:00:00Z") - Date.parse(periodFrom + "T00:00:00Z")) / 86400000) + 1);
+  // "Today" spend only means something when today is inside the window.
+  var todayInWindow = todayStr >= periodFrom && todayStr <= periodTo;
 
   var periodData, todayData;
   try {
-    var pair = await Promise.all([
-      fetchCampaigns(monthStart, todayStr, dashKey),  // month-to-date
-      fetchCampaigns(todayStr, todayStr, dashKey)      // today only
-    ]);
-    periodData = pair[0]; todayData = pair[1];
+    var jobs = [ fetchCampaigns(periodFrom, periodTo, dashKey) ];
+    if (todayInWindow) jobs.push(fetchCampaigns(todayStr, todayStr, dashKey));
+    var pair = await Promise.all(jobs);
+    periodData = pair[0];
+    todayData = todayInWindow ? pair[1] : { campaigns: [] };
   } catch (err) {
     res.status(502).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
     return;
@@ -121,7 +135,7 @@ export default async function handler(req, res) {
     // Pacing: expected month-to-date = daily budget x days elapsed.
     var pacing = null;
     if (budgetDaily > 0) {
-      var expected = budgetDaily * dayOfMonth;
+      var expected = budgetDaily * elapsedDays;
       var ratio = expected > 0 ? periodSpend / expected : null;
       pacing = {
         budgetDaily: budgetDaily,
@@ -138,9 +152,9 @@ export default async function handler(req, res) {
       alerts.push({ severity: "high", code: "ended_still_active", message: "Status is active but the end date has passed. Turn it off or extend it." });
     }
     if (live && (budgetDaily > 0 || budgetAmount > 0) && periodSpend === 0) {
-      alerts.push({ severity: "high", code: "live_no_spend", message: "Live with a budget but zero spend this month. Check delivery / approval / payment." });
-    } else if (live && periodSpend > 0 && todaySpend === 0 && !ended) {
-      alerts.push({ severity: "medium", code: "today_no_spend", message: "Was delivering this month but no spend today. Check it has not stalled." });
+      alerts.push({ severity: "high", code: "live_no_spend", message: "Live with a budget but zero spend in this period. Check delivery / approval / payment." });
+    } else if (todayInWindow && live && periodSpend > 0 && todaySpend === 0 && !ended) {
+      alerts.push({ severity: "medium", code: "today_no_spend", message: "Was delivering in this period but no spend today. Check it has not stalled." });
     }
     if (periodSpend >= 200 && clicks === 0) {
       alerts.push({ severity: "high", code: "spend_no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with zero clicks. Creative or targeting problem." });
@@ -152,7 +166,7 @@ export default async function handler(req, res) {
       alerts.push({ severity: "medium", code: "frequency_high", message: "Frequency " + frequency.toFixed(2) + ". Creative fatigue risk, refresh or widen audience." });
     }
     if (pacing && pacing.state === "behind") {
-      alerts.push({ severity: "medium", code: "pacing_behind", message: "Pacing behind: R" + Math.round(periodSpend) + " spent vs ~R" + pacing.expectedToDate + " expected by day " + dayOfMonth + "." });
+      alerts.push({ severity: "medium", code: "pacing_behind", message: "Pacing behind: R" + Math.round(periodSpend) + " spent vs ~R" + pacing.expectedToDate + " expected over " + elapsedDays + " day" + (elapsedDays === 1 ? "" : "s") + "." });
     } else if (pacing && pacing.state === "ahead") {
       alerts.push({ severity: "low", code: "pacing_ahead", message: "Pacing ahead of plan: R" + Math.round(periodSpend) + " vs ~R" + pacing.expectedToDate + " expected. Budget may exhaust early." });
     }
@@ -229,7 +243,7 @@ export default async function handler(req, res) {
   res.status(200).json({
     ok: true,
     generatedAt: new Date().toISOString(),
-    period: { from: monthStart, to: todayStr, label: "Month to date" },
+    period: { from: periodFrom, to: periodTo, label: "Selected period" },
     summary: summary,
     clients: clientList
   });

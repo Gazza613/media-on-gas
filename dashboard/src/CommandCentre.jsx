@@ -8,12 +8,14 @@ import React, { useState, useEffect } from "react";
 export default function CommandCentre(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, SH = props.SH;
   var apiBase = props.apiBase, session = props.session;
+  var dateFrom = props.dateFrom || "", dateTo = props.dateTo || "";
 
   var st = useState({ loading: true, error: "", data: null }), s = st[0], setS = st[1];
 
   var load = function() {
     setS({ loading: true, error: "", data: null });
-    fetch(apiBase + "/api/command-centre", { headers: { "x-session-token": session || "" } })
+    var qs = (dateFrom && dateTo) ? ("?from=" + encodeURIComponent(dateFrom) + "&to=" + encodeURIComponent(dateTo)) : "";
+    fetch(apiBase + "/api/command-centre" + qs, { headers: { "x-session-token": session || "" } })
       .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, d: d }; }); })
       .then(function(x) {
         if (!x.ok || !x.d || !x.d.ok) { setS({ loading: false, error: (x.d && x.d.error) || ("Failed (" + x.status + ")"), data: null }); return; }
@@ -21,7 +23,9 @@ export default function CommandCentre(props) {
       })
       .catch(function() { setS({ loading: false, error: "Network error", data: null }); });
   };
-  useEffect(load, [session]);
+  // Re-pull when the dashboard period changes so the command centre
+  // always matches the dates the operator has selected.
+  useEffect(load, [session, dateFrom, dateTo]);
 
   var sevColor = function(sev) {
     return sev === "high" ? (P.critical || "#ef4444")
