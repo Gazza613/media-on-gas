@@ -1100,6 +1100,31 @@ function DraftsPanel(props) {
   var ms = useState(""), msg = ms[0], setMsg = ms[1];
   var es = useState(""), err = es[0], setErr = es[1];
   var ps = useState(false), open = ps[0], setOpen = ps[1];
+  var cis = useState(""), cloneId = cis[0], setCloneId = cis[1];
+  var cbs = useState(false), cloning = cbs[0], setCloning = cbs[1];
+  var crs = useState([]), cloneReview = crs[0], setCloneReview = crs[1];
+
+  var doClone = function(){
+    var id = String(cloneId || "").trim().replace(/^act_/, "");
+    if (!/^\d+$/.test(id)) { setErr("Enter the numeric campaign ID to clone."); return; }
+    if (cloning) return;
+    setCloning(true); setErr(""); setMsg(""); setCloneReview([]);
+    fetch(apiBase + "/api/create/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ campaignId: id })
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        setCloning(false);
+        if (!x.ok || !x.data || !x.data.ok || !x.data.draft) { setErr((x.data && x.data.error) || "Clone failed"); return; }
+        applyServerDraft(x.data.draft);
+        setCloneReview(Array.isArray(x.data.review) ? x.data.review : []);
+        setCloneId("");
+        setMsg("Cloned '" + ((x.data.source && x.data.source.campaignName) || id) + "'. Review the flagged steps, then Save draft.");
+      })
+      .catch(function(){ setCloning(false); setErr("Network error"); });
+  };
 
   var loadList = function(){
     if (!token) { setSt({ loading: false, items: [], error: "Not authenticated" }); return; }
@@ -1197,6 +1222,22 @@ function DraftsPanel(props) {
             </div>;
           })}
         </div>
+      </div>}
+
+      <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:14,paddingBottom:14,borderBottom:"1px solid "+P.rule}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Clone a live campaign <span style={{color:P.caption||P.sub,fontWeight:600}}>(any allowlisted account)</span></div>
+          <input value={cloneId} onChange={function(e){ setCloneId(e.target.value.replace(/[^0-9]/g, "")); }} placeholder="Meta campaign ID, e.g. 120212345678901234"
+            style={Object.assign({}, inputStyle(P, fm))}/>
+        </div>
+        <button onClick={doClone} disabled={cloning || !cloneId.trim()} style={{background:cloning?P.dim:"linear-gradient(135deg,#22D3EE,#0EA5E9)",border:"none",borderRadius:10,padding:"11px 18px",color:"#04121a",fontSize:11,fontWeight:800,fontFamily:fm,cursor:cloning?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{cloning ? "Cloning…" : "Clone"}</button>
+      </div>
+
+      {cloneReview.length > 0 && <div style={{marginBottom:14,padding:"12px 14px",background:P.solar+"14",border:"1px solid "+P.solar+"45",borderRadius:10}}>
+        <div style={{fontSize:10,fontWeight:800,color:P.solar,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Review before launch ({cloneReview.length})</div>
+        <ul style={{margin:0,paddingLeft:18}}>
+          {cloneReview.map(function(rv, i){ return <li key={i} style={{fontSize:11,color:P.txt,fontFamily:ff,lineHeight:1.6,marginBottom:3}}>{rv}</li>; })}
+        </ul>
       </div>}
 
       <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
