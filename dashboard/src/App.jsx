@@ -4012,12 +4012,13 @@ export default function MediaOnGas(){
               }
               if(dBest&&dSc>=2&&!demoMatchedIds[dBest.id]){demoMatchedPages.push(dBest);demoMatchedIds[dBest.id]=true;}
             }
-            var demoIgGrowth=0;
+            var demoIgGrowth=0;var demoFbGrowth=0;
             demoMatchedPages.forEach(function(mp){
+              if(typeof mp.follower_growth==="number")demoFbGrowth+=mp.follower_growth;
               if(mp.instagram_business_account)demoIgGrowth+=parseFloat(mp.instagram_business_account.follower_growth||0);
             });
             var demoTtE=0;sel.forEach(function(c){if(c.platform==="TikTok")demoTtE+=parseFloat(c.follows||0);});
-            var demoEarnedTotal=parseFloat(m.pageLikes||0)+demoIgGrowth+demoTtE;
+            var demoEarnedTotal=demoFbGrowth+demoIgGrowth+demoTtE;
             if(demoEarnedTotal>0){
               authObj=authObj-authObjFollowersRaw+demoEarnedTotal;
             }
@@ -5219,15 +5220,19 @@ export default function MediaOnGas(){
             /* --- Community (computed early so Objective Highlights can use the ground-truth follower total) --- */
             var matchedPages3=[];var matchedIds3={};
             for(var s3=0;s3<sel.length;s3++){var bestPg3=null;var bestSc3=0;for(var p3=0;p3<pages.length;p3++){var sc4=autoMatchPage(sel[s3].campaignName,pages[p3].name);if(sc4>bestSc3){bestSc3=sc4;bestPg3=pages[p3];}}if(bestPg3&&bestSc3>=2&&matchedIds3[bestPg3.id]!==true){matchedPages3.push(bestPg3);matchedIds3[bestPg3.id]=true;}}
-            var fbT2=0;var igT2=0;var igGrowth=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;igGrowth+=mp.instagram_business_account.follower_growth||0;}});
+            // Whole-account follower growth for the window comes from our
+            // own daily snapshots (fb-page-snapshot cron -> page.follower_growth),
+            // exactly as IG growth comes from Meta IG Insights. null means
+            // "no baseline snapshot yet", treated as 0 for the period total.
+            var fbT2=0;var igT2=0;var igGrowth=0;var fbGrowth=0;matchedPages3.forEach(function(mp){fbT2+=mp.followers_count||mp.fan_count||0;if(typeof mp.follower_growth==="number")fbGrowth+=mp.follower_growth;if(mp.instagram_business_account){igT2+=mp.instagram_business_account.followers_count||0;igGrowth+=mp.instagram_business_account.follower_growth||0;}});
             var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"){ttE2+=parseFloat(camp.follows||0);}});
             var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
             var grandT2=fbT2+igT2+ttT2;
-            var earnedTotal=parseFloat(m.pageLikes||0)+igGrowth+ttE2;
+            var earnedTotal=fbGrowth+igGrowth+ttE2;
             // Ground-truth override so Objective Highlights matches Community Growth.
             if(objectives4["Followers & Likes"]&&earnedTotal>0)objectives4["Followers & Likes"].results=earnedTotal;
             var communityData=[];
-            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:parseFloat(m.pageLikes||0),color:P.fb});
+            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:fbGrowth,color:P.fb});
             if(igT2>0)communityData.push({name:"IG",total:igT2,earned:igGrowth,color:P.ig});
             if(ttT2>0)communityData.push({name:"TT",total:ttT2,earned:ttE2,color:P.tt});
 
@@ -6364,7 +6369,7 @@ export default function MediaOnGas(){
                   return lines.join(" ");
                 })();
 
-                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns, connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(parseFloat(m.pageLikes||0)>0?" (with "+fmt(parseFloat(m.pageLikes||0))+" earned in this period)":"")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" total IG growth this period, organic and paid combined as Meta does not attribute the follow action to paid campaigns)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member adds to a warm, retargetable audience pool. Organic posts typically reach only 1 to 3 percent of followers on their own, so a modest boost budget is still needed to reach the full community, but paid delivery to this warm audience runs at noticeably lower CPMs and higher engagement than cold prospecting.":"");
+                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns, connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(fbGrowth>0?" (with "+fmt(fbGrowth)+" total FB growth this period, organic and paid combined as Meta does not attribute the follow action to paid campaigns)":"")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" total IG growth this period, organic and paid combined as Meta does not attribute the follow action to paid campaigns)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member adds to a warm, retargetable audience pool. Organic posts typically reach only 1 to 3 percent of followers on their own, so a modest boost budget is still needed to reach the full community, but paid delivery to this warm audience runs at noticeably lower CPMs and higher engagement than cold prospecting.":"");
 
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
                 return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
@@ -6494,7 +6499,13 @@ export default function MediaOnGas(){
                   <div style={{fontSize:24,fontWeight:900,color:c,fontFamily:fm,lineHeight:1}}>{val}</div>
                   {sub&&<div style={{fontSize:9.5,color:P.caption,fontFamily:fm,marginTop:6,lineHeight:1.5}}>{sub}</div>}
                 </Glass>;};
-                var fSteps=[{l:"Items viewed",v:ecf.itemsViewed,c:P.cyan},{l:"Added to cart",v:ecf.addToCarts,c:P.orchid},{l:"Reached checkout",v:ecf.checkouts,c:P.solar},{l:"Purchased",v:ecf.purchases,c:P.mint}].filter(function(s){return s.v!=null;});
+                // Funnel entry = itemViewEvents (count of view_item
+                // events = distinct product-detail views), the strictly
+                // accurate funnel start. itemsViewed (item units/
+                // impressions, list-inflated) is kept but shown
+                // separately and clearly relabelled below, not as the
+                // funnel head.
+                var fSteps=[{l:"Product views",v:ecf.itemViewEvents,c:P.cyan},{l:"Added to cart",v:ecf.addToCarts,c:P.orchid},{l:"Reached checkout",v:ecf.checkouts,c:P.solar},{l:"Purchased",v:ecf.purchases,c:P.mint}].filter(function(s){return s.v!=null;});
                 var fM=Math.max.apply(null,fSteps.map(function(s){return s.v||0;}).concat([1]));
                 return <Reveal minHeight={160}><div style={{marginBottom:24}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>{Ic.cart(P.solar,18)}<span style={{fontSize:13,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Shopper Behaviour</span></div>
@@ -6506,7 +6517,8 @@ export default function MediaOnGas(){
                     {eng.engagementRatePct!=null&&box("ENGAGEMENT RATE",eng.engagementRatePct.toFixed(2)+"%",enCol,(100-eng.engagementRatePct).toFixed(2)+"% bounced")}
                   </div>
                   {fSteps.length>=2&&<div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:20}}>
-                    <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:16}}>Purchase Funnel</div>
+                    <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Purchase Funnel</div>
+                    {ecf.itemsViewed!=null&&ecf.itemsViewed>0&&<div style={{fontSize:9.5,color:P.caption,fontFamily:fm,marginBottom:16,lineHeight:1.5}}>Funnel starts at product views (distinct product-detail views). Separately, {fmt(ecf.itemsViewed)} item impressions were served across product and listing pages, a browse-reach signal, not a funnel step.</div>}
                     {fSteps.map(function(s,i){var w=Math.max(5,(s.v||0)/fM*100);return <div key={i} style={{marginBottom:14}}>
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontFamily:fm,marginBottom:5}}><span style={{color:P.label,letterSpacing:1,fontWeight:700,textTransform:"uppercase"}}>{s.l}</span><span style={{color:s.c,fontWeight:900,fontSize:14}}>{fmt(s.v||0)}</span></div>
                       <div style={{height:14,background:P.rule+"40",borderRadius:7,overflow:"hidden"}}><div style={{width:w+"%",height:"100%",background:"linear-gradient(90deg,"+s.c+"AA,"+s.c+")",borderRadius:7}}/></div>
@@ -6796,10 +6808,10 @@ export default function MediaOnGas(){
               }
               if(bestPg&&bestSc>=2&&!creativeMatchedIds[bestPg.id]){creativeMatchedPages.push(bestPg);creativeMatchedIds[bestPg.id]=true;}
             }
-            var creativeIgGrowth=0;
-            creativeMatchedPages.forEach(function(mpg){if(mpg.instagram_business_account)creativeIgGrowth+=parseFloat(mpg.instagram_business_account.follower_growth||0);});
+            var creativeIgGrowth=0;var creativeFbGrowth=0;
+            creativeMatchedPages.forEach(function(mpg){if(typeof mpg.follower_growth==="number")creativeFbGrowth+=mpg.follower_growth;if(mpg.instagram_business_account)creativeIgGrowth+=parseFloat(mpg.instagram_business_account.follower_growth||0);});
             var creativeTtE=0;selCamps.forEach(function(c){if(c.platform==="TikTok")creativeTtE+=parseFloat(c.follows||0);});
-            var creativeEarnedTotal=parseFloat(m.pageLikes||0)+creativeIgGrowth+creativeTtE;
+            var creativeEarnedTotal=creativeFbGrowth+creativeIgGrowth+creativeTtE;
 
             var platformGroup=function(p){
               if(p==="Facebook")return "Facebook";
@@ -8190,15 +8202,16 @@ export default function MediaOnGas(){
               // Mirror the Summary's Community Growth EXACTLY: earned is
               // NOT gated by a "followers" objective. Meta does not
               // attribute the follow/like action to awareness campaigns,
-              // so IG growth is whole-account net growth from page
-              // metadata (set below from matchedPages2, same source as
-              // Summary's igGrowth), and FB/TT use the per-ad
-              // attribution the platform does provide. The old
-              // isFollowLike gate + findIgGrowth path zeroed everything
-              // for an awareness client (showed 0 here while Summary
-              // correctly showed +22 IG).
+              // so BOTH FB and IG growth are whole-account net growth
+              // from page metadata (set below from matchedPages2, same
+              // source as Summary's fbGrowth/igGrowth: FB from our daily
+              // fb-page-snapshot feed, IG from Meta IG Insights), and TT
+              // uses the per-ad attribution the platform does provide.
+              // The old isFollowLike gate + findIgGrowth path zeroed
+              // everything for an awareness client (showed 0 here while
+              // Summary correctly showed +22 IG).
               sel.forEach(function(camp){
-                if(camp.platform==="Facebook"){fbEarned+=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);fbSpend+=parseFloat(camp.spend||0);}
+                if(camp.platform==="Facebook"){fbSpend+=parseFloat(camp.spend||0);}
                 else if(camp.platform==="Instagram"){igSpend+=parseFloat(camp.spend||0);}
                 else if(camp.platform==="TikTok"){ttEarned+=parseFloat(camp.follows||0);ttSpend+=parseFloat(camp.spend||0);}
               });
@@ -8227,13 +8240,13 @@ export default function MediaOnGas(){
               }
               var fbTotal=0;var igTotal=0;
               if(matchedPages2.length>0){
-                matchedPages2.forEach(function(mp){fbTotal+=mp.followers_count||mp.fan_count||0;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;igEarned+=mp.instagram_business_account.follower_growth||0;}});
+                matchedPages2.forEach(function(mp){fbTotal+=mp.followers_count||mp.fan_count||0;if(typeof mp.follower_growth==="number")fbEarned+=mp.follower_growth;if(mp.instagram_business_account){igTotal+=mp.instagram_business_account.followers_count||0;igEarned+=mp.instagram_business_account.follower_growth||0;}});
                 fbPage=matchedPages2[0];
                 if(fbPage.instagram_business_account){igAccount=fbPage.instagram_business_account;}
               }
-              // IG earned = whole-account follower growth from the same
-              // matched page metadata the Summary uses, set after the
-              // page match so the two views always agree.
+              // FB + IG earned = whole-account follower growth from the
+              // same matched page metadata the Summary uses, set after
+              // the page match so the two views always agree.
               var totalEarned=fbEarned+igEarned+ttEarned;
               var ttTotal=(function(){var selNames2=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames2,ttEarned);})();var grandTotal=fbTotal+igTotal+ttTotal;
               return <div>
@@ -8241,7 +8254,11 @@ export default function MediaOnGas(){
                   {(function(){
                     var ttTotalResolved=(function(){var selNames=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames,ttEarned);})();
                     var boxes=[
-                      {name:"FACEBOOK",color:P.fb,total:fbTotal,earned:fbEarned,spend:fbSpend,costLabel:"COST PER FOLLOWER",earnedLabel:"EARNED THIS PERIOD"},
+                      // Facebook growth, like Instagram, is whole-account net
+                      // follower growth (from our daily fb-page-snapshot feed),
+                      // organic and paid combined, because Meta does not
+                      // attribute the follow action to the paid campaign.
+                      {name:"FACEBOOK",color:P.fb,total:fbTotal,earned:fbEarned,spend:fbSpend,costLabel:"COST PER FOLLOW",earnedLabel:"TOTAL FB GROWTH"},
                       // Instagram growth is total profile growth, organic and
                       // paid combined, because Meta does not attribute the
                       // follow action to the paid campaign. Label reflects
@@ -8261,12 +8278,12 @@ export default function MediaOnGas(){
                 <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
                   <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
                   <ChartReveal><ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={[{name:"FB Likes",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;})} barSize={50}>
+                    <BarChart data={[{name:"FB Followers",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;})} barSize={50}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
                       <XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/>
                       <YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/>
                       <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{[{name:"FB Likes",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;}).map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Bar>
+                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{[{name:"FB Followers",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;}).map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Bar>
                     </BarChart>
                   </ResponsiveContainer></ChartReveal>
                 </div>
@@ -8440,7 +8457,7 @@ export default function MediaOnGas(){
                     })}
                   </div>;
                 })()}
-                <Insight title="Community Growth Analysis" accent={P.mint} icon={Ic.users(P.mint,16)}>{(function(){var p=[];if(totalEarned===0&&grandTotal===0){return "No community data available for the selected campaigns.";}if(grandTotal>0){p.push("The brand\'s total social community stands at "+fmt(grandTotal)+" members across Facebook, Instagram, and TikTok.");}if(totalEarned>0){p.push("During the selected period, the community grew by "+fmt(totalEarned)+" new members with "+fR(totalSpend)+" invested at a blended cost of "+fR(totalSpend/totalEarned)+" per new member.");}if(fbTotal>0){p.push("Facebook leads with "+fmt(fbTotal)+" total page likes"+(fbEarned>0?", adding "+fmt(fbEarned)+" new likes at "+fR(fbSpend/fbEarned)+" cost per follower during this period":"")+". Each page like permanently increases organic News Feed distribution.");}if(igTotal>0){p.push("Instagram has "+fmt(igTotal)+" total followers"+(igEarned>0?", growing by "+fmt(igEarned)+" followers during this period. This figure represents total profile growth, organic and paid combined, as Meta does not attribute the follow action directly to paid campaigns":"")+". Instagram followers directly increase Stories, Reels, and Feed visibility.");}if(ttEarned>0){p.push("TikTok has "+fmt(ttTotal)+" total followers, growing by "+fmt(ttEarned)+" new follows this period at "+fR(ttSpend/ttEarned)+" cost per follow. Each TikTok follower feeds into the For You page recommendation engine, amplifying organic reach.");}return p.join(" ");})()}</Insight>
+                <Insight title="Community Growth Analysis" accent={P.mint} icon={Ic.users(P.mint,16)}>{(function(){var p=[];if(totalEarned===0&&grandTotal===0){return "No community data available for the selected campaigns.";}if(grandTotal>0){p.push("The brand\'s total social community stands at "+fmt(grandTotal)+" members across Facebook, Instagram, and TikTok.");}if(totalEarned>0){p.push("During the selected period, the community grew by "+fmt(totalEarned)+" new members with "+fR(totalSpend)+" invested at a blended cost of "+fR(totalSpend/totalEarned)+" per new member.");}if(fbTotal>0){p.push("Facebook leads with "+fmt(fbTotal)+" total followers"+(fbEarned>0?", growing by "+fmt(fbEarned)+" followers during this period. This figure represents total page growth, organic and paid combined, as Meta does not attribute the follow action directly to paid campaigns":"")+". Each new follower permanently increases organic News Feed distribution.");}if(igTotal>0){p.push("Instagram has "+fmt(igTotal)+" total followers"+(igEarned>0?", growing by "+fmt(igEarned)+" followers during this period. This figure represents total profile growth, organic and paid combined, as Meta does not attribute the follow action directly to paid campaigns":"")+". Instagram followers directly increase Stories, Reels, and Feed visibility.");}if(ttEarned>0){p.push("TikTok has "+fmt(ttTotal)+" total followers, growing by "+fmt(ttEarned)+" new follows this period at "+fR(ttSpend/ttEarned)+" cost per follow. Each TikTok follower feeds into the For You page recommendation engine, amplifying organic reach.");}return p.join(" ");})()}</Insight>
               </div>;
             })()}
           </div>

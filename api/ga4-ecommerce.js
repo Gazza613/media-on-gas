@@ -326,7 +326,7 @@ export default async function handler(req, res) {
         //    abandonment, the headline behaviour metric).
         {
           dateRanges: dateRanges,
-          metrics: [{ name: "addToCarts" }, { name: "checkouts" }, { name: "ecommercePurchases" }, { name: "itemsViewed" }]
+          metrics: [{ name: "addToCarts" }, { name: "checkouts" }, { name: "ecommercePurchases" }, { name: "itemsViewed" }, { name: "itemViewEvents" }]
         },
         // 4. Engagement quality totals (time on site, pages/session,
         //    engagement & bounce).
@@ -366,8 +366,16 @@ export default async function handler(req, res) {
       var fChk = parseFloat((fr.metricValues[1] && fr.metricValues[1].value) || 0);
       var fPur = parseFloat((fr.metricValues[2] && fr.metricValues[2].value) || 0);
       var fView = parseFloat((fr.metricValues[3] && fr.metricValues[3].value) || 0);
+      // itemsViewed counts item UNITS surfaced (inflated by list/PLP
+      // impressions and multi-item views) - not a true funnel entry.
+      // itemViewEvents counts view_item events, i.e. distinct product
+      // detail views, which is the strictly accurate funnel start.
+      // Keep both: the funnel uses itemViewEvents; itemsViewed is
+      // retained, clearly relabelled, as a secondary reach signal.
+      var fViewEvents = parseFloat((fr.metricValues[4] && fr.metricValues[4].value) || 0);
       funnel = {
         itemsViewed: Math.round(fView),
+        itemViewEvents: Math.round(fViewEvents),
         addToCarts: Math.round(fAdd),
         checkouts: Math.round(fChk),
         purchases: Math.round(fPur),

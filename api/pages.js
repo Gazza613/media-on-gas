@@ -1,6 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { fbGrowthByPage } from "./_fbPageSnapshots.js";
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
@@ -24,9 +25,23 @@ export default async function handler(req, res) {
     var pages = pagesData.data || [];
     var debug = [];
 
+    // Whole-account FB Page follower growth over the window, from our
+    // daily fb-page-snapshot store (Meta has no reliable Insights
+    // metric for net page-follower change). Same treatment as IG's
+    // follower_growth so the dashboard can report FB growth identically.
+    var fbGrowthMap = {};
+    if (from && to) {
+      try { fbGrowthMap = await fbGrowthByPage(from, to); } catch (_) { fbGrowthMap = {}; }
+    }
+
     for (var i = 0; i < pages.length; i++) {
       var page = pages[i];
       var pageToken = page.access_token || token;
+      // FB Page whole-account growth for the period (null when there
+      // is no baseline snapshot yet, so the UI can distinguish
+      // "0 growth" from "not enough history").
+      page.follower_growth = Object.prototype.hasOwnProperty.call(fbGrowthMap, String(page.id))
+        ? fbGrowthMap[String(page.id)] : null;
       
       if (page.instagram_business_account && from && to) {
         try {

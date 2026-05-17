@@ -25,6 +25,10 @@
     {
       "path": "/api/ig-snapshot",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/fb-page-snapshot",
+      "schedule": "5 4 * * *"
     }
   ],
   "rewrites": [
