@@ -36,12 +36,40 @@ function stripDraftForPersist(d) {
   });
   return Object.assign({}, d, { creatives: creatives });
 }
+// Deep-merge a persisted/cloned/resumed draft over the canonical
+// `initial` so a partial saved object can NEVER replace a nested
+// default and blank the wizard. A shallow Object.assign let a saved
+// `audience` without `genders` reach Step 6 and throw on
+// `genders.length` ("wizard bombs going to Review"). Audience,
+// placement and the key arrays are reconstructed defensively.
+function mergeDraft(base, patch) {
+  if (!patch || typeof patch !== "object") return base;
+  var out = Object.assign({}, base, patch);
+  var ba = base.audience || {}, pa = (patch.audience && typeof patch.audience === "object") ? patch.audience : {};
+  var a = Object.assign({}, ba, pa);
+  var bl = ba.locations || {}, pl = (pa.locations && typeof pa.locations === "object") ? pa.locations : {};
+  a.locations = Object.assign({}, bl, pl);
+  if (!Array.isArray(a.locations.geographies)) a.locations.geographies = bl.geographies || [];
+  if (!Array.isArray(a.locations.customLocations)) a.locations.customLocations = [];
+  if (!Array.isArray(a.genders)) a.genders = [];
+  if (!Array.isArray(a.targetingItems)) a.targetingItems = [];
+  if (!Array.isArray(a.savedAudienceIds)) a.savedAudienceIds = [];
+  if (!Array.isArray(a.customAudienceIds)) a.customAudienceIds = [];
+  if (typeof a.audienceLabel !== "string") a.audienceLabel = "";
+  if (typeof a.ageMin !== "number") a.ageMin = ba.ageMin != null ? ba.ageMin : 18;
+  if (typeof a.ageMax !== "number") a.ageMax = ba.ageMax != null ? ba.ageMax : 65;
+  out.audience = a;
+  out.placement = Object.assign({}, base.placement, (patch.placement && typeof patch.placement === "object") ? patch.placement : {});
+  if (!Array.isArray(out.placement.platforms)) out.placement.platforms = (base.placement || {}).platforms || [];
+  if (!Array.isArray(out.creatives) || out.creatives.length === 0) out.creatives = base.creatives;
+  return out;
+}
 function readSavedDraft(fallback) {
   try {
     var raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return fallback;
     var parsed = JSON.parse(raw);
-    return Object.assign({}, fallback, parsed);
+    return mergeDraft(fallback, parsed);
   } catch (_) { return fallback; }
 }
 function readSavedStep() {
@@ -308,7 +336,7 @@ function Wizard(props) {
   // and jump to the step it was left on (not a template merge).
   var applyServerDraft = function(rec){
     if (!rec || !rec.draft) return;
-    setDraft(Object.assign({}, initial, rec.draft));
+    setDraft(mergeDraft(initial, rec.draft));
     setStep(Math.max(0, Math.min(6, Number(rec.step || 0))));
     setDraftMeta({ id: rec.id || "", name: rec.name || "", saving: false, savedAt: rec.updatedAt || rec.savedAt || "", error: "" });
   };
@@ -418,7 +446,7 @@ function Wizard(props) {
     }
     if (step === 1) {
       var demoOk = draft.audience.ageMin >= 13 && draft.audience.ageMax <= 65 && draft.audience.ageMin < draft.audience.ageMax;
-      return demoOk && draft.audience.audienceLabel.trim().length >= 2;
+      return demoOk && String((draft.audience && draft.audience.audienceLabel) || "").trim().length >= 2;
     }
     if (step === 2) return draft.placement.mode === "advantage" || ((draft.placement.platforms || []).length > 0);
     if (step === 3) {
@@ -2642,7 +2670,7 @@ function Step6(props) {
     ["Platform", platformLabel],
     ["Page", pageName],
     ["Instagram", igName],
-    ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + (draft.audience.genders.length ? (", " + draft.audience.genders.map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
+    ["Audience", "Age " + draft.audience.ageMin + "-" + draft.audience.ageMax + ((draft.audience.genders || []).length ? (", " + (draft.audience.genders || []).map(function(g){return g===1?"M":"F";}).join("/")) : ", all genders")],
     ["Locations", (function(){
       var loc = draft.audience.locations || {};
       var includeParts = [], excludeParts = [];
