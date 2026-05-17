@@ -50,13 +50,15 @@ export default function CommandCentre(props) {
   };
 
   var pacingBar = function(p) {
-    if (!p) return <span style={{ fontSize: 10, color: P.caption, fontFamily: fm }}>no daily budget set</span>;
-    var pct = p.ratioPct == null ? 0 : Math.max(0, Math.min(160, p.ratioPct));
+    if (!p || p.state === "na" || p.ratioPct == null) {
+      return <span style={{ fontSize: 10, color: P.caption, fontFamily: fm, lineHeight: 1.5 }}>{(p && p.note) || "Budget pacing not available at campaign level."}</span>;
+    }
+    var pct = Math.max(0, Math.min(160, p.ratioPct));
     var col = p.state === "behind" ? (P.warning || "#fbbf24") : p.state === "ahead" ? P.solar : P.mint;
     return <div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, color: P.label, fontFamily: fm, marginBottom: 3 }}>
-        <span>{R(p.actualToDate)} / ~{R(p.expectedToDate)}</span>
-        <span style={{ color: col, fontWeight: 800 }}>{p.ratioPct == null ? "-" : p.ratioPct.toFixed(2) + "%"} {p.state.replace("_", " ")}</span>
+        <span>{R(p.actualToDate)} / ~{R(p.expectedToDate)} {p.budgetMode === "lifetime" ? "(lifetime)" : "(daily)"}</span>
+        <span style={{ color: col, fontWeight: 800 }}>{p.ratioPct.toFixed(2) + "%"} {String(p.state).replace("_", " ")}</span>
       </div>
       <div style={{ height: 7, background: P.rule + "55", borderRadius: 4, overflow: "hidden" }}>
         <div style={{ width: (pct / 1.6) + "%", height: "100%", background: col, borderRadius: 4 }} />
@@ -94,7 +96,7 @@ export default function CommandCentre(props) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1 }}>{grp.client}</div>
             <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
-              {grp.rollup.live} live · {R(grp.rollup.spendPeriod)} MTD · {R(grp.rollup.spendToday)} today · {N(grp.rollup.leads)} leads
+              {grp.rollup.live} live · {R(grp.rollup.spendPeriod)} period · {R(grp.rollup.spendToday)} today · {N(grp.rollup.results)} results
               {grp.rollup.alerts > 0 && <span style={{ color: P.critical || "#ef4444", fontWeight: 800 }}> · {grp.rollup.alerts} alerts</span>}
             </div>
           </div>
@@ -112,7 +114,7 @@ export default function CommandCentre(props) {
                   <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, marginTop: 2 }}>{c.objective}{c.endDate ? " · ends " + c.endDate : ""}</div>
                 </div>
                 <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontFamily: fm }}>
-                  {[["MTD", R(c.delivery.spendPeriod)], ["TODAY", R(c.delivery.spendToday)], ["IMPR", N(c.delivery.impressions)], ["CLICKS", N(c.delivery.clicks)], ["CTR", c.delivery.ctr.toFixed(2) + "%"], ["CPM", R(c.delivery.cpm)], ["LEADS", N(c.delivery.leads)], ["CPL", c.delivery.leads > 0 ? R(c.delivery.cpl) : "-"], ["FREQ", c.delivery.frequency.toFixed(2)]].map(function(m, i) {
+                  {[["SPEND", R(c.delivery.spendPeriod)], ["TODAY", R(c.delivery.spendToday)], ["IMPR", N(c.delivery.impressions)], ["CLICKS", N(c.delivery.clicks)], ["CTR", c.delivery.ctr.toFixed(2) + "%"], ["CPM", R(c.delivery.cpm)], [(c.delivery.resultLabel || "RESULTS").toUpperCase(), N(c.delivery.result)], [c.delivery.costLabel || "CPR", c.delivery.result > 0 ? R(c.delivery.costPer) : "-"], ["FREQ", c.delivery.frequency.toFixed(2)]].map(function(m, i) {
                     return <div key={i} style={{ textAlign: "right", minWidth: 52 }}>
                       <div style={{ fontSize: 8, color: P.label, letterSpacing: 1, marginBottom: 2 }}>{m[0]}</div>
                       <div style={{ fontSize: 12, fontWeight: 800, color: P.txt }}>{m[1]}</div>
@@ -136,7 +138,7 @@ export default function CommandCentre(props) {
       })}
 
       <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
-        Internal operations view. Pacing is daily budget x days elapsed this month. CPL-trend alerts use the first-party perf-snapshot history and stay silent until enough days have accumulated. Not shown to clients.
+        Internal operations view, scoped to your selected dates. The headline metric and cost are the campaign's own objective (installs / leads / followers / clicks / impressions). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets set at ad-set level are noted rather than guessed. Not shown to clients.
       </div>
     </div>}
   </div>;

@@ -35,9 +35,39 @@ function endedInPast(c) {
   var t = Date.parse(c.endDate);
   return isFinite(t) && t < Date.now();
 }
-// Loose objective family check for result-based alerts.
-function isLeadType(obj) {
-  return /lead|conver|sale|sign|regist|purchase|acquisi|app_?install|install/i.test(String(obj || ""));
+// Resolve a campaign's objective family and its CORRECT result metric,
+// so alerts + the headline tile speak the campaign's own KPI (installs
+// for app campaigns, leads for lead campaigns, follows for community,
+// clicks for traffic, impressions for awareness) instead of always
+// assuming "leads". Canon objective first, campaign-name fallback,
+// mirrors the dashboard's classification.
+function resolveObjective(c) {
+  var canon = String(c.objective || "").toLowerCase();
+  var nm = String(c.campaignName || "").toLowerCase();
+  var fam;
+  if (canon === "appinstall" || /app[_\s-]?instal/.test(nm)) fam = "appinstall";
+  else if (canon === "leads" || /(^|[_\s-])lead/.test(nm) || /(^|[_\s-])pos(\b|[_\s-])/.test(nm)) fam = "leads";
+  else if (canon === "followers" || /follow|_like[_\s]|like_facebook|like_instagram|paidsocial_like/.test(nm)) fam = "followers";
+  else if (canon === "landingpage" || /landing|traffic|paidsearch|homeloan/.test(nm)) fam = "traffic";
+  else fam = "awareness";
+  var spend = num(c.spend);
+  var result, resultLabel, costLabel;
+  if (fam === "appinstall") { result = num(c.appInstalls); resultLabel = "Installs"; costLabel = "CPI"; }
+  else if (fam === "leads") { result = num(c.leads); resultLabel = "Leads"; costLabel = "CPL"; }
+  else if (fam === "followers") { result = num(c.pageLikes) + num(c.follows); resultLabel = "Followers"; costLabel = "CPF"; }
+  else if (fam === "traffic") { result = num(c.clicks); resultLabel = "Clicks"; costLabel = "CPC"; }
+  else { result = num(c.impressions); resultLabel = "Impressions"; costLabel = "CPM"; }
+  var costPer = fam === "awareness"
+    ? (result > 0 ? spend / result * 1000 : 0)
+    : (result > 0 ? spend / result : 0);
+  return {
+    family: fam, result: result, resultLabel: resultLabel,
+    costLabel: costLabel, costPer: costPer,
+    // Only these objectives have a discrete conversion the absence of
+    // which is a tracking-break signal. Traffic's "result" IS clicks,
+    // awareness has none, so neither is flagged for "no results".
+    hasConversion: fam === "appinstall" || fam === "leads" || fam === "followers"
+  };
 }
 
 // Trend alert from the first-party snapshot history: trailing median
@@ -128,21 +158,41 @@ export default async function handler(req, res) {
 
     var impressions = num(c.impressions), clicks = num(c.clicks), leads = num(c.leads);
     var ctr = num(c.ctr), cpm = num(c.cpm), cpc = num(c.cpc), frequency = num(c.frequency);
-    var budgetDaily = num(c.budgetDaily), budgetAmount = num(c.budgetAmount);
-    var cpl = leads > 0 ? periodSpend / leads : 0;
     var live = statusActive && !ended;
+    var ob = resolveObjective(c);
 
-    // Pacing: expected month-to-date = daily budget x days elapsed.
-    var pacing = null;
-    if (budgetDaily > 0) {
-      var expected = budgetDaily * elapsedDays;
+    // Pacing: handle daily AND lifetime budgets, at campaign OR ad-set
+    // (ABO) level. /api/campaigns exposes a campaign-level view; for
+    // ABO multi-ad-set setups the campaign row often has no budget
+    // figure. In that case we say so plainly instead of the misleading
+    // "no daily budget set", and we do NOT fabricate a pacing verdict.
+    var bMode = String(c.budgetMode || "").toLowerCase();
+    var bDaily = num(c.budgetDaily), bAmount = num(c.budgetAmount), bFlight = num(c.budgetFlightDays);
+    var dailyTarget = 0;
+    if (bMode === "daily" && bDaily > 0) dailyTarget = bDaily;
+    else if (bMode === "lifetime" && bAmount > 0 && bFlight > 0) dailyTarget = bAmount / bFlight;
+    else if (bDaily > 0) dailyTarget = bDaily;
+    else if (bAmount > 0 && bFlight > 0) dailyTarget = bAmount / bFlight;
+    var pacing;
+    if (dailyTarget > 0) {
+      var expected = dailyTarget * elapsedDays;
+      if (bAmount > 0 && (bMode === "lifetime" || bFlight > 0)) expected = Math.min(expected, bAmount);
       var ratio = expected > 0 ? periodSpend / expected : null;
       pacing = {
-        budgetDaily: budgetDaily,
+        budgetMode: bMode === "lifetime" ? "lifetime" : "daily",
+        budgetDaily: Math.round(dailyTarget),
         expectedToDate: Math.round(expected),
         actualToDate: Math.round(periodSpend),
         ratioPct: ratio == null ? null : parseFloat((ratio * 100).toFixed(2)),
-        state: ratio == null ? "unknown" : ratio < 0.8 ? "behind" : ratio > 1.25 ? "ahead" : "on_track"
+        state: ratio == null ? "unknown" : ratio < 0.8 ? "behind" : ratio > 1.25 ? "ahead" : "on_track",
+        note: ""
+      };
+    } else {
+      pacing = {
+        budgetMode: bMode || "unset", budgetDaily: 0,
+        expectedToDate: 0, actualToDate: Math.round(periodSpend),
+        ratioPct: null, state: "na",
+        note: "Budget is set at ad-set level (ABO) or not exposed at campaign level. Pacing is not computed here, check the ad sets in Ads Manager."
       };
     }
 
@@ -151,16 +201,24 @@ export default async function handler(req, res) {
     if (statusActive && ended) {
       alerts.push({ severity: "high", code: "ended_still_active", message: "Status is active but the end date has passed. Turn it off or extend it." });
     }
-    if (live && (budgetDaily > 0 || budgetAmount > 0) && periodSpend === 0) {
-      alerts.push({ severity: "high", code: "live_no_spend", message: "Live with a budget but zero spend in this period. Check delivery / approval / payment." });
+    if (live && periodSpend === 0) {
+      alerts.push({ severity: "high", code: "live_no_spend", message: "Live but zero spend in this period. Check delivery / approval / payment / budget." });
     } else if (todayInWindow && live && periodSpend > 0 && todaySpend === 0 && !ended) {
       alerts.push({ severity: "medium", code: "today_no_spend", message: "Was delivering in this period but no spend today. Check it has not stalled." });
     }
     if (periodSpend >= 200 && clicks === 0) {
       alerts.push({ severity: "high", code: "spend_no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with zero clicks. Creative or targeting problem." });
     }
-    if (isLeadType(c.objective) && clicks >= 50 && leads === 0) {
-      alerts.push({ severity: "medium", code: "clicks_no_results", message: clicks + " clicks, zero leads. Likely a landing page / tracking break." });
+    // Objective-aware "delivering but zero of its own KPI" check. Only
+    // for objectives with a discrete conversion (app installs / leads /
+    // follows). Traffic's result IS clicks and awareness has none, so
+    // neither is ever falsely flagged as a tracking break.
+    if (ob.hasConversion && (clicks >= 50 || periodSpend >= 200) && ob.result === 0) {
+      var noun = ob.family === "appinstall" ? "app installs"
+        : ob.family === "followers" ? "new follows" : "leads";
+      var cause = ob.family === "appinstall" ? "an install-tracking / store-link break"
+        : ob.family === "followers" ? "the follow CTA / destination" : "a landing page / tracking break";
+      alerts.push({ severity: "medium", code: "no_results", message: Math.round(clicks) + " clicks, zero " + noun + ". Likely " + cause + "." });
     }
     if (frequency >= 3) {
       alerts.push({ severity: "medium", code: "frequency_high", message: "Frequency " + frequency.toFixed(2) + ". Creative fatigue risk, refresh or widen audience." });
@@ -178,7 +236,7 @@ export default async function handler(req, res) {
     } catch (_) {}
 
     var cl = clientOf(c);
-    if (!clients[cl]) clients[cl] = { client: cl, campaigns: [], rollup: { spendPeriod: 0, spendToday: 0, leads: 0, live: 0, alerts: 0 } };
+    if (!clients[cl]) clients[cl] = { client: cl, campaigns: [], rollup: { spendPeriod: 0, spendToday: 0, results: 0, live: 0, alerts: 0 } };
     clients[cl].campaigns.push({
       campaignId: id,
       campaignName: String(c.campaignName || ""),
@@ -198,14 +256,19 @@ export default async function handler(req, res) {
         cpm: parseFloat(cpm.toFixed(2)),
         cpc: parseFloat(cpc.toFixed(2)),
         frequency: parseFloat(frequency.toFixed(2)),
-        leads: Math.round(leads),
-        cpl: parseFloat(cpl.toFixed(2))
+        // Objective-aware headline metric (Installs / Leads / Followers
+        // / Clicks / Impressions) + its cost label, so the tile speaks
+        // the campaign's own KPI instead of always "Leads / CPL".
+        result: Math.round(ob.result),
+        resultLabel: ob.resultLabel,
+        costLabel: ob.costLabel,
+        costPer: parseFloat((ob.costPer || 0).toFixed(2))
       },
       pacing: pacing,
       alerts: alerts
     });
     var rr = clients[cl].rollup;
-    rr.spendPeriod += periodSpend; rr.spendToday += todaySpend; rr.leads += leads;
+    rr.spendPeriod += periodSpend; rr.spendToday += todaySpend; rr.results += (ob.hasConversion ? ob.result : 0);
     if (live) rr.live++;
     rr.alerts += alerts.length;
 
@@ -225,7 +288,7 @@ export default async function handler(req, res) {
     var grp = clients[k];
     grp.rollup.spendPeriod = parseFloat(grp.rollup.spendPeriod.toFixed(2));
     grp.rollup.spendToday = parseFloat(grp.rollup.spendToday.toFixed(2));
-    grp.rollup.leads = Math.round(grp.rollup.leads);
+    grp.rollup.results = Math.round(grp.rollup.results);
     grp.campaigns.sort(function(a, b) {
       var d = topSev(b.alerts) - topSev(a.alerts);
       if (d) return d;
