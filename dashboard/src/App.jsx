@@ -6731,9 +6731,10 @@ export default function MediaOnGas(){
                 </div>;
               })()}
 
-              {/* Paid social contribution, framed as assisted, with the
-                  GA4 attribution caveat as a footnote. */}
-              <Reveal minHeight={120}><div style={{marginBottom:22,padding:"20px 24px",background:"linear-gradient(135deg,"+P.ember+"14 0%,"+P.ember+"05 55%, transparent 80%),#0b0716",border:"1px solid "+P.ember+"2E",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0",boxShadow:"0 12px 38px rgba(0,0,0,0.34),0 0 58px "+P.ember+"12 inset"}}>
+              {/* Paid social contribution. TEAM ONLY, never shown on a
+                  client share link, the paid-social attribution slice
+                  is an internal read, not for the client's eyes. */}
+              {!isClient&&<Reveal minHeight={120}><div style={{marginBottom:22,padding:"20px 24px",background:"linear-gradient(135deg,"+P.ember+"14 0%,"+P.ember+"05 55%, transparent 80%),#0b0716",border:"1px solid "+P.ember+"2E",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0",boxShadow:"0 12px 38px rgba(0,0,0,0.34),0 0 58px "+P.ember+"12 inset"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>{Ic.bolt(P.ember,16)}<span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Our Contribution, Paid Social Assisted</span></div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:"10px 40px",alignItems:"baseline"}}>
                   <div><span style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(psRev)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>revenue, {pc(psShare)} of total</span></div>
@@ -6741,7 +6742,7 @@ export default function MediaOnGas(){
                   <div><span style={{fontSize:18,fontWeight:800,color:P.txt,fontFamily:fm}}>{fmt(ps.sessions)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>sessions</span></div>
                 </div>
                 <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.7,marginTop:14,borderTop:"1px solid "+P.rule,paddingTop:10}}>{ecoData.note}</div>
-              </div></Reveal>
+              </div></Reveal>}
 
             </div>;
           })()}
