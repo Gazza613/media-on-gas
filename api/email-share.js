@@ -159,11 +159,16 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
       var awr = hay.indexOf("aware") >= 0 || hay.indexOf("brand") >= 0
         || /(^|[_\s||-])(awr|awareness|reach|brand)([_\s||-]|$)/.test(hay);
       if (awr) {
-        // Primary KPI for awareness is REACH, so rank + headline on
-        // reach (fall back to impressions only if reach is absent).
-        var rch = parseFloat(a.reach || 0), imp = parseFloat(a.impressions || 0);
-        a.results = rch > 0 ? rch : imp;
-        a.resultType = rch > 0 ? "reach" : "impressions";
+        // Rank + headline on IMPRESSIONS with CPM, never per-ad reach.
+        // These rows are per-ad and split by publisher_platform, where
+        // Meta's reach is NOT de-duplicated and is unreliable for MIXED
+        // / Dynamic Creative ads (it returns reach ≈ impressions, e.g.
+        // 10.4K served / 10.3K "reach", frequency ~1.0, which is wrong
+        // and misranks the top performers). Impressions is the
+        // trustworthy per-ad awareness proxy; true de-duplicated reach
+        // is reported only at campaign level in the Performance Summary.
+        a.results = parseFloat(a.impressions || 0);
+        a.resultType = "impressions";
       }
     });
     // Group by platform, pick top 3 by results then spend
@@ -549,7 +554,10 @@ function renderTopAdsBlock(topAds, origin, token) {
       var clicks = parseFloat(ad.clicks || 0);
       var impressions = parseFloat(ad.impressions || 0);
       var ctr = parseFloat(ad.ctr || 0);
-      var adName = (ad.adName || "Unnamed ad").length > 44 ? (ad.adName || "").substring(0, 42) + "," : (ad.adName || "Unnamed ad");
+      // Show the FULL ad name. Long underscore-delimited names (e.g.
+      // Meta_Static_9x16_Mixed_Gateway_Awareness_M...) must not be cut;
+      // we let it wrap instead of truncating with a comma.
+      var adName = ad.adName || "Unnamed ad";
       var thumbCell = proxyThumb(ad, accent, pl.platform);
       var awrAd = ad.resultType === "reach" || ad.resultType === "impressions";
       var costStr = awrAd
@@ -599,9 +607,9 @@ function renderTopAdsBlock(topAds, origin, token) {
         '<tr>' +
         '<td valign="top" style="width:130px;padding-right:14px;">' + thumbCell + '</td>' +
         '<td valign="top">' +
-          '<div style="font-size:13px;color:#FFFBF8;font-weight:700;margin-bottom:6px;line-height:1.4;font-family:Helvetica,Arial,sans-serif;">' + escapeHtml(adName) + '</div>' +
+          '<div style="font-size:13px;color:#FFFBF8;font-weight:700;margin-bottom:6px;line-height:1.4;font-family:Helvetica,Arial,sans-serif;word-break:break-word;overflow-wrap:anywhere;">' + escapeHtml(adName) + '</div>' +
           metricBlock +
-          '<div style="font-size:11px;color:#8B7FA3;margin-top:8px;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend) + ' spent, ' + fmtNum(impressions) + ' ads served, ' + fmtPct(ctr) + ' CTR</div>' +
+          '<div style="font-size:11px;color:#8B7FA3;margin-top:8px;font-family:Helvetica,Arial,sans-serif;">' + fmtR(spend) + ' spent' + (awrAd ? '' : ', ' + fmtNum(impressions) + ' ads served') + ', ' + fmtPct(ctr) + ' CTR</div>' +
         '</td>' +
         '</tr></table>' +
         breakdownBlock +
