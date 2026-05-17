@@ -11,6 +11,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { fetchCampaigns } from "./_pulseShared.js";
 import { readCampaignSeries, ymd } from "./_perfSnapshots.js";
+import { fetchAdsetPacing, paceAdset } from "./_adsetBudgets.js";
 
 export const config = { maxDuration: 60 };
 
@@ -141,6 +142,7 @@ export default async function handler(req, res) {
 
   var rows = (periodData && periodData.campaigns) || [];
   var clients = {};
+  var adsetTargets = [];
   var summary = { campaigns: 0, live: 0, needsAttention: 0, spendToday: 0, spendPeriod: 0, alerts: 0 };
 
   for (var i = 0; i < rows.length; i++) {
@@ -237,7 +239,7 @@ export default async function handler(req, res) {
 
     var cl = clientOf(c);
     if (!clients[cl]) clients[cl] = { client: cl, campaigns: [], rollup: { spendPeriod: 0, spendToday: 0, results: 0, live: 0, alerts: 0 } };
-    clients[cl].campaigns.push({
+    var entry = {
       campaignId: id,
       campaignName: String(c.campaignName || ""),
       platform: String(c.platform || ""),
@@ -266,19 +268,72 @@ export default async function handler(req, res) {
       },
       pacing: pacing,
       alerts: alerts
-    });
+    };
+    clients[cl].campaigns.push(entry);
+    // Meta campaign with no campaign-level budget = ABO / ad-set-level.
+    // Queue it for a precise per-ad-set pacing pass after the loop.
+    var isMeta = /facebook|instagram/i.test(String(c.platform || "")) || String(c.metaPlatform || "") === "facebook";
+    if (pacing && pacing.state === "na" && isMeta && c.accountId && (c.rawCampaignId || c.campaignId)) {
+      adsetTargets.push({ accountId: String(c.accountId), rawCampaignId: String(c.rawCampaignId || c.campaignId), entry: entry });
+    }
     var rr = clients[cl].rollup;
     rr.spendPeriod += periodSpend; rr.spendToday += todaySpend; rr.results += (ob.hasConversion ? ob.result : 0);
     if (live) rr.live++;
-    rr.alerts += alerts.length;
-
+    // Alert counters are tallied AFTER the post-loop ad-set pacing pass
+    // (which can add a pacing alert), so they are computed in the
+    // clientList pass below, not here.
     summary.campaigns++;
     if (live) summary.live++;
-    if (alerts.length > 0) summary.needsAttention++;
-    summary.alerts += alerts.length;
     summary.spendToday += todaySpend;
     summary.spendPeriod += periodSpend;
   }
+
+  // ---- Per-ad-set pacing for Meta ABO / ad-set-level budgets -------
+  // The campaign-level view could not express these; resolve them now
+  // with a batched Graph read. Best-effort: on any miss the campaign
+  // keeps its existing "budget at ad-set level" note (no regression).
+  if (adsetTargets.length > 0) {
+    try {
+      var pacingMap = await fetchAdsetPacing(
+        adsetTargets.map(function (t) { return { accountId: t.accountId, rawCampaignId: t.rawCampaignId }; }),
+        periodFrom, periodTo);
+      adsetTargets.forEach(function (t) {
+        var list = pacingMap[t.accountId + "::" + t.rawCampaignId];
+        if (!list || !list.length) return;
+        var paced = list.map(function (a) { return paceAdset(a, periodFrom, periodTo, todayStr); });
+        var expSum = paced.reduce(function (s, p) { return s + p.expectedToDate; }, 0);
+        var actSum = paced.reduce(function (s, p) { return s + p.actualToDate; }, 0);
+        var ratio = expSum > 0 ? actSum / expSum : null;
+        t.entry.pacing = {
+          mode: "adset",
+          budgetMode: "adset",
+          adsets: paced,
+          expectedToDate: Math.round(expSum),
+          actualToDate: Math.round(actSum),
+          ratioPct: ratio == null ? null : parseFloat((ratio * 100).toFixed(2)),
+          state: ratio == null ? "unknown" : ratio < 0.8 ? "behind" : ratio > 1.25 ? "ahead" : "on_track",
+          note: paced.length + " ad set" + (paced.length === 1 ? "" : "s") + " (ABO)"
+        };
+        if (t.entry.pacing.state === "behind") {
+          t.entry.alerts.push({ severity: "medium", code: "pacing_behind", message: "Pacing behind across " + paced.length + " ad set" + (paced.length === 1 ? "" : "s") + ": R" + Math.round(actSum) + " spent vs ~R" + Math.round(expSum) + " expected." });
+        } else if (t.entry.pacing.state === "ahead") {
+          t.entry.alerts.push({ severity: "low", code: "pacing_ahead", message: "Pacing ahead across " + paced.length + " ad set" + (paced.length === 1 ? "" : "s") + ": R" + Math.round(actSum) + " vs ~R" + Math.round(expSum) + " expected. Budget may exhaust early." });
+        }
+      });
+    } catch (_) {}
+  }
+
+  // Tally alert counters now that ad-set pacing may have added alerts.
+  Object.keys(clients).forEach(function (k) {
+    var grp = clients[k];
+    grp.rollup.alerts = 0;
+    grp.campaigns.forEach(function (cm) {
+      var n2 = (cm.alerts && cm.alerts.length) || 0;
+      grp.rollup.alerts += n2;
+      summary.alerts += n2;
+      if (n2 > 0) summary.needsAttention++;
+    });
+  });
 
   // Round rollups; order clients by attention then spend; campaigns
   // needing attention float to the top of each client.

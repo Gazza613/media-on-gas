@@ -49,21 +49,39 @@ export default function CommandCentre(props) {
     return <span style={{ background: color + "22", border: "1px solid " + color + "55", color: color, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>{txt}</span>;
   };
 
-  var pacingBar = function(p) {
-    if (!p || p.state === "na" || p.ratioPct == null) {
-      return <span style={{ fontSize: 10, color: P.caption, fontFamily: fm, lineHeight: 1.5 }}>{(p && p.note) || "Budget pacing not available at campaign level."}</span>;
-    }
-    var pct = Math.max(0, Math.min(160, p.ratioPct));
-    var col = p.state === "behind" ? (P.warning || "#fbbf24") : p.state === "ahead" ? P.solar : P.mint;
-    return <div>
+  var stateCol = function(stt) { return stt === "behind" ? (P.warning || "#fbbf24") : stt === "ahead" ? P.solar : stt === "pending" ? (P.label || "#9ca3af") : P.mint; };
+  var bar = function(actual, expected, ratioPct, stt, leftLabel) {
+    var col = stateCol(stt);
+    var pct = ratioPct == null ? 0 : Math.max(0, Math.min(160, ratioPct));
+    return <div style={{ marginBottom: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, color: P.label, fontFamily: fm, marginBottom: 3 }}>
-        <span>{R(p.actualToDate)} / ~{R(p.expectedToDate)} {p.budgetMode === "lifetime" ? "(lifetime)" : "(daily)"}</span>
-        <span style={{ color: col, fontWeight: 800 }}>{p.ratioPct.toFixed(2) + "%"} {String(p.state).replace("_", " ")}</span>
+        <span>{leftLabel}</span>
+        <span style={{ color: col, fontWeight: 800 }}>{ratioPct == null ? "-" : ratioPct.toFixed(2) + "%"} {String(stt).replace("_", " ")}</span>
       </div>
       <div style={{ height: 7, background: P.rule + "55", borderRadius: 4, overflow: "hidden" }}>
         <div style={{ width: (pct / 1.6) + "%", height: "100%", background: col, borderRadius: 4 }} />
       </div>
     </div>;
+  };
+  var pacingBar = function(p) {
+    // Per-ad-set (ABO) breakdown.
+    if (p && p.mode === "adset" && p.adsets && p.adsets.length) {
+      return <div>
+        {bar(p.actualToDate, p.expectedToDate, p.ratioPct, p.state, R(p.actualToDate) + " / ~" + R(p.expectedToDate) + " · " + p.adsets.length + " ad set" + (p.adsets.length === 1 ? "" : "s") + " (ABO)")}
+        <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 5 }}>
+          {p.adsets.map(function(a, i) {
+            return <div key={i} style={{ paddingLeft: 10, borderLeft: "2px solid " + stateCol(a.state) + "55" }}>
+              <div style={{ fontSize: 9, color: P.caption, fontFamily: fm, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name} · {a.budgetLabel} · {a.window}</div>
+              {bar(a.actualToDate, a.expectedToDate, a.ratioPct, a.state, R(a.actualToDate) + " / ~" + R(a.expectedToDate))}
+            </div>;
+          })}
+        </div>
+      </div>;
+    }
+    if (!p || p.state === "na" || p.ratioPct == null) {
+      return <span style={{ fontSize: 10, color: P.caption, fontFamily: fm, lineHeight: 1.5 }}>{(p && p.note) || "Budget pacing not available at campaign level."}</span>;
+    }
+    return bar(p.actualToDate, p.expectedToDate, p.ratioPct, p.state, R(p.actualToDate) + " / ~" + R(p.expectedToDate) + " " + (p.budgetMode === "lifetime" ? "(lifetime)" : "(daily)"));
   };
 
   return <div>
@@ -122,7 +140,7 @@ export default function CommandCentre(props) {
                   })}
                 </div>
               </div>
-              <div style={{ marginTop: 12, maxWidth: 360 }}>{pacingBar(c.pacing)}</div>
+              <div style={{ marginTop: 12, maxWidth: c.pacing && c.pacing.mode === "adset" ? 520 : 360 }}>{pacingBar(c.pacing)}</div>
               {hasAlert && <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
                 {c.alerts.map(function(a, i) {
                   var col = sevColor(a.severity);
