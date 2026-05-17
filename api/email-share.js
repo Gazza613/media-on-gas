@@ -660,14 +660,11 @@ function buildEmailHtml(opts) {
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
   var origin = opts.origin || "https://media-on-gas.vercel.app";
   var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
-  // Per-client brand logo (co-branded header). Absolute https stays as
-  // is; a same-origin path is prefixed with origin so the email <img>
-  // has an absolute src.
-  var clientLogo = (function () {
-    var l = opts.profile && opts.profile.logoUrl ? String(opts.profile.logoUrl) : "";
-    if (!l) return "";
-    return l.indexOf("http") === 0 ? l : (origin + l);
-  })();
+  // Per-client brand logo for the email header. Pre-validated by the
+  // handler (reachable image) so a missing/wrong logo silently falls
+  // back to the GAS emblem instead of a broken image in the client's
+  // inbox.
+  var clientLogo = String(opts.clientLogo || "");
   var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
@@ -700,7 +697,7 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:36px 40px 24px;text-align:center;">
         <div style="margin-bottom:18px;">
-          ${clientLogo ? `<img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="104" height="104" border="0" style="width:104px;height:104px;display:inline-block;object-fit:contain;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/><div style="font-size:9px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-top:10px;">Reporting by GAS Marketing</div>` : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
+          ${clientLogo ? `<img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="104" height="104" border="0" style="width:104px;height:104px;display:inline-block;object-fit:contain;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>` : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
         </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
@@ -904,6 +901,22 @@ export default async function handler(req, res) {
       }
     } catch (_) {}
 
+    // Validate the client logo BEFORE building the email: only use it
+    // if it actually resolves to an image, otherwise fall back to the
+    // GAS emblem. Prevents a broken-image logo in the client's inbox
+    // (e.g. the file not yet committed at the configured path).
+    var clientLogo = "";
+    if (kpiProfile && kpiProfile.logoUrl) {
+      var _lu = String(kpiProfile.logoUrl);
+      var _abs = _lu.indexOf("http") === 0 ? _lu : (origin + _lu);
+      try {
+        var _lr = await fetch(_abs, { method: "GET" });
+        var _ct = String((_lr.headers && _lr.headers.get && _lr.headers.get("content-type")) || "").toLowerCase();
+        if (_lr.ok && _ct.indexOf("image") === 0) clientLogo = _abs;
+        else console.warn("[email-share] client logo not usable", _abs, _lr.status, _ct);
+      } catch (e) { console.warn("[email-share] client logo fetch failed", _abs, String(e && e.message || e)); }
+    }
+
     var html = buildEmailHtml({
       clientSlug: clientSlug,
       from: from,
@@ -918,7 +931,8 @@ export default async function handler(req, res) {
       summary: summary,
       topAds: topAds,
       ecommerce: ecommerce,
-      profile: kpiProfile
+      profile: kpiProfile,
+      clientLogo: clientLogo
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.

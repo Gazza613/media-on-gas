@@ -4970,10 +4970,9 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
-          {ecoProfile&&ecoProfile.logoUrl&&<div style={{display:"flex",alignItems:"center",gap:16,marginBottom:18}}>
-            <img src={ecoProfile.logoUrl} alt="" style={{width:64,height:64,objectFit:"contain",display:"block",flexShrink:0}} onError={function(e){e.target.style.display="none";}}/>
-            <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Client report<div style={{fontSize:9,color:P.caption,marginTop:3,letterSpacing:1.5}}>Powered by GAS Marketing</div></div>
-          </div>}
+          {/* Client dashboard keeps GAS branding (unchanged). The
+              per-client logo is used ONLY in the personalised report
+              email, not here. */}
           <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
           {/* The per-client KPI objectives used to render here at the top.
               They now live in the Objectives section lower down (rendered
