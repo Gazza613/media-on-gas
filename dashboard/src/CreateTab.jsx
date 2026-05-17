@@ -286,7 +286,10 @@ function Wizard(props) {
     pixelId: "", conversionEvent: "PURCHASE", urlTags: ""
   };
   var ds = useState(function(){ return readSavedDraft(initial); }), draft = ds[0], setDraft = ds[1];
-  var ss = useState(function(){ return readSavedStep(); }), step = ss[0], setStep = ss[1];
+  // Always land on Step 1 (the draft-selection / start screen), never
+  // mid-wizard. The team picks a Shared draft to resume or starts
+  // fresh, instead of being dropped back where they left off.
+  var ss = useState(0), step = ss[0], setStep = ss[1];
   var update = function(patch){ setDraft(function(d){ return Object.assign({}, d, patch); }); };
   var updateNested = function(key, patch){ setDraft(function(d){ var v = Object.assign({}, d[key], patch); var out = {}; out[key] = v; return Object.assign({}, d, out); }); };
   var updateCreative = function(idx, patch){
@@ -979,7 +982,17 @@ function Wizard(props) {
               nm = String(nm).trim();
               if (!nm) return;
             }
-            saveServerDraft(nm);
+            // Save, then hand the team a clean slate at Step 1 so they
+            // can start the next campaign. The saved draft lives on the
+            // server (Shared drafts table on Step 1) to resume later;
+            // release the active link so autosave does not overwrite it
+            // with the freshly-reset blank draft.
+            saveServerDraft(nm, { onSaved: function(){
+              releaseServerDraft(false);
+              clearSavedDraft();
+              setDraft(initial);
+              setStep(0);
+            } });
           }} disabled={draftMeta.saving}
           title={draftMeta.savedAt ? "Last saved " + new Date(draftMeta.savedAt).toLocaleTimeString() : "Save this build so the team can resume it"}
           style={{background:"transparent",border:"1px solid "+(draftMeta.id?P.mint+"60":P.rule),borderRadius:10,padding:"10px 16px",color:draftMeta.saving?P.dim:(draftMeta.id?P.mint:(P.label||P.sub)),fontSize:11,fontWeight:700,fontFamily:fm,cursor:draftMeta.saving?"default":"pointer",letterSpacing:2}}>
@@ -1251,7 +1264,9 @@ function DraftsPanel(props) {
   var bs = useState(false), busy = bs[0], setBusy = bs[1];
   var ms = useState(""), msg = ms[0], setMsg = ms[1];
   var es = useState(""), err = es[0], setErr = es[1];
-  var ps = useState(false), open = ps[0], setOpen = ps[1];
+  // Open by default: this is the draft-selection table the team lands
+  // on at Step 1 (resume in-progress work or start fresh).
+  var ps = useState(true), open = ps[0], setOpen = ps[1];
   var cis = useState(""), cloneId = cis[0], setCloneId = cis[1];
   var cbs = useState(false), cloning = cbs[0], setCloning = cbs[1];
   var crs = useState([]), cloneReview = crs[0], setCloneReview = crs[1];
