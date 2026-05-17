@@ -166,6 +166,22 @@ var FEATURES={
 };
 var LOOKER_URLS={"mtn momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo pos":"https://lookerstudio.google.com/reporting/2c88c27a-4e0f-46ed-8ef9-afdb1b54a9dd/page/p_2upnicpx0d","momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","mtn momo":"https://lookerstudio.google.com/reporting/e527d821-db3b-4e60-9f3a-626165e2eed1/page/p_1ooj1p0nmd","willowbrook":"https://lookerstudio.google.com/reporting/823fd5fa-b39d-4dc3-b623-549197d0341f/page/p_2upnicpx0d","psycho":"https://lookerstudio.google.com/reporting/0adc106a-50e2-42cc-a4ca-aafc04160e5d/page/p_1ooj1p0nmd","khava":"","concord":"","eden":"","flower":""};
 var LOOKER_KEYS=["mtn momo pos","momo pos","willowbrook","psycho","khava","concord","eden","flower","momo","mtn momo"];
+// Known GAS senders -> signature title, auto-filled when the sender
+// types their name on the client report send form. Keyed by lowercased
+// full name; match is exact on the trimmed, space-collapsed name.
+var SENDER_TITLES={
+  "gary berman":"Managing Director",
+  "sam michel":"Chief Executive Officer",
+  "busi mntungwa":"Account Director",
+  "claire chrystal":"Senior Account Manager",
+  "donovan pretorius":"Sales Director",
+  "aphelele madlala":"Junior Account Manager"
+};
+var GAS_SENDER_NAMES=["Gary Berman","Sam Michel","Busi Mntungwa","Claire Chrystal","Donovan Pretorius","Aphelele Madlala"];
+function senderTitleFor(name){
+  var k=String(name||"").trim().toLowerCase().replace(/\s+/g," ");
+  return Object.prototype.hasOwnProperty.call(SENDER_TITLES,k)?SENDER_TITLES[k]:"";
+}
 function findLookerUrl(camps,sel){var s=camps.filter(function(x){return sel.indexOf(x.campaignId)>=0;});if(s.length===0)return{url:"",client:"none"};var names=s.map(function(x){return(x.campaignName||"").toLowerCase();}).join(" ");for(var i=0;i<LOOKER_KEYS.length;i++){if(names.indexOf(LOOKER_KEYS[i])>=0){var u=LOOKER_URLS[LOOKER_KEYS[i]];return{url:u,client:LOOKER_KEYS[i]};}}return{url:"",client:"unknown"};}
 var fmt=function(n){var v=parseFloat(n);if(isNaN(v))return"0";if(v>=1e6)return(v/1e6).toFixed(2)+"M";if(v>=1e3)return(v/1e3).toFixed(1)+"K";return Math.round(v).toLocaleString();};
 var fR=function(n){var v=parseFloat(n);return isNaN(v)?"R0.00":"R"+v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2});};
@@ -1299,10 +1315,22 @@ function extractAgencyClient(campaignName){
   }
   return "";
 }
-function deriveClientNames(campaigns){
+// A campaign counts as "actively campaigning" when it is switched on
+// (ACTIVE/ENABLE/ENABLED) and has not ended (no endDate, or endDate in
+// the future). Matches the "LIVE/NO DELIVERY" switched-on states the
+// operator sees on the classification table, not paused/dormant.
+function isActiveCampaign(c){
+  var s=String((c&&c.status)||"").toUpperCase();
+  var on=s==="ACTIVE"||s==="ENABLE"||s==="ENABLED";
+  if(!on)return false;
+  if(c&&c.endDate){var t=Date.parse(c.endDate);if(isFinite(t)&&t<Date.now())return false;}
+  return true;
+}
+function deriveClientNames(campaigns,activeOnly){
   var PLATFORM_SUFFIXES=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
   var seen={};
   (campaigns||[]).forEach(function(c){
+    if(activeOnly&&!isActiveCampaign(c))return;
     var raw=(c.accountName||"").trim();
     if(!raw)return;
     var clean=raw.replace(PLATFORM_SUFFIXES,"").replace(PLATFORM_SUFFIXES,"").trim();
@@ -1323,9 +1351,14 @@ function deriveClientNames(campaigns){
 }
 
 function ShareModal(props){
-  // Derive client names once from all campaigns; auto-select the client
-  // whose campaigns are currently selected (most-frequent account name).
-  var clientNames=useMemo(function(){return deriveClientNames(props.campaigns);},[props.campaigns]);
+  // Derive client names; the dropdown only lists clients with an
+  // actively-campaigning campaign. allClientNames keeps the full list
+  // so the auto-select can still display-case a selected client even
+  // if it has no live campaign right now.
+  var allClientNames=useMemo(function(){return deriveClientNames(props.campaigns);},[props.campaigns]);
+  var clientNames=useMemo(function(){return deriveClientNames(props.campaigns,true);},[props.campaigns]);
+  var clientSearch=useState("");
+  var clientOpen=useState(false);
   var autoClient=useMemo(function(){
     var PLATFORM_SUFFIXES=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
     var counts={};
@@ -1343,10 +1376,10 @@ function ShareModal(props){
     });
     var best="";var bestN=0;
     Object.keys(counts).forEach(function(k){if(counts[k]>bestN){bestN=counts[k];best=k;}});
-    // Return the display-cased version from clientNames
-    for(var i=0;i<clientNames.length;i++){if(clientNames[i].toLowerCase()===best)return clientNames[i];}
+    // Return the display-cased version from the full client list.
+    for(var i=0;i<allClientNames.length;i++){if(allClientNames[i].toLowerCase()===best)return allClientNames[i];}
     return "";
-  },[props.campaigns,props.selected,clientNames]);
+  },[props.campaigns,props.selected,allClientNames]);
   var slug=useState("");
   // Auto-populate slug from the selected campaigns' client name.
   useEffect(function(){if(autoClient&&!slug[0])slug[1](autoClient);},[autoClient]);
@@ -1417,13 +1450,24 @@ function ShareModal(props){
     });
     return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim()};
   };
-  var validateBasics=function(){
-    if(!slug[0].trim()){err[1]("Select a client before sharing");return false;}
+  // Every field is compulsory except Cc and Bcc. requireEmail adds the
+  // recipient-address check for the actual send/preview (Link Only has
+  // no email to validate).
+  var validateForm=function(requireEmail){
     if(!props.selected||props.selected.length===0){err[1]("Select at least one campaign on the left before sharing");return false;}
+    if(!slug[0].trim()){err[1]("Select a client");return false;}
+    if(!recipientName[0].trim()){err[1]("Fill in who to greet (client name or company)");return false;}
+    if(!personalMsg[0].trim()){err[1]("Add a personal message for the client");return false;}
+    if(!senderName[0].trim()){err[1]("Fill in your name");return false;}
+    if(!senderTitle[0].trim()){err[1]("Fill in your title");return false;}
+    if(requireEmail){
+      var emailRe=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if(!emailRe.test((emailTo[0]||"").trim())){err[1]("Enter a valid recipient email in the To field");return false;}
+    }
     return true;
   };
   var generate=function(){
-    if(!validateBasics())return;
+    if(!validateForm(false))return;
     err[1]("");busy[1](true);emailSent[1](false);
     fetch(props.apiBase+"/api/issue-token",{
       method:"POST",
@@ -1438,9 +1482,7 @@ function ShareModal(props){
   // Preview flow: fetch the rendered email HTML, show it in an iframe pane
   // so the account manager reviews before committing the send.
   var requestPreview=function(){
-    if(!validateBasics())return;
-    var emailRe=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if(!emailRe.test((emailTo[0]||"").trim())){err[1]("Enter a valid recipient email to preview and send");return;}
+    if(!validateForm(true))return;
     err[1]("");previewLoading[1](true);previewHtml[1]("");
     var payload=buildCampaignPayload();
     payload.emailTo=emailTo[0].trim();
@@ -1597,11 +1639,24 @@ function ShareModal(props){
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client</div>
-          <select value={slug[0]} onChange={function(e){slug[1](e.target.value);err[1]("");}} style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:slug[0]?P.txt:P.caption,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase",appearance:"none",WebkitAppearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238B7FA3' stroke-width='1.5' fill='none'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center",cursor:"pointer"}}>
-            <option value="" style={{background:P.cosmos}}>Select client</option>
-            {clientNames.map(function(n){return <option key={n} value={n} style={{background:P.cosmos}}>{n.toUpperCase()}</option>;})}
-          </select>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Client <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(actively campaigning)</span></div>
+          <div style={{position:"relative"}}>
+            <input
+              name="share-client-search" autoComplete="off"
+              value={clientOpen[0]?clientSearch[0]:(slug[0]?slug[0].toUpperCase():"")}
+              onFocus={function(){clientOpen[1](true);clientSearch[1]("");}}
+              onBlur={function(){setTimeout(function(){clientOpen[1](false);},150);}}
+              onChange={function(e){clientSearch[1](e.target.value);clientOpen[1](true);err[1]("");}}
+              placeholder="Search client"
+              style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:slug[0]||clientOpen[0]?P.txt:P.caption,fontSize:13,fontFamily:fm,outline:"none",letterSpacing:1,textTransform:"uppercase"}}/>
+            {clientOpen[0]&&(function(){
+              var q=(clientSearch[0]||"").toLowerCase().trim();
+              var list=clientNames.filter(function(n){return !q||n.toLowerCase().indexOf(q)>=0;});
+              return <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:P.cosmos,border:"1px solid "+P.rule,borderRadius:10,maxHeight:220,overflowY:"auto",zIndex:20,boxShadow:"0 12px 32px rgba(0,0,0,0.5)"}}>
+                {list.length===0?<div style={{padding:"10px 14px",fontSize:11,color:P.caption,fontFamily:fm}}>No actively-campaigning client matches</div>:list.map(function(n){return <div key={n} onMouseDown={function(ev){ev.preventDefault();slug[1](n);clientSearch[1]("");clientOpen[1](false);err[1]("");}} style={{padding:"10px 14px",fontSize:12,color:slug[0]===n?P.ember:P.txt,fontFamily:fm,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",borderBottom:"1px solid "+P.rule,background:slug[0]===n?P.ember+"18":"transparent"}}>{n.toUpperCase()}</div>;})}
+              </div>;
+            })()}
+          </div>
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Greet as <span style={{color:P.caption,fontWeight:600,letterSpacing:1}}>(name or company)</span></div>
@@ -1620,24 +1675,25 @@ function ShareModal(props){
 
       {/* Personal message, used in both sent emails and the copyable draft for link-only */}
       <div style={{marginBottom:14}}>
-        <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Personal message (optional)</div>
+        <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Personal message</div>
         <textarea value={personalMsg[0]} onChange={function(e){personalMsg[1](e.target.value);}} placeholder="Add a short note for the client. E.g. 'Really strong month, scroll to Engagement Highlights for the click-through rate spike on the new Reels ad.'" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:ff,outline:"none",resize:"vertical",minHeight:70,lineHeight:1.5}}/>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
         <div>
           <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Your name</div>
-          <input name="share-sender-name" autoComplete="name" value={senderName[0]} onChange={function(e){senderName[1](e.target.value);}} placeholder="e.g. Gary Shepherd" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          <input name="share-sender-name" autoComplete="off" list="gas-senders" value={senderName[0]} onChange={function(e){var v=e.target.value;senderName[1](v);var t=senderTitleFor(v);if(t)senderTitle[1](t);}} placeholder="e.g. Gary Berman" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          <datalist id="gas-senders">{GAS_SENDER_NAMES.map(function(n){return <option key={n} value={n}/>;})}</datalist>
         </div>
         <div>
-          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Title (optional)</div>
+          <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Title</div>
           <input name="share-sender-title" autoComplete="organization-title" value={senderTitle[0]} onChange={function(e){senderTitle[1](e.target.value);}} placeholder="e.g. Performance Lead" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
         </div>
       </div>
 
       {/* Email delivery */}
       <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Email delivery (optional)</div>
+        <div style={{fontSize:11,fontWeight:800,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Email delivery</div>
         <div style={{marginBottom:10}}>
           <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>To</div>
           <input name="share-email-to" type="email" autoComplete="email" value={emailTo[0]} onChange={function(e){emailTo[1](e.target.value);err[1]("");}} placeholder="client@company.co.za" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
@@ -1645,11 +1701,11 @@ function ShareModal(props){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
             <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Cc</div>
-            <input name="share-email-cc" type="email" autoComplete="off" value={emailCc[0]} onChange={function(e){emailCc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+            <input name="share-extra-cc" type="text" inputMode="email" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" value={emailCc[0]} onChange={function(e){emailCc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           </div>
           <div>
             <div style={{fontSize:9,fontWeight:700,color:P.label,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Bcc</div>
-            <input name="share-email-bcc" type="email" autoComplete="off" value={emailBcc[0]} onChange={function(e){emailBcc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+            <input name="share-extra-bcc" type="text" inputMode="email" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" value={emailBcc[0]} onChange={function(e){emailBcc[1](e.target.value);}} placeholder="optional, comma-separated" style={{width:"100%",boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           </div>
         </div>
         <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:8,lineHeight:1.5}}>Sends from grow@gasmarketing.co.za with a branded HTML report and a live dashboard link.</div>
