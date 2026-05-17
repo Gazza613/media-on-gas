@@ -1864,6 +1864,22 @@ function CampaignAuditModal(props){
       })
       .catch(function(){slaBusy[1](false);slaErr[1]("Connection error");});
   };
+  // Report-send history that backs the SLA panel. Same session-authed
+  // /api/audit-log the email audit trail uses; rendered as a per-client
+  // SLA standing + a full "reports sent" list so the panel actually
+  // shows the data, not just the reset control.
+  var slaLog=useState({loading:false,entries:[],error:""});
+  var loadSlaLog=function(){
+    slaLog[1]({loading:true,entries:[],error:""});
+    fetch(props.apiBase+"/api/audit-log?limit=500",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        if(r.status===200&&r.data&&Array.isArray(r.data.entries)){slaLog[1]({loading:false,entries:r.data.entries,error:""});}
+        else{slaLog[1]({loading:false,entries:[],error:(r.data&&r.data.error)||"Could not load report history"});}
+      })
+      .catch(function(){slaLog[1]({loading:false,entries:[],error:"Connection error"});});
+  };
+  useEffect(function(){ if(slaPanelOpen[0]&&props.isSuperadmin){loadSlaLog();} },[slaPanelOpen[0]]);
 
   // Usage state
   var usageEvents=useState([]);
@@ -2150,6 +2166,59 @@ function CampaignAuditModal(props){
           <div>Anchor: <strong>{slaResult[0].baseline}</strong></div>
           <div>Earliest possible nudge: <strong>{slaResult[0].nextNudgeAfter}</strong></div>
         </div>}
+        {(function(){
+          var L=slaLog[0];
+          var rowHd={padding:"7px 10px",fontSize:9,fontWeight:800,color:P.solar,letterSpacing:1,fontFamily:fm,textTransform:"uppercase",textAlign:"left",background:P.solar+"12",borderBottom:"1px solid "+P.solar+"30"};
+          var cell={padding:"7px 10px",fontSize:11,color:P.txt,fontFamily:fm,borderBottom:"1px solid "+P.rule,verticalAlign:"top"};
+          var fmtD=function(iso){if(!iso)return"—";var d=new Date(iso);return isNaN(d.getTime())?String(iso):d.toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"2-digit"});};
+          return <div style={{marginTop:14,borderTop:"1px solid "+P.solar+"25",paddingTop:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <span style={{fontSize:11,fontWeight:800,color:P.solar,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Reports Sent &amp; SLA Standing</span>
+              <button onClick={loadSlaLog} disabled={L.loading} style={{marginLeft:"auto",background:"transparent",border:"1px solid "+P.rule,borderRadius:6,padding:"4px 10px",color:L.loading?P.dim:P.label,fontSize:9,fontWeight:800,fontFamily:fm,cursor:L.loading?"wait":"pointer",letterSpacing:1,textTransform:"uppercase"}}>{L.loading?"Loading…":"Refresh"}</button>
+            </div>
+            {L.error&&<div style={{fontSize:11,color:P.critical,fontFamily:fm,marginBottom:8}}>{L.error}</div>}
+            {L.loading&&L.entries.length===0&&<div style={{fontSize:11,color:P.label,fontFamily:fm}}>Loading report history…</div>}
+            {!L.loading&&!L.error&&L.entries.length===0&&<div style={{fontSize:11,color:P.caption,fontFamily:ff}}>No reports have been sent yet. Sends made via Share appear here.</div>}
+            {L.entries.length>0&&(function(){
+              var sorted=L.entries.slice().filter(function(e){return e&&e.sentAt;}).sort(function(a,b){return new Date(b.sentAt)-new Date(a.sentAt);});
+              var now=Date.now();var DAY=86400000;
+              var groups={};
+              sorted.forEach(function(e){
+                var key=String(e.clientSlug||e.clientName||"unknown").toLowerCase();
+                var ts=new Date(e.sentAt).getTime();
+                if(!groups[key]||ts>groups[key].ts){groups[key]={ts:ts,name:e.clientName||e.clientSlug||"Unknown",sentAt:e.sentAt};}
+              });
+              var standing=Object.keys(groups).map(function(k){var g=groups[k];var days=Math.floor((now-g.ts)/DAY);return{name:g.name,sentAt:g.sentAt,days:days,overdue:days>7};}).sort(function(a,b){return (b.overdue-a.overdue)||(b.days-a.days);});
+              return <div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",margin:"4px 0 6px"}}>Per-client standing ({standing.length})</div>
+                <div style={{overflowX:"auto",marginBottom:14}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr><th style={rowHd}>Client</th><th style={rowHd}>Last report</th><th style={rowHd}>Days ago</th><th style={rowHd}>Status</th></tr></thead>
+                    <tbody>{standing.map(function(s,i){return <tr key={i}>
+                      <td style={cell}>{s.name}</td>
+                      <td style={cell}>{fmtD(s.sentAt)}</td>
+                      <td style={Object.assign({},cell,{fontWeight:800,color:s.overdue?P.critical:P.mint})}>{s.days}</td>
+                      <td style={cell}><span style={{background:(s.overdue?P.critical:P.mint)+"22",border:"1px solid "+(s.overdue?P.critical:P.mint)+"55",color:s.overdue?P.critical:P.mint,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,padding:"2px 7px",borderRadius:4,textTransform:"uppercase"}}>{s.overdue?"Overdue":"On track"}</span></td>
+                    </tr>;})}</tbody>
+                  </table>
+                </div>
+                <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",margin:"4px 0 6px"}}>All reports sent ({sorted.length})</div>
+                <div style={{overflowX:"auto",maxHeight:320,overflowY:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr><th style={rowHd}>Sent</th><th style={rowHd}>Client</th><th style={rowHd}>By</th><th style={rowHd}>To</th><th style={rowHd}>Period</th></tr></thead>
+                    <tbody>{sorted.slice(0,200).map(function(e,i){var to=[].concat(e.to||[]).join(", ");return <tr key={i}>
+                      <td style={Object.assign({},cell,{whiteSpace:"nowrap"})}>{fmtD(e.sentAt)}</td>
+                      <td style={cell}>{e.clientName||e.clientSlug||"—"}</td>
+                      <td style={Object.assign({},cell,{whiteSpace:"nowrap"})}>{e.senderName||e.senderEmail||"—"}</td>
+                      <td style={Object.assign({},cell,{maxWidth:220,wordBreak:"break-word"})}>{to||"—"}</td>
+                      <td style={Object.assign({},cell,{whiteSpace:"nowrap"})}>{e.fromDate&&e.toDate?(e.fromDate+" → "+e.toDate):"—"}</td>
+                    </tr>;})}</tbody>
+                  </table>
+                </div>
+              </div>;
+            })()}
+          </div>;
+        })()}
       </div>}
       {view[0]==="audit"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
