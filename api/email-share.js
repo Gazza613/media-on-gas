@@ -660,6 +660,14 @@ function buildEmailHtml(opts) {
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
   var origin = opts.origin || "https://media-on-gas.vercel.app";
   var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  // Per-client brand logo (co-branded header). Absolute https stays as
+  // is; a same-origin path is prefixed with origin so the email <img>
+  // has an absolute src.
+  var clientLogo = (function () {
+    var l = opts.profile && opts.profile.logoUrl ? String(opts.profile.logoUrl) : "";
+    if (!l) return "";
+    return l.indexOf("http") === 0 ? l : (origin + l);
+  })();
   var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
@@ -692,7 +700,7 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:36px 40px 24px;text-align:center;">
         <div style="margin-bottom:18px;">
-          <img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>
+          ${clientLogo ? `<img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="92" height="92" border="0" style="width:92px;height:92px;display:inline-block;background:#FFFFFF;border-radius:18px;padding:10px;box-sizing:border-box;object-fit:contain;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.30);"/><div style="font-size:9px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-top:10px;">Reporting by GAS Marketing</div>` : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
         </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">

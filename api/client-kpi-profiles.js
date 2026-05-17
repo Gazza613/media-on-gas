@@ -106,7 +106,17 @@ export default async function handler(req, res) {
         // deterministic completed-signup, no event-name guessing. When
         // set it overrides newsletterEvent. Allow path chars only.
         newsletterPagePath: String(ec.newsletterPagePath || "").replace(/[^a-zA-Z0-9_\-\/]/g, "").slice(0, 120)
-      }
+      },
+      // Client brand logo for personalised email + dashboard headers.
+      // Accept an https URL or a same-origin path (e.g.
+      // "/clients/psycho-bunny.png"). Conservative charset, length
+      // capped. Empty = fall back to GAS branding only.
+      logoUrl: (function () {
+        var s = String(p.logoUrl || "").trim().slice(0, 300);
+        if (/^https:\/\/[a-zA-Z0-9._~:\/?#\[\]@!$&'()*+,;=%-]+$/.test(s)) return s;
+        if (/^\/[a-zA-Z0-9._~\/?#@!$&'()*+,;=%-]+$/.test(s)) return s;
+        return "";
+      })()
     };
 
     var ok = await setKpiProfile(client, profile);

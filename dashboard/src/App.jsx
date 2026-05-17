@@ -1850,7 +1850,7 @@ function CampaignAuditModal(props){
       .then(function(d){kpiLoading[1](false);if(d&&d.profiles)kpiProfiles[1](d.profiles);else kpiErr[1](d.error||"Could not load profiles");})
       .catch(function(){kpiLoading[1](false);kpiErr[1]("Connection error");});
   };
-  var blankKpiForm=function(){return{primaryKpis:[],secondaryKpis:[],tertiaryKpis:[],benchmarkBand:"default",ecommerce:{enabled:false,source:"ga4",ga4PropertyId:"",newsletterEvent:"",newsletterPagePath:""}};};
+  var blankKpiForm=function(){return{primaryKpis:[],secondaryKpis:[],tertiaryKpis:[],benchmarkBand:"default",logoUrl:"",ecommerce:{enabled:false,source:"ga4",ga4PropertyId:"",newsletterEvent:"",newsletterPagePath:""}};};
   var editKpi=function(slug){
     var p=kpiProfiles[0][slug];
     kpiClient[1](slug);
@@ -2544,6 +2544,11 @@ function CampaignAuditModal(props){
                 <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:5,lineHeight:1.5}}>GA4 page path shown only after a completed sign-up. Counting its views is a deterministic sign-up count, no event-name guessing. When set, this is used instead of the event name.</div>
               </div>
             </div>}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:6}}>Client logo URL <span style={{color:P.caption,fontWeight:600,textTransform:"none",letterSpacing:0}}>(personalises this client's email + dashboard header)</span></div>
+              <input value={form.logoUrl||""} onChange={function(e){var nf=Object.assign({},form);nf.logoUrl=e.target.value;kpiForm[1](nf);}} placeholder="/clients/psycho-bunny.png  or  https://..." style={inp}/>
+              <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:5,lineHeight:1.5}}>An https URL, or a file committed to dashboard/public (served at the site root, e.g. /clients/psycho-bunny.png). Leave blank for GAS-only branding.</div>
+            </div>
             <button onClick={saveKpiProfile} disabled={kpiBusy[0]} style={{background:kpiBusy[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"11px 24px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:kpiBusy[0]?"wait":"pointer",letterSpacing:1.5}}>{kpiBusy[0]?"SAVING...":"SAVE PROFILE"}</button>
           </div>}
 
@@ -4965,6 +4970,10 @@ export default function MediaOnGas(){
 
         {/* OVERVIEW */}
         {tab==="summary"&&(<div>
+          {ecoProfile&&ecoProfile.logoUrl&&<div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
+            <div style={{width:60,height:60,borderRadius:14,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:8,boxSizing:"border-box",flexShrink:0,boxShadow:"0 4px 16px rgba(0,0,0,0.35)"}}><img src={ecoProfile.logoUrl} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",display:"block"}} onError={function(e){e.target.style.display="none";}}/></div>
+            <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Client report<div style={{fontSize:9,color:P.caption,marginTop:3,letterSpacing:1.5}}>Powered by GAS Marketing</div></div>
+          </div>}
           <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
           {/* The per-client KPI objectives used to render here at the top.
               They now live in the Objectives section lower down (rendered
