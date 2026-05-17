@@ -264,6 +264,68 @@ function Wizard(props) {
     });
   };
 
+  // ---- Server-side, TEAM-SHARED draft. sessionStorage above stays the
+  //      instant local cache; this is the durable, shareable copy via
+  //      /api/create/drafts so one person can prep and another finish
+  //      or launch. Autosave only runs once a draft has been explicitly
+  //      named/saved (or loaded), so we never churn the shared list
+  //      with abandoned wizards.
+  var dms = useState({ id: "", name: "", saving: false, savedAt: "", error: "" });
+  var draftMeta = dms[0], setDraftMeta = dms[1];
+  var draftSaveTimer = useRef(null);
+
+  var saveServerDraft = function(name, opts){
+    opts = opts || {};
+    var nm = String(name || draftMeta.name || "").trim();
+    if (!nm) { setDraftMeta(function(m){ return Object.assign({}, m, { error: "Name the draft first." }); }); return; }
+    var useId = opts.asNew ? "" : (draftMeta.id || "");
+    setDraftMeta(function(m){ return Object.assign({}, m, { saving: true, error: "" }); });
+    authedFetch("/api/create/drafts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: useId, name: nm, step: step, draft: draft })
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function(x){
+        if (x.status === 401) { props.onLogout(); return; }
+        if (!x.ok || !x.data || !x.data.ok) {
+          setDraftMeta(function(m){ return Object.assign({}, m, { saving: false, error: (x.data && x.data.error) || "Save failed" }); });
+          return;
+        }
+        var rec = x.data.draft || {};
+        setDraftMeta({ id: rec.id || useId, name: rec.name || nm, saving: false, savedAt: rec.updatedAt || new Date().toISOString(), error: "" });
+        if (typeof opts.onSaved === "function") opts.onSaved(rec);
+      })
+      .catch(function(){ setDraftMeta(function(m){ return Object.assign({}, m, { saving: false, error: "Network error" }); }); });
+  };
+
+  // Full resume: replace the whole wizard with a loaded server draft
+  // and jump to the step it was left on (not a template merge).
+  var applyServerDraft = function(rec){
+    if (!rec || !rec.draft) return;
+    setDraft(Object.assign({}, initial, rec.draft));
+    setStep(Math.max(0, Math.min(6, Number(rec.step || 0))));
+    setDraftMeta({ id: rec.id || "", name: rec.name || "", saving: false, savedAt: rec.updatedAt || rec.savedAt || "", error: "" });
+  };
+
+  // Stop autosaving and drop the shared record once a build is no
+  // longer in progress (launched, or user started another).
+  var releaseServerDraft = function(del){
+    if (del && draftMeta.id) {
+      authedFetch("/api/create/drafts?id=" + encodeURIComponent(draftMeta.id), { method: "DELETE" }).catch(function(){});
+    }
+    if (draftSaveTimer.current) { clearTimeout(draftSaveTimer.current); draftSaveTimer.current = null; }
+    setDraftMeta({ id: "", name: "", saving: false, savedAt: "", error: "" });
+  };
+
+  // Debounced autosave: only once this build is a named server draft.
+  useEffect(function(){
+    if (!draftMeta.id) return;
+    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+    draftSaveTimer.current = setTimeout(function(){ saveServerDraft(draftMeta.name); }, 4000);
+    return function(){ if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
+  }, [draft, step]);
+
   useEffect(function(){
     try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(stripDraftForPersist(draft))); } catch (_) {}
   }, [draft]);
@@ -655,6 +717,7 @@ function Wizard(props) {
           return;
         }
         clearSavedDraft();
+        releaseServerDraft(true); // build launched: drop the shared draft
         // For split, surface a combined result; otherwise pass through
         // the single-call response shape so the existing success UI
         // works unchanged.
@@ -692,7 +755,7 @@ function Wizard(props) {
 
   // -------- Result screen --------------------------------------------------
   if (result) return <SuccessScreen P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} result={result}
-    onAnother={function(){ clearSavedDraft(); setResult(null); setStep(0); setDraft(initial); setSubmitErr(null); }}/>;
+    onAnother={function(){ clearSavedDraft(); releaseServerDraft(false); setResult(null); setStep(0); setDraft(initial); setSubmitErr(null); }}/>;
 
   // -------- Render ---------------------------------------------------------
   return <div>
@@ -706,6 +769,7 @@ function Wizard(props) {
       {step === 0 && <Step0 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
         apiBase={apiBase} token={token}
         draft={draft} update={update} accounts={accounts}
+        applyServerDraft={applyServerDraft} saveServerDraft={saveServerDraft} draftMeta={draftMeta}
         generatedCampaignName={generatedCampaignName}/>}
       {step === 1 && <Step1 P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass}
         apiBase={apiBase} token={token}
@@ -762,6 +826,22 @@ function Wizard(props) {
         Back
       </button>
       <div style={{display:"flex",gap:10}}>
+        {!result && <button onClick={function(){
+            var nm = draftMeta.name;
+            if (!nm) {
+              nm = (typeof window !== "undefined" && window.prompt)
+                ? window.prompt("Name this draft (shared with the team):", draft.clientCode ? draft.clientCode + " draft" : "")
+                : "Draft";
+              if (nm == null) return;
+              nm = String(nm).trim();
+              if (!nm) return;
+            }
+            saveServerDraft(nm);
+          }} disabled={draftMeta.saving}
+          title={draftMeta.savedAt ? "Last saved " + new Date(draftMeta.savedAt).toLocaleTimeString() : "Save this build so the team can resume it"}
+          style={{background:"transparent",border:"1px solid "+(draftMeta.id?P.mint+"60":P.rule),borderRadius:10,padding:"10px 16px",color:draftMeta.saving?P.dim:(draftMeta.id?P.mint:(P.label||P.sub)),fontSize:11,fontWeight:700,fontFamily:fm,cursor:draftMeta.saving?"default":"pointer",letterSpacing:2}}>
+          {draftMeta.saving ? "Saving…" : draftMeta.id ? "Saved ✓" : "Save draft"}
+        </button>}
         <button onClick={props.onLogout} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 16px",color:P.dim,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",letterSpacing:2}}>
           Lock
         </button>
@@ -1005,6 +1085,135 @@ function TemplatesPanel(props) {
   </Glass>;
 }
 
+// Team-shared DRAFTS panel. Unlike Templates (reusable config preset),
+// a draft is a full in-progress build, creatives + dates + the exact
+// step. Load = full resume. Sits beside Templates on Step 0 so the
+// team starts by either resuming shared work or starting fresh.
+function DraftsPanel(props) {
+  var P = props.P, fm = props.fm, ff = props.ff, Glass = props.Glass;
+  var apiBase = props.apiBase, token = props.token;
+  var applyServerDraft = props.applyServerDraft, saveServerDraft = props.saveServerDraft;
+  var draftMeta = props.draftMeta;
+  var ls = useState({ loading: true, items: [], error: "" }), st = ls[0], setSt = ls[1];
+  var ns = useState(""), saveName = ns[0], setSaveName = ns[1];
+  var bs = useState(false), busy = bs[0], setBusy = bs[1];
+  var ms = useState(""), msg = ms[0], setMsg = ms[1];
+  var es = useState(""), err = es[0], setErr = es[1];
+  var ps = useState(false), open = ps[0], setOpen = ps[1];
+
+  var loadList = function(){
+    if (!token) { setSt({ loading: false, items: [], error: "Not authenticated" }); return; }
+    setSt({ loading: true, items: [], error: "" });
+    fetch(apiBase + "/api/create/drafts", { headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setSt({ loading: false, items: [], error: (x.data && x.data.error) || "Failed to load" }); return; }
+        setSt({ loading: false, items: (x.data && x.data.drafts) || [], error: "" });
+      })
+      .catch(function(){ setSt({ loading: false, items: [], error: "Network error" }); });
+  };
+  useEffect(loadList, [token]);
+  // Refresh the list whenever the active draft id/savedAt changes (a
+  // new save or first save just landed).
+  useEffect(function(){ if (token) loadList(); }, [draftMeta.id, draftMeta.savedAt]);
+
+  var doLoad = function(item){
+    if (busy) return;
+    setBusy(true); setErr(""); setMsg("");
+    fetch(apiBase + "/api/create/drafts?id=" + encodeURIComponent(item.id), { headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        setBusy(false);
+        if (!x.ok || !x.data || !x.data.draft) { setErr((x.data && x.data.error) || "Could not open draft"); return; }
+        applyServerDraft(x.data.draft);
+        setMsg("Resumed '" + (x.data.draft.name || item.name) + "'.");
+        setTimeout(function(){ setMsg(""); }, 2000);
+      })
+      .catch(function(){ setBusy(false); setErr("Network error"); });
+  };
+
+  var doDelete = function(item){
+    if (!window.confirm("Delete shared draft '" + item.name + "'? This removes it for the whole team.")) return;
+    setBusy(true); setErr(""); setMsg("");
+    fetch(apiBase + "/api/create/drafts?id=" + encodeURIComponent(item.id), {
+      method: "DELETE", headers: { "Authorization": "Bearer " + token }
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        setBusy(false);
+        if (!x.ok) { setErr((x.data && x.data.error) || "Delete failed"); return; }
+        setMsg("Deleted."); setTimeout(function(){ setMsg(""); }, 1500);
+        loadList();
+      })
+      .catch(function(){ setBusy(false); setErr("Network error"); });
+  };
+
+  var doSaveNew = function(){
+    if (!saveName.trim()) { setErr("Give the draft a short name first."); return; }
+    setErr("");
+    saveServerDraft(saveName.trim(), { asNew: true, onSaved: function(){
+      setSaveName(""); setMsg("Saved."); setTimeout(function(){ setMsg(""); }, 1800); loadList();
+    }});
+  };
+
+  var fmtWhen = function(iso){ try { return new Date(iso).toLocaleString(); } catch (_) { return iso || ""; } };
+
+  return <Glass accent={P.mint} st={{padding:22,marginBottom:18}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}
+      onClick={function(){ setOpen(!open); }}>
+      <div>
+        <div style={{fontSize:13,fontWeight:800,color:P.mint,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Shared drafts</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,marginTop:4}}>
+          Resume an in-progress build, or hand one to a teammate to finish and launch. {st.items.length > 0 && <span style={{color:P.mint,fontWeight:700}}>· {st.items.length} saved</span>}
+          {draftMeta.id && <span style={{color:P.mint,fontWeight:700}}> · editing “{draftMeta.name}” (autosaving)</span>}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:P.mint,fontFamily:fm,fontWeight:800,letterSpacing:1.5}}>{open ? "− HIDE" : "+ SHOW"}</div>
+    </div>
+
+    {open && <div style={{marginTop:18}}>
+      {st.loading && <div style={{fontSize:12,color:P.label||P.sub,fontFamily:fm}}>Loading shared drafts…</div>}
+      {st.error && <div style={{fontSize:12,color:P.critical||"#ef4444",fontFamily:fm}}>{st.error}</div>}
+
+      {!st.loading && st.items.length === 0 && <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,padding:"10px 0"}}>
+        No shared drafts yet. Build part of a campaign, then use “Save draft” in the footer so anyone on the team can pick it up.
+      </div>}
+
+      {!st.loading && st.items.length > 0 && <div style={{marginBottom:14}}>
+        <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Resume a draft</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {st.items.map(function(it){
+            return <div key={it.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"rgba(20,12,30,0.5)",border:"1px solid "+(it.id===draftMeta.id?P.mint+"55":P.rule),borderRadius:10}}>
+              <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+                <div style={{fontSize:13,color:P.txt,fontFamily:fm,fontWeight:700,letterSpacing:0.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.name}{it.id===draftMeta.id && <span style={{color:P.mint,fontWeight:800}}> · live</span>}</div>
+                <div style={{fontSize:10,color:P.caption||P.sub,fontFamily:fm,marginTop:3,letterSpacing:0.5}}>
+                  {it.clientCode ? it.clientCode + " · " : ""}{it.objective ? String(it.objective).replace(/^OUTCOME_/, "") + " · " : ""}step {Number(it.step||0)+1}/7 · {it.updatedBy || it.savedBy || "team"} · {fmtWhen(it.updatedAt || it.savedAt)}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={function(){ doLoad(it); }} disabled={busy} style={{background:P.mint+"20",border:"1px solid "+P.mint+"60",borderRadius:8,padding:"6px 12px",color:P.mint,fontSize:10,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Resume</button>
+                <button onClick={function(){ doDelete(it); }} disabled={busy} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"6px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:busy?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Del</button>
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>}
+
+      <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Save current build as a new shared draft</div>
+          <input value={saveName} onChange={function(e){ setSaveName(e.target.value); }} placeholder="e.g. MTN MoMo May hampers (WIP)"
+            style={Object.assign({}, inputStyle(P, fm))}/>
+        </div>
+        <button onClick={doSaveNew} disabled={draftMeta.saving || !saveName.trim()} style={{background:draftMeta.saving?P.dim:"linear-gradient(135deg,#34D399,#10B981)",border:"none",borderRadius:10,padding:"11px 18px",color:"#062014",fontSize:11,fontWeight:800,fontFamily:fm,cursor:draftMeta.saving?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{draftMeta.saving ? "Saving…" : "Save"}</button>
+      </div>
+
+      {msg && <div style={{marginTop:10,fontSize:11,color:P.mint,fontFamily:fm,fontWeight:700}}>{msg}</div>}
+      {(err || draftMeta.error) && <div style={{marginTop:10,fontSize:11,color:P.critical||"#ef4444",fontFamily:fm}}>{err || draftMeta.error}</div>}
+    </div>}
+  </Glass>;
+}
+
 function Step0(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
   var draft = props.draft, update = props.update, accounts = props.accounts;
@@ -1032,6 +1241,10 @@ function Step0(props) {
   return <div>
     <NamePreview P={P} fm={fm} accent={P.ember} label="Campaign name (live preview)"
       name={props.generatedCampaignName} parts={nameParts}/>
+
+    <DraftsPanel P={P} fm={fm} ff={ff} Glass={Glass}
+      apiBase={apiBase} token={token}
+      applyServerDraft={props.applyServerDraft} saveServerDraft={props.saveServerDraft} draftMeta={props.draftMeta || {}}/>
 
     <TemplatesPanel P={P} fm={fm} ff={ff} Glass={Glass}
       apiBase={apiBase} token={token}
