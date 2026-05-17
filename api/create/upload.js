@@ -14,6 +14,7 @@
 
 import { rateLimit } from "../_rateLimit.js";
 import { checkCreateAuth, isAccountAllowed, getCreateMetaToken, META_API_VERSION } from "../_createAuth.js";
+import { registerAsset } from "./_assetLibrary.js";
 
 export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "5mb" } } };
 
@@ -38,6 +39,9 @@ export default async function handler(req, res) {
   var filename = String(body.filename || "asset").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "asset";
   var mimeType = String(body.mimeType || "");
   var dataB64 = String(body.dataB64 || "");
+  // Optional, for library scoping/labelling. Never affects the upload.
+  var clientCode = String(body.clientCode || "").slice(0, 40);
+  var ratioLabel = String(body.ratioLabel || "").slice(0, 16);
 
   if (kind !== "image" && kind !== "video") { res.status(400).json({ error: "kind must be image or video" }); return; }
   if (!isAccountAllowed(accountId)) { res.status(403).json({ error: "Account not in allowlist" }); return; }
@@ -76,8 +80,26 @@ export default async function handler(req, res) {
       // Meta keys the response by filename. Pull the first hash.
       var keys = Object.keys(idata.images || {});
       if (keys.length === 0) { res.status(502).json({ error: "Meta returned no image hash" }); return; }
-      var hash = idata.images[keys[0]].hash;
-      res.status(200).json({ kind: "image", imageHash: hash, filename: keys[0] });
+      var imgEntry = idata.images[keys[0]] || {};
+      var hash = imgEntry.hash;
+      // Resolve a durable preview URL for the library. The /adimages
+      // POST response sometimes omits url; a hashes= GET is reliable.
+      var thumbUrl = /^https?:\/\//.test(String(imgEntry.url || "")) ? imgEntry.url : "";
+      if (!thumbUrl) {
+        try {
+          var lookUrl = "https://graph.facebook.com/" + META_API_VERSION + "/" +
+            encodeURIComponent(accountId) + "/adimages?fields=hash,url,permalink_url&hashes=" +
+            encodeURIComponent(JSON.stringify([hash])) + "&access_token=" + encodeURIComponent(token);
+          var lr = await fetch(lookUrl);
+          var lj = await lr.json();
+          var first = lj && lj.data && lj.data[0];
+          if (first) thumbUrl = first.permalink_url || first.url || "";
+        } catch (_) { /* best-effort, library just shows a placeholder */ }
+      }
+      // Best-effort: add to the shared asset library. Must never fail
+      // or delay the upload response the wizard is waiting on.
+      try { await registerAsset(accountId, { kind: "image", imageHash: hash, filename: keys[0], thumbnailUrl: thumbUrl, clientCode: clientCode, ratioLabel: ratioLabel }); } catch (_) {}
+      res.status(200).json({ kind: "image", imageHash: hash, filename: keys[0], thumbnailUrl: thumbUrl });
       return;
     }
 
@@ -93,6 +115,9 @@ export default async function handler(req, res) {
       res.status(502).json({ error: "Meta video upload failed" });
       return;
     }
+    // Video thumbnails are not ready at upload time; the library shows
+    // a video placeholder tile until Meta finishes processing.
+    try { await registerAsset(accountId, { kind: "video", videoId: vdata.id, filename: filename, thumbnailUrl: "", clientCode: clientCode, ratioLabel: ratioLabel }); } catch (_) {}
     res.status(200).json({ kind: "video", videoId: vdata.id });
   } catch (e) {
     console.error("[create/upload] error:", e && e.message);

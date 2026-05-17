@@ -1777,6 +1777,7 @@ function Step3(props) {
       return <CreativeCard key={idx} idx={idx} creative={c} P={P} ff={ff} fm={fm}
         creativeMode={draft.creativeMode}
         accountId={draft.accountId} apiBase={apiBase} token={token}
+        clientCode={draft.clientCode}
         adName={adName}
         onChange={function(patch){ updateCreative(idx, patch); }}
         onRemove={creatives.length > 1 ? function(){ removeCreative(idx); } : null}
@@ -1948,8 +1949,39 @@ function CreativeCard(props) {
   var P = props.P, ff = props.ff, fm = props.fm, c = props.creative;
   var idx = props.idx, creativeMode = props.creativeMode;
   var apiBase = props.apiBase, token = props.token, accountId = props.accountId;
+  var clientCode = props.clientCode || "";
   var fileRef = useRef(null);
   var upS = useState({ uploading: false, error: "" }), uploadState = upS[0], setUploadState = upS[1];
+  var lbO = useState(false), libOpen = lbO[0], setLibOpen = lbO[1];
+  var lbS = useState({ loading: false, items: [], error: "" }), libState = lbS[0], setLibState = lbS[1];
+
+  var loadLibrary = function(){
+    if (!accountId) { setLibState({ loading: false, items: [], error: "Pick an ad account on Step 0 first." }); return; }
+    setLibState({ loading: true, items: [], error: "" });
+    fetch(apiBase + "/api/create/assets?accountId=" + encodeURIComponent(accountId), { headers: { "Authorization": "Bearer " + token } })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+      .then(function(x){
+        if (!x.ok) { setLibState({ loading: false, items: [], error: (x.data && x.data.error) || "Failed to load library" }); return; }
+        setLibState({ loading: false, items: (x.data && x.data.assets) || [], error: "" });
+      })
+      .catch(function(){ setLibState({ loading: false, items: [], error: "Network error" }); });
+  };
+  var toggleLibrary = function(){
+    var next = !libOpen;
+    setLibOpen(next);
+    if (next && libState.items.length === 0 && !libState.loading) loadLibrary();
+  };
+  var pickAsset = function(a){
+    if (!a) return;
+    props.onChange({
+      kind: a.kind,
+      imageHash: a.imageHash || null,
+      videoId: a.videoId || null,
+      filename: a.filename || (a.kind === "video" ? "library video" : "library image"),
+      previewDataUrl: a.kind === "image" && a.thumbnailUrl ? a.thumbnailUrl : null
+    });
+    setLibOpen(false);
+  };
 
   var onFile = function(e){
     var file = e.target.files && e.target.files[0];
@@ -1964,7 +1996,7 @@ function CreativeCard(props) {
       fetch(apiBase + "/api/create/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-        body: JSON.stringify({ kind: kind, accountId: accountId, filename: file.name, mimeType: file.type, dataB64: b64 })
+        body: JSON.stringify({ kind: kind, accountId: accountId, filename: file.name, mimeType: file.type, dataB64: b64, clientCode: clientCode })
       })
         .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
         .then(function(x){
@@ -2016,6 +2048,41 @@ function CreativeCard(props) {
         ✓ Uploaded: {c.filename} ({c.videoId ? "video" : "image"})
       </div>}
       {c.previewDataUrl && <img src={c.previewDataUrl} alt="" style={{marginTop:12,maxWidth:240,borderRadius:10,border:"1px solid "+P.rule}}/>}
+
+      <div style={{marginTop:12}}>
+        <button type="button" onClick={toggleLibrary} disabled={!accountId}
+          style={{background:"transparent",border:"1px solid "+P.cyan+"55",borderRadius:8,padding:"7px 14px",color:!accountId?P.dim:P.cyan,fontSize:10,fontWeight:800,fontFamily:fm,cursor:!accountId?"default":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
+          {libOpen ? "− Hide asset library" : "↻ Or pick from asset library"}
+        </button>
+        {libOpen && <div style={{marginTop:12,padding:"12px 14px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:800,color:P.cyan,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Previously uploaded {carouselCard ? "images" : "assets"} for this account</div>
+            <button type="button" onClick={loadLibrary} disabled={libState.loading} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,padding:"4px 10px",color:P.label||P.sub,fontSize:9,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,textTransform:"uppercase"}}>Refresh</button>
+          </div>
+          {libState.loading && <div style={{fontSize:11,color:P.label||P.sub,fontFamily:fm}}>Loading library…</div>}
+          {libState.error && <div style={{fontSize:11,color:P.critical||"#ef4444",fontFamily:fm}}>{libState.error}</div>}
+          {(function(){
+            var items = (libState.items || []).filter(function(a){ return carouselCard ? a.kind === "image" : true; });
+            if (!libState.loading && !libState.error && items.length === 0) {
+              return <div style={{fontSize:11,color:P.caption||P.sub,fontFamily:ff,padding:"6px 0"}}>No saved assets yet. Anything you upload here is added automatically, so it is one click next time.</div>;
+            }
+            return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(96px,1fr))",gap:8,maxHeight:260,overflowY:"auto"}}>
+              {items.map(function(a){
+                var isVid = a.kind === "video";
+                return <div key={a.id} onClick={function(){ pickAsset(a); }} title={(a.filename||"")+(a.clientCode?(" · "+a.clientCode):"")}
+                  style={{cursor:"pointer",border:"1px solid "+P.rule,borderRadius:8,overflow:"hidden",background:"#0c0716"}}>
+                  <div style={{width:"100%",height:74,display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,"+P.cyan+"22,"+P.fuchsia+"15)"}}>
+                    {(!isVid && a.thumbnailUrl)
+                      ? <img src={a.thumbnailUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      : <span style={{fontSize:9,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:1}}>{isVid ? "VIDEO" : "IMAGE"}</span>}
+                  </div>
+                  <div style={{padding:"5px 6px",fontSize:8.5,color:P.label||P.sub,fontFamily:fm,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.filename || a.ref}</div>
+                </div>;
+              })}
+            </div>;
+          })()}
+        </div>}
+      </div>
     </Field>
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
