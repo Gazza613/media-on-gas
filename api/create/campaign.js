@@ -283,7 +283,7 @@ export default async function handler(req, res) {
 
 // ---------------------------------------------------------------------------
 
-async function postAd(graphBase, acct, token, adName, adsetId, creativeId, p) {
+export async function postAd(graphBase, acct, token, adName, adsetId, creativeId, p) {
   var adForm = new URLSearchParams();
   adForm.set("name", adName);
   adForm.set("adset_id", adsetId);
@@ -311,7 +311,7 @@ async function postAd(graphBase, acct, token, adName, adsetId, creativeId, p) {
   return { id: d.id };
 }
 
-function creativeFormFromBody(body, p, token, name) {
+export function creativeFormFromBody(body, p, token, name) {
   var form = new URLSearchParams();
   form.set("name", name + " - Creative");
   Object.keys(body).forEach(function(k){
@@ -324,7 +324,7 @@ function creativeFormFromBody(body, p, token, name) {
 // Read the Redis approval record for a token and verify it matches the
 // current campaign config's fingerprint. Returns { ok: true } or
 // { ok: false, reason }.
-async function verifyApproval(token, p) {
+export async function verifyApproval(token, p) {
   var url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
   var tok = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
   if (!url || !tok) return { ok: false, reason: "Approval store unavailable" };
@@ -376,14 +376,14 @@ function fail(res, code, msg, detail, ids, sentForm) {
 // Pull a URLSearchParams form back into a plain object for echoing in error
 // responses, dropping the access_token so it doesn't bounce through logs or
 // browser DevTools.
-function scrubForm(form) {
+export function scrubForm(form) {
   if (!form) return null;
   var out = {};
   form.forEach(function(v, k){ if (k !== "access_token") out[k] = v; });
   return out;
 }
 
-function validate(b) {
+export function validate(b) {
   if (!b.accountId || !isAccountAllowed(b.accountId)) return { error: "accountId missing or not in allowlist" };
   if (!ALLOWED_OBJECTIVES[b.objective]) return { error: "objective not allowed for Phase 1" };
   if (!b.campaignName || String(b.campaignName).length < 3) return { error: "campaignName too short" };
@@ -709,7 +709,7 @@ function buildTargetingImpl(p) {
   return t;
 }
 
-function buildSingleCreative(c, p) {
+export function buildSingleCreative(c, p) {
   var storySpec = { page_id: p.pageId };
   if (p.instagramId) storySpec.instagram_user_id = p.instagramId;
 

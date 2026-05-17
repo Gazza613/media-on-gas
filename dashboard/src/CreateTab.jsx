@@ -196,6 +196,11 @@ function Wizard(props) {
   // Approval state for high-spend campaigns. token + status drive the
   // UI between "request", "pending", and "approved" panels on Step 6.
   var apS = useState({ loading: false, token: null, status: null, error: "" }), approvalState = apS[0], setApprovalState = apS[1];
+  // Phase 3 matrix: extra audience rows. Each = { label, savedAudienceIds,
+  // customAudienceIds }. Empty => normal single build. >=1 => fan the
+  // same campaign + creatives out across (base audience + these) ad sets
+  // via /api/create/campaign-batch.
+  var mxS = useState([]), matrixRows = mxS[0], setMatrixRows = mxS[1];
 
   // -------- Wizard state ---------------------------------------------------
   var initial = {
@@ -753,6 +758,115 @@ function Wizard(props) {
     runNext();
   };
 
+  // -------- Phase 3 matrix (audience x creative) ---------------------------
+  // Batch is only offered under the agreed MVP cut line: CBO budget +
+  // discrete ads (single / multi). Carousel / Advantage+ / ABO stay on
+  // the single build.
+  var batchEligible = draft.funding === "CBO" &&
+    (draft.creativeMode === "single" || draft.creativeMode === "multi");
+  var activeMatrixRows = (matrixRows || []).filter(function(r){
+    return r && String(r.label || "").trim() &&
+      (((r.savedAudienceIds || []).length + (r.customAudienceIds || []).length) > 0);
+  });
+
+  // Build one batch variant (a full single-style payload) from a draft
+  // clone. Mirrors buildPayloadForBucket's payload shape so the backend
+  // runs it through the exact same validator.
+  var buildVariantFromDraft = function(dClone){
+    var cName = composeCampaignName(dClone);
+    var aName = composeAdsetName(dClone);
+    var creativesPayload = (dClone.creatives || []).map(function(c, idx){
+      return {
+        imageHash: c.imageHash || null, videoId: c.videoId || null,
+        headline: c.headline, primaryText: c.primaryText, description: c.description,
+        linkUrl: c.linkUrl, callToAction: c.callToAction,
+        adName: composeAdName(c, idx, dClone)
+      };
+    });
+    var nameErrors = validateNamingConvention(dClone, cName, aName, dClone.creatives || []);
+    return {
+      nameErrors: nameErrors,
+      payload: {
+        accountId: dClone.accountId, accountName: dClone.accountName,
+        objective: dClone.objective, specialAdCategories: dClone.specialAdCategories,
+        campaignName: cName, adsetName: aName,
+        platformMode: dClone.platformMode, pageId: dClone.pageId,
+        instagramId: dClone.instagramId || null,
+        audience: dClone.audience, placement: dClone.placement,
+        creativeMode: dClone.creativeMode,
+        multiAdvertiserAds: dClone.multiAdvertiserAds === true,
+        creatives: creativesPayload,
+        funding: dClone.funding, budgetMode: dClone.budgetMode,
+        dailyBudgetCents: dClone.budgetMode === "daily" ? Math.round(dClone.dailyBudgetRand * 100) : 0,
+        lifetimeBudgetCents: dClone.budgetMode === "lifetime" ? Math.round(dClone.lifetimeBudgetRand * 100) : 0,
+        startDate: dClone.startDate, endDate: dClone.endDate || null,
+        pixelId: dClone.pixelId || null, conversionEvent: dClone.conversionEvent || null,
+        urlTags: dClone.urlTags || null
+      }
+    };
+  };
+
+  var submitBatch = function(){
+    if (submitting) return;
+    var built = [];
+    // Audience #1 = the base draft (Step 1 audience), as-is.
+    built.push(buildVariantFromDraft(draft));
+    // Audiences #2..K = each matrix row, overriding only the audience
+    // label + saved/custom audience selection.
+    activeMatrixRows.forEach(function(r){
+      var dClone = Object.assign({}, draft, {
+        audience: Object.assign({}, draft.audience, {
+          audienceLabel: r.label,
+          savedAudienceIds: r.savedAudienceIds || [],
+          customAudienceIds: r.customAudienceIds || []
+        })
+      });
+      built.push(buildVariantFromDraft(dClone));
+    });
+
+    var nameErrors = [];
+    built.forEach(function(b, i){ (b.nameErrors || []).forEach(function(e){ nameErrors.push("Audience #" + (i + 1) + ": " + e); }); });
+    if (nameErrors.length > 0) { setSubmitErr({ status: 0, body: { error: "Naming convention violations", details: nameErrors } }); return; }
+
+    // Distinct ad-set name per audience (the label must differ).
+    var seen = {};
+    for (var s = 0; s < built.length; s++) {
+      var an = built[s].payload.adsetName;
+      if (seen[an]) { setSubmitErr({ status: 0, body: { error: "Two audiences resolve to the same ad set name. Give each a distinct audience label.", details: [an] } }); return; }
+      seen[an] = true;
+    }
+
+    setSubmitting(true); setSubmitErr(null);
+    fetch(apiBase + "/api/create/campaign-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({
+        variants: built.map(function(b){ return b.payload; }),
+        approvalToken: approvalState && approvalState.status === "approved" ? approvalState.token : null
+      })
+    })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function(x){
+        setSubmitting(false);
+        if (x.status === 401) { props.onLogout(); return; }
+        if (!x.ok || !x.data || !x.data.ok) { setSubmitErr({ status: x.status, body: x.data || { error: "Batch create failed" } }); return; }
+        clearSavedDraft();
+        releaseServerDraft(true);
+        var d = x.data;
+        var flatAds = [];
+        (d.adsets || []).forEach(function(a){ (a.ads || []).forEach(function(ad){ flatAds.push(ad); }); });
+        // Reuse the single-build success screen shape.
+        setResult({
+          ok: true, campaignId: d.campaignId,
+          adsetId: (d.adsets && d.adsets[0] && d.adsets[0].adsetId) || null,
+          ads: flatAds, status: "PAUSED",
+          adsManagerUrl: d.adsManagerUrl,
+          batchSummary: { adsets: d.adsetCount, ads: d.adCount }
+        });
+      })
+      .catch(function(){ setSubmitting(false); setSubmitErr({ status: 0, body: { error: "Network error during batch create" } }); });
+  };
+
   // -------- Result screen --------------------------------------------------
   if (result) return <SuccessScreen P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} result={result}
     onAnother={function(){ clearSavedDraft(); releaseServerDraft(false); setResult(null); setStep(0); setDraft(initial); setSubmitErr(null); }}/>;
@@ -794,6 +908,7 @@ function Wizard(props) {
         apiBase={apiBase} token={token}
         draft={draft} accounts={accounts} pages={pages} instagrams={instagrams} pixels={pixels}
         savedAudiences={savedAudiences}
+        batchEligible={batchEligible} matrixRows={matrixRows} setMatrixRows={setMatrixRows}
         generatedCampaignName={generatedCampaignName}
         generatedAdsetName={generatedAdsetName}/>}
     </div>
@@ -853,11 +968,20 @@ function Wizard(props) {
           style={{background:"transparent",border:"1px solid "+P.cyan,borderRadius:10,padding:"10px 22px",color:P.cyan,fontSize:11,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:(validateState.loading||submitting)?"default":"pointer",textTransform:"uppercase"}}>
           {validateState.loading ? "Validating…" : "Validate first"}
         </button>}
-        {step === 6 && <button onClick={submit} disabled={submitting || (requiresApproval && !approvedNow)}
-          title={requiresApproval && !approvedNow ? "Approval required before launch" : ""}
-          style={{background:(submitting || (requiresApproval && !approvedNow))?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:(submitting||(requiresApproval&&!approvedNow))?"default":"pointer",boxShadow:(submitting||(requiresApproval&&!approvedNow))?"none":"0 6px 20px rgba(249,98,3,0.35)"}}>
-          {submitting ? "Creating..." : (requiresApproval && !approvedNow ? "🔒 Approval required" : "🚀 Create campaign (PAUSED)")}
-        </button>}
+        {step === 6 && (function(){
+          var isBatch = activeMatrixRows.length > 0;
+          var onClick = isBatch ? submitBatch : submit;
+          var blocked = submitting || (requiresApproval && !approvedNow);
+          var label = submitting ? "Creating..."
+            : (requiresApproval && !approvedNow) ? "🔒 Approval required"
+            : isBatch ? ("🚀 Create " + (activeMatrixRows.length + 1) + " ad sets (PAUSED)")
+            : "🚀 Create campaign (PAUSED)";
+          return <button onClick={onClick} disabled={blocked}
+            title={requiresApproval && !approvedNow ? "Approval required before launch" : (isBatch ? "Fans this campaign across " + (activeMatrixRows.length + 1) + " audiences" : "")}
+            style={{background:blocked?P.dim:"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:10,padding:"10px 26px",color:"#fff",fontSize:12,fontWeight:800,fontFamily:fm,letterSpacing:2,cursor:blocked?"default":"pointer",boxShadow:blocked?"none":"0 6px 20px rgba(249,98,3,0.35)"}}>
+            {label}
+          </button>;
+        })()}
       </div>
     </div>
 
@@ -2420,6 +2544,75 @@ function ReachPreview(props) {
   </Glass>;
 }
 
+// Phase 3 matrix panel (Step 6). Define K-1 extra audiences; each
+// becomes its own ad set under ONE shared CBO campaign carrying the
+// same creatives. MVP: CBO + discrete ads only.
+function MatrixPanel(props) {
+  var P = props.P, ff = props.ff, fm = props.fm, Glass = props.Glass;
+  var draft = props.draft, savedAudiences = props.savedAudiences || { items: [] };
+  var rows = props.matrixRows || [], setRows = props.setMatrixRows;
+  var os = useState(false), open = os[0], setOpen = os[1];
+
+  var setRow = function(i, patch){
+    var next = rows.map(function(r, idx){ return idx === i ? Object.assign({}, r, patch) : r; });
+    setRows(next);
+  };
+  var addRow = function(){
+    if (rows.length >= 11) return; // +1 base = 12 ad set cap
+    setRows(rows.concat([{ label: "", savedAudienceIds: [], customAudienceIds: [] }]));
+  };
+  var removeRow = function(i){ setRows(rows.filter(function(_, idx){ return idx !== i; })); };
+
+  var activeCount = rows.filter(function(r){
+    return r && String(r.label || "").trim() && (((r.savedAudienceIds||[]).length + (r.customAudienceIds||[]).length) > 0);
+  }).length;
+
+  return <Glass accent={P.cyan} st={{padding:22,marginTop:18}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={function(){ setOpen(!open); }}>
+      <div>
+        <div style={{fontSize:13,fontWeight:800,color:P.cyan,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Fan out across audiences</div>
+        <div style={{fontSize:11,color:P.label||P.sub,fontFamily:ff,marginTop:4}}>
+          Optional. One campaign, one ad set per audience, the same creatives in each.
+          {activeCount > 0 && <span style={{color:P.cyan,fontWeight:700}}> · will create {activeCount + 1} ad sets</span>}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:P.cyan,fontFamily:fm,fontWeight:800,letterSpacing:1.5}}>{open ? "− HIDE" : "+ SHOW"}</div>
+    </div>
+
+    {open && <div style={{marginTop:18}}>
+      {!props.batchEligible && <div style={{fontSize:12,color:P.warning||"#fbbf24",fontFamily:ff,lineHeight:1.6,padding:"10px 0"}}>
+        The matrix needs <strong>CBO funding</strong> and <strong>discrete ads</strong> (single or multi). Carousel, Advantage+ and ABO stay on the single build. Adjust Step 4 / Step 3 to enable it.
+      </div>}
+      {props.batchEligible && <div>
+        <div style={{fontSize:12,color:P.caption||P.sub,fontFamily:ff,lineHeight:1.6,marginBottom:14}}>
+          <strong style={{color:P.txt}}>Audience 1</strong> is your Step 1 audience ({draft.audience.audienceLabel || "unlabelled"}). Add more below, each gets its own ad set, sharing this campaign's budget and creatives. Ad set names are auto-generated from each audience label.
+        </div>
+        {rows.map(function(r, i){
+          return <div key={i} style={{padding:"14px 16px",background:"rgba(20,12,30,0.5)",border:"1px solid "+P.rule,borderRadius:12,marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <span style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:1.5}}>AUDIENCE {i + 2}</span>
+              <button onClick={function(){ removeRow(i); }} style={{background:"transparent",border:"1px solid "+(P.critical||"#ef4444")+"40",borderRadius:8,padding:"4px 10px",color:P.critical||"#ef4444",fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Remove</button>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:800,color:P.label||P.sub,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Audience label <span style={{color:P.caption||P.sub,fontWeight:600}}>(goes into the ad set name)</span></div>
+              <input value={r.label} onChange={function(e){ setRow(i, { label: sanitiseLoose(e.target.value, 32) }); }} placeholder="e.g. LookalikePurchasers"
+                style={Object.assign({}, inputStyle(P, fm))}/>
+            </div>
+            <SavedAudiencePicker P={P} ff={ff} fm={fm} savedAudiences={savedAudiences}
+              selectedSaved={r.savedAudienceIds || []} selectedCustom={r.customAudienceIds || []}
+              onChange={function(saved, custom){ setRow(i, { savedAudienceIds: saved, customAudienceIds: custom }); }}/>
+          </div>;
+        })}
+        <button onClick={addRow} disabled={rows.length >= 11}
+          style={{background:rows.length>=11?P.dim:"transparent",border:"1px solid "+P.cyan+"55",borderRadius:10,padding:"10px 18px",color:rows.length>=11?P.dim:P.cyan,fontSize:11,fontWeight:800,fontFamily:fm,cursor:rows.length>=11?"default":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>
+          + Add audience
+        </button>
+        {rows.length > 0 && activeCount !== rows.length && <div style={{marginTop:10,fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm}}>Rows missing a label or an audience selection are ignored.</div>}
+      </div>}
+    </div>}
+  </Glass>;
+}
+
 function Step6(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass;
   var apiBase = props.apiBase, token = props.token;
@@ -2514,6 +2707,8 @@ function Step6(props) {
       </ul>
     </div>
   </Glass>
+  <MatrixPanel P={P} ff={ff} fm={fm} Glass={Glass} draft={draft} savedAudiences={savedAudiences}
+    batchEligible={props.batchEligible} matrixRows={props.matrixRows} setMatrixRows={props.setMatrixRows}/>
   </div>;
 }
 
