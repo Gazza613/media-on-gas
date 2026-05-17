@@ -3861,6 +3861,18 @@ export default function MediaOnGas(){
   },[ecoClientName,isClient,session,viewToken,kpiRev]);
 
   var ecoOn=!!(ecoProfile&&ecoProfile.ecommerce&&ecoProfile.ecommerce.enabled);
+  // A client only counts as "profiled" for the Summary layout when its
+  // profile actually carries KPI content or ecommerce. A profile that
+  // exists only to hold a logoUrl (e.g. MTN MoMo's email logo) must NOT
+  // flip Summary into the profile-KPI branch, that branch returns null
+  // with no KPIs and also hides the campaign-derived objective tiles,
+  // platform graphs and standout boxes. Gate layout on this, not on the
+  // mere existence of a profile object.
+  var ecoProfiled=!!(ecoProfile&&(
+    (ecoProfile.primaryKpis&&ecoProfile.primaryKpis.length)||
+    (ecoProfile.secondaryKpis&&ecoProfile.secondaryKpis.length)||
+    (ecoProfile.tertiaryKpis&&ecoProfile.tertiaryKpis.length)||
+    (ecoProfile.ecommerce&&ecoProfile.ecommerce.enabled)));
 
   // Pull the GA4 ecommerce summary when ecommerce is enabled and the
   // user is on a tab that shows it (Ecommerce tab, or the condensed
@@ -5490,7 +5502,7 @@ export default function MediaOnGas(){
                   each, instead of the campaign-derived bottom-of-funnel
                   objective cards. Fully profile-gated; non-profiled
                   clients fall through to the original block unchanged. */}
-              {ecoProfile?(function(){
+              {ecoProfiled?(function(){
                 var rch=(m.reach||0)+(t.reach||0)+(computed.gd.reach||0);
                 var g=computed.grand||{};
                 var ec=(ecoData&&ecoData.ecommerce)||{};
@@ -7599,7 +7611,7 @@ export default function MediaOnGas(){
               "Landing Page Clicks" and would contradict that.
               Non-profiled clients (MoMo, MoMo POS, Willowbrook, ...) have
               ecoProfile=null so they keep this block unchanged. */}
-          {!ecoProfile&&(<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
+          {!ecoProfiled&&(<div style={{background:P.glass,borderRadius:18,padding:"6px 24px 24px",marginBottom:28,border:"1px solid "+P.rule}}>
             <div style={{textAlign:"center",padding:"18px 0 16px"}}><span style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,letterSpacing:1}}>OBJECTIVE KEY METRICS</span><div style={{fontSize:10,color:P.label,fontFamily:fm,marginTop:4,letterSpacing:3}}>BOTTOM OF FUNNEL, CAMPAIGN KPIs</div></div>
 
             {(function(){
