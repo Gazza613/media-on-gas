@@ -301,10 +301,24 @@ export default async function handler(req, res) {
   var watchedCount = 0;
   (yesterdayData.campaigns || []).forEach(function(c) {
     if (!isLive(c)) return;
-    watchedCount++;
+    // Ended campaigns (endDate in the past) are finishing on schedule,
+    // not monitored. /api/campaigns returns ACTIVE+SCHEDULED rows for
+    // every account, so "active status" alone counted dozens of dead
+    // rows ("48 monitored" when ~3 are live).
+    var endRaw = c && c.endDate ? String(c.endDate) : "";
+    if (endRaw) { var em = Date.parse(endRaw); if (isFinite(em) && em < Date.now()) return; }
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
     var b = baseByKey[k] || null;
+    // "Monitored" = genuinely in flight: delivered yesterday OR has a
+    // material 7-day baseline (so a real spend-collapse is still
+    // caught). A campaign with no delivery either side is dormant and
+    // shouldn't pad the watch count.
+    var deliveredY = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
+    var baseMaterial = b && ((parseFloat(b.spend || 0) > 0) || (parseInt(b.impressions || 0) > 0));
+    if (!deliveredY && !baseMaterial) return;
+    watchedCount++;
+
     var rm = resultMetricFor(c);
     var anomalies = detectAnomalies(c, b, rm);
     if (anomalies.length === 0) return;
