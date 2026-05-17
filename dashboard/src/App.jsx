@@ -6506,7 +6506,7 @@ export default function MediaOnGas(){
                     {eng.pagesPerSession!=null&&box("PAGES / SESSION",String(eng.pagesPerSession),P.orchid,"browsing depth")}
                     {eng.engagementRatePct!=null&&box("ENGAGEMENT RATE",eng.engagementRatePct.toFixed(2)+"%",enCol,(100-eng.engagementRatePct).toFixed(2)+"% bounced")}
                   </div>
-                  {fSteps.length>=2&&<div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20}}>
+                  {fSteps.length>=2&&<div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:20}}>
                     <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:16}}>Purchase Funnel</div>
                     {fSteps.map(function(s,i){var w=Math.max(5,(s.v||0)/fM*100);return <div key={i} style={{marginBottom:14}}>
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontFamily:fm,marginBottom:5}}><span style={{color:P.label,letterSpacing:1,fontWeight:700,textTransform:"uppercase"}}>{s.l}</span><span style={{color:s.c,fontWeight:900,fontSize:14}}>{fmt(s.v||0)}</span></div>
@@ -6553,7 +6553,7 @@ export default function MediaOnGas(){
                     <div style={{fontSize:11.5,color:P.label,fontFamily:ff,lineHeight:1.65}}>{x.d}</div>
                   </div>;})}
                 </div>;};
-                return <Reveal minHeight={200}><div style={{marginBottom:24,padding:"24px 26px",background:"linear-gradient(135deg,"+P.cyan+"0C 0%, transparent 70%)",border:"1px solid "+P.cyan+"30",borderLeft:"4px solid "+P.cyan,borderRadius:"0 16px 16px 0"}}>
+                return <Reveal minHeight={200}><div style={{marginBottom:24,padding:"24px 26px",background:"linear-gradient(135deg,"+P.cyan+"12 0%,"+P.cyan+"04 55%, transparent 80%),#0b0716",border:"1px solid "+P.cyan+"33",borderLeft:"4px solid "+P.cyan,borderRadius:"0 16px 16px 0",boxShadow:"0 12px 38px rgba(0,0,0,0.34),0 0 60px "+P.cyan+"12 inset"}}>
                   <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>{Ic.target(P.cyan,20)}<div><div style={{fontSize:16,fontWeight:900,color:P.cyan,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Independent Ecommerce Audit</div><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginTop:3}}>An honest analyst read of this period against retail benchmarks</div></div></div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:28,marginTop:18}}>
                     {col("Strengths",S,P.mint)}
@@ -6569,7 +6569,7 @@ export default function MediaOnGas(){
               {/* Revenue mix donut + conversion funnel, side by side, the
                   way Deep Dive pairs a chart with a structural read. */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,margin:"24px 0"}}>
-                <Reveal minHeight={300}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                <Reveal minHeight={300}><div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:20,height:"100%"}}>
                   <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Revenue Mix</div>
                   <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:10}}>{fR(rev)} total, paid social's assisted slice highlighted</div>
                   {rev>0?<ChartReveal><ResponsiveContainer width="100%" height={230}>
@@ -6582,7 +6582,7 @@ export default function MediaOnGas(){
                     </PieChart>
                   </ResponsiveContainer></ChartReveal>:<div style={{padding:"40px 0",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No revenue recorded in this period.</div>}
                 </div></Reveal>
-                <Reveal minHeight={300} delay={80}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                <Reveal minHeight={300} delay={80}><div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:20,height:"100%"}}>
                   <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Path To Purchase</div>
                   <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:18}}>How site traffic narrows down to paying orders</div>
                   {funnel.map(function(f,i){var w=Math.max(6,f.v/fMax*100);return <div key={i} style={{marginBottom:16}}>
@@ -6643,7 +6643,7 @@ export default function MediaOnGas(){
                 var coMax=Math.max.apply(null,co.map(function(c){return c.users;}).concat([1]));
                 return <div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:24}}>
-                    {chSess.length>0&&<Reveal minHeight={260}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                    {chSess.length>0&&<Reveal minHeight={260}><div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:20,height:"100%"}}>
                       <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Where Visits Come From</div>
                       <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:12}}>Sessions by acquisition channel</div>
                       <ChartReveal><ResponsiveContainer width="100%" height={chSess.length*40+20}>
@@ -6656,7 +6656,7 @@ export default function MediaOnGas(){
                         </BarChart>
                       </ResponsiveContainer></ChartReveal>
                     </div></Reveal>}
-                    {devPie.length>0&&<Reveal minHeight={260} delay={80}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:20,height:"100%"}}>
+                    {devPie.length>0&&<Reveal minHeight={260} delay={80}><div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:20,height:"100%"}}>
                       <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:6}}>Device Used</div>
                       <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:10}}>Visitors by device category</div>
                       <ChartReveal><ResponsiveContainer width="100%" height={210}>
@@ -6673,7 +6673,7 @@ export default function MediaOnGas(){
                   {chRev.length>0&&<Reveal minHeight={200}><div style={{marginBottom:24}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>{Ic.bolt(P.solar,18)}<span style={{fontSize:13,fontWeight:900,color:P.solar,fontFamily:ff,letterSpacing:2,textTransform:"uppercase"}}>Where Sales Come From</span></div>
                     <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginBottom:14}}>Revenue by acquisition channel</div>
-                    <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"18px 14px 14px"}}>
+                    <div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:"18px 14px 14px"}}>
                       <ChartReveal><ResponsiveContainer width="100%" height={chRev.length*44+20}>
                         <BarChart data={chRev} layout="vertical" margin={{top:0,right:64,left:8,bottom:0}}>
                           <CartesianGrid strokeDasharray="3 3" stroke={P.rule} horizontal={false}/>
@@ -6687,7 +6687,7 @@ export default function MediaOnGas(){
                   </div></Reveal>}
                   {co.length>0&&<Reveal minHeight={140}><div style={{marginBottom:24}}>
                     <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Top Markets</div>
-                    <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"4px 24px"}}>
+                    <div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:"4px 24px"}}>
                       <div style={{display:"flex",alignItems:"center",gap:18,padding:"14px 0 12px",borderBottom:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}><div style={{width:170}}>MARKET</div><div style={{flex:1}}>SHARE OF VISITORS</div><div style={{width:100,textAlign:"right"}}>USERS</div><div style={{width:130,textAlign:"right"}}>REVENUE</div></div>
                       {co.slice(0,6).map(function(c,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:18,padding:"15px 0",borderBottom:i<Math.min(6,co.length)-1?"1px solid "+P.rule+"40":"none"}}>
                         <div title={c.country} style={{width:170,fontSize:14,color:P.txt,fontFamily:ff,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.country}</div>
@@ -6718,7 +6718,7 @@ export default function MediaOnGas(){
                     };
                     return <Reveal minHeight={140}><div style={{marginBottom:24}}>
                       <div style={{fontSize:12,fontWeight:800,color:P.label,letterSpacing:2.5,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Most-Viewed Pages</div>
-                      <div style={{background:"rgba(0,0,0,0.15)",borderRadius:14,padding:"4px 24px"}}>
+                      <div style={{background:"linear-gradient(165deg,"+P.mint+"12 0%,"+P.mint+"04 55%,transparent 100%),#0b0716",borderRadius:16,border:"1px solid "+P.mint+"2E",boxShadow:"0 10px 34px rgba(0,0,0,0.32),0 0 52px "+P.mint+"0E inset",padding:"4px 24px"}}>
                         <div style={{display:"flex",alignItems:"center",gap:18,padding:"14px 0 12px",borderBottom:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}><div style={{width:240}}>PAGE</div><div style={{flex:1}}>SHARE OF VIEWS</div><div style={{width:100,textAlign:"right"}}>VIEWS</div><div style={{width:100,textAlign:"right"}}>USERS</div></div>
                         {tp.slice(0,8).map(function(p,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:18,padding:"15px 0",borderBottom:i<Math.min(8,tp.length)-1?"1px solid "+P.rule+"40":"none"}}>
                           <div title={p.path} style={{width:240,fontSize:14,color:P.txt,fontFamily:ff,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{prettyPath(p.path)}</div>
@@ -6734,7 +6734,7 @@ export default function MediaOnGas(){
 
               {/* Paid social contribution, framed as assisted, with the
                   GA4 attribution caveat as a footnote. */}
-              <Reveal minHeight={120}><div style={{marginBottom:22,padding:"20px 24px",background:"linear-gradient(135deg,"+P.ember+"12 0%, transparent 70%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0"}}>
+              <Reveal minHeight={120}><div style={{marginBottom:22,padding:"20px 24px",background:"linear-gradient(135deg,"+P.ember+"14 0%,"+P.ember+"05 55%, transparent 80%),#0b0716",border:"1px solid "+P.ember+"2E",borderLeft:"4px solid "+P.ember,borderRadius:"0 14px 14px 0",boxShadow:"0 12px 38px rgba(0,0,0,0.34),0 0 58px "+P.ember+"12 inset"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>{Ic.bolt(P.ember,16)}<span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Our Contribution, Paid Social Assisted</span></div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:"10px 40px",alignItems:"baseline"}}>
                   <div><span style={{fontSize:24,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(psRev)}</span><span style={{fontSize:10,color:P.caption,fontFamily:fm,marginLeft:8}}>revenue, {pc(psShare)} of total</span></div>
