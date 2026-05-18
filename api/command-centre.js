@@ -76,7 +76,11 @@ function resolveObjective(c) {
   else fam = "awareness";
   var spend = num(c.spend);
   var result, resultLabel, costLabel;
-  if (fam === "appinstall") { result = num(c.appInstalls); resultLabel = "Installs"; costLabel = "CPI"; }
+  // App Store campaigns here drive CLICKS TO THE APP STORE, not SDK
+  // installs (no install SDK in play). The dashboard classifies these
+  // as "Clicks to App Store" with clicks as the result; mirror that.
+  // installs===0 is expected and is NOT a tracking break.
+  if (fam === "appinstall") { result = num(c.clicks); resultLabel = "App Store Clicks"; costLabel = "CPC"; }
   else if (fam === "leads") { result = num(c.leads); resultLabel = "Leads"; costLabel = "CPL"; }
   else if (fam === "followers") { result = num(c.pageLikes) + num(c.follows); resultLabel = "Followers"; costLabel = "CPF"; }
   else if (fam === "traffic") { result = num(c.clicks); resultLabel = "Clicks"; costLabel = "CPC"; }
@@ -87,10 +91,13 @@ function resolveObjective(c) {
   return {
     family: fam, result: result, resultLabel: resultLabel,
     costLabel: costLabel, costPer: costPer,
-    // Only these objectives have a discrete conversion the absence of
-    // which is a tracking-break signal. Traffic's "result" IS clicks,
-    // awareness has none, so neither is flagged for "no results".
-    hasConversion: fam === "appinstall" || fam === "leads" || fam === "followers"
+    // Only LEADS and FOLLOWERS have a discrete tracked conversion whose
+    // absence is a real tracking-break signal. App Store (clicks) and
+    // traffic are click-KPI, awareness has none — never "no results".
+    hasConversion: fam === "leads" || fam === "followers",
+    // Click-KPI objectives: a click-break (spend + impressions but zero
+    // clicks) IS a real problem and gets its own alert.
+    clickKpi: fam === "appinstall" || fam === "traffic"
   };
 }
 
@@ -261,18 +268,17 @@ export default async function handler(req, res) {
     // Click break ONLY for click objectives (traffic / landing page),
     // where clicks ARE the KPI. Followers / awareness / app installs
     // are judged on their own metric below, never on clicks.
-    else if (ob.family === "traffic" && periodSpend >= 200 && impressions > 0 && clicks === 0) {
-      alerts.push({ severity: "high", code: "traffic_no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with impressions but zero landing-page clicks. Creative / targeting / landing-page problem." });
+    else if (ob.clickKpi && periodSpend >= 200 && impressions > 0 && clicks === 0) {
+      var clkWhat = ob.family === "appinstall" ? "app-store clicks" : "landing-page clicks";
+      alerts.push({ severity: "high", code: "no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with impressions but zero " + clkWhat + ". Creative / targeting / destination problem." });
     }
-    // Objective-aware "delivering but zero of its own KPI" check. Only
-    // for objectives with a discrete conversion (app installs / leads /
-    // follows). Traffic's result IS clicks and awareness has none, so
-    // neither is ever falsely flagged as a tracking break.
+    // "Delivering but zero of its own tracked conversion" — ONLY leads
+    // and followers (a genuine tracked conversion). App Store and
+    // traffic are click-KPI (covered above); awareness has none.
+    // installs===0 on a click-to-store campaign is expected, not a bug.
     if (ob.hasConversion && (clicks >= 50 || periodSpend >= 200) && ob.result === 0) {
-      var noun = ob.family === "appinstall" ? "app installs"
-        : ob.family === "followers" ? "new follows" : "leads";
-      var cause = ob.family === "appinstall" ? "an install-tracking / store-link break"
-        : ob.family === "followers" ? "the follow CTA / destination" : "a landing page / tracking break";
+      var noun = ob.family === "followers" ? "new follows" : "leads";
+      var cause = ob.family === "followers" ? "the follow CTA / destination" : "a landing page / tracking break";
       alerts.push({ severity: "medium", code: "no_results", message: Math.round(clicks) + " clicks, zero " + noun + ". Likely " + cause + "." });
     }
     // TikTok tolerates much higher frequency than Meta before fatigue;
