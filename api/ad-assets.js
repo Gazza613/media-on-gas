@@ -160,6 +160,10 @@ export async function computeAssetBreakdown(adId, from, to) {
       hash: a.hash || "",
       videoId: "",
       name: a.name || "Image",
+      // Meta often returns a direct asset URL on the breakdown even
+      // when the hash is not resolvable via /adimages (Advantage+ /
+      // DCO assets). Keep it as a thumbnail fallback.
+      url: a.url || a.permalink_url || "",
       impressions: imps, clicks: clicks, spend: spend,
       ctr: imps > 0 ? parseFloat((clicks / imps * 100).toFixed(2)) : 0,
       cpc: clicks > 0 ? parseFloat((spend / clicks).toFixed(2)) : 0,
@@ -179,6 +183,7 @@ export async function computeAssetBreakdown(adId, from, to) {
       hash: "",
       videoId: a.video_id || "",
       name: a.name || "Video",
+      url: a.url || "",
       impressions: imps, clicks: clicks, spend: spend,
       ctr: imps > 0 ? parseFloat((clicks / imps * 100).toFixed(2)) : 0,
       cpc: clicks > 0 ? parseFloat((spend / clicks).toFixed(2)) : 0,
@@ -224,8 +229,8 @@ export async function computeAssetBreakdown(adId, from, to) {
 
   // Resolve thumbnails (cap parallelism, isolate failures).
   await Promise.all(assets.slice(0, 20).map(async function(a) {
-    if (a.kind === "Image") a.thumbnail = await resolveImageThumb(accountId, a.hash, token);
-    else a.thumbnail = a.preThumb || await resolveVideoThumb(a.videoId, token);
+    if (a.kind === "Image") a.thumbnail = (await resolveImageThumb(accountId, a.hash, token)) || a.url || "";
+    else a.thumbnail = a.preThumb || (await resolveVideoThumb(a.videoId, token)) || a.url || "";
   }));
 
   var payload = {
@@ -238,6 +243,7 @@ export async function computeAssetBreakdown(adId, from, to) {
         kind: a.kind,
         name: a.name,
         thumbnail: a.thumbnail || "",
+        url: a.url || "",
         videoId: a.videoId || "",
         impressions: a.impressions,
         clicks: a.clicks,

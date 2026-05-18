@@ -258,8 +258,13 @@ export default async function handler(req, res) {
             new Promise(function(resolve) { setTimeout(function(){ resolve(null); }, 3500); })
           ]);
           if (bk && bk.ok && Array.isArray(bk.assets)) {
+            // Winner = highest-ranked asset (the "profile the top
+            // performer" rule). Prefer its resolved thumbnail; fall
+            // back to the asset's direct URL when the hash did not
+            // resolve via /adimages (Advantage+ / DCO assets).
             for (var bi = 0; bi < bk.assets.length; bi++) {
-              if (bk.assets[bi] && bk.assets[bi].thumbnail) { cdnUrl = bk.assets[bi].thumbnail; winnerHit = true; break; }
+              var bAsset = bk.assets[bi];
+              if (bAsset && (bAsset.thumbnail || bAsset.url)) { cdnUrl = bAsset.thumbnail || bAsset.url; winnerHit = true; break; }
             }
           }
         } catch (_) { /* fall back to the default resolver below */ }
