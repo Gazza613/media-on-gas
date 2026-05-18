@@ -195,6 +195,34 @@ export default async function handler(req, res) {
         }
       } catch (cErr) { console.error("Meta campaign objective fetch error", account.name, cErr); }
 
+      // Ad-set optimization_goal per campaign. Under Meta's ODAX a
+      // "Follows or likes" campaign and a "profile visits" campaign are
+      // BOTH objective=OUTCOME_ENGAGEMENT, so the objective string can't
+      // tell them apart. optimization_goal is the real delivery target
+      // Meta uses to decide the campaign's "Results": PAGE_LIKES (or
+      // LIKE_PAGE) means it genuinely grows the page, so action_type
+      // "like" is the page-follow result, fold it. Anything else (e.g.
+      // PROFILE_VISIT, POST_ENGAGEMENT, IMPRESSIONS) means "like" is
+      // post reactions, do not fold. A campaign counts as page-likes
+      // if ANY of its ad sets optimises for page likes.
+      var campPageLikeOpt = {};
+      try {
+        var asNext = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,optimization_goal&limit=500&access_token=" + metaToken;
+        var asGuard = 0;
+        while (asNext && asGuard < 20) {
+          asGuard++;
+          var asRes = await fetch(asNext);
+          var asData = await asRes.json();
+          if (asData.data) {
+            asData.data.forEach(function(s) {
+              var og = String(s.optimization_goal || "").toUpperCase();
+              if (og === "PAGE_LIKES" || og === "LIKE_PAGE") campPageLikeOpt[s.campaign_id] = true;
+            });
+          }
+          asNext = asData.paging && asData.paging.next ? asData.paging.next : null;
+        }
+      } catch (asErr) { console.error("Meta adset optimization_goal fetch error", account.name, asErr); }
+
       var timeRange = JSON.stringify({ since: from, until: to });
       // Single publisher_platform breakdown only. The earlier `platform_position`
       // breakdown caused Meta to drop most ad rows entirely for Page Like and
@@ -398,7 +426,7 @@ export default async function handler(req, res) {
             // page-like results arrive in the unambiguous page_like /
             // onsite_conversion.page_like key, captured above. See
             // project_meta_like_action.
-            var isStrictPageLikes = String(campObjMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+            var isStrictPageLikes = campPageLikeOpt[row.campaign_id] === true || String(campObjMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
             var pageLikeFinal = isStrictPageLikes ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
             adTrueTotals[row.ad_id] = {
               pageLikes: pageLikeFinal,
@@ -858,7 +886,7 @@ export default async function handler(req, res) {
         // over-reports community growth massively. Genuine page-like
         // results land in the unambiguous page_like key (captured above).
         // See project_meta_like_action.
-        var metaObjStrictPageLikes = String(campObjMap[ins.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+        var metaObjStrictPageLikes = campPageLikeOpt[ins.campaign_id] === true || String(campObjMap[ins.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
         if (metaObjStrictPageLikes && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
@@ -963,6 +991,10 @@ export default async function handler(req, res) {
           // Decides whether the strict page-like fold applies, so the
           // inspector must surface it per campaign.
           _debugMetaObjective: debugFollows ? rawMetaObj : undefined,
+          // Whether ANY ad set in this campaign optimises for page likes.
+          // This, not the objective, decides if "like" is the page-follow
+          // result. Surfaced so the inspector can prove the distinction.
+          _debugPageLikeOpt: debugFollows ? (campPageLikeOpt[ins.campaign_id] === true) : undefined,
           // Meta video id for in-dashboard playback via /api/ad-video proxy.
           // Falls back to the first DCO variant video if the primary creative is static.
           videoId: cr.video_id || (candidateVids.length > 0 ? candidateVids[0] : ""),

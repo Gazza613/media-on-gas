@@ -120,6 +120,29 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
         warnings.push({ source: "Meta", account: acc.name, stage: "objective-map", error: String(oErr && oErr.message || oErr) });
       }
 
+      // Ad-set optimization_goal per campaign. Under ODAX a "Follows or
+      // likes" campaign and a "profile visits" campaign are BOTH
+      // OUTCOME_ENGAGEMENT, so only optimization_goal === PAGE_LIKES
+      // proves "like" is the page-follow result. Must match api/ads.js.
+      var pageLikeOpt = {};
+      try {
+        var agNext = "https://graph.facebook.com/v25.0/" + acc.id + "/adsets?fields=campaign_id,optimization_goal&limit=500&access_token=" + token;
+        var agGuard = 0;
+        while (agNext && agGuard < 20) {
+          agGuard++;
+          var agR = await fetchWithTimeout(agNext);
+          if (!agR.ok) break;
+          var agD = await agR.json();
+          if (agD.data) agD.data.forEach(function(s) {
+            var og = String(s.optimization_goal || "").toUpperCase();
+            if (og === "PAGE_LIKES" || og === "LIKE_PAGE") pageLikeOpt[s.campaign_id] = true;
+          });
+          agNext = agD.paging && agD.paging.next ? agD.paging.next : null;
+        }
+      } catch (agErr) {
+        warnings.push({ source: "Meta", account: acc.name, stage: "optgoal-map", error: String(agErr && agErr.message || agErr) });
+      }
+
       var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&time_range={\"since\":\"" + from + "\",\"until\":\"" + to + "\"}&limit=500&access_token=" + token;
       // Follow pagination so large accounts (>500 campaigns) aren't truncated.
       var allRows = [];
@@ -157,7 +180,7 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
         // growth by orders of magnitude. Genuine ODAX page-like results
         // arrive in the unambiguous page_like / onsite_conversion.page_like
         // key. Must match api/ads.js exactly. See project_meta_like_action.
-        var rawMetaObjStrict = String(objMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+        var rawMetaObjStrict = pageLikeOpt[row.campaign_id] === true || String(objMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
         var pageLikesRaw = Math.max(actions["page_like"] || 0, actions["onsite_conversion.page_like"] || 0);
         if (rawMetaObjStrict) pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
         var follows = actions["follow"] || actions["onsite_conversion.follow"] || actions["onsite_conversion.ig_follow"] || 0;

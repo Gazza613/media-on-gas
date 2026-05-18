@@ -202,8 +202,14 @@ export default async function handler(req, res) {
     // campaign, later in the merge step we synthesise zero-delivery rows
     // for any configured placement that didn't get an insights row.
     var configuredPlacements = {};
+    // Campaigns whose ad sets optimise for page likes. Under ODAX a
+    // "Follows or likes" and a "profile visits" campaign are BOTH
+    // OUTCOME_ENGAGEMENT, so only optimization_goal === PAGE_LIKES proves
+    // "like" is the page-follow result (not post reactions). Must match
+    // api/ads.js + api/reconcile.js. Folded from this same adset fetch.
+    var pageLikeOpt = {};
     try {
-      var adsetsCfgUrl = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,effective_status,targeting{publisher_platforms}&limit=500&access_token=" + metaToken;
+      var adsetsCfgUrl = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,effective_status,optimization_goal,targeting{publisher_platforms}&limit=500&access_token=" + metaToken;
       var adsetsCfgNext = adsetsCfgUrl;
       var adsetsCfgGuard = 0;
       while (adsetsCfgNext && adsetsCfgGuard < 10) {
@@ -218,6 +224,8 @@ export default async function handler(req, res) {
           // Ignore deleted / archived adsets, they do not represent the
           // current configuration clients are paying against.
           if (status === "DELETED" || status === "ARCHIVED") return;
+          var og = String(a.optimization_goal || "").toUpperCase();
+          if (og === "PAGE_LIKES" || og === "LIKE_PAGE") pageLikeOpt[cid] = true;
           var pubs = a.targeting && a.targeting.publisher_platforms;
           // A null publisher_platforms means Meta chooses automatically
           // across every available placement, which includes both FB and
@@ -397,7 +405,7 @@ export default async function handler(req, res) {
           // the unambiguous page_like / onsite_conversion.page_like key.
           // Must match api/ads.js + api/reconcile.js. See
           // project_meta_like_action.
-          if (rawMetaObj === "PAGE_LIKES" && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+          if ((pageLikeOpt[c.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
 
           if (!rowMap[uniqueId]) {
             rowMap[uniqueId] = {
@@ -566,7 +574,7 @@ export default async function handler(req, res) {
           // Strict PAGE_LIKES-only "like" fold — must match the per-campaign
           // path above + api/ads.js + api/reconcile.js. See
           // project_meta_like_action.
-          if (rawMetaObj === "PAGE_LIKES" && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
+          if ((pageLikeOpt[a.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
           seenIds[a.campaign_id] = true;
           rowMap[k] = {
             platform: a.platform,
