@@ -1,6 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { getPageLikeMaps } from "./_pageLikeOpt.js";
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
@@ -33,37 +34,10 @@ export default async function handler(req, res) {
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
     try {
-      // Campaigns whose ad sets optimise for page likes. Under ODAX a
-      // "Follows or likes" campaign returns its page-follow result under
-      // action_type "like" (NOT page_like), and the objective string
-      // (OUTCOME_ENGAGEMENT) cannot distinguish it from a profile-visit
-      // campaign. Only the ad-set optimization_goal can. ONE campaigns
-      // call with adsets field-expansion (rate-safe; a separate /adsets
-      // pagination tripped Meta's per-user limit on /api/ads). Must match
-      // api/ads.js / reconcile.js / campaigns.js.
-      var campPageLikeOpt = {};
-      try {
-        var cNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
-        var cGuard = 0;
-        while (cNext && cGuard < 25) {
-          cGuard++;
-          var cRes = await fetch(cNext);
-          var cJson = await cRes.json();
-          if (cJson && cJson.error) break;
-          (cJson.data || []).forEach(function(c) {
-            var rawObj = String(c.objective || "").toUpperCase();
-            if (rawObj === "PAGE_LIKES") campPageLikeOpt[c.id] = true;
-            var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
-            aset.forEach(function(s) {
-              var st = String(s.effective_status || "").toUpperCase();
-              if (st === "DELETED" || st === "ARCHIVED") return;
-              var og = String(s.optimization_goal || "").toUpperCase();
-              if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
-            });
-          });
-          cNext = cJson.paging && cJson.paging.next ? cJson.paging.next : null;
-        }
-      } catch (_) { /* non-fatal: falls back to unambiguous page_like only */ }
+      // Cached (6h) page-like-optimised map, same helper /api/ads uses.
+      // A per-request campaigns+adsets fetch here was as heavy as the
+      // one that was timing out /api/ads. Must match api/ads.js.
+      var campPageLikeOpt = (await getPageLikeMaps(account.id, metaToken)).plOpt || {};
 
       var timeRange = "{\"since\":\"" + from + "\",\"until\":\"" + to + "\"}";
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range=" + timeRange + "&breakdowns=publisher_platform&limit=200&access_token=" + metaToken;

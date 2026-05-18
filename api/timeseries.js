@@ -2,6 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
+import { getPageLikeMaps } from "./_pageLikeOpt.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -139,36 +140,14 @@ export default async function handler(req, res) {
     for (var i = 0; i < metaAccounts.length; i++) {
       var account = metaAccounts[i];
       try {
-        // Campaign objective map + page-like-optimised map. The "like"
-        // fold below MUST be gated by ad-set optimization_goal, not the
-        // objective (a "Follows or likes" and a "profile visits"
-        // campaign are BOTH OUTCOME_ENGAGEMENT; folding "like" for the
-        // latter over-reports the Trendline). One campaigns call with
-        // adsets field-expansion (rate-safe). Matches api/ads.js.
-        var campObjMap = {};
-        var campPageLikeOpt = {};
-        try {
-          var campNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
-          var campGuard = 0;
-          while (campNext && campGuard < 25) {
-            campGuard++;
-            var campRes = await fetch(campNext);
-            var campData = await campRes.json();
-            if (campData && campData.error) break;
-            if (campData.data) campData.data.forEach(function(c) {
-              campObjMap[c.id] = c.objective;
-              if (String(c.objective || "").toUpperCase() === "PAGE_LIKES") campPageLikeOpt[c.id] = true;
-              var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
-              aset.forEach(function(s) {
-                var st = String(s.effective_status || "").toUpperCase();
-                if (st === "DELETED" || st === "ARCHIVED") return;
-                var og = String(s.optimization_goal || "").toUpperCase();
-                if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
-              });
-            });
-            campNext = campData.paging && campData.paging.next ? campData.paging.next : null;
-          }
-        } catch (e) {}
+        // Cached (6h) objective + page-like-optimised maps, same helper
+        // /api/ads uses. The "like" fold is gated by optimization_goal
+        // (a "Follows or likes" and a "profile visits" campaign are
+        // BOTH OUTCOME_ENGAGEMENT). Per-request fetch here was as heavy
+        // as the one that timed out /api/ads. Matches api/ads.js.
+        var __plm = await getPageLikeMaps(account.id, metaToken);
+        var campObjMap = __plm.objMap || {};
+        var campPageLikeOpt = __plm.plOpt || {};
 
         // Map AN / Messenger / Oculus into Facebook family and Threads into
         // Instagram. Dropping them silently undercut timeseries totals by 2 to 5

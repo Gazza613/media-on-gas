@@ -1,6 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { getPageLikeMaps } from "./_pageLikeOpt.js";
 
 // Placement-level performance breakdown. Pulls Meta insights with the
 // publisher_platform + platform_position breakdown so we can attribute
@@ -163,35 +164,10 @@ export default async function handler(req, res) {
     for (var i = 0; i < META_ACCOUNTS.length; i++) {
       var acc = META_ACCOUNTS[i];
       try {
-        // Page-like-optimised map. placements only counted the
-        // unambiguous "page_like" action, so a "Follows or likes"
-        // campaign (which reports under "like", no page_like) showed
-        // ZERO page likes at placement level. Gate the "like" fold by
-        // ad-set optimization_goal, one campaigns call with adsets
-        // field-expansion (rate-safe). Matches api/ads.js.
-        var campPageLikeOpt = {};
-        try {
-          var cNext = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
-          var cGuard = 0;
-          while (cNext && cGuard < 25) {
-            cGuard++;
-            var cR = await fetch(cNext);
-            if (!cR.ok) break;
-            var cJ = await cR.json();
-            if (cJ && cJ.error) break;
-            (cJ.data || []).forEach(function(c) {
-              if (String(c.objective || "").toUpperCase() === "PAGE_LIKES") campPageLikeOpt[c.id] = true;
-              var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
-              aset.forEach(function(s) {
-                var st = String(s.effective_status || "").toUpperCase();
-                if (st === "DELETED" || st === "ARCHIVED") return;
-                var og = String(s.optimization_goal || "").toUpperCase();
-                if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
-              });
-            });
-            cNext = cJ.paging && cJ.paging.next ? cJ.paging.next : null;
-          }
-        } catch (_) { /* non-fatal: page_like-only fallback */ }
+        // Cached (6h) page-like-optimised map, same helper /api/ads
+        // uses. A per-request campaigns+adsets fetch here was as heavy
+        // as the one that timed out /api/ads. Matches api/ads.js.
+        var campPageLikeOpt = (await getPageLikeMaps(acc.id, metaToken)).plOpt || {};
 
         var timeRange = JSON.stringify({ since: from, until: to });
         var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,impressions,clicks,spend,actions&breakdowns=publisher_platform,platform_position&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;

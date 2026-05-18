@@ -1,5 +1,6 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, isCampaignAllowed } from "./_auth.js";
+import { getPageLikeMaps } from "./_pageLikeOpt.js";
 
 // Demographics endpoint. Returns age × gender, province (region), device
 // and Google-only city breakdowns across Meta, TikTok and Google. The
@@ -139,32 +140,10 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
-    // Page-like-optimised campaigns for this account, so the "like"
-    // fold in extractResults matches ad/campaign level. ONE campaigns
-    // call with adsets field-expansion (rate-safe). Matches api/ads.js.
-    var campPageLikeOpt = {};
-    try {
-      var cNext = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + token;
-      var cGuard = 0;
-      while (cNext && cGuard < 25) {
-        cGuard++;
-        var cR = await fetch(cNext);
-        if (!cR.ok) break;
-        var cJ = await cR.json();
-        if (cJ && cJ.error) break;
-        (cJ.data || []).forEach(function(c) {
-          if (String(c.objective || "").toUpperCase() === "PAGE_LIKES") campPageLikeOpt[String(c.id)] = true;
-          var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
-          aset.forEach(function(s) {
-            var st = String(s.effective_status || "").toUpperCase();
-            if (st === "DELETED" || st === "ARCHIVED") return;
-            var og = String(s.optimization_goal || "").toUpperCase();
-            if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[String(c.id)] = true;
-          });
-        });
-        cNext = cJ.paging && cJ.paging.next ? cJ.paging.next : null;
-      }
-    } catch (_) { /* non-fatal: page_like-only fallback */ }
+    // Cached (6h) page-like-optimised map, same helper /api/ads uses.
+    // Per-request campaigns+adsets fetch here was as heavy as the one
+    // that timed out /api/ads. Matches api/ads.js.
+    var campPageLikeOpt = (await getPageLikeMaps(acc.id, token)).plOpt || {};
     // Diagnostic: log row counts and publisher_platform distribution so we
     // can see in Vercel logs exactly what Meta is returning for this account
     // per breakdown. Helps distinguish "IG genuinely has no clicks in this
