@@ -139,13 +139,35 @@ export default async function handler(req, res) {
     for (var i = 0; i < metaAccounts.length; i++) {
       var account = metaAccounts[i];
       try {
-        // Campaign objective map
+        // Campaign objective map + page-like-optimised map. The "like"
+        // fold below MUST be gated by ad-set optimization_goal, not the
+        // objective (a "Follows or likes" and a "profile visits"
+        // campaign are BOTH OUTCOME_ENGAGEMENT; folding "like" for the
+        // latter over-reports the Trendline). One campaigns call with
+        // adsets field-expansion (rate-safe). Matches api/ads.js.
         var campObjMap = {};
+        var campPageLikeOpt = {};
         try {
-          var campUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective&limit=500&access_token=" + metaToken;
-          var campRes = await fetch(campUrl);
-          var campData = await campRes.json();
-          if (campData.data) campData.data.forEach(function(c) { campObjMap[c.id] = c.objective; });
+          var campNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
+          var campGuard = 0;
+          while (campNext && campGuard < 25) {
+            campGuard++;
+            var campRes = await fetch(campNext);
+            var campData = await campRes.json();
+            if (campData && campData.error) break;
+            if (campData.data) campData.data.forEach(function(c) {
+              campObjMap[c.id] = c.objective;
+              if (String(c.objective || "").toUpperCase() === "PAGE_LIKES") campPageLikeOpt[c.id] = true;
+              var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
+              aset.forEach(function(s) {
+                var st = String(s.effective_status || "").toUpperCase();
+                if (st === "DELETED" || st === "ARCHIVED") return;
+                var og = String(s.optimization_goal || "").toUpperCase();
+                if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
+              });
+            });
+            campNext = campData.paging && campData.paging.next ? campData.paging.next : null;
+          }
         } catch (e) {}
 
         // Map AN / Messenger / Oculus into Facebook family and Threads into
@@ -205,13 +227,15 @@ export default async function handler(req, res) {
                 at === "onsite_conversion.lead_grouped" ||
                 at === "offsite_complete_registration_add_meta_leads"
               )) results = Math.max(results, v);
-              // FB follower-objective: accept both page_like (modern) AND
-              // like (legacy PAGE_LIKES objective returns page likes under
-              // this key) plus the follow action. The Facebook placement
-              // check is what keeps IG post reactions out of the count,
-              // IG hearts also come under "like" but never on an FB row.
-              // Matches /api/campaigns.js which Community Growth uses.
-              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "like" || at === "follow" || at === "onsite_conversion.follow")) results = Math.max(results, v);
+              // FB follower-objective: page_like / onsite_conversion.page_like
+              // / follow are unambiguous and always count. "like" is post
+              // reactions EXCEPT on a page-like-optimised campaign, where
+              // Meta returns the page-follow result under "like" (no
+              // page_like row). Gate "like" on optimization_goal so the
+              // profile-visit twin doesn't over-report the Trendline.
+              // Matches api/ads.js / campaigns.js / adsets.js.
+              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "onsite_conversion.page_like" || at === "follow" || at === "onsite_conversion.follow")) results = Math.max(results, v);
+              else if (objective === "followers" && platform === "Facebook" && at === "like" && campPageLikeOpt[row.campaign_id] === true) results = Math.max(results, v);
             });
           }
           // App Install campaigns are judged on CLICKS TO THE APP STORE,

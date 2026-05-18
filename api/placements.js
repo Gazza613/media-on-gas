@@ -163,6 +163,36 @@ export default async function handler(req, res) {
     for (var i = 0; i < META_ACCOUNTS.length; i++) {
       var acc = META_ACCOUNTS[i];
       try {
+        // Page-like-optimised map. placements only counted the
+        // unambiguous "page_like" action, so a "Follows or likes"
+        // campaign (which reports under "like", no page_like) showed
+        // ZERO page likes at placement level. Gate the "like" fold by
+        // ad-set optimization_goal, one campaigns call with adsets
+        // field-expansion (rate-safe). Matches api/ads.js.
+        var campPageLikeOpt = {};
+        try {
+          var cNext = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
+          var cGuard = 0;
+          while (cNext && cGuard < 25) {
+            cGuard++;
+            var cR = await fetch(cNext);
+            if (!cR.ok) break;
+            var cJ = await cR.json();
+            if (cJ && cJ.error) break;
+            (cJ.data || []).forEach(function(c) {
+              if (String(c.objective || "").toUpperCase() === "PAGE_LIKES") campPageLikeOpt[c.id] = true;
+              var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
+              aset.forEach(function(s) {
+                var st = String(s.effective_status || "").toUpperCase();
+                if (st === "DELETED" || st === "ARCHIVED") return;
+                var og = String(s.optimization_goal || "").toUpperCase();
+                if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
+              });
+            });
+            cNext = cJ.paging && cJ.paging.next ? cJ.paging.next : null;
+          }
+        } catch (_) { /* non-fatal: page_like-only fallback */ }
+
         var timeRange = JSON.stringify({ since: from, until: to });
         var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,impressions,clicks,spend,actions&breakdowns=publisher_platform,platform_position&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
         var allRows = [];
@@ -180,15 +210,19 @@ export default async function handler(req, res) {
           var pub = row.publisher_platform || "facebook";
           var pos = row.platform_position || "";
           var key = pub + "::" + pos;
-          var leads = 0, installs = 0, follows = 0, pageLikes = 0;
+          var leads = 0, installs = 0, follows = 0, pageLikes = 0, reactionLikes = 0;
           (row.actions || []).forEach(function(a) {
             var at = String(a.action_type || "").toLowerCase();
             var v = parseInt(a.value || 0);
             if (at === "lead" || at === "onsite_web_lead" || at === "offsite_conversion.fb_pixel_lead" || at === "onsite_conversion.lead_grouped" || at === "offsite_complete_registration_add_meta_leads") leads = Math.max(leads, v);
             if (at.indexOf("app_install") >= 0 || at === "mobile_app_install" || at === "omni_app_install") installs = Math.max(installs, v);
-            if (at === "page_like") pageLikes = Math.max(pageLikes, v);
+            if (at === "page_like" || at === "onsite_conversion.page_like") pageLikes = Math.max(pageLikes, v);
+            if (at === "like") reactionLikes = Math.max(reactionLikes, v);
             if (at === "follow" || at === "onsite_conversion.follow") follows = Math.max(follows, v);
           });
+          // Fold "like" into page likes only for a page-like-optimised
+          // campaign on a Facebook-family placement.
+          if (campPageLikeOpt[row.campaign_id] === true && platformOf(pub) === "Facebook" && reactionLikes > pageLikes) pageLikes = reactionLikes;
           addRow(key, {
             name: placementName(pub, pos),
             platform: platformOf(pub),

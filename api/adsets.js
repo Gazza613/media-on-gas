@@ -33,6 +33,38 @@ export default async function handler(req, res) {
   for (var i = 0; i < metaAccounts.length; i++) {
     var account = metaAccounts[i];
     try {
+      // Campaigns whose ad sets optimise for page likes. Under ODAX a
+      // "Follows or likes" campaign returns its page-follow result under
+      // action_type "like" (NOT page_like), and the objective string
+      // (OUTCOME_ENGAGEMENT) cannot distinguish it from a profile-visit
+      // campaign. Only the ad-set optimization_goal can. ONE campaigns
+      // call with adsets field-expansion (rate-safe; a separate /adsets
+      // pagination tripped Meta's per-user limit on /api/ads). Must match
+      // api/ads.js / reconcile.js / campaigns.js.
+      var campPageLikeOpt = {};
+      try {
+        var cNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
+        var cGuard = 0;
+        while (cNext && cGuard < 25) {
+          cGuard++;
+          var cRes = await fetch(cNext);
+          var cJson = await cRes.json();
+          if (cJson && cJson.error) break;
+          (cJson.data || []).forEach(function(c) {
+            var rawObj = String(c.objective || "").toUpperCase();
+            if (rawObj === "PAGE_LIKES") campPageLikeOpt[c.id] = true;
+            var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
+            aset.forEach(function(s) {
+              var st = String(s.effective_status || "").toUpperCase();
+              if (st === "DELETED" || st === "ARCHIVED") return;
+              var og = String(s.optimization_goal || "").toUpperCase();
+              if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
+            });
+          });
+          cNext = cJson.paging && cJson.paging.next ? cJson.paging.next : null;
+        }
+      } catch (_) { /* non-fatal: falls back to unambiguous page_like only */ }
+
       var timeRange = "{\"since\":\"" + from + "\",\"until\":\"" + to + "\"}";
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range=" + timeRange + "&breakdowns=publisher_platform&limit=200&access_token=" + metaToken;
       // Collect all breakdown rows for this account first (paginated) so we
@@ -52,21 +84,29 @@ export default async function handler(req, res) {
           var pub = d.publisher_platform || "facebook";
           var platform = mapPubToPlat(pub);
           if (!platform) continue;
-          var leads = 0, appInstalls = 0, pageLikes = 0, landingPageViews = 0, follows = 0;
+          var leads = 0, appInstalls = 0, pageLikes = 0, landingPageViews = 0, follows = 0, reactionLikes = 0;
           if (d.actions) {
             for (var k = 0; k < d.actions.length; k++) {
               var a = d.actions[k];
               if (a.action_type === "lead") leads += parseInt(a.value || 0);
               if (a.action_type === "omni_app_install" || a.action_type === "app_install") appInstalls += parseInt(a.value || 0);
-              // Use the unambiguous "page_like" action. "like" at ad/adset
-              // level is post reactions on non-follower placements and would
-              // inflate adset pageLikes, polluting the Audience tab's
-              // follower-objective rollup.
-              if (a.action_type === "page_like") pageLikes += parseInt(a.value || 0);
+              // "page_like" and the modern "onsite_conversion.page_like"
+              // are the unambiguous page-follow actions. "like" is post
+              // reactions EXCEPT on a PAGE_LIKES-optimised campaign, where
+              // Meta returns the page-follow result under "like" (no
+              // page_like row at all). Track it separately and fold it
+              // only for page-like-optimised campaigns on FB placements,
+              // matching api/ads.js so adset rollups agree with ad level.
+              if (a.action_type === "page_like" || a.action_type === "onsite_conversion.page_like") pageLikes += parseInt(a.value || 0);
+              if (a.action_type === "like") reactionLikes += parseInt(a.value || 0);
               if (a.action_type === "landing_page_view" || a.action_type === "omni_landing_page_view") landingPageViews += parseInt(a.value || 0);
               if (a.action_type === "onsite_conversion.messaging_first_reply") follows += parseInt(a.value || 0);
             }
           }
+          // Fold "like" into page likes only for a page-like-optimised
+          // campaign on a Facebook-family placement (publisher already
+          // mapped; mapPubToPlat collapses AN/Messenger/Oculus into FB).
+          if (campPageLikeOpt[d.campaign_id] === true && platform === "Facebook" && reactionLikes > pageLikes) pageLikes = reactionLikes;
           breakdownRows.push({
             platform: platform,
             accountName: account.name,
