@@ -1820,6 +1820,34 @@ function CampaignAuditModal(props){
   var query=useState("");
   var platFilter=useState("all");
   var objFilter=useState("all");
+  // Admin-only raw-Meta-actions inspector. Answers "what action_type is
+  // Meta actually returning for this campaign per platform" without
+  // chasing tokens — runs inside the already-authed Settings modal.
+  var dbgQ=useState("");
+  var dbgState=useState({loading:false,error:"",rows:null});
+  var runDbg=function(){
+    var q=String(dbgQ[0]||"").trim();
+    if(!q){dbgState[1]({loading:false,error:"Type part of a campaign name first.",rows:null});return;}
+    dbgState[1]({loading:true,error:"",rows:null});
+    fetch(props.apiBase+"/api/ads?from="+encodeURIComponent(props.dateFrom)+"&to="+encodeURIComponent(props.dateTo)+"&debug=1",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(x){
+        if(x.status!==200||!x.data||!Array.isArray(x.data.ads)){dbgState[1]({loading:false,error:(x.data&&x.data.error)||("Failed ("+x.status+")"),rows:null});return;}
+        var ql=q.toLowerCase();
+        var hit=x.data.ads.filter(function(a){return String(a.campaignName||"").toLowerCase().indexOf(ql)>=0;});
+        // Aggregate the raw action map per platform across matching ads.
+        var byPlat={};
+        hit.forEach(function(a){
+          var p=a.platform||"?";
+          if(!byPlat[p])byPlat[p]={spend:0,impressions:0,clicks:0,agg:{}};
+          byPlat[p].spend+=parseFloat(a.spend||0);byPlat[p].impressions+=parseFloat(a.impressions||0);byPlat[p].clicks+=parseFloat(a.clicks||0);
+          var ag=a._debugActionsAgg||{};
+          Object.keys(ag).forEach(function(k){byPlat[p].agg[k]=(byPlat[p].agg[k]||0)+parseFloat(ag[k]||0);});
+        });
+        dbgState[1]({loading:false,error:hit.length?"":"No ads matched that name in "+props.dateFrom+" to "+props.dateTo+".",rows:byPlat});
+      })
+      .catch(function(){dbgState[1]({loading:false,error:"Connection error",rows:null});});
+  };
   // Discrepancy filter — show only the audit rows where the team's name
   // tag and the platform's API objective disagreed (or rows where the
   // API was the fallback because no name keyword matched). Default
@@ -2224,6 +2252,26 @@ function CampaignAuditModal(props){
             })()}
           </div>;
         })()}
+      </div>}
+      {view[0]==="audit"&&props.isSuperadmin&&<div style={{marginBottom:14,padding:"12px 14px",background:P.cyan+"08",border:"1px solid "+P.cyan+"30",borderLeft:"3px solid "+P.cyan,borderRadius:"0 12px 12px 0"}}>
+        <div style={{fontSize:11,fontWeight:800,color:P.cyan,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",marginBottom:8}}>Raw Meta actions inspector <span style={{color:P.caption,fontWeight:600,letterSpacing:0}}>· what action_type Meta returns per platform</span></div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <input value={dbgQ[0]} onChange={function(e){dbgQ[1](e.target.value);}} placeholder="part of a campaign name, e.g. Like&Follow_MoMo Deals" style={{flex:1,minWidth:280,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
+          <button onClick={runDbg} disabled={dbgState[0].loading} style={{background:dbgState[0].loading?"#555":"linear-gradient(135deg,#22D3EE,#0EA5E9)",border:"none",borderRadius:8,padding:"8px 16px",color:"#04121a",fontSize:11,fontWeight:800,fontFamily:fm,cursor:dbgState[0].loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{dbgState[0].loading?"Reading…":"Inspect"}</button>
+        </div>
+        {dbgState[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>{dbgState[0].error}</div>}
+        {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:10}}>
+          {Object.keys(dbgState[0].rows).sort().map(function(plat){
+            var pr=dbgState[0].rows[plat];
+            var keys=Object.keys(pr.agg).sort(function(a,b){return pr.agg[b]-pr.agg[a];});
+            return <div key={plat} style={{background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,marginBottom:6}}>{plat} <span style={{color:P.caption,fontWeight:600}}>· R{Math.round(pr.spend)} spent · {Math.round(pr.impressions).toLocaleString()} impr · {Math.round(pr.clicks).toLocaleString()} clicks</span></div>
+              {keys.length===0?<div style={{fontSize:10,color:P.caption,fontFamily:fm}}>(no actions returned by Meta for this platform)</div>:
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{keys.map(function(k){return <span key={k} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:5,padding:"3px 8px",fontSize:10.5,fontFamily:fm,color:P.txt}}><span style={{color:P.cyan}}>{k}</span> = <strong>{Math.round(pr.agg[k]).toLocaleString()}</strong></span>;})}</div>}
+            </div>;
+          })}
+          <div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5}}>This is the literal Meta actions map per publisher for the matched ads, aggregated. Find the key whose Facebook value equals Meta Ads Manager's per-platform "Results" and send it to me — that is the action_type to wire into the Follows & Likes result.</div>
+        </div>}
       </div>}
       {view[0]==="audit"&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <input value={query[0]} onChange={function(e){query[1](e.target.value);}} placeholder="Search campaign, account, objective..." style={{flex:1,minWidth:240,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
