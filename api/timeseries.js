@@ -106,13 +106,27 @@ export default async function handler(req, res) {
   // honour an operator-supplied correction ahead of name + API logic.
   var overridesMap = await getOverrides();
 
-  var campaignAllowed = function(id, name) {
+  // virtualId is the dashboard's per-publisher id (e.g. "123_facebook").
+  // Meta passes it so the selection filter is publisher-aware and
+  // matches EXACTLY what the operator selected on screen. Without it,
+  // the old raw-id match leaked: deselecting MTN MoMo POS still let its
+  // rows through because the frontend also sends the bare campaign id
+  // (for TikTok/Google shape), and a bare Meta campaign_id matched the
+  // raw key regardless of publisher / selection. TikTok & Google have
+  // no publisher split, so they keep the raw match.
+  var campaignAllowed = function(id, name, virtualId) {
     if (isClientScoped) {
       if (!(id && allowedIds[String(id)]) && !(name && allowedNames[String(name)])) return false;
     }
     if (hasSelection) {
-      var sid = String(id || "");
-      if (!selectionIds[sid] && !selectionIds[sid.replace(/^google_/, "")]) return false;
+      if (virtualId) {
+        // Meta: require the exact selected virtual id. Do NOT fall back
+        // to the bare campaign id (that is the leak).
+        if (!selectionIds[String(virtualId)]) return false;
+      } else {
+        var sid = String(id || "");
+        if (!selectionIds[sid] && !selectionIds[sid.replace(/^google_/, "")]) return false;
+      }
     }
     return true;
   };
@@ -213,7 +227,13 @@ export default async function handler(req, res) {
           // the ad actually drives.
           if (objective === "landingpage") results = clk;
           if (objective === "followers" && platform === "Instagram") results = clk;
-          if (!campaignAllowed(row.campaign_id, row.campaign_name)) return;
+          // Reconstruct the dashboard's per-publisher virtual id so the
+          // selection filter matches exactly what was selected (the
+          // dashboard keys Meta as "<rawCampaignId>_facebook" /
+          // "_instagram"; AN/Messenger fold into facebook, Threads into
+          // instagram, same as campaigns.js).
+          var metaVid = String(row.campaign_id || "") + (platform === "Instagram" ? "_instagram" : "_facebook");
+          if (!campaignAllowed(row.campaign_id, row.campaign_name, metaVid)) return;
           addTo(seriesMap, platform, objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
         });
         debug.meta[account.name] = metaAllRows.length;
