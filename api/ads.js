@@ -2,6 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
+import { getPageLikeMaps } from "./_pageLikeOpt.js";
 
 function overrideFor(overridesMap, campaignId) {
   if (!overridesMap || !campaignId) return null;
@@ -175,48 +176,14 @@ export default async function handler(req, res) {
   await Promise.all(metaAccounts.map(async function(account) {
     try {
       // Fetch real campaign objectives for this account
-      var campObjMap = {};
-      var campPageLikeOpt = {};   // campaign_id -> true if any ad set optimises page likes
-      var campOptGoals = {};      // campaign_id -> distinct raw optimization_goal (debug)
-      var adsetSeen = 0;          // ad sets parsed (0 => fetch problem, not "no PAGE_LIKES")
-      var adsetFetchErr = "";     // surfaced in debug so an empty result is explained
-      try {
-        // ONE paginated campaigns call with adsets field-expansion.
-        // A SEPARATE /adsets pagination tipped /api/ads over Meta's
-        // per-user rate limit ("User request limit reached"), so the
-        // optimization_goal map came back empty for every campaign.
-        // Folding optimization_goal into the campaigns call we already
-        // make removes that whole extra endpoint. MUST paginate:
-        // accounts carry hundreds of historical campaigns and the
-        // newest (the ones the client cares about) were being dropped.
-        var campNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,name,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
-        var campGuard = 0;
-        while (campNext && campGuard < 25) {
-          campGuard++;
-          var campRes = await fetch(campNext);
-          var campData = await campRes.json();
-          if (campData && campData.error) { adsetFetchErr = String(campData.error.message || campData.error.type || "graph error"); break; }
-          if (campData.data) {
-            campData.data.forEach(function(c) {
-              campObjMap[c.id] = c.objective || "";
-              var adsets = c.adsets && c.adsets.data ? c.adsets.data : [];
-              adsets.forEach(function(s) {
-                var st = String(s.effective_status || "").toUpperCase();
-                if (st === "DELETED" || st === "ARCHIVED") return;
-                adsetSeen++;
-                var og = String(s.optimization_goal || "").toUpperCase();
-                // Page-follow delivery enum names across legacy + ODAX.
-                if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
-                if (debugFollows) {
-                  if (!campOptGoals[c.id]) campOptGoals[c.id] = {};
-                  campOptGoals[c.id][og || "(empty)"] = true;
-                }
-              });
-            });
-          }
-          campNext = campData.paging && campData.paging.next ? campData.paging.next : null;
-        }
-      } catch (cErr) { adsetFetchErr = String(cErr && cErr.message || cErr); console.error("Meta campaign+adset fetch error", account.name, cErr); }
+      // Cached (6h) per-account objective + page-like-optimised maps.
+      // Resolving this per request was blowing the function time
+      // budget and Meta's rate limit, so /api/ads returned partial
+      // data. The helper never throws and degrades to empty maps, so
+      // ad data is never blocked by this enrichment.
+      var __plm = await getPageLikeMaps(account.id, metaToken);
+      var campObjMap = __plm.objMap || {};
+      var campPageLikeOpt = __plm.plOpt || {};
 
       var timeRange = JSON.stringify({ since: from, until: to });
       // Single publisher_platform breakdown only. The earlier `platform_position`
@@ -990,11 +957,11 @@ export default async function handler(req, res) {
           // This, not the objective, decides if "like" is the page-follow
           // result. Surfaced so the inspector can prove the distinction.
           _debugPageLikeOpt: debugFollows ? (campPageLikeOpt[ins.campaign_id] === true) : undefined,
-          // Raw optimization_goal|destination_type values across this
-          // campaign's ad sets, so we can see exactly what Meta returns
-          // instead of guessing the enum. "(no adsets returned)" means
-          // the fetch itself came back empty for the whole account.
-          _debugOptGoals: debugFollows ? (adsetFetchErr ? ("ERROR: " + adsetFetchErr) : adsetSeen === 0 ? "(no adsets returned)" : Object.keys(campOptGoals[ins.campaign_id] || {}).join(", ") || "(none for this campaign)") : undefined,
+          // Page-like detection now comes from the cached _pageLikeOpt
+          // helper (6h TTL), so the per-request raw optimization_goal
+          // dump is no longer collected. The chip (_debugPageLikeOpt)
+          // remains the source of truth in the inspector.
+          _debugOptGoals: debugFollows ? (campPageLikeOpt[ins.campaign_id] === true ? "PAGE-LIKES (cached)" : "not page-likes (cached)") : undefined,
           // Meta video id for in-dashboard playback via /api/ad-video proxy.
           // Falls back to the first DCO variant video if the primary creative is static.
           videoId: cr.video_id || (candidateVids.length > 0 ? candidateVids[0] : ""),
