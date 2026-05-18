@@ -949,6 +949,10 @@ export default async function handler(req, res) {
           // wrong. Stripped from the payload unless ?debug=1 is passed.
           _debugActionsAgg: debugFollows ? (ins.actionsAgg || {}) : undefined,
           _debugTrueTotals: debugFollows ? (ins.trueTotals || null) : undefined,
+          // Raw Meta objective string (e.g. PAGE_LIKES vs OUTCOME_ENGAGEMENT).
+          // Decides whether the strict page-like fold applies, so the
+          // inspector must surface it per campaign.
+          _debugMetaObjective: debugFollows ? rawMetaObj : undefined,
           // Meta video id for in-dashboard playback via /api/ad-video proxy.
           // Falls back to the first DCO variant video if the primary creative is static.
           videoId: cr.video_id || (candidateVids.length > 0 ? candidateVids[0] : ""),
