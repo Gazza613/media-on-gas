@@ -512,6 +512,7 @@ export default async function handler(req, res) {
   }
 
   var dryRun = req.query.dryRun === "1" || req.query.dry === "1";
+  var testTo = (req.query.testTo || "").trim();
 
   // "Last week" = the 7-day window ending yesterday (SAST). Baseline =
   // the 7 days before that. So for a Monday morning run:
@@ -563,7 +564,7 @@ export default async function handler(req, res) {
       clients: [], totals: totals, lastWeekSpend: lastWeekSpend
     });
     if (dryRun) { res.status(200).json({ ok: true, dryRun: true, weekLabel: weekLabel, rows: 0, html: emptyHtml }); return; }
-    return await sendEmail(res, weekLabel, emptyHtml, isCron);
+    return await sendEmail(res, weekLabel, emptyHtml, isCron, testTo);
   }
 
   var html = buildHtml({ weekLabel: weekLabel, clients: clients, totals: totals, lastWeekSpend: lastWeekSpend });
@@ -579,10 +580,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  return await sendEmail(res, weekLabel, html, isCron);
+  return await sendEmail(res, weekLabel, html, isCron, testTo);
 }
 
-async function sendEmail(res, weekLabel, html, isCron) {
+async function sendEmail(res, weekLabel, html, isCron, testTo) {
   var gmailUser = process.env.GMAIL_USER;
   var gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!gmailUser || !gmailPass) {
@@ -590,7 +591,10 @@ async function sendEmail(res, weekLabel, html, isCron) {
     return;
   }
 
-  if (isCron) {
+  var recipient = testTo || RECIPIENT_LIST;
+  var isTest = !!testTo;
+
+  if (!isTest && isCron) {
     var nowSast = sastNow();
     var keyDate = ymd(new Date(nowSast.getTime() - 24 * 60 * 60 * 1000));
     var dedupKey = "weekly-pulse:sent:" + keyDate;
@@ -609,12 +613,12 @@ async function sendEmail(res, weekLabel, html, isCron) {
   try {
     await transporter.sendMail({
       from: "GAS Marketing Automation <" + gmailUser + ">",
-      to: RECIPIENT_LIST,
-      subject: "Weekly Pulse | " + weekLabel,
+      to: recipient,
+      subject: (isTest ? "[TEST] " : "") + "Weekly Pulse | " + weekLabel,
       text: "GAS Weekly Pulse for " + weekLabel + ". Open the dashboard: " + ORIGIN,
       html: html
     });
-    res.status(200).json({ ok: true, sent: true, to: RECIPIENT_LIST, weekLabel: weekLabel });
+    res.status(200).json({ ok: true, sent: true, to: recipient, weekLabel: weekLabel, test: isTest });
   } catch (err) {
     console.error("Weekly pulse send failed", err);
     res.status(500).json({ ok: false, error: String(err && err.message || err) });
