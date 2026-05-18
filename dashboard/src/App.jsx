@@ -6128,10 +6128,11 @@ export default function MediaOnGas(){
                   wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
                   sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                   angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                  other:{label:"Other Reactions",color:P.label,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.label} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.label}/><circle cx="15" cy="11" r="1" fill={P.label}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.label} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                   shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                   comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                 };
-                var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).sort(function(a,b){return b.value-a.value;});
+                var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).sort(function(a,b){return b.value-a.value;});
                 var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.mint,"BRAND PULSE",Ic.pulse(P.mint,18))}
@@ -8665,7 +8666,7 @@ export default function MediaOnGas(){
                   // Keep every row, even at 0, so the reader can verify which
                   // reactions the brand got and which it didn't. Sort by
                   // value desc so the dominant reaction always leads.
-                  var rows=types.map(function(t){var m2=typeMeta[t];return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t],perPlat:{FB:perPlat.Facebook[t],IG:perPlat.Instagram[t],TT:perPlat.TikTok[t]}};}).sort(function(a,b){return b.value-a.value;});
+                  var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).sort(function(a,b){return b.value-a.value;});
                   var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                   return <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(244,63,94,0.04) 50%,rgba(168,85,247,0.06))",borderRadius:16,padding:"22px 24px",marginBottom:20,border:"1px solid "+P.rule}}>
                     <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}@keyframes sentRing{from{stroke-dashoffset:314}to{stroke-dashoffset:var(--sent-offset)}}"}</style>
