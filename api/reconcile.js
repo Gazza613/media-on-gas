@@ -149,14 +149,17 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
           actions["onsite_conversion.lead_grouped"] || 0,
           actions["offsite_conversion.fb_pixel_lead"] || 0
         );
-        // "like" is POST REACTIONS on every non-follower campaign, only fold
-        // it into the followers count when the campaign is actually a
-        // follower-family campaign (PAGE_LIKES / OUTCOME_ENGAGEMENT etc.).
-        // This keeps Lead Gen campaigns from showing phantom followers that
-        // contradict the dashboard.
-        var obj = canonicalObjective(objMap[row.campaign_id], row.campaign_name, overridesMap, row.campaign_id);
-        var pageLikesRaw = actions["page_like"] || 0;
-        if (obj === "followers") pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
+        // "like" is POST REACTIONS, not page joins. Fold it into the
+        // followers count ONLY for a strictly legacy PAGE_LIKES campaign
+        // (the pre-ODAX objective where Meta returned page likes under
+        // "like"). For OUTCOME_ENGAGEMENT / POST_ENGAGEMENT / profile-visit
+        // goals "like" is reactions and folding it over-reports community
+        // growth by orders of magnitude. Genuine ODAX page-like results
+        // arrive in the unambiguous page_like / onsite_conversion.page_like
+        // key. Must match api/ads.js exactly. See project_meta_like_action.
+        var rawMetaObjStrict = String(objMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+        var pageLikesRaw = Math.max(actions["page_like"] || 0, actions["onsite_conversion.page_like"] || 0);
+        if (rawMetaObjStrict) pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
         var follows = actions["follow"] || actions["onsite_conversion.follow"] || actions["onsite_conversion.ig_follow"] || 0;
         var appInstalls = Math.max(actions["app_install"] || 0, actions["mobile_app_install"] || 0, actions["omni_app_install"] || 0);
         out.push({

@@ -379,7 +379,7 @@ export default async function handler(req, res) {
               // POST REACTIONS (hearts/likes on the post itself) for all
               // non-follower campaigns, counting those as page likes would
               // wildly inflate follower counts on engagement-heavy creative.
-              if (act.action_type === "page_like") pageLikes = Math.max(pageLikes, parseInt(act.value));
+              if (act.action_type === "page_like" || act.action_type === "onsite_conversion.page_like") pageLikes = Math.max(pageLikes, parseInt(act.value));
               if (act.action_type === "like") reactionLikes = Math.max(reactionLikes, parseInt(act.value));
               if (act.action_type === "page_engagement") pageFollows = Math.max(pageFollows, parseInt(act.value));
               // Authoritative total post reactions (all types combined).
@@ -388,12 +388,16 @@ export default async function handler(req, res) {
               if (act.action_type === "post_reaction") reactionsTotal = Math.max(reactionsTotal, parseInt(act.value));
             }
           }
-          // Fold reactions into page likes for any follower-family campaign
-          // on an FB placement. Covers strict PAGE_LIKES and the modern
-          // OUTCOME_ENGAGEMENT objective (ODAX consolidated these in 2022+).
-          // The placement check keeps IG post hearts out of the count on
-          // broader engagement-family campaigns that run on IG too.
-          if (canonObj === "followers" && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+          // Fold reactions into page likes ONLY for a strictly legacy
+          // PAGE_LIKES campaign (the pre-ODAX objective where Meta returned
+          // page likes under "like"). A campaign merely NAMED Like&Follow
+          // but set up as OUTCOME_ENGAGEMENT / profile visits returns "like"
+          // as POST REACTIONS; folding those over-reports community growth
+          // by orders of magnitude. Genuine ODAX page-like results land in
+          // the unambiguous page_like / onsite_conversion.page_like key.
+          // Must match api/ads.js + api/reconcile.js. See
+          // project_meta_like_action.
+          if (rawMetaObj === "PAGE_LIKES" && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
 
           if (!rowMap[uniqueId]) {
             rowMap[uniqueId] = {
@@ -526,7 +530,7 @@ export default async function handler(req, res) {
               if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") a.leads += v;
               if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") a.appInstalls += v;
               if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") a.landingPageViews += v;
-              if (act.action_type === "page_like") a.pageLikes += v;
+              if (act.action_type === "page_like" || act.action_type === "onsite_conversion.page_like") a.pageLikes += v;
               if (act.action_type === "like") a.reactionLikes += v;
               if (act.action_type === "page_engagement") a.pageFollows += v;
               if (act.action_type === "post_reaction") a.reactionsTotal += v;
@@ -559,7 +563,10 @@ export default async function handler(req, res) {
             return "unknown";
           })();
           var pageLikes = a.pageLikes;
-          if (canonObj === "followers" && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
+          // Strict PAGE_LIKES-only "like" fold — must match the per-campaign
+          // path above + api/ads.js + api/reconcile.js. See
+          // project_meta_like_action.
+          if (rawMetaObj === "PAGE_LIKES" && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
           seenIds[a.campaign_id] = true;
           rowMap[k] = {
             platform: a.platform,
