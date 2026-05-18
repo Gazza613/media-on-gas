@@ -243,6 +243,10 @@ function buildHtml(opts) {
   var weekLabel = opts.weekLabel;
   var clients = opts.clients;
   var totals = opts.totals;
+  var lastWeekSpend = opts.lastWeekSpend != null ? parseFloat(opts.lastWeekSpend) : -1;
+  var wowPct = lastWeekSpend > 0 ? Math.round((totals.spend - lastWeekSpend) / lastWeekSpend * 100) : null;
+  var wowLabel = wowPct !== null ? ((wowPct >= 0 ? "\u25b2" : "\u25bc") + "\u00a0" + Math.abs(wowPct) + "% vs last week") : "";
+  var wowColor = wowPct !== null ? (wowPct > 15 ? P.lava : wowPct < -15 ? P.mint : P.amber) : P.caption;
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   var totalAction = 0, totalWarning = 0, totalWatch = 0, totalHealthy = 0;
@@ -276,9 +280,11 @@ function buildHtml(opts) {
         ? '<img src="' + escapeHtml(r.thumbnail) + '" alt="ad creative" width="64" height="64" style="width:64px;height:64px;display:block;border-radius:10px;object-fit:cover;border:1px solid ' + P.rule + ';"/>'
         : '<div style="width:64px;height:64px;display:block;border-radius:10px;background:linear-gradient(135deg,' + P.ember + '40,' + P.lava + '40);border:1px solid ' + P.rule + ';"></div>';
 
-      var analystHtml = r.analystNote ?
-        '<div style="margin-top:8px;padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
-        escapeHtml(r.analystNote) + '</div>' : '';
+      var rowBottomBorder = r.analystNote ? 'none' : '1px solid ' + P.rule;
+      var analystRow = r.analystNote ?
+        '<tr><td colspan="6" class="pw-note" style="padding:0 14px 12px;background:' + c.soft + ';border-bottom:1px solid ' + P.rule + ';">' +
+        '<div style="padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
+        escapeHtml(r.analystNote) + '</div></td></tr>' : '';
 
       var flagsHtml = flags.length === 0 ? "" :
         '<div style="font-size:11px;color:' + DISP_COLORS.red.fill + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.55;font-weight:700;">' +
@@ -304,36 +310,36 @@ function buildHtml(opts) {
         : '';
 
       return '<tr>' +
-        '<td style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' + thumbHtml + '</td>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
+        '<td class="pw-thumb" style="padding:10px 0 10px 12px;border-bottom:' + rowBottomBorder + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:72px;vertical-align:top;">' + thumbHtml + '</td>' +
+        '<td class="pw-camp" style="padding:10px 12px;border-bottom:' + rowBottomBorder + ';background:' + c.soft + ';vertical-align:top;">' +
           '<div style="margin-bottom:4px;line-height:1.6;">' +
             dispChip(r.disposition) +
             '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
           '</div>' +
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.35;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
-          analystHtml + flagsHtml + winsHtml + contextHtml + noSignalHtml + amLink +
+          flagsHtml + winsHtml + contextHtml + noSignalHtml + amLink +
         '</td>' +
-        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.ember + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
+        '<td class="pw-mc" style="padding:10px 8px;border-bottom:' + rowBottomBorder + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div class="pw-mc-v" style="font-size:13px;color:' + P.ember + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">spend</div>' +
         '</td>' +
-        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + ctrTxt + '</div>' +
+        '<td class="pw-mc" style="padding:10px 8px;border-bottom:' + rowBottomBorder + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div class="pw-mc-v" style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + ctrTxt + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CTR</div>' +
         '</td>' +
-        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.amber + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + cpcTxt + '</div>' +
+        '<td class="pw-mc" style="padding:10px 8px;border-bottom:' + rowBottomBorder + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div class="pw-mc-v" style="font-size:13px;color:' + P.amber + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + cpcTxt + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CPC</div>' +
         '</td>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.cyan + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtNum(r.results)) + '</div>' +
+        '<td class="pw-mc" style="padding:10px 10px 10px 8px;border-bottom:' + rowBottomBorder + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+          '<div class="pw-mc-v" style="font-size:13px;color:' + P.cyan + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtNum(r.results)) + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">' + escapeHtml(r.resultsKind) + '</div>' +
           cprStack +
         '</td>' +
-      '</tr>';
+      '</tr>' + analystRow;
     }).join("");
 
-    return '<tr><td style="padding:24px 36px 0;">' +
+    return '<tr><td class="pw-client" style="padding:24px 36px 0;">' +
       '<div style="display:block;margin-bottom:14px;">' +
         '<div style="font-size:18px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">' + escapeHtml(b.label) + '</div>' +
         '<div style="margin-top:6px;font-size:11px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
@@ -355,21 +361,23 @@ function buildHtml(opts) {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
     '<tr>' +
       '<td width="25%" style="padding:0 4px 0 0;">' +
-        '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
+        '<div class="pw-kpi" style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
         '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Spend this week</div>' +
-        '<div style="font-size:22px;font-weight:900;color:' + P.ember + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(totals.spend)) + '</div></div></td>' +
+        '<div class="pw-kpi-v" style="font-size:22px;font-weight:900;color:' + P.ember + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(totals.spend)) + '</div>' +
+        (wowLabel ? '<div style="font-size:9px;color:' + wowColor + ';font-family:Manrope,Helvetica,Arial,sans-serif;font-weight:700;margin-top:4px;">' + escapeHtml(wowLabel) + '</div>' : '') +
+        '</div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
-        '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Campaigns</div>' +
-        '<div style="font-size:22px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totals.activeCampaigns + '</div></div></td>' +
-      '<td width="25%" style="padding:0 2px;">' +
-        '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
+        '<div class="pw-kpi" style="background:rgba(255,255,255,0.04);border:1px solid ' + (totalAction > 0 ? 'rgba(255,61,0,0.35)' : P.rule) + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
         '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Action required</div>' +
-        '<div style="font-size:22px;font-weight:900;color:' + (totalAction > 0 ? P.lava : P.mint) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalAction + '</div></div></td>' +
+        '<div class="pw-kpi-v" style="font-size:22px;font-weight:900;color:' + (totalAction > 0 ? P.lava : P.mint) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalAction + '</div></div></td>' +
+      '<td width="25%" style="padding:0 2px;">' +
+        '<div class="pw-kpi" style="background:rgba(255,255,255,0.04);border:1px solid ' + (totalWarning > 0 ? 'rgba(249,98,3,0.35)' : P.rule) + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
+        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Warning</div>' +
+        '<div class="pw-kpi-v" style="font-size:22px;font-weight:900;color:' + (totalWarning > 0 ? P.ember : P.mint) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalWarning + '</div></div></td>' +
       '<td width="25%" style="padding:0 0 0 4px;">' +
-        '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
+        '<div class="pw-kpi" style="background:rgba(255,255,255,0.04);border:1px solid ' + (totalHealthy > 0 ? 'rgba(52,211,153,0.25)' : P.rule) + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
         '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Healthy</div>' +
-        '<div style="font-size:22px;font-weight:900;color:' + P.mint + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalHealthy + '</div></div></td>' +
+        '<div class="pw-kpi-v" style="font-size:22px;font-weight:900;color:' + P.mint + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalHealthy + '</div></div></td>' +
     '</tr></table>';
 
   var methodology =
@@ -384,6 +392,40 @@ function buildHtml(opts) {
       '<div style="margin-top:6px;color:' + P.caption + ';">Same-day anomalies (sudden CPL spikes, lead-volume drops, conversion path breaks) ship in a separate Daily Anomalies email each morning, not here. This pulse is the week-in-review.</div>' +
     '</div>';
 
+  var summaryParts = [];
+  if (totalAction > 0) summaryParts.push('<span style="color:' + P.lava + ';font-weight:800;">' + totalAction + ' action</span>');
+  if (totalWarning > 0) summaryParts.push('<span style="color:' + P.ember + ';font-weight:800;">' + totalWarning + ' warning</span>');
+  if (totalWatch > 0) summaryParts.push('<span style="color:' + P.amber + ';font-weight:800;">' + totalWatch + ' watch</span>');
+  if (totalHealthy > 0) summaryParts.push('<span style="color:' + P.mint + ';font-weight:800;">' + totalHealthy + ' healthy</span>');
+  var summaryHtml = '<tr><td class="pw-summary" style="padding:10px 36px 4px;">' +
+    '<div style="font-size:12px;color:' + P.label + ';font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;">' +
+    '<strong style="color:' + P.txt + ';">' + escapeHtml(fmtR(totals.spend)) + '</strong> managed across ' +
+    '<strong style="color:' + P.txt + ';">' + totals.activeCampaigns + '</strong> active campaign' + (totals.activeCampaigns === 1 ? '' : 's') + ' this week' +
+    (summaryParts.length > 0 ? ' &mdash; ' + summaryParts.join(', ') : '') + '.' +
+    '</div></td></tr>';
+
+  var mobileStyles =
+    '@media only screen and (max-width:599px){' +
+    '.pw-wrap{padding:14px 4px !important;}' +
+    '.pw-card{border-radius:14px !important;}' +
+    '.pw-hdr{padding:22px 16px 16px !important;}' +
+    '.pw-div{padding:0 16px !important;}' +
+    '.pw-kpi-row{padding:16px 12px 4px !important;}' +
+    '.pw-kpi{padding:10px 6px !important;}' +
+    '.pw-kpi-v{font-size:16px !important;}' +
+    '.pw-summary{padding:8px 16px 2px !important;}' +
+    '.pw-client{padding:14px 14px 0 !important;}' +
+    '.pw-mc{padding:8px 5px !important;}' +
+    '.pw-mc-v{font-size:11px !important;}' +
+    '.pw-thumb{width:56px !important;padding-left:8px !important;padding-right:0 !important;}' +
+    '.pw-camp{padding:8px 8px !important;}' +
+    '.pw-note{padding:0 8px 10px !important;}' +
+    '.pw-meth{padding:14px 14px 4px !important;}' +
+    '.pw-cta{padding:20px 14px 6px !important;}' +
+    '.pw-sign{padding:20px 14px 4px !important;}' +
+    '.pw-foot{padding:14px 14px 22px !important;}' +
+    '}';
+
   var glowStyles =
     '<style>' +
     '@keyframes gasGlow {' +
@@ -391,6 +433,7 @@ function buildHtml(opts) {
       '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
     '}' +
     '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
+    mobileStyles +
     '</style>';
 
   var logoBlock =
@@ -402,11 +445,12 @@ function buildHtml(opts) {
     '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Weekly Pulse</title>' +
     glowStyles + '</head>' +
     '<body style="margin:0;padding:0;background:' + P.bg + ';font-family:Manrope,\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' + P.bg + ';padding:36px 14px;">' +
+    '<style>' + mobileStyles + '</style>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="pw-wrap" style="background:' + P.bg + ';padding:36px 14px;">' +
     '<tr><td align="center">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="pw-card" style="max-width:720px;background:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
 
-      '<tr><td style="padding:32px 36px 24px;text-align:center;">' +
+      '<tr><td class="pw-hdr" style="padding:32px 36px 24px;text-align:center;">' +
       logoBlock +
       '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">GAS Weekly Pulse</div>' +
       '<div style="font-size:26px;font-weight:900;letter-spacing:4px;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
@@ -414,30 +458,31 @@ function buildHtml(opts) {
       '<div style="font-size:11px;color:' + P.caption + ';letter-spacing:3px;margin-top:8px;text-transform:uppercase;font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(weekLabel) + '</div>' +
       '</td></tr>' +
 
-      '<tr><td style="padding:0 36px;"><div style="height:1px;background:linear-gradient(90deg,transparent,' + P.ember + ',transparent);"></div></td></tr>' +
+      '<tr><td class="pw-div" style="padding:0 36px;"><div style="height:1px;background:linear-gradient(90deg,transparent,' + P.ember + ',transparent);"></div></td></tr>' +
 
-      '<tr><td style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
+      '<tr><td class="pw-kpi-row" style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
+      summaryHtml +
       clientBlocks +
 
-      '<tr><td style="padding:32px 36px 8px;">' +
+      '<tr><td class="pw-meth" style="padding:32px 36px 8px;">' +
       '<div style="background:rgba(0,0,0,0.22);border:1px solid ' + P.rule + ';border-left:4px solid ' + P.amber + ';border-radius:0 12px 12px 0;padding:18px 22px;">' +
         methodology +
       '</div></td></tr>' +
 
-      '<tr><td style="padding:24px 36px 8px;" align="center">' +
+      '<tr><td class="pw-cta" style="padding:24px 36px 8px;" align="center">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
       '<tr><td align="center" style="background:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border-radius:12px;">' +
       '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
       '</td></tr></table></td></tr>' +
 
-      '<tr><td style="padding:28px 36px 4px;">' +
+      '<tr><td class="pw-sign" style="padding:28px 36px 4px;">' +
       '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
       '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
       '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
       '</td></tr>' +
 
       '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
-      '<tr><td style="padding:18px 36px 30px;">' +
+      '<tr><td class="pw-foot" style="padding:18px 36px 30px;">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">' +
       '<tr><td valign="middle" style="width:54px;padding-right:14px;">' +
       '<img src="' + logoUrl + '" alt="GAS Marketing" width="46" height="46" border="0" style="width:46px;height:46px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
@@ -510,17 +555,18 @@ export default async function handler(req, res) {
     spend: rows.reduce(function(a, r) { return a + r.spend; }, 0),
     activeCampaigns: rows.length
   };
+  var lastWeekSpend = (lastWeekData.campaigns || []).reduce(function(a, c) { return a + parseFloat(c.spend || 0); }, 0);
 
   if (rows.length === 0) {
     var emptyHtml = buildHtml({
       weekLabel: weekLabel + " (no active spend this week)",
-      clients: [], totals: totals
+      clients: [], totals: totals, lastWeekSpend: lastWeekSpend
     });
     if (dryRun) { res.status(200).json({ ok: true, dryRun: true, weekLabel: weekLabel, rows: 0, html: emptyHtml }); return; }
     return await sendEmail(res, weekLabel, emptyHtml, isCron);
   }
 
-  var html = buildHtml({ weekLabel: weekLabel, clients: clients, totals: totals });
+  var html = buildHtml({ weekLabel: weekLabel, clients: clients, totals: totals, lastWeekSpend: lastWeekSpend });
 
   if (dryRun) {
     res.status(200).json({
