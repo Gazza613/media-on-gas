@@ -206,8 +206,10 @@ export default async function handler(req, res) {
       // post reactions, do not fold. A campaign counts as page-likes
       // if ANY of its ad sets optimises for page likes.
       var campPageLikeOpt = {};
+      var campOptGoals = {};   // campaign_id -> distinct raw "optimization_goal|destination_type" strings (debug)
+      var adsetSeen = 0;       // total ad sets the fetch returned (0 => fetch problem, not "no PAGE_LIKES")
       try {
-        var asNext = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,optimization_goal&limit=500&access_token=" + metaToken;
+        var asNext = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,optimization_goal,destination_type,promoted_object&limit=500&access_token=" + metaToken;
         var asGuard = 0;
         while (asNext && asGuard < 20) {
           asGuard++;
@@ -215,8 +217,19 @@ export default async function handler(req, res) {
           var asData = await asRes.json();
           if (asData.data) {
             asData.data.forEach(function(s) {
+              adsetSeen++;
               var og = String(s.optimization_goal || "").toUpperCase();
-              if (og === "PAGE_LIKES" || og === "LIKE_PAGE") campPageLikeOpt[s.campaign_id] = true;
+              var dt = String(s.destination_type || "").toUpperCase();
+              // Page-like / page-follow delivery surfaces under several
+              // enum names across legacy + ODAX: PAGE_LIKES, LIKE_PAGE,
+              // and the ODAX "Follows or likes" goal. destination_type
+              // ON_PAGE / PAGE / FACEBOOK_PAGE also marks a page-join.
+              if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES" || dt === "ON_PAGE" || dt.indexOf("PAGE") >= 0) campPageLikeOpt[s.campaign_id] = true;
+              if (debugFollows) {
+                var tag = og + (dt ? ("|" + dt) : "");
+                if (!campOptGoals[s.campaign_id]) campOptGoals[s.campaign_id] = {};
+                campOptGoals[s.campaign_id][tag] = true;
+              }
             });
           }
           asNext = asData.paging && asData.paging.next ? asData.paging.next : null;
@@ -995,6 +1008,11 @@ export default async function handler(req, res) {
           // This, not the objective, decides if "like" is the page-follow
           // result. Surfaced so the inspector can prove the distinction.
           _debugPageLikeOpt: debugFollows ? (campPageLikeOpt[ins.campaign_id] === true) : undefined,
+          // Raw optimization_goal|destination_type values across this
+          // campaign's ad sets, so we can see exactly what Meta returns
+          // instead of guessing the enum. "(no adsets returned)" means
+          // the fetch itself came back empty for the whole account.
+          _debugOptGoals: debugFollows ? (adsetSeen === 0 ? "(no adsets returned)" : Object.keys(campOptGoals[ins.campaign_id] || {}).join(", ") || "(none for this campaign)") : undefined,
           // Meta video id for in-dashboard playback via /api/ad-video proxy.
           // Falls back to the first DCO variant video if the primary creative is static.
           videoId: cr.video_id || (candidateVids.length > 0 ? candidateVids[0] : ""),

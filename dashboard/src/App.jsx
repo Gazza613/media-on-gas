@@ -1926,7 +1926,7 @@ function CampaignAuditModal(props){
         var byCamp={};
         hit.forEach(function(a){
           var cid=String(a.campaignId||"(no id)");
-          if(!byCamp[cid])byCamp[cid]={id:cid,name:String(a.campaignName||"(unnamed)"),metaObj:String(a._debugMetaObjective||"?"),pageLikeOpt:a._debugPageLikeOpt===true,spend:0,plats:{}};
+          if(!byCamp[cid])byCamp[cid]={id:cid,name:String(a.campaignName||"(unnamed)"),metaObj:String(a._debugMetaObjective||"?"),pageLikeOpt:a._debugPageLikeOpt===true,optGoals:String(a._debugOptGoals||"?"),spend:0,plats:{}};
           var p=a.platform||"?";
           byCamp[cid].spend+=parseFloat(a.spend||0);
           if(!byCamp[cid].plats[p])byCamp[cid].plats[p]={spend:0,impressions:0,clicks:0,agg:{}};
@@ -2362,7 +2362,7 @@ function CampaignAuditModal(props){
             var camp=dbgState[0].rows[cid];
             var plats=Object.keys(camp.plats||{}).sort();
             return <div key={cid} style={{border:"1px solid "+P.cyan+"40",borderRadius:10,padding:"10px 12px",background:"rgba(0,0,0,0.18)"}}>
-              <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,marginBottom:8,wordBreak:"break-all"}}>{camp.name} <span style={{color:P.caption,fontWeight:600}}>· id {camp.id} · Meta objective {camp.metaObj} · R{Math.round(camp.spend).toLocaleString()} total</span> <span style={{color:camp.pageLikeOpt?P.mint:P.caption,fontWeight:800,fontSize:9.5,letterSpacing:1,marginLeft:4}}>{camp.pageLikeOpt?"◉ PAGE-LIKES OPTIMISED (like = page follows)":"○ not page-likes optimised (like = post reactions)"}</span></div>
+              <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,marginBottom:8,wordBreak:"break-all"}}>{camp.name} <span style={{color:P.caption,fontWeight:600}}>· id {camp.id} · Meta objective {camp.metaObj} · R{Math.round(camp.spend).toLocaleString()} total</span> <span style={{color:camp.pageLikeOpt?P.mint:P.caption,fontWeight:800,fontSize:9.5,letterSpacing:1,marginLeft:4}}>{camp.pageLikeOpt?"◉ PAGE-LIKES OPTIMISED (like = page follows)":"○ not page-likes optimised (like = post reactions)"}</span><div style={{fontSize:9.5,color:P.label,fontFamily:fm,marginTop:4}}>ad-set optimization_goal: <strong style={{color:P.txt}}>{camp.optGoals}</strong></div></div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {plats.map(function(plat){
                 var pr=camp.plats[plat];
