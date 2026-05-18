@@ -8601,6 +8601,40 @@ export default function MediaOnGas(){
                     });
                   })()}
                 </div>
+                {/* FB page-like paid-result panel, mirrors the Summary one.
+                    Facebook DOES attribute the page follow per ad on
+                    PAGE_LIKES-optimised campaigns (c.pageLikes is gated by
+                    ad-set optimization_goal upstream), so Paid Page Likes
+                    is a real per-ad result, not a proxy. Net growth =
+                    whole-account snapshot delta, "building" until history
+                    spans the window. See project_followers_truth. */}
+                {(function(){
+                  var fbFollowerCamps=sel.filter(function(c){
+                    if(c.platform!=="Facebook")return false;
+                    var obj=String(c.objective||"").toLowerCase();
+                    var name=String(c.campaignName||"").toLowerCase();
+                    var isFol=obj==="followers"||name.indexOf("follower")>=0||name.indexOf("like&follow")>=0||name.indexOf("like_follow")>=0||name.indexOf("_like_")>=0||name.indexOf("_follow_")>=0;
+                    return isFol&&parseFloat(c.pageLikes||0)>0;
+                  });
+                  if(fbFollowerCamps.length===0)return null;
+                  var fbPageLikes=fbFollowerCamps.reduce(function(a,c){return a+parseFloat(c.pageLikes||0);},0);
+                  var fbFolSpend=fbFollowerCamps.reduce(function(a,c){return a+parseFloat(c.spend||0);},0);
+                  var fbCppl=fbPageLikes>0?fbFolSpend/fbPageLikes:0;
+                  return <div style={{marginBottom:20,padding:"14px 18px",background:"linear-gradient(135deg,"+P.fb+"10 0%,"+P.fb+"05 60%,transparent)",border:"1px solid "+P.fb+"35",borderLeft:"3px solid "+P.fb,borderRadius:"0 12px 12px 0"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:P.fb}}></span>
+                      <span style={{fontSize:10,fontWeight:800,color:P.fb,letterSpacing:2,textTransform:"uppercase",fontFamily:fm}}>FB Page-Like Campaigns, Paid Result + Net Growth</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:10}}>
+                      <div><div style={{fontSize:9,color:P.caption,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Paid Page Likes</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{fmt(fbPageLikes)}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:2}}>per-ad attributable</div></div>
+                      <div><div style={{fontSize:9,color:P.caption,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Cost per Page Like</div><div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm}}>{fbCppl>0?fR(fbCppl):"-"}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:2}}>{fR(fbFolSpend)} spent</div></div>
+                      <div><div style={{fontSize:9,color:P.caption,letterSpacing:1.5,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Net Page Growth</div><div style={{fontSize:18,fontWeight:900,color:P.fb,fontFamily:fm}}>{fbGrowthKnown?(fbEarned>0?"+"+fmt(fbEarned):fbEarned<0?fmt(fbEarned):"0"):"-"}</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:2}}>{fbGrowthKnown?"whole account, paid + organic":"building snapshot history"}</div></div>
+                    </div>
+                    <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>
+                      Facebook attributes the page follow per ad, so Paid Page Likes is the real result these PAGE_LIKES-optimised ads delivered (Meta's "Follows or likes"), and you can rank ads on it. Net Page Growth is the whole-account period change including organic and unfollows, read from our daily snapshots.{fbGrowthKnown?"":" Net growth reads as building until the snapshot history spans the selected window."}
+                    </div>
+                  </div>;
+                })()}
                 <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
                   <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
                   <ChartReveal><ResponsiveContainer width="100%" height={220}>
