@@ -10,7 +10,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { fetchCampaigns, fetchAdsByCampaign } from "./_pulseShared.js";
-import { readCampaignSeries, ymd } from "./_perfSnapshots.js";
+import { readRecentPerf, ymd } from "./_perfSnapshots.js";
 import { fetchAdsetPacing, paceAdset } from "./_adsetBudgets.js";
 
 export const config = { maxDuration: 60 };
@@ -163,6 +163,21 @@ export default async function handler(req, res) {
   var adsByCampaign = {};
   try { adsByCampaign = await fetchAdsByCampaign(periodFrom, periodTo, dashKey) || {}; } catch (_) { adsByCampaign = {}; }
 
+  // Fetch the perf-snapshot history ONCE (was per-campaign inside the
+  // loop = O(N) x ~9 serial Redis round-trips, which timed the function
+  // out on large accounts like Psycho Bunny). Derive each campaign's
+  // series in-memory from this single read.
+  var recentSnaps = [];
+  try { recentSnaps = await readRecentPerf(8) || []; } catch (_) { recentSnaps = []; }
+  var seriesFor = function (cid) {
+    var out = [];
+    for (var k = 0; k < recentSnaps.length; k++) {
+      var sn = recentSnaps[k];
+      if (sn && sn.campaigns && sn.campaigns[cid]) out.push(Object.assign({ date: sn.date }, sn.campaigns[cid]));
+    }
+    return out;
+  };
+
   var todaySpendById = {};
   (todayData && todayData.campaigns || []).forEach(function(c) {
     todaySpendById[String(c.campaignId || c.rawCampaignId || "")] = num(c.spend);
@@ -272,9 +287,9 @@ export default async function handler(req, res) {
       alerts.push({ severity: "low", code: "pacing_ahead", message: "Pacing ahead of plan: R" + Math.round(periodSpend) + " vs ~R" + pacing.expectedToDate + " expected. Budget may exhaust early." });
     }
     // Trend alert from first-party snapshot history (roadmap #1 payoff).
+    // In-memory now, no per-campaign Redis call.
     try {
-      var series = await readCampaignSeries(id, 8);
-      var trend = cplTrend(series);
+      var trend = cplTrend(seriesFor(id));
       if (trend) alerts.push(trend);
     } catch (_) {}
 
