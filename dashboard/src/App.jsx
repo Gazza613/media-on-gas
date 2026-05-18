@@ -1215,6 +1215,11 @@ function AdPreviewModal(props){
           <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Impressions</div>
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fmt(parseFloat(ad.impressions||0))}</div>
         </div>
+        {!adAwareness&&parseFloat(ad.reach||0)>0&&<div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>Reach (people)</div>
+          <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{fmt(parseFloat(ad.reach||0))}</div>
+          <div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:4}}>{(function(){var rr=parseFloat(ad.reach||0),ii=parseFloat(ad.impressions||0);return rr>0?(ii/rr).toFixed(2)+"x frequency":"";})()}</div>
+        </div>}
         <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 12px"}}>
           <div style={{fontSize:8,color:P.label,letterSpacing:2,fontWeight:800,textTransform:"uppercase",fontFamily:fm,marginBottom:4}}>CTR</div>
           <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{(parseFloat(ad.ctr||0)).toFixed(2)+"%"}</div>
