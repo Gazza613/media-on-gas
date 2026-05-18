@@ -362,7 +362,7 @@ export default async function handler(req, res) {
             (row.actions || []).forEach(function(a) {
               var at = a.action_type;
               var v = parseInt(a.value || 0);
-              if (at === "page_like") totals.page_like = Math.max(totals.page_like, v);
+              if (at === "page_like" || at === "onsite_conversion.page_like") totals.page_like = Math.max(totals.page_like, v);
               if (at === "like") totals.reactionLikes = Math.max(totals.reactionLikes, v);
               // IG follows: any action type scoped to Instagram. These are
               // unambiguous, Instagram doesn't have "page likes", only follows.
@@ -378,13 +378,18 @@ export default async function handler(req, res) {
               if (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at === "onsite_conversion.lead_grouped") totals.lead = Math.max(totals.lead, v);
               if (at === "app_install" || at === "mobile_app_install" || at === "omni_app_install") totals.app_install = Math.max(totals.app_install, v);
             });
-            // Fold the ambiguous "like" into FB page_likes for any follower-
-            // objective campaign. Safe because "like" at ad level reflects
-            // FB page likes for PAGE_LIKES / OUTCOME_ENGAGEMENT page-like
-            // goals, IG post hearts are returned in the same key but we
-            // never attach this value to an IG placement row (see below).
-            var isFollowerObj = mapMetaObjective(campObjMap[row.campaign_id]) === "followers";
-            var pageLikeFinal = isFollowerObj ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
+            // Fold the ambiguous "like" into FB page_likes ONLY for a
+            // strictly PAGE_LIKES campaign (the legacy objective where Meta
+            // genuinely returns page likes under the "like" key). For
+            // POST_ENGAGEMENT / OUTCOME_ENGAGEMENT / profile-visit goals,
+            // "like" is POST REACTIONS and folding it over-reports community
+            // growth by orders of magnitude (e.g. 5,065 reactions reported
+            // as page likes when Meta's real FB result was 15). Modern ODAX
+            // page-like results arrive in the unambiguous page_like /
+            // onsite_conversion.page_like key, captured above. See
+            // project_meta_like_action.
+            var isStrictPageLikes = String(campObjMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+            var pageLikeFinal = isStrictPageLikes ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
             adTrueTotals[row.ad_id] = {
               pageLikes: pageLikeFinal,
               follows: totals.fbFollow + totals.igFollow,  // kept for backward compat
@@ -817,7 +822,7 @@ export default async function handler(req, res) {
           // no relationship to community growth. Track separately and only
           // fold reactions into page_likes when the campaign is Page Likes
           // objective (where Meta returns page likes under legacy "like").
-          if (at === "page_like") pageLikes = Math.max(pageLikes, v);
+          if (at === "page_like" || at === "onsite_conversion.page_like") pageLikes = Math.max(pageLikes, v);
           if (at === "like") reactionLikes = Math.max(reactionLikes, v);
           // Strict follow-type list. No catch-all indexOf("follow") because
           // Meta has action types that contain "follow" in misleading ways
@@ -835,13 +840,16 @@ export default async function handler(req, res) {
           // and caught post-level engagement that is not a follow. If no
           // page_like or follow action fires, the result is legitimately 0.
         });
-        // Fold "like" into page likes for any follower-family campaign on
-        // an FB placement. That covers strict PAGE_LIKES AND the modern
-        // OUTCOME_ENGAGEMENT objective (ODAX consolidated the two in 2022+).
-        // The FB-placement check keeps IG post reactions out of the count,
-        // IG hearts are returned under the same "like" key but are never
-        // page follows.
-        if (objective === "followers" && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+        // Fold "like" into page likes ONLY for a strictly PAGE_LIKES Meta
+        // campaign on an FB placement. The campaign's Meta objective (not
+        // the name-derived one) is authoritative here: a campaign merely
+        // NAMED "Like&Follow" but set up as OUTCOME_ENGAGEMENT / profile
+        // visits returns "like" as POST REACTIONS, and folding those
+        // over-reports community growth massively. Genuine page-like
+        // results land in the unambiguous page_like key (captured above).
+        // See project_meta_like_action.
+        var metaObjStrictPageLikes = String(campObjMap[ins.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
+        if (metaObjStrictPageLikes && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;

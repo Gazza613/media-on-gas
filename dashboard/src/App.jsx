@@ -1835,23 +1835,25 @@ function CampaignAuditModal(props){
         if(x.status!==200||!x.data||!Array.isArray(x.data.ads)){dbgState[1]({loading:false,error:(x.data&&x.data.error)||("Failed ("+x.status+")"),rows:null});return;}
         var ql=q.toLowerCase();
         var hit=x.data.ads.filter(function(a){return String(a.campaignName||"").toLowerCase().indexOf(ql)>=0;});
-        // Group per CAMPAIGN, then per platform. Substring matches can span
-        // several Like&Follow campaigns; aggregating them all hides which
-        // key equals Meta Ads Manager's per-platform "Results" for the one
-        // campaign the user is reconciling. Per-campaign keeps it exact.
+        // Group per campaign ID, then per platform. Substring matches can
+        // span several campaigns AND Meta reuses the exact same campaign
+        // NAME across distinct campaign IDs (monthly relaunches, duplicates),
+        // so name-grouping silently sums unrelated campaigns (R31K showing
+        // for a campaign Meta says spent R5.7K). Campaign ID is the only
+        // unambiguous key, so each row is one real Meta campaign.
         var byCamp={};
         hit.forEach(function(a){
-          var cn=String(a.campaignName||"(unnamed)");
-          if(!byCamp[cn])byCamp[cn]={spend:0,plats:{}};
+          var cid=String(a.campaignId||"(no id)");
+          if(!byCamp[cid])byCamp[cid]={id:cid,name:String(a.campaignName||"(unnamed)"),spend:0,plats:{}};
           var p=a.platform||"?";
-          byCamp[cn].spend+=parseFloat(a.spend||0);
-          if(!byCamp[cn].plats[p])byCamp[cn].plats[p]={spend:0,impressions:0,clicks:0,agg:{}};
-          var bp=byCamp[cn].plats[p];
+          byCamp[cid].spend+=parseFloat(a.spend||0);
+          if(!byCamp[cid].plats[p])byCamp[cid].plats[p]={spend:0,impressions:0,clicks:0,agg:{}};
+          var bp=byCamp[cid].plats[p];
           bp.spend+=parseFloat(a.spend||0);bp.impressions+=parseFloat(a.impressions||0);bp.clicks+=parseFloat(a.clicks||0);
           var ag=a._debugActionsAgg||{};
           Object.keys(ag).forEach(function(k){bp.agg[k]=(bp.agg[k]||0)+parseFloat(ag[k]||0);});
         });
-        dbgState[1]({loading:false,error:hit.length?"":"No ads matched that name in "+props.dateFrom+" to "+props.dateTo+".",rows:byCamp});
+        dbgState[1]({loading:false,error:hit.length?"":"No ads matched that name in "+props.dateFrom+" to "+props.dateTo+".",rows:byCamp,window:props.dateFrom+" to "+props.dateTo});
       })
       .catch(function(){dbgState[1]({loading:false,error:"Connection error",rows:null});});
   };
@@ -2268,11 +2270,12 @@ function CampaignAuditModal(props){
         </div>
         {dbgState[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>{dbgState[0].error}</div>}
         {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14}}>
-          {Object.keys(dbgState[0].rows).sort().map(function(cn){
-            var camp=dbgState[0].rows[cn];
+          <div style={{fontSize:10,color:P.caption,fontFamily:fm}}>Window queried: <strong style={{color:P.txt}}>{dbgState[0].window||(props.dateFrom+" to "+props.dateTo)}</strong> · one card = one real Meta campaign ID (same name can repeat across IDs)</div>
+          {Object.keys(dbgState[0].rows).sort(function(a,b){return dbgState[0].rows[b].spend-dbgState[0].rows[a].spend;}).map(function(cid){
+            var camp=dbgState[0].rows[cid];
             var plats=Object.keys(camp.plats||{}).sort();
-            return <div key={cn} style={{border:"1px solid "+P.cyan+"40",borderRadius:10,padding:"10px 12px",background:"rgba(0,0,0,0.18)"}}>
-              <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,marginBottom:8,wordBreak:"break-all"}}>{cn} <span style={{color:P.caption,fontWeight:600}}>· R{Math.round(camp.spend).toLocaleString()} total</span></div>
+            return <div key={cid} style={{border:"1px solid "+P.cyan+"40",borderRadius:10,padding:"10px 12px",background:"rgba(0,0,0,0.18)"}}>
+              <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,marginBottom:8,wordBreak:"break-all"}}>{camp.name} <span style={{color:P.caption,fontWeight:600}}>· id {camp.id} · R{Math.round(camp.spend).toLocaleString()} total</span></div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {plats.map(function(plat){
                 var pr=camp.plats[plat];
