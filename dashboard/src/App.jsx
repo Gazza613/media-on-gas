@@ -816,6 +816,83 @@ function CommunityMemberCard(props){
 
 function Tip(props){if(!props.active||!props.payload||!props.payload.length)return null;var first=props.payload[0]&&props.payload[0].payload?props.payload[0].payload:{};var heading=first.fullName||first.name||props.label;return(<div style={{background:"#121212",border:"1px solid rgba(255,255,255,0.2)",borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxWidth:360}}><div style={{fontSize:11,fontWeight:800,color:P.txt,fontFamily:fm,marginBottom:4,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.4}}>{heading}</div>{props.payload.map(function(p,i){var v=p.value;var display="";var n=(p.name||"").toLowerCase();var dn=(p.dataKey||"").toLowerCase();var rowCurrency=!!(p.payload&&p.payload._currency);var isPct=dn==="ctr"||n.indexOf("ctr")>=0||n.indexOf("rate")>=0||(p.payload&&p.payload._pct);var isCurrency=rowCurrency||n.indexOf("spend")>=0||n.indexOf("cpc")>=0||n.indexOf("cpm")>=0||n.indexOf("cpl")>=0||n.indexOf("cpf")>=0||n.indexOf("cpa")>=0||n.indexOf("cpi")>=0||n.indexOf("cost per")>=0||n.indexOf("cost-per")>=0||dn==="spend"||dn==="cpc"||dn==="cpm"||dn==="cpl"||dn==="cpf"||dn==="cpa"||dn==="costper";if(isPct){display=typeof v==="number"?v.toFixed(2)+"%":v;}else if(isCurrency){display="R"+(typeof v==="number"?v.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:2}):v);}else{display=typeof v==="number"?v.toLocaleString():v;}return<div key={i} style={{fontSize:11,color:p.color||P.label,fontFamily:fm,lineHeight:1.8}}>{p.name}: {display}</div>;})}</div>);}
 function PH(props){var bg=props.platform==="Facebook"?P.fb:props.platform==="Instagram"?"linear-gradient(135deg,#e1306c,#833ab4)":props.platform==="TikTok"?"#1e1e2e":P.ember;var dot=props.platform==="Facebook"?"#fff":props.platform==="TikTok"?P.tt:"#fff";return(<div style={{background:bg,padding:"14px 24px",borderRadius:12,marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{width:10,height:10,borderRadius:"50%",background:dot,boxShadow:"0 0 10px "+dot}}></span><span style={{fontSize:15,fontWeight:800,color:"#fff",fontFamily:ff,letterSpacing:0.5}}>{props.platform}</span>{props.suffix&&<span style={{fontSize:12,fontWeight:400,color:"rgba(255,255,255,0.7)",fontFamily:fm}}>· {props.suffix}</span>}</div><div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>LIVE DATA</div></div>);}
+// Ground-truth brand sentiment. Honest by construction: we only have
+// reaction COUNTS (not comment text), and Meta one-tap reactions skew
+// positive (Like/Love are one tap, Sad/Angry need a long-press). So we
+// never present a single rosy number. We compute a band:
+//   verified = positive / classified reactions only (love+like+haha+wow
+//              vs sad+angry) — the old, optimistic figure.
+//   worst    = positive / EVERY reaction Meta tallied, treating the
+//              unclassified "other" bucket as if it were negative (floor).
+//   best     = treating "other" as positive (ceiling).
+// The headline label and colour are driven by the WORST case, never the
+// best. Comments are surfaced as unread written feedback, never folded
+// into the score, because we do not analyse their text.
+function computeSentimentTruth(totals){
+  var pos=(totals.love||0)+(totals.like||0)+(totals.haha||0)+(totals.wow||0);
+  var neg=(totals.sad||0)+(totals.angry||0);
+  var other=(totals.other||0);
+  var classified=pos+neg;
+  var base=pos+neg+other;
+  var verified=classified>0?(pos/classified*100):0;
+  var best=base>0?((pos+other)/base*100):verified;
+  var worst=base>0?(pos/base*100):0;
+  var uncertainty=base>0?(other/base*100):0;
+  var label;
+  if(neg===0&&other===0&&classified>0)label="POSITIVE, VERIFIED";
+  else if(worst>=85)label="POSITIVE";
+  else if(worst>=70)label="LEANS POSITIVE";
+  else if(worst>=50)label="MIXED";
+  else if(worst>=30)label="LEANS NEGATIVE";
+  else label="NEGATIVE";
+  var confidence=uncertainty>=20?"LOW":uncertainty>=5?"MEDIUM":"HIGH";
+  var color=worst>=85?P.mint:worst>=70?P.cyan:worst>=50?P.solar:P.rose;
+  return {pos:pos,neg:neg,other:other,classified:classified,base:base,verified:verified,best:best,worst:worst,uncertainty:uncertainty,label:label,confidence:confidence,color:color};
+}
+function SentimentTruthCard(props){
+  var totals=props.totals||{};
+  var s=computeSentimentTruth(totals);
+  if(s.base===0)return null;
+  var comments=parseFloat(totals.comments||0);
+  var shares=parseFloat(totals.shares||0);
+  var circ=2*Math.PI*50;
+  var offset=circ-(s.worst/100)*circ;
+  var confColor=s.confidence==="LOW"?P.critical:s.confidence==="MEDIUM"?P.solar:P.mint;
+  var spread=s.best-s.worst;
+  return <div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 20px",marginBottom:18,border:"1px solid "+s.color+"30"}}>
+    <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,alignItems:"center"}}>
+      <div style={{display:"flex",alignItems:"center",gap:16}}>
+        <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
+          <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
+          <circle cx="60" cy="60" r="50" stroke={s.color} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
+          <text x="60" y="58" textAnchor="middle" style={{fontSize:16,fontWeight:900,fill:s.color,fontFamily:fm,letterSpacing:-0.5}}>{s.worst.toFixed(2)+"%"}</text>
+          <text x="60" y="74" textAnchor="middle" style={{fontSize:7.5,fontWeight:700,fill:"rgba(255,251,248,0.58)",fontFamily:fm,letterSpacing:1.5}}>POSITIVE FLOOR</text>
+        </svg>
+      </div>
+      <div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4,flexWrap:"wrap"}}>
+          <div style={{fontSize:18,fontWeight:900,color:s.color,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Brand Sentiment, Ground Truth</div>
+          <span style={{fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1.5,color:confColor,border:"1px solid "+confColor+"55",borderRadius:5,padding:"2px 7px"}}>{s.confidence} CONFIDENCE</span>
+        </div>
+        <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{s.label}</div>
+        <div style={{fontSize:11,color:P.label,fontFamily:ff,lineHeight:1.6,marginBottom:8}}>
+          Ground-truth range <strong style={{color:P.txt}}>{s.worst.toFixed(2)}%</strong> to <strong style={{color:P.txt}}>{s.best.toFixed(2)}%</strong> positive{spread>=1?(", a "+spread.toFixed(2)+" point spread driven by "+fmt(s.other)+" reactions ("+s.uncertainty.toFixed(2)+"%) Meta counted but did not classify by type"):""}. Verified score on classified reactions only is {s.verified.toFixed(2)}%.
+        </div>
+        <div style={{display:"flex",gap:8,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
+          <span style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:5,padding:"3px 8px"}}><span style={{width:8,height:8,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.label}}>Positive {fmt(s.pos)}</span></span>
+          <span style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:5,padding:"3px 8px"}}><span style={{width:8,height:8,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.label}}>Negative {fmt(s.neg)}</span></span>
+          <span style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:5,padding:"3px 8px"}}><span style={{width:8,height:8,borderRadius:"50%",background:P.label}}></span><span style={{color:P.label}}>Unclassified {fmt(s.other)}</span></span>
+        </div>
+        <div style={{fontSize:10.5,color:P.label,fontFamily:ff,lineHeight:1.6,marginTop:10,paddingTop:10,borderTop:"1px dashed "+P.rule}}>
+          <strong style={{color:P.txt}}>{fmt(comments)} comments</strong> and <strong style={{color:P.txt}}>{fmt(shares)} shares</strong> are written or shared feedback. This score does NOT read the words in comments, so any praise or complaint inside them is unmeasured here. Treat comments as feedback requiring manual review.
+        </div>
+        <div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginTop:8}}>
+          Method: Meta one-tap reactions skew positive (Like and Love are a single tap, Sad and Angry need a long-press), so a reaction-only score almost always reads high. We therefore report the conservative floor, not the optimistic figure, and exclude no reaction Meta returned. This is a directional signal from reactions, not a verdict on brand sentiment.
+        </div>
+      </div>
+    </div>
+  </div>;
+}
 function Insight(props){var a=props.accent||P.ember;return(<div style={{marginTop:24,padding:"22px 26px",background:"linear-gradient(135deg,"+a+"08 0%,"+a+"03 50%, transparent 100%)",border:"1px solid "+a+"20",borderLeft:"4px solid "+a,borderRadius:"0 14px 14px 0",position:"relative",overflow:"hidden"}}><div style={{position:"absolute",top:0,left:4,width:120,height:"100%",background:"linear-gradient(90deg,"+a+"06, transparent)",pointerEvents:"none"}}></div><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,position:"relative"}}>{props.icon||Ic.bolt(a,16)}<span style={{fontSize:18,fontWeight:900,color:a,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>{props.title||"Campaign Read"}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+a+"30, transparent)",marginLeft:8}}></div></div><div style={{fontSize:13.5,color:P.txt,lineHeight:2.1,fontFamily:ff,position:"relative",letterSpacing:0.2}}>{props.children}</div></div>);}
 function SevBadge(props){var c={critical:P.critical,warning:P.warning,info:P.info,positive:P.positive}[props.s]||P.info;return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:c+"18",border:"1px solid "+c+"40",borderRadius:6,padding:"3px 10px",fontSize:10,fontWeight:800,color:c,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:7,height:7,borderRadius:"50%",background:c}}/>{props.s}</span>);}
 
@@ -5994,7 +6071,7 @@ export default function MediaOnGas(){
 
               {/* ═══ ENGAGEMENT PULSE (mirrors Community tab) ═══ */}
               {(function(){
-                var types=["love","like","haha","wow","sad","angry","shares","comments"];
+                var types=["love","like","haha","wow","sad","angry","other","shares","comments"];
                 var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,other:0,shares:0,comments:0};};
                 var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
                 sel.forEach(function(camp){
@@ -6040,19 +6117,10 @@ export default function MediaOnGas(){
                 types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
                 var totalAll=types.reduce(function(a,t){return a+totals[t];},0);
                 if(totalAll===0)return null;
+                // Sentiment is computed honestly inside SentimentTruthCard
+                // (conservative floor-to-ceiling band, no one-tap-bias
+                // relabelling). reactionSum only gates whether to render.
                 var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry;
-                var positiveSum=totals.love+totals.like+totals.haha+totals.wow;
-                var negativeSum=totals.sad+totals.angry;
-                var classifiedSum=positiveSum+negativeSum;
-                var sentimentPct=classifiedSum>0?(positiveSum/classifiedSum*100):0;
-                var sentColor=sentimentPct>=90?P.mint:sentimentPct>=75?P.cyan:sentimentPct>=50?P.solar:P.rose;
-                // Reaction ratio is structurally biased positive on Meta, Like
-                // and Love are one-tap defaults while Sad and Angry need a
-                // long-press, so most posts naturally land at 90%+. Tighten
-                // the bands so labels reflect a real signal rather than the
-                // baseline. >=99% means a genuine outlier on positive
-                // reactions, 90% is closer to "any negative signal at all".
-                var sentLabel=sentimentPct>=99?"OVERWHELMINGLY POSITIVE":sentimentPct>=95?"STRONGLY POSITIVE":sentimentPct>=85?"POSITIVE":sentimentPct>=70?"MIXED-POSITIVE":sentimentPct>=50?"MIXED":sentimentPct>=30?"NEGATIVE LEAN":"STRONGLY NEGATIVE";
                 var typeMeta={
                   love:{label:"Love",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose} strokeLinejoin="round"/></svg>},
                   like:{label:"Like",color:P.fb,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 22V11m0 0V6a3 3 0 014.9-2.3L13 5l-1 5h6a2 2 0 012 2l-2 8a2 2 0 01-2 2H7z" stroke={P.fb} strokeWidth="1.6" fill={P.fb+"25"} strokeLinejoin="round"/></svg>},
@@ -6069,29 +6137,7 @@ export default function MediaOnGas(){
                   {secHead(P.mint,"BRAND PULSE",Ic.pulse(P.mint,18))}
                   <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
                   <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1,marginBottom:14,textAlign:"right"}}>{fmt(totalAll)} total interactions</div>
-                  {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:16}}>
-                      {(function(){
-                        var circ=2*Math.PI*50;
-                        var offset=circ-(sentimentPct/100)*circ;
-                        return <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
-                          <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
-                          <circle cx="60" cy="60" r="50" stroke={sentColor} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
-                          <text x="60" y="62" textAnchor="middle" style={{fontSize:16,fontWeight:900,fill:sentColor,fontFamily:fm,letterSpacing:-0.5}}>{sentimentPct.toFixed(2)+"%"}</text>
-                          <text x="60" y="78" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
-                        </svg>;
-                      })()}
-                    </div>
-                    <div>
-                      <div style={{fontSize:18,fontWeight:900,color:sentColor,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
-                      <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
-                      <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
-                      <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.label}}>Positive {fmt(positiveSum)}</span></div>
-                        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.label}}>Negative {fmt(negativeSum)}</span></div>
-                      </div>
-                    </div>
-                  </div>}
+                  {(reactionSum>0||totals.other>0)&&<SentimentTruthCard totals={totals}/>}
                   {/* Text + container for every row renders unconditionally
                       so the section reads as static. GrowBar gates only
                       the bar fill width, with a 60 ms per-row stagger so
@@ -8535,7 +8581,7 @@ export default function MediaOnGas(){
                   // array. TikTok's top-level likes / comments / shares
                   // count here too; TikTok has no love/haha/wow/sad/angry
                   // equivalents so TT likes fold into Like.
-                  var types=["love","like","haha","wow","sad","angry","shares","comments"];
+                  var types=["love","like","haha","wow","sad","angry","other","shares","comments"];
                   var empty=function(){return {love:0,like:0,haha:0,wow:0,sad:0,angry:0,other:0,shares:0,comments:0};};
                   var perPlat={Facebook:empty(),Instagram:empty(),TikTok:empty()};
                   sel.forEach(function(camp){
@@ -8601,20 +8647,10 @@ export default function MediaOnGas(){
                   // the Other Reactions row is hidden so it's left out of
                   // this sum (keeps the sentiment gate from going NaN now
                   // that 'other' isn't in the types array).
+                  // Sentiment is computed honestly inside SentimentTruthCard
+                  // (conservative floor-to-ceiling band). reactionSum only
+                  // gates whether to render the card.
                   var reactionSum=totals.love+totals.like+totals.haha+totals.wow+totals.sad+totals.angry;
-                  var positiveSum=totals.love+totals.like+totals.haha+totals.wow;
-                  var negativeSum=totals.sad+totals.angry;
-                  var classifiedSum=positiveSum+negativeSum;
-                  var sentimentPct=classifiedSum>0?(positiveSum/classifiedSum*100):0;
-                  var hasUnclassified=totals.other>0;
-                  var sentColor=sentimentPct>=90?P.mint:sentimentPct>=75?P.cyan:sentimentPct>=50?P.solar:P.rose;
-                  // Reaction ratio is structurally biased positive on Meta, Like
-                // and Love are one-tap defaults while Sad and Angry need a
-                // long-press, so most posts naturally land at 90%+. Tighten
-                // the bands so labels reflect a real signal rather than the
-                // baseline. >=99% means a genuine outlier on positive
-                // reactions, 90% is closer to "any negative signal at all".
-                var sentLabel=sentimentPct>=99?"OVERWHELMINGLY POSITIVE":sentimentPct>=95?"STRONGLY POSITIVE":sentimentPct>=85?"POSITIVE":sentimentPct>=70?"MIXED-POSITIVE":sentimentPct>=50?"MIXED":sentimentPct>=30?"NEGATIVE LEAN":"STRONGLY NEGATIVE";
                   var typeMeta={
                     love:{label:"Love",color:P.rose,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-11a4 4 0 017-2.65A4 4 0 0119 10c0 6.5-7 11-7 11z" stroke={P.rose} strokeWidth="1.8" fill={P.rose} strokeLinejoin="round"/></svg>},
                     like:{label:"Like",color:P.fb,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 22V11m0 0V6a3 3 0 014.9-2.3L13 5l-1 5h6a2 2 0 012 2l-2 8a2 2 0 01-2 2H7z" stroke={P.fb} strokeWidth="1.6" fill={P.fb+"25"} strokeLinejoin="round"/></svg>},
@@ -8639,29 +8675,7 @@ export default function MediaOnGas(){
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}></div>
                       <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1}}>{fmt(totalAll)} total interactions</span>
                     </div>
-                    {reactionSum>0&&<div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,marginBottom:18,alignItems:"center",background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"16px 18px",border:"1px solid "+sentColor+"30"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:16}}>
-                        {(function(){
-                          var circ=2*Math.PI*50;
-                          var offset=circ-(sentimentPct/100)*circ;
-                          return <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
-                            <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
-                            <circle cx="60" cy="60" r="50" stroke={sentColor} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
-                            <text x="60" y="62" textAnchor="middle" style={{fontSize:16,fontWeight:900,fill:sentColor,fontFamily:fm,letterSpacing:-0.5}}>{sentimentPct.toFixed(2)+"%"}</text>
-                            <text x="60" y="78" textAnchor="middle" style={{fontSize:8,fontWeight:700,fill:"rgba(255,251,248,0.6)",fontFamily:fm,letterSpacing:2}}>POSITIVE</text>
-                          </svg>;
-                        })()}
-                      </div>
-                      <div>
-                        <div style={{fontSize:18,fontWeight:900,color:sentColor,letterSpacing:2,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Brand Sentiment Pulse</div>
-                        <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{sentLabel}</div>
-                        <div style={{fontSize:11,color:"rgba(255,251,248,0.72)",fontFamily:ff,lineHeight:1.5,marginBottom:8}}>{fmt(positiveSum)} positive (love, like, haha, wow) against {fmt(negativeSum)} negative (sad, angry) across {fmt(classifiedSum)} classified reactions.</div>
-                        <div style={{display:"flex",gap:10,fontSize:10,fontFamily:fm,flexWrap:"wrap"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.mint}}></span><span style={{color:P.label}}>Positive {fmt(positiveSum)}</span></div>
-                          <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:"50%",background:P.critical}}></span><span style={{color:P.label}}>Negative {fmt(negativeSum)}</span></div>
-                        </div>
-                      </div>
-                    </div>}
+                    {(reactionSum>0||totals.other>0)&&<SentimentTruthCard totals={totals}/>}
                     {/* Text + container renders unconditionally; only the
                         bar fill width gates on intersection via GrowBar
                         so the row's labels and counts are static and
