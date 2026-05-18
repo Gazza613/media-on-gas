@@ -857,7 +857,12 @@ function SentimentTruthCard(props){
   var shares=parseFloat(totals.shares||0);
   var circ=2*Math.PI*50;
   var offset=circ-(s.worst/100)*circ;
-  var confColor=s.confidence==="LOW"?P.critical:s.confidence==="MEDIUM"?P.solar:P.mint;
+  // Health, not "confidence". Above the 50% positive floor reads as on
+  // track, below it needs attention. The floor (worst case) is the
+  // honest threshold to judge against.
+  var statusGood=s.worst>=50;
+  var statusLabel=statusGood?"ON TRACK":"NEEDS ATTENTION";
+  var statusColor=statusGood?P.mint:P.rose;
   var spread=s.best-s.worst;
   return <div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 20px",marginBottom:18,border:"1px solid "+s.color+"30"}}>
     <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,alignItems:"center"}}>
@@ -872,7 +877,7 @@ function SentimentTruthCard(props){
       <div>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4,flexWrap:"wrap"}}>
           <div style={{fontSize:18,fontWeight:900,color:s.color,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>Brand Sentiment, Ground Truth</div>
-          <span style={{fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1.5,color:confColor,border:"1px solid "+confColor+"55",borderRadius:5,padding:"2px 7px"}}>{s.confidence} CONFIDENCE</span>
+          <span style={{fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1.5,color:statusColor,border:"1px solid "+statusColor+"55",borderRadius:5,padding:"2px 7px"}}>{statusLabel}</span>
         </div>
         <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{s.label}</div>
         <div style={{fontSize:11,color:P.label,fontFamily:ff,lineHeight:1.6,marginBottom:8}}>
@@ -6133,7 +6138,7 @@ export default function MediaOnGas(){
                   wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
                   sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                   angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
-                  other:{label:"Other Reactions",color:P.label,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.label} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.label}/><circle cx="15" cy="11" r="1" fill={P.label}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.label} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                  other:{label:"Other Reactions",color:P.sub,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.label} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.label}/><circle cx="15" cy="11" r="1" fill={P.label}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.label} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                   shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                   comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                 };
@@ -8664,7 +8669,7 @@ export default function MediaOnGas(){
                     wow:{label:"Wow",color:P.lava,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.lava} strokeWidth="1.6" fill={P.lava+"25"}/><circle cx="9" cy="11" r="0.7" fill={P.lava}/><circle cx="15" cy="11" r="0.7" fill={P.lava}/><ellipse cx="12" cy="16" rx="2" ry="2.4" stroke={P.lava} strokeWidth="1.4" fill="none"/></svg>},
                     sad:{label:"Sad",color:P.info,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.info} strokeWidth="1.6" fill={P.info+"25"}/><path d="M8 11l0 1M16 11l0 1M8 16s1.5-2 4-2 4 2 4 2" stroke={P.info} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     angry:{label:"Angry",color:P.critical,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.critical} strokeWidth="1.6" fill={P.critical+"25"}/><path d="M6.5 8l3 2M17.5 8l-3 2M8 16s1.5-2 4-2 4 2 4 2" stroke={P.critical} strokeWidth="1.6" strokeLinecap="round"/></svg>},
-                    other:{label:"Other Reactions",color:P.label,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.label} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.label}/><circle cx="15" cy="11" r="1" fill={P.label}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.label} strokeWidth="1.6" strokeLinecap="round"/></svg>},
+                    other:{label:"Other Reactions",color:P.sub,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={P.label} strokeWidth="1.6" fill={P.sub+"25"}/><circle cx="9" cy="11" r="1" fill={P.label}/><circle cx="15" cy="11" r="1" fill={P.label}/><line x1="9" y1="15" x2="15" y2="15" stroke={P.label} strokeWidth="1.6" strokeLinecap="round"/></svg>},
                     shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                     comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                   };
