@@ -6363,10 +6363,18 @@ export default function MediaOnGas(){
                           var ck=parseFloat(a.clicks||0);
                           return Object.assign({},a,{results:ck,resultType:"profile_visits"});
                         }
-                        // FB + TikTok, follow is cleanly attributed in-ad.
+                        // FB + TikTok page follows. Prefer followsTrue
+                        // (no-breakdown per-ad, the optimization_goal-gated
+                        // page-like number). Fall back to the raw per-ad
+                        // follows + pageLikes so a genuine page-like ad is
+                        // never shown as 0 just because the no-breakdown
+                        // pass returned nothing for that ad. resultType
+                        // stays "follows" so the card always headlines
+                        // FOLLOWS / PAGE LIKES, never impressions.
                         var ft=parseFloat(a.followsTrue||0);
-                        if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
-                        return Object.assign({},a,{resultType:"follows"});
+                        var fallbackFol=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0);
+                        var folRes=ft>0?ft:fallbackFol;
+                        return Object.assign({},a,{results:folRes,resultType:"follows"});
                       });
                     } else if(og.key==="landingpage"){
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
@@ -6430,14 +6438,21 @@ export default function MediaOnGas(){
                       </div>
                       {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                       {hasThumb(ad)&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
-                        {/* Meta does not attribute conversion actions to the
-                            Instagram publisher_platform row (it books them to
-                            the Facebook split), so an IG card's ad.results is
-                            often 0 even though it delivered. Fall back to the
-                            reach headline IG actually earned so the overlay is
-                            never blank and FB/IG cards stay visually paired. */}
-                        <div style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?resultLabelS(ad.resultType):"IMPRESSIONS"}</div>
-                        <div style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{ad.results>0?fmt(ad.results):fmt(ad.impressions)}</div>
+                        {/* IMPRESSIONS fallback is ONLY for awareness ads
+                            (resultType reach/impressions) and Instagram
+                            cards with 0 attributed results (Meta books IG
+                            conversions to the FB split). A Facebook /
+                            TikTok follower-objective card must ALWAYS
+                            headline its FOLLOWS / PAGE LIKES result with
+                            its label, even when the count is 0, never an
+                            IMPRESSIONS number it was not optimised for. */}
+                        {(function(){
+                          var awrFallback=(ad.resultType==="reach"||ad.resultType==="impressions")||(parseFloat(ad.results||0)<=0&&ad.platform==="Instagram");
+                          return [
+                            <div key="l" style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{awrFallback?"IMPRESSIONS":resultLabelS(ad.resultType)}</div>,
+                            <div key="v" style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{awrFallback?fmt(ad.impressions):(parseFloat(ad.results||0)>0?fmt(ad.results):"0")}</div>
+                          ];
+                        })()}
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(crStr):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
                       </div>}
                       <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
