@@ -110,6 +110,21 @@ async function resolveMetaAdThumbnail(adId, token) {
         }
       }
     } catch (_) {}
+    // Per-hash fallback: Meta's /adimages fails the WHOLE batch if any
+    // one hash in it is invalid, so a MIXED / DCO ad with several
+    // variant hashes can return nothing even when a good one exists
+    // (the "some mixed ads not displaying" bug). Retry each hash on its
+    // own and take the first that resolves.
+    for (var ph2 = 0; ph2 < candidateHashes.length; ph2++) {
+      try {
+        var r1 = await fetch("https://graph.facebook.com/v25.0/" + accountId + "/adimages?hashes=" + encodeURIComponent(JSON.stringify([candidateHashes[ph2]])) + "&fields=hash,url,permalink_url&access_token=" + token);
+        if (!r1.ok) continue;
+        var d1 = await r1.json();
+        var row1 = d1 && d1.data && d1.data[0];
+        var u1 = row1 && (row1.url || row1.permalink_url);
+        if (u1) return u1;
+      } catch (_) {}
+    }
   }
 
   // asset_feed_spec.images[].url — pre-resolved DCO asset URLs (full size).

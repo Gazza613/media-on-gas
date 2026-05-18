@@ -593,6 +593,25 @@ export default async function handler(req, res) {
             if (im.hash && imageHashes.indexOf(im.hash) < 0) imageHashes.push(im.hash);
           });
         }
+        // MIXED / DCO / carousel ads frequently carry their image only
+        // inside object_story_spec (link_data.image_hash,
+        // video_data.image_hash, or link_data.child_attachments[].
+        // image_hash). The thumbnail fallback chain already TREATS
+        // these as candidate hashes, but they were never sent to
+        // /adimages, so hashToUrl never had them and the thumbnail
+        // came back blank (the "some mixed ads not displaying" bug).
+        // Collect them here so they actually resolve.
+        var oss = cr.object_story_spec || {};
+        var ossHashes = [];
+        if (oss.link_data && oss.link_data.image_hash) ossHashes.push(oss.link_data.image_hash);
+        if (oss.video_data && oss.video_data.image_hash) ossHashes.push(oss.video_data.image_hash);
+        if (oss.link_data && oss.link_data.child_attachments) {
+          oss.link_data.child_attachments.forEach(function(ch) { if (ch.image_hash) ossHashes.push(ch.image_hash); });
+        }
+        ossHashes.forEach(function(h) {
+          if (h && imageHashes.indexOf(h) < 0) imageHashes.push(h);
+          if (h && !adPrimaryImageHash[adId]) adPrimaryImageHash[adId] = h;
+        });
       });
       var hashToUrl = {};
       // Seed from module-level cache first
