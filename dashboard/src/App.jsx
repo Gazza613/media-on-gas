@@ -5525,11 +5525,20 @@ export default function MediaOnGas(){
             var ttE2=0;sel.forEach(function(camp){if(camp.platform==="TikTok"){ttE2+=parseFloat(camp.follows||0);}});
             var ttT2=getTtTotal(sel.map(function(x){return x.campaignName;}).join(" "),ttE2);
             var grandT2=fbT2+igT2+ttT2;
-            var earnedTotal=fbGrowth+igGrowth+ttE2;
+            // FB "Followers & Likes" earned. Page likes for FB sit in the
+            // same KPI family as IG/TT follows. c.pageLikes is the
+            // validated per-ad page-follow result (gated by ad-set
+            // optimization_goal upstream). Use whole-account net growth
+            // when the daily snapshot spans the window, else the per-ad
+            // page-like result so FB is never silently dropped from the
+            // Earned chart. See project_followers_truth.
+            var fbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)fbPaidPL+=parseFloat(camp.pageLikes||0);});
+            var fbEarnedResolved=(fbGrowthKnown&&fbGrowth>0)?fbGrowth:fbPaidPL;
+            var earnedTotal=fbEarnedResolved+igGrowth+ttE2;
             // Ground-truth override so Objective Highlights matches Community Growth.
             if(objectives4["Followers & Likes"]&&earnedTotal>0)objectives4["Followers & Likes"].results=earnedTotal;
             var communityData=[];
-            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:fbGrowth,color:P.fb});
+            if(fbT2>0)communityData.push({name:"FB",total:fbT2,earned:fbEarnedResolved,color:P.fb});
             if(igT2>0)communityData.push({name:"IG",total:igT2,earned:igGrowth,color:P.ig});
             if(ttT2>0)communityData.push({name:"TT",total:ttT2,earned:ttE2,color:P.tt});
 
@@ -6671,7 +6680,7 @@ export default function MediaOnGas(){
                   return lines.join(" ");
                 })();
 
-                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns, connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(fbGrowthKnown&&fbGrowth>0?" (with "+fmt(fbGrowth)+" total FB growth this period, organic and paid combined as Meta does not attribute the follow action to paid campaigns)":fbGrowthKnown?" (no measurable net page growth this period)":" (period page-follow growth still building; Meta does not attribute page follows per ad, so it is read from our daily whole-account snapshots which do not yet span the selected range)")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" total IG growth this period, organic and paid combined as Meta does not attribute the follow action to paid campaigns)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member adds to a warm, retargetable audience pool. Organic posts typically reach only 1 to 3 percent of followers on their own, so a modest boost budget is still needed to reach the full community, but paid delivery to this warm audience runs at noticeably lower CPMs and higher engagement than cold prospecting.":"");
+                var communityRead=grandT2===0?"Community data is not linked to the selected campaigns, connect page data to unlock these insights.":"Your owned community stands at "+fmt(grandT2)+" members across "+communityData.length+" platforms. "+(fbT2>0?"Facebook contributes "+fmt(fbT2)+" followers"+(fbGrowthKnown&&fbGrowth>0?" (with "+fmt(fbGrowth)+" net page growth this period, whole-account paid and organic combined)":fbPaidPL>0?" (with "+fmt(fbPaidPL)+" page likes attributed to its Page-Likes ads this period; whole-account net growth is still building in our daily snapshots)":fbGrowthKnown?" (no measurable net page growth this period)":" (page-follow growth still building in our daily whole-account snapshots)")+". ":"")+(igT2>0?"Instagram adds "+fmt(igT2)+" followers"+(igGrowth>0?" (with "+fmt(igGrowth)+" total IG growth this period, organic and paid combined as Meta does not attribute the follow action to paid campaigns)":"")+". ":"")+(ttT2>0?"TikTok brings "+fmt(ttT2)+" followers"+(ttE2>0?" (with "+fmt(ttE2)+" earned this period"+(t.follows>0?" at "+fR(t.spend/t.follows)+" per new follower":"")+")":"")+". ":"")+(earnedTotal>0?"In total, "+fmt(earnedTotal)+" new community members joined during this reporting period. Each new member adds to a warm, retargetable audience pool. Organic posts typically reach only 1 to 3 percent of followers on their own, so a modest boost budget is still needed to reach the full community, but paid delivery to this warm audience runs at noticeably lower CPMs and higher engagement than cold prospecting.":"");
 
                 var subSec=function(color,icon,title,body){return<div style={{marginBottom:18,paddingBottom:18,borderBottom:"1px solid "+P.rule}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>{icon}<span style={{fontSize:12,fontWeight:900,color:color,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{title}</span><div style={{flex:1,height:1,background:"linear-gradient(90deg,"+color+"30, transparent)"}}/></div><div style={{fontSize:13,color:P.txt,lineHeight:1.9,fontFamily:ff,letterSpacing:0.2}}>{body}</div></div>;};
                 return <div style={{marginTop:28,padding:"26px 30px",background:"linear-gradient(135deg,"+P.ember+"08 0%,"+P.ember+"03 50%, transparent 100%)",border:"1px solid "+P.ember+"25",borderLeft:"4px solid "+P.ember,borderRadius:"0 16px 16px 0"}}>
