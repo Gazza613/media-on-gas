@@ -2134,6 +2134,10 @@ function CampaignAuditModal(props){
       .catch(function(){recLoading[1](false);recSending[1](false);recErr[1]("Connection error");});
   };
   useEffect(function(){if(props.open&&view[0]==="audit")load();},[props.open,view[0]]);
+  // The modal stays mounted (only returns null when closed), so the
+  // inspector's results survived a close + reopen and Settings looked
+  // "stuck open" on the old inspector. Reset it whenever the modal closes.
+  useEffect(function(){if(!props.open){dbgState[1]({loading:false,error:"",rows:null});dbgQ[1]("");}},[props.open]);
   useEffect(function(){if(props.open&&view[0]==="reconcile"&&recRows[0].length===0)loadReconcile(false);},[props.open,view[0]]);
   useEffect(function(){if(props.open&&view[0]==="usage")loadUsage();},[props.open,view[0]]);
   useEffect(function(){if(props.open&&view[0]==="users"&&props.isSuperadmin)loadTeam();},[props.open,view[0],props.isSuperadmin]);
@@ -2344,6 +2348,7 @@ function CampaignAuditModal(props){
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <input value={dbgQ[0]} onChange={function(e){dbgQ[1](e.target.value);}} placeholder="part of a campaign name, e.g. Like&Follow_MoMo Deals" style={{flex:1,minWidth:280,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           <button onClick={runDbg} disabled={dbgState[0].loading} style={{background:dbgState[0].loading?"#555":"linear-gradient(135deg,#22D3EE,#0EA5E9)",border:"none",borderRadius:8,padding:"8px 16px",color:"#04121a",fontSize:11,fontWeight:800,fontFamily:fm,cursor:dbgState[0].loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{dbgState[0].loading?"Reading…":"Inspect"}</button>
+          {(dbgState[0].rows||dbgState[0].error||dbgQ[0])&&<button onClick={function(){dbgState[1]({loading:false,error:"",rows:null});dbgQ[1]("");}} title="Clear inspector results" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Clear</button>}
         </div>
         {dbgState[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>{dbgState[0].error}</div>}
         {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14,maxHeight:"60vh",overflowY:"auto",overflowX:"hidden",paddingRight:8,WebkitOverflowScrolling:"touch"}}>
