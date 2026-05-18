@@ -8085,10 +8085,19 @@ export default function MediaOnGas(){
                 return "Traffic";
               };
               var obj=getObj2(a);
-              var result=obj==="Leads"?parseFloat(a.leads||0):obj==="Followers & Likes"?parseFloat(a.follows||0)+parseFloat(a.pageLikes||0):parseFloat(a.clicks||0);
+              // Followers & Likes: prefer followsTrue (the no-breakdown
+              // per-ad page_like + follow total Meta actually attributes;
+              // the same field the Creative tab uses). The publisher-
+              // breakdown follows+pageLikes under-reports FB page likes
+              // because Meta returns page-likes at ad/campaign level, not
+              // inside the publisher_platform breakdown — that is why FB
+              // Like&Follow adsets showed 0/1 here. Fall back to the
+              // breakdown sum only when followsTrue is absent.
+              var followsLikesAttr=(parseFloat(a.followsTrue||0)>0)?parseFloat(a.followsTrue||0):(parseFloat(a.follows||0)+parseFloat(a.pageLikes||0));
+              var result=obj==="Leads"?parseFloat(a.leads||0):obj==="Followers & Likes"?followsLikesAttr:parseFloat(a.clicks||0);
               var spend=parseFloat(a.spend||0);var clicks=parseFloat(a.clicks||0);var imps=parseFloat(a.impressions||0);
               var ctr=imps>0?(clicks/imps*100):0;var cpc=clicks>0?spend/clicks:0;var costPer=result>0?spend/result:0;
-              return{adsetName:a.adsetName,campaignName:a.campaignName,platform:a.platform,objective:obj,spend:spend,clicks:clicks,impressions:imps,reach:parseFloat(a.reach||0),ctr:ctr,cpc:cpc,result:result,costPer:costPer,follows:parseFloat(a.follows||0),pageLikes:parseFloat(a.pageLikes||0),leads:parseFloat(a.leads||0)};
+              return{adsetName:a.adsetName,campaignName:a.campaignName,platform:a.platform,objective:obj,spend:spend,clicks:clicks,impressions:imps,reach:parseFloat(a.reach||0),ctr:ctr,cpc:cpc,result:result,costPer:costPer,follows:parseFloat(a.follows||0),pageLikes:parseFloat(a.pageLikes||0),followsTrue:parseFloat(a.followsTrue||0),leads:parseFloat(a.leads||0)};
             });
 
             var totalSpend=allRows.reduce(function(a,r){return a+r.spend;},0);
