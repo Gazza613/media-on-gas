@@ -177,11 +177,21 @@ export default async function handler(req, res) {
       // Fetch real campaign objectives for this account
       var campObjMap = {};
       try {
-        var campUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,name&limit=300&access_token=" + metaToken;
-        var campRes = await fetch(campUrl);
-        var campData = await campRes.json();
-        if (campData.data) {
-          campData.data.forEach(function(c) { campObjMap[c.id] = c.objective || ""; });
+        // MUST paginate. Accounts here carry hundreds of historical
+        // campaigns; a single limit=300 page silently dropped the
+        // newest ones, so their objective came back "" and every
+        // objective-gated rule (the strict page-like fold, etc.) failed
+        // for exactly the campaigns the client cares about this month.
+        var campNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,name&limit=500&access_token=" + metaToken;
+        var campGuard = 0;
+        while (campNext && campGuard < 20) {
+          campGuard++;
+          var campRes = await fetch(campNext);
+          var campData = await campRes.json();
+          if (campData.data) {
+            campData.data.forEach(function(c) { campObjMap[c.id] = c.objective || ""; });
+          }
+          campNext = campData.paging && campData.paging.next ? campData.paging.next : null;
         }
       } catch (cErr) { console.error("Meta campaign objective fetch error", account.name, cErr); }
 
