@@ -9,6 +9,11 @@ import { computeAssetBreakdown } from "./ad-assets.js";
 // their share link later. Fetching a fresh signed URL server-side on every
 // image load keeps previews working for the lifetime of the share token.
 
+// Allow enough wall-clock for a cold MIXED-winner breakdown to finish
+// in-band on a client share link (the team usually has the breakdown
+// cache warm; a fresh client link does not).
+export const config = { maxDuration: 30 };
+
 var resolveCache = {};
 var RESOLVE_TTL_MS = 10 * 60 * 1000;
 
@@ -253,9 +258,16 @@ export default async function handler(req, res) {
         // standard resolver, and because we don't cache that fallback
         // the winner appears once the breakdown cache is warm.
         try {
+          // Cold breakdown on a fresh client share link is the common
+          // case (team usually has it cached, clients do not). 3.5s
+          // lost the race almost every time on cold loads and the tile
+          // fell back to a resolver that cannot resolve DCO statics ->
+          // blank. Give it real time; the image is lazy-loaded so a
+          // slower first paint is far better than a blank card, and the
+          // result is cached so siblings/next views are instant.
           var bk = await Promise.race([
             computeAssetBreakdown(adId, String(req.query.from || ""), String(req.query.to || "")),
-            new Promise(function(resolve) { setTimeout(function(){ resolve(null); }, 3500); })
+            new Promise(function(resolve) { setTimeout(function(){ resolve(null); }, 9000); })
           ]);
           if (bk && bk.ok && Array.isArray(bk.assets)) {
             // Winner = highest-ranked asset (the "profile the top
