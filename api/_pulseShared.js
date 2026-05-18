@@ -129,7 +129,14 @@ export function resultMetricFor(c) {
     return { kind: "Leads", value: parseInt(c.leads || 0), costLabel: "CPL" };
   }
   if (obj.indexOf("page_likes") >= 0 || obj.indexOf("post_engagement") >= 0 || obj.indexOf("outcome_engagement") >= 0 || obj.indexOf("follower") >= 0 || name.indexOf("like") >= 0 || name.indexOf("follow") >= 0) {
-    var f = parseInt(c.follows || 0) + parseInt(c.likes || 0) + parseInt(c.pageLikes || 0) + parseInt(c.pageFollows || 0);
+    // Follower result = page likes + follows ONLY. c.pageLikes is
+    // already the optimization_goal-gated page-follow result from
+    // /api/campaigns (folds "like" only for PAGE_LIKES-optimised
+    // campaigns). Do NOT add c.likes (post reactions / TikTok video
+    // hearts) or c.pageFollows (page_engagement, any page interaction),
+    // both massively over-counted the client weekly-email / Command
+    // Centre follower number. See project_meta_like_action.
+    var f = parseInt(c.pageLikes || 0) + parseInt(c.follows || 0);
     return { kind: "Follows + Likes", value: f, costLabel: "CPF" };
   }
   return { kind: "Clicks", value: parseInt(c.clicks || 0), costLabel: "CPC" };

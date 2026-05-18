@@ -20,9 +20,16 @@ var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
 var DEMO_CACHE_VERSION = "v10-meta-ig-proportional-inference";
 
-function extractResults(actions) {
+function extractResults(actions, pageLikeOpt) {
   var map = {};
   (actions || []).forEach(function(a) { map[a.action_type] = parseInt(a.value || 0, 10); });
+  // page_like / onsite_conversion.page_like are unambiguous. "like" is
+  // post reactions EXCEPT on a page-like-optimised campaign, where Meta
+  // returns the page-follow result under "like" (no page_like row).
+  // Fold "like" only when the campaign is page-likes optimised, so the
+  // demographic split matches ad/campaign level. See project_meta_like_action.
+  var pl = Math.max(map["page_like"] || 0, map["onsite_conversion.page_like"] || 0);
+  if (pageLikeOpt === true) pl = Math.max(pl, map["like"] || 0);
   return {
     leads: Math.max(
       map["lead"] || 0,
@@ -35,7 +42,7 @@ function extractResults(actions) {
       map["mobile_app_install"] || 0,
       map["omni_app_install"] || 0
     ),
-    pageLikes: map["page_like"] || 0,
+    pageLikes: pl,
     postReactions: map["post_reaction"] || 0,
     landingPageViews: map["landing_page_view"] || 0,
     follows: map["follow"] || map["onsite_conversion.follow"] || 0
@@ -132,6 +139,32 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
+    // Page-like-optimised campaigns for this account, so the "like"
+    // fold in extractResults matches ad/campaign level. ONE campaigns
+    // call with adsets field-expansion (rate-safe). Matches api/ads.js.
+    var campPageLikeOpt = {};
+    try {
+      var cNext = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,objective,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + token;
+      var cGuard = 0;
+      while (cNext && cGuard < 25) {
+        cGuard++;
+        var cR = await fetch(cNext);
+        if (!cR.ok) break;
+        var cJ = await cR.json();
+        if (cJ && cJ.error) break;
+        (cJ.data || []).forEach(function(c) {
+          if (String(c.objective || "").toUpperCase() === "PAGE_LIKES") campPageLikeOpt[String(c.id)] = true;
+          var aset = c.adsets && c.adsets.data ? c.adsets.data : [];
+          aset.forEach(function(s) {
+            var st = String(s.effective_status || "").toUpperCase();
+            if (st === "DELETED" || st === "ARCHIVED") return;
+            var og = String(s.optimization_goal || "").toUpperCase();
+            if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[String(c.id)] = true;
+          });
+        });
+        cNext = cJ.paging && cJ.paging.next ? cJ.paging.next : null;
+      }
+    } catch (_) { /* non-fatal: page_like-only fallback */ }
     // Diagnostic: log row counts and publisher_platform distribution so we
     // can see in Vercel logs exactly what Meta is returning for this account
     // per breakdown. Helps distinguish "IG genuinely has no clicks in this
@@ -227,7 +260,7 @@ async function fetchMetaDemo(token, from, to) {
       }
     }
     ag.forEach(function(row) {
-      var r = extractResults(row.actions);
+      var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       agAll.push({
         platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
@@ -242,7 +275,7 @@ async function fetchMetaDemo(token, from, to) {
       });
     });
     reg.forEach(function(row) {
-      var r = extractResults(row.actions);
+      var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       regAll.push({
         platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
@@ -256,7 +289,7 @@ async function fetchMetaDemo(token, from, to) {
       });
     });
     dev.forEach(function(row) {
-      var r = extractResults(row.actions);
+      var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       devAll.push({
         platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
