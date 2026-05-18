@@ -176,75 +176,47 @@ export default async function handler(req, res) {
     try {
       // Fetch real campaign objectives for this account
       var campObjMap = {};
+      var campPageLikeOpt = {};   // campaign_id -> true if any ad set optimises page likes
+      var campOptGoals = {};      // campaign_id -> distinct raw optimization_goal (debug)
+      var adsetSeen = 0;          // ad sets parsed (0 => fetch problem, not "no PAGE_LIKES")
+      var adsetFetchErr = "";     // surfaced in debug so an empty result is explained
       try {
-        // MUST paginate. Accounts here carry hundreds of historical
-        // campaigns; a single limit=300 page silently dropped the
-        // newest ones, so their objective came back "" and every
-        // objective-gated rule (the strict page-like fold, etc.) failed
-        // for exactly the campaigns the client cares about this month.
-        var campNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,name&limit=500&access_token=" + metaToken;
+        // ONE paginated campaigns call with adsets field-expansion.
+        // A SEPARATE /adsets pagination tipped /api/ads over Meta's
+        // per-user rate limit ("User request limit reached"), so the
+        // optimization_goal map came back empty for every campaign.
+        // Folding optimization_goal into the campaigns call we already
+        // make removes that whole extra endpoint. MUST paginate:
+        // accounts carry hundreds of historical campaigns and the
+        // newest (the ones the client cares about) were being dropped.
+        var campNext = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=id,objective,name,adsets.limit(50){optimization_goal,effective_status}&limit=200&access_token=" + metaToken;
         var campGuard = 0;
-        while (campNext && campGuard < 20) {
+        while (campNext && campGuard < 25) {
           campGuard++;
           var campRes = await fetch(campNext);
           var campData = await campRes.json();
+          if (campData && campData.error) { adsetFetchErr = String(campData.error.message || campData.error.type || "graph error"); break; }
           if (campData.data) {
-            campData.data.forEach(function(c) { campObjMap[c.id] = c.objective || ""; });
+            campData.data.forEach(function(c) {
+              campObjMap[c.id] = c.objective || "";
+              var adsets = c.adsets && c.adsets.data ? c.adsets.data : [];
+              adsets.forEach(function(s) {
+                var st = String(s.effective_status || "").toUpperCase();
+                if (st === "DELETED" || st === "ARCHIVED") return;
+                adsetSeen++;
+                var og = String(s.optimization_goal || "").toUpperCase();
+                // Page-follow delivery enum names across legacy + ODAX.
+                if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") campPageLikeOpt[c.id] = true;
+                if (debugFollows) {
+                  if (!campOptGoals[c.id]) campOptGoals[c.id] = {};
+                  campOptGoals[c.id][og || "(empty)"] = true;
+                }
+              });
+            });
           }
           campNext = campData.paging && campData.paging.next ? campData.paging.next : null;
         }
-      } catch (cErr) { console.error("Meta campaign objective fetch error", account.name, cErr); }
-
-      // Ad-set optimization_goal per campaign. Under Meta's ODAX a
-      // "Follows or likes" campaign and a "profile visits" campaign are
-      // BOTH objective=OUTCOME_ENGAGEMENT, so the objective string can't
-      // tell them apart. optimization_goal is the real delivery target
-      // Meta uses to decide the campaign's "Results": PAGE_LIKES (or
-      // LIKE_PAGE) means it genuinely grows the page, so action_type
-      // "like" is the page-follow result, fold it. Anything else (e.g.
-      // PROFILE_VISIT, POST_ENGAGEMENT, IMPRESSIONS) means "like" is
-      // post reactions, do not fold. A campaign counts as page-likes
-      // if ANY of its ad sets optimises for page likes.
-      var campPageLikeOpt = {};
-      var campOptGoals = {};   // campaign_id -> distinct raw optimization_goal|destination_type (debug)
-      var adsetSeen = 0;       // total ad sets the fetch returned (0 => fetch problem, not "no PAGE_LIKES")
-      var adsetFetchErr = "";  // surfaced in debug so an empty result is explained, not guessed
-      try {
-        // Field set MUST stay minimal + proven. campaigns.js fetches
-        // adsets fine with campaign_id,effective_status,optimization_goal;
-        // adding destination_type/promoted_object made Graph return an
-        // error object (no .data) so the whole map read empty. Fetch
-        // destination_type SEPARATELY-safe by keeping it last and still
-        // tolerating its absence.
-        var asNext = "https://graph.facebook.com/v25.0/" + account.id + "/adsets?fields=campaign_id,effective_status,optimization_goal,destination_type&limit=500&access_token=" + metaToken;
-        var asGuard = 0;
-        while (asNext && asGuard < 20) {
-          asGuard++;
-          var asRes = await fetch(asNext);
-          var asData = await asRes.json();
-          if (asData && asData.error) { adsetFetchErr = String(asData.error.message || asData.error.type || "graph error"); break; }
-          if (asData.data) {
-            asData.data.forEach(function(s) {
-              var st = String(s.effective_status || "").toUpperCase();
-              if (st === "DELETED" || st === "ARCHIVED") return;
-              adsetSeen++;
-              var og = String(s.optimization_goal || "").toUpperCase();
-              var dt = String(s.destination_type || "").toUpperCase();
-              // Page-follow delivery surfaces under several enum names
-              // across legacy + ODAX: PAGE_LIKES, LIKE_PAGE, anything
-              // containing PAGE_LIKE, LIKES, or destination_type ON_PAGE
-              // / *PAGE* (the ODAX "Follows or likes" goal).
-              if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES" || dt === "ON_PAGE" || dt.indexOf("PAGE") >= 0) campPageLikeOpt[s.campaign_id] = true;
-              if (debugFollows) {
-                var tag = og + (dt ? ("|" + dt) : "");
-                if (!campOptGoals[s.campaign_id]) campOptGoals[s.campaign_id] = {};
-                campOptGoals[s.campaign_id][tag] = true;
-              }
-            });
-          }
-          asNext = asData.paging && asData.paging.next ? asData.paging.next : null;
-        }
-      } catch (asErr) { adsetFetchErr = String(asErr && asErr.message || asErr); console.error("Meta adset optimization_goal fetch error", account.name, asErr); }
+      } catch (cErr) { adsetFetchErr = String(cErr && cErr.message || cErr); console.error("Meta campaign+adset fetch error", account.name, cErr); }
 
       var timeRange = JSON.stringify({ since: from, until: to });
       // Single publisher_platform breakdown only. The earlier `platform_position`
