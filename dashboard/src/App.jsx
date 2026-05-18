@@ -2346,7 +2346,7 @@ function CampaignAuditModal(props){
           <button onClick={runDbg} disabled={dbgState[0].loading} style={{background:dbgState[0].loading?"#555":"linear-gradient(135deg,#22D3EE,#0EA5E9)",border:"none",borderRadius:8,padding:"8px 16px",color:"#04121a",fontSize:11,fontWeight:800,fontFamily:fm,cursor:dbgState[0].loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{dbgState[0].loading?"Reading…":"Inspect"}</button>
         </div>
         {dbgState[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>{dbgState[0].error}</div>}
-        {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14}}>
+        {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14,maxHeight:"60vh",overflowY:"auto",overflowX:"hidden",paddingRight:8,WebkitOverflowScrolling:"touch"}}>
           <div style={{fontSize:10,color:P.caption,fontFamily:fm}}>Window queried: <strong style={{color:P.txt}}>{dbgState[0].window||(props.dateFrom+" to "+props.dateTo)}</strong> · one card = one real Meta campaign ID (same name can repeat across IDs)</div>
           {Object.keys(dbgState[0].rows).sort(function(a,b){return dbgState[0].rows[b].spend-dbgState[0].rows[a].spend;}).map(function(cid){
             var camp=dbgState[0].rows[cid];
