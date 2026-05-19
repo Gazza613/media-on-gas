@@ -6196,6 +6196,21 @@ export default function MediaOnGas(){
                     bucket.shares+=(seen.post_share||seen.share||seen.post||0);
                   }
                 });
+                // Page-level reaction-type split (post_reactions_by_type_total
+                // from the Page token) is the ONLY place Meta exposes the
+                // Like/Love/Haha/Wow/Sad/Angry breakdown — the Ads API only
+                // gives the post_reaction total. When matched FB pages
+                // carry it, it is the authoritative, fully-typed FB
+                // breakdown, so REPLACE the FB campaign-derived reaction
+                // buckets (the paid post_reaction total that otherwise sat
+                // unclassified in "other") to avoid double counting and
+                // actually surface the types. Page-level = brand content,
+                // organic + paid. See project_sentiment_ground_truth.
+                (function(){
+                  var fbRx={like:0,love:0,haha:0,wow:0,sad:0,angry:0};var have=false;
+                  (matchedPages3||[]).forEach(function(mp){var r=mp&&mp.reactionsByType;if(r&&typeof r==="object"){fbRx.like+=parseFloat(r.like||0);fbRx.love+=parseFloat(r.love||0);fbRx.haha+=parseFloat(r.haha||0);fbRx.wow+=parseFloat(r.wow||0);fbRx.sad+=parseFloat(r.sad||0);fbRx.angry+=parseFloat(r.angry||0);if((r.like||0)+(r.love||0)+(r.haha||0)+(r.wow||0)+(r.sad||0)+(r.angry||0)>0)have=true;}});
+                  if(have){perPlat.Facebook.like=fbRx.like;perPlat.Facebook.love=fbRx.love;perPlat.Facebook.haha=fbRx.haha;perPlat.Facebook.wow=fbRx.wow;perPlat.Facebook.sad=fbRx.sad;perPlat.Facebook.angry=fbRx.angry;perPlat.Facebook.other=0;}
+                })();
                 var totals={};
                 types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
                 var totalAll=types.reduce(function(a,t){return a+totals[t];},0);
@@ -8776,6 +8791,17 @@ export default function MediaOnGas(){
                       bucket.shares+=(seen.post_share||seen.share||seen.post||0);
                     }
                   });
+                  // Page-level reaction-type split (post_reactions_by_type_total)
+                  // is the only Meta source for Like/Love/Haha/Wow/Sad/Angry;
+                  // when matched FB pages carry it, replace the FB
+                  // campaign-derived buckets so the types show and the paid
+                  // post_reaction total isn't double counted. Mirrors the
+                  // Summary Brand Pulse. See project_sentiment_ground_truth.
+                  (function(){
+                    var fbRx={like:0,love:0,haha:0,wow:0,sad:0,angry:0};var have=false;
+                    (matchedPages2||[]).forEach(function(mp){var r=mp&&mp.reactionsByType;if(r&&typeof r==="object"){fbRx.like+=parseFloat(r.like||0);fbRx.love+=parseFloat(r.love||0);fbRx.haha+=parseFloat(r.haha||0);fbRx.wow+=parseFloat(r.wow||0);fbRx.sad+=parseFloat(r.sad||0);fbRx.angry+=parseFloat(r.angry||0);if((r.like||0)+(r.love||0)+(r.haha||0)+(r.wow||0)+(r.sad||0)+(r.angry||0)>0)have=true;}});
+                    if(have){perPlat.Facebook.like=fbRx.like;perPlat.Facebook.love=fbRx.love;perPlat.Facebook.haha=fbRx.haha;perPlat.Facebook.wow=fbRx.wow;perPlat.Facebook.sad=fbRx.sad;perPlat.Facebook.angry=fbRx.angry;perPlat.Facebook.other=0;}
+                  })();
                   var totals={};
                   types.forEach(function(t){totals[t]=perPlat.Facebook[t]+perPlat.Instagram[t]+perPlat.TikTok[t];});
                   var totalAll=types.reduce(function(a,t){return a+totals[t];},0);

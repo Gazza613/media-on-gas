@@ -1130,6 +1130,36 @@ export default async function handler(req, res) {
             pg.instagram_business_account.follower_growth = totalGrowth;
           } catch (igErr) { console.error("IG insights error", igErr); }
         }
+        // Page-level reaction-type split. This is the ONLY place Meta
+        // exposes Like/Love/Haha/Wow/Sad/Angry (the Ads API only gives
+        // the post_reaction total — proven via ?rxnprobe). Page-level =
+        // all reactions on the page's posts (organic + paid), the
+        // correct basis for brand sentiment. Meta's enum is
+        // like/love/wow/haha/sorry/anger -> normalise sorry=sad,
+        // anger=angry. Non-fatal; runs only on a cold campaigns cache.
+        pg.reactionsByType = { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+        try {
+          var prUrl = "https://graph.facebook.com/v25.0/" + pg.id + "/insights?metric=post_reactions_by_type_total&period=day&since=" + encodeURIComponent(from) + "&until=" + encodeURIComponent(to) + "&access_token=" + pgToken;
+          var prRes = await fetch(prUrl);
+          if (prRes.status === 200) {
+            var prJson = await prRes.json();
+            var PR_MAP = { like: "like", love: "love", wow: "wow", haha: "haha", sorry: "sad", anger: "angry" };
+            if (prJson.data && prJson.data[0] && Array.isArray(prJson.data[0].values)) {
+              prJson.data[0].values.forEach(function(val) {
+                var obj = val && val.value;
+                if (obj && typeof obj === "object") {
+                  Object.keys(obj).forEach(function(k) {
+                    var nk = PR_MAP[String(k).toLowerCase()];
+                    if (nk) pg.reactionsByType[nk] += parseInt(obj[k] || 0, 10);
+                  });
+                }
+              });
+            }
+          } else {
+            var prErrTxt = await prRes.text();
+            console.warn("[page-reactions] non-ok", pg.name, prRes.status, prErrTxt.substring(0, 200));
+          }
+        } catch (prErr) { console.error("Page reactions insights error", pg.id, prErr); }
         delete pg.access_token;
       }
       pageData = pagesJson.data;
