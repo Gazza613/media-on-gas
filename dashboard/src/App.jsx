@@ -1946,7 +1946,11 @@ function CampaignAuditModal(props){
           var ag=a._debugActionsAgg||{};
           Object.keys(ag).forEach(function(k){bp.agg[k]=(bp.agg[k]||0)+parseFloat(ag[k]||0);});
         });
-        dbgState[1]({loading:false,error:hit.length?"":"No ads matched that name in "+props.dateFrom+" to "+props.dateTo+".",rows:byCamp,window:props.dateFrom+" to "+props.dateTo});
+        // Ads whose card renders blank (no thumbnail) + the raw
+        // creative-resolution trace, so a blank image can be diagnosed
+        // (which fallback failed) instead of guessed.
+        var blanks=hit.filter(function(a){return !a.thumbnail;}).map(function(a){return {ad:String(a.adName||a.adId||"?"),camp:String(a.campaignName||""),plat:String(a.platform||""),dbg:a._debugCreative||null};});
+        dbgState[1]({loading:false,error:hit.length?"":"No ads matched that name in "+props.dateFrom+" to "+props.dateTo+".",rows:byCamp,blanks:blanks,window:props.dateFrom+" to "+props.dateTo});
       })
       .catch(function(){dbgState[1]({loading:false,error:"Connection error",rows:null});});
   };
@@ -2421,6 +2425,13 @@ function CampaignAuditModal(props){
         </div>}
         {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14,maxHeight:"60vh",overflowY:"auto",overflowX:"hidden",paddingRight:8,WebkitOverflowScrolling:"touch"}}>
           <div style={{fontSize:10,color:P.caption,fontFamily:fm}}>Window queried: <strong style={{color:P.txt}}>{dbgState[0].window||(props.dateFrom+" to "+props.dateTo)}</strong> · one card = one real Meta campaign ID (same name can repeat across IDs)</div>
+          {(dbgState[0].blanks||[]).length>0&&<div style={{border:"1px solid "+P.rose+"55",borderRadius:8,padding:"10px 12px",background:P.rose+"10"}}>
+            <div style={{fontSize:11,fontWeight:800,color:P.rose,fontFamily:fm,marginBottom:6}}>BLANK CREATIVES ({(dbgState[0].blanks||[]).length}) · why the image did not resolve</div>
+            {(dbgState[0].blanks||[]).slice(0,12).map(function(b,bi){var d=b.dbg||{};return <div key={bi} style={{fontSize:10,fontFamily:fm,color:P.txt,marginBottom:8,paddingLeft:8,borderLeft:"2px solid "+P.rose+"55",wordBreak:"break-all"}}>
+              <div style={{color:P.label,fontWeight:700}}>{b.plat} · {b.ad} <span style={{color:P.caption}}>· {b.camp}</span></div>
+              {d?<div style={{color:P.caption}}>thumb={String(d.thumb)} · image_hash={String(d.image_hash)} (resolved {String(d.hashResolved)}) · image_url={d.image_url?"present":"null"} · thumbnail_url={String(d.thumbnail_url)} · story_id={String(d.effective_object_story_id)} · storyPic={String(d.storyPic)} · object_type={String(d.object_type)} · oss={String(d.has_object_story_spec)} · afs={String(d.has_asset_feed_spec)}</div>:<div style={{color:P.caption}}>(no creative debug, run with the latest deploy)</div>}
+            </div>;})}
+          </div>}
           {Object.keys(dbgState[0].rows).sort(function(a,b){return dbgState[0].rows[b].spend-dbgState[0].rows[a].spend;}).map(function(cid){
             var camp=dbgState[0].rows[cid];
             var plats=Object.keys(camp.plats||{}).sort();

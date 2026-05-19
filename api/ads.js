@@ -949,6 +949,23 @@ export default async function handler(req, res) {
           // wrong. Stripped from the payload unless ?debug=1 is passed.
           _debugActionsAgg: debugFollows ? (ins.actionsAgg || {}) : undefined,
           _debugTrueTotals: debugFollows ? (ins.trueTotals || null) : undefined,
+          // Creative-resolution trace: when a card renders blank we need
+          // to SEE which creative fields Meta returned and which
+          // fallback in the thumb chain failed, rather than blind-patch
+          // (the thumbnail chain is shared by every Meta ad — see
+          // project_meta_thumbnails). Debug-only.
+          _debugCreative: debugFollows ? {
+            thumb: thumb || "(EMPTY)",
+            image_hash: cr.image_hash || null,
+            hashResolved: cr.image_hash ? (hashToUrl[cr.image_hash] ? "yes" : "NO-not-in-/adimages") : "n/a",
+            image_url: cr.image_url || null,
+            thumbnail_url: cr.thumbnail_url ? "present" : null,
+            effective_object_story_id: cr.effective_object_story_id || null,
+            storyPic: cr.effective_object_story_id ? (storyToPicHi[cr.effective_object_story_id] || storyToPic[cr.effective_object_story_id] || "(none-page-read?)") : "n/a",
+            object_type: cr.object_type || null,
+            has_object_story_spec: !!cr.object_story_spec,
+            has_asset_feed_spec: !!cr.asset_feed_spec
+          } : undefined,
           // Raw Meta objective string (e.g. PAGE_LIKES vs OUTCOME_ENGAGEMENT).
           // Decides whether the strict page-like fold applies, so the
           // inspector must surface it per campaign.
