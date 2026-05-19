@@ -1907,6 +1907,17 @@ function CampaignAuditModal(props){
   // chasing tokens — runs inside the already-authed Settings modal.
   var dbgQ=useState("");
   var dbgState=useState({loading:false,error:"",rows:null});
+  var rxnProbe=useState({loading:false,error:"",data:null});
+  var runRxnProbe=function(){
+    rxnProbe[1]({loading:true,error:"",data:null});
+    fetch(props.apiBase+"/api/campaigns?from="+encodeURIComponent(props.dateFrom)+"&to="+encodeURIComponent(props.dateTo)+"&rxnprobe=1",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(x){
+        if(x.status!==200||!x.data||!x.data.rxnprobe){rxnProbe[1]({loading:false,error:(x.data&&x.data.error)||("Failed ("+x.status+")"),data:null});return;}
+        rxnProbe[1]({loading:false,error:"",data:x.data});
+      })
+      .catch(function(){rxnProbe[1]({loading:false,error:"Connection error",data:null});});
+  };
   var runDbg=function(){
     var q=String(dbgQ[0]||"").trim();
     if(!q){dbgState[1]({loading:false,error:"Type part of a campaign name first.",rows:null});return;}
@@ -2354,8 +2365,26 @@ function CampaignAuditModal(props){
           <input value={dbgQ[0]} onChange={function(e){dbgQ[1](e.target.value);}} placeholder="part of a campaign name, e.g. Like&Follow_MoMo Deals" style={{flex:1,minWidth:280,boxSizing:"border-box",background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"8px 12px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none"}}/>
           <button onClick={runDbg} disabled={dbgState[0].loading} style={{background:dbgState[0].loading?"#555":"linear-gradient(135deg,#22D3EE,#0EA5E9)",border:"none",borderRadius:8,padding:"8px 16px",color:"#04121a",fontSize:11,fontWeight:800,fontFamily:fm,cursor:dbgState[0].loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{dbgState[0].loading?"Reading…":"Inspect"}</button>
           {(dbgState[0].rows||dbgState[0].error||dbgQ[0])&&<button onClick={function(){dbgState[1]({loading:false,error:"",rows:null});dbgQ[1]("");}} title="Clear inspector results" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"8px 14px",color:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Clear</button>}
+          <button onClick={runRxnProbe} disabled={rxnProbe[0].loading} title="Show the RAW Meta reaction-breakdown response, 4 request variants per account" style={{background:rxnProbe[0].loading?"#555":"linear-gradient(135deg,#A855F7,#7C3AED)",border:"none",borderRadius:8,padding:"8px 16px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:rxnProbe[0].loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{rxnProbe[0].loading?"Probing…":"Probe reactions"}</button>
         </div>
         {dbgState[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>{dbgState[0].error}</div>}
+        {rxnProbe[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>Reaction probe: {rxnProbe[0].error}</div>}
+        {rxnProbe[0].data&&<div style={{marginTop:10,maxHeight:"55vh",overflowY:"auto",background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px"}}>
+          <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginBottom:8}}>Raw Meta reaction-breakdown probe · {rxnProbe[0].data.from} to {rxnProbe[0].data.to} · find the variant whose sampleActions contains an action_reaction key</div>
+          {(rxnProbe[0].data.accounts||[]).map(function(acc,ai){
+            return <div key={ai} style={{marginBottom:12,borderBottom:"1px solid "+P.rule,paddingBottom:8}}>
+              <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,marginBottom:4}}>{acc.account}</div>
+              {(acc.variants||[]).map(function(v,vi){
+                return <div key={vi} style={{fontSize:10,fontFamily:fm,color:P.txt,marginBottom:6,paddingLeft:8,borderLeft:"2px solid "+P.rule}}>
+                  <div style={{color:P.label,fontWeight:700}}>{v.tag}</div>
+                  <div style={{color:P.caption}}>http {String(v.httpStatus)} · rows {String(v.rowCount)}{v.metaError?(" · ERROR "+v.metaError):""}{v.error?(" · "+v.error):""}</div>
+                  <div style={{color:v.reactionEntryFound&&v.reactionEntryFound!=="NONE"?P.mint:P.caption,wordBreak:"break-all"}}>reactionEntry: {JSON.stringify(v.reactionEntryFound)}</div>
+                  <div style={{color:P.caption,wordBreak:"break-all"}}>sampleActions: {JSON.stringify(v.sampleActions)}</div>
+                </div>;
+              })}
+            </div>;
+          })}
+        </div>}
         {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14,maxHeight:"60vh",overflowY:"auto",overflowX:"hidden",paddingRight:8,WebkitOverflowScrolling:"touch"}}>
           <div style={{fontSize:10,color:P.caption,fontFamily:fm}}>Window queried: <strong style={{color:P.txt}}>{dbgState[0].window||(props.dateFrom+" to "+props.dateTo)}</strong> · one card = one real Meta campaign ID (same name can repeat across IDs)</div>
           {Object.keys(dbgState[0].rows).sort(function(a,b){return dbgState[0].rows[b].spend-dbgState[0].rows[a].spend;}).map(function(cid){

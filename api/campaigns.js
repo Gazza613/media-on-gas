@@ -1,5 +1,5 @@
 import { rateLimit } from "./_rateLimit.js";
-import { checkAuth, filterPagesForPrincipal } from "./_auth.js";
+import { checkAuth, filterPagesForPrincipal, isAdminOrSuperadmin } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 
@@ -99,6 +99,56 @@ export default async function handler(req, res) {
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-07";
+
+  // Reaction probe (internal staff only). Returns the RAW Meta response
+  // for the reaction-breakdown call so we can SEE what Meta actually
+  // sends instead of guessing the field/shape. Same methodology that
+  // resolved the page-like attribution. Returns early; no heavy work.
+  if (req.query.rxnprobe === "1" && isAdminOrSuperadmin(req.authPrincipal || {})) {
+    var probeTR = JSON.stringify({ since: from, until: to });
+    var variants = [
+      { tag: "actions+action_breakdowns=action_reaction (current)", url: "fields=actions&action_breakdowns=action_reaction&level=campaign&breakdowns=publisher_platform" },
+      { tag: "actions+action_breakdowns=action_reaction (NO publisher breakdown)", url: "fields=actions&action_breakdowns=action_reaction&level=campaign" },
+      { tag: "actions+action_breakdowns=action_reaction (level=ad)", url: "fields=actions&action_breakdowns=action_reaction&level=ad" },
+      { tag: "legacy field action_reactions", url: "fields=campaign_id,action_reactions&level=campaign&breakdowns=publisher_platform" }
+    ];
+    var probeOut = [];
+    for (var pa = 0; pa < metaAccounts.length; pa++) {
+      var acc = metaAccounts[pa];
+      var accRes = { account: acc.name, variants: [] };
+      for (var pv = 0; pv < variants.length; pv++) {
+        var v = variants[pv];
+        var purl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?" + v.url + "&time_range=" + probeTR + "&limit=50&access_token=" + metaToken;
+        try {
+          var pr = await fetch(purl);
+          var pj = await pr.json();
+          var rows = (pj && pj.data) || [];
+          // Find the first row whose actions[] has a reaction discriminator.
+          var withRx = null;
+          for (var ri = 0; ri < rows.length && !withRx; ri++) {
+            var racts = rows[ri].actions || rows[ri].action_reactions || [];
+            for (var rj = 0; rj < racts.length; rj++) {
+              if (racts[rj] && (racts[rj].action_reaction || /reaction/i.test(String(racts[rj].action_type || "")))) { withRx = racts[rj]; break; }
+            }
+          }
+          accRes.variants.push({
+            tag: v.tag,
+            httpStatus: pr.status,
+            metaError: pj && pj.error ? (pj.error.message || pj.error.type) : null,
+            rowCount: rows.length,
+            sampleRowKeys: rows[0] ? Object.keys(rows[0]) : [],
+            sampleActions: rows[0] ? (rows[0].actions || rows[0].action_reactions || "no actions key").slice ? (rows[0].actions || rows[0].action_reactions || []).slice(0, 8) : (rows[0].actions || rows[0].action_reactions) : "no rows",
+            reactionEntryFound: withRx || "NONE"
+          });
+        } catch (pe) {
+          accRes.variants.push({ tag: v.tag, error: String(pe && pe.message || pe) });
+        }
+      }
+      probeOut.push(accRes);
+    }
+    res.status(200).json({ rxnprobe: true, from: from, to: to, accounts: probeOut });
+    return;
+  }
 
   // Manual objective overrides (Settings → Audit). Loaded once per
   // request, used everywhere objectives are classified below. The hash
