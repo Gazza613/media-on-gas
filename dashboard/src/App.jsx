@@ -8742,10 +8742,21 @@ export default function MediaOnGas(){
                 fbPage=matchedPages2[0];
                 if(fbPage.instagram_business_account){igAccount=fbPage.instagram_business_account;}
               }
+              // FB earned must resolve EXACTLY like the Summary tab
+              // (project_followers_truth: surfaces must agree). When the
+              // whole-account snapshot spans the window use it; else
+              // fall back to the per-ad attributable page-like result
+              // (same fbPaidPL the FB Page-Like panel shows), so the
+              // Community tab no longer reads "—/building" while
+              // Summary shows the 5.6K.
+              var fbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)fbPaidPL+=parseFloat(camp.pageLikes||0);});
+              var fbSnapKnown=fbGrowthKnown&&fbEarned>0;
+              var fbEarnedResolved=fbSnapKnown?fbEarned:fbPaidPL;
+              var fbIsPaid=!fbSnapKnown&&fbPaidPL>0;
               // FB + IG earned = whole-account follower growth from the
               // same matched page metadata the Summary uses, set after
               // the page match so the two views always agree.
-              var totalEarned=fbEarned+igEarned+ttEarned;
+              var totalEarned=fbEarnedResolved+igEarned+ttEarned;
               var ttTotal=(function(){var selNames2=sel.map(function(x){return x.campaignName;}).join(" ");return getTtTotal(selNames2,ttEarned);})();var grandTotal=fbTotal+igTotal+ttTotal;
               return <div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
@@ -8756,7 +8767,7 @@ export default function MediaOnGas(){
                       // follower growth (from our daily fb-page-snapshot feed),
                       // organic and paid combined, because Meta does not
                       // attribute the follow action to the paid campaign.
-                      {name:"FACEBOOK",color:P.fb,total:fbTotal,earned:fbEarned,spend:fbSpend,costLabel:"COST PER FOLLOW",earnedLabel:"TOTAL FB GROWTH",known:fbGrowthKnown,unknownNote:"Building page-follow history"},
+                      {name:"FACEBOOK",color:P.fb,total:fbTotal,earned:fbEarnedResolved,spend:fbSpend,costLabel:"COST PER FOLLOW",earnedLabel:fbIsPaid?"PAID PAGE LIKES":"TOTAL FB GROWTH",known:fbSnapKnown||fbPaidPL>0,unknownNote:"Building page-follow history",note:fbIsPaid?"per-ad attributable · net growth still building":undefined,cpfHide:fbIsPaid},
                       // Instagram growth is total profile growth, organic and
                       // paid combined, because Meta does not attribute the
                       // follow action to the paid campaign. Label reflects
@@ -8768,7 +8779,7 @@ export default function MediaOnGas(){
                       return <Glass key={b.name} accent={b.color} hv={true} st={{padding:22}}>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:b.color}}></span><span style={{fontSize:11,fontWeight:700,color:b.color,fontFamily:fm}}>{b.name}</span></div>
                         <div style={{textAlign:"center",marginBottom:14}}><div style={{fontSize:9,color:"rgba(255,255,255,0.6)",fontFamily:fm,letterSpacing:2,marginBottom:4}}>TOTAL FOLLOWERS</div><div style={{fontSize:36,fontWeight:900,color:b.color,fontFamily:fm}}>{fmt(b.total)}</div></div>
-                        <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>{b.earnedLabel}</div><div style={{fontSize:18,fontWeight:900,color:b.known===false?P.label:P.mint,fontFamily:fm}}>{b.known===false?"—":("+"+fmt(b.earned))}</div>{b.known===false&&<div style={{fontSize:7.5,color:P.caption,fontFamily:fm,marginTop:2,lineHeight:1.3}}>{b.unknownNote}</div>}</div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>{b.costLabel}</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{b.known!==false&&b.earned>0?fR(b.spend/b.earned):"-"}</div></div></div>
+                        <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>{b.earnedLabel}</div><div style={{fontSize:18,fontWeight:900,color:b.known===false?P.label:P.mint,fontFamily:fm}}>{b.known===false?"—":("+"+fmt(b.earned))}</div>{(b.known===false||b.note)&&<div style={{fontSize:7.5,color:P.caption,fontFamily:fm,marginTop:2,lineHeight:1.3}}>{b.known===false?b.unknownNote:b.note}</div>}</div><div style={{textAlign:"center",flex:1}}><div style={{fontSize:8,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:1,marginBottom:2}}>{b.costLabel}</div><div style={{fontSize:14,fontWeight:700,color:P.ember,fontFamily:fm}}>{(!b.cpfHide&&b.known!==false&&b.earned>0)?fR(b.spend/b.earned):"-"}</div></div></div>
                       </Glass>;
                     });
                   })()}
@@ -8810,12 +8821,12 @@ export default function MediaOnGas(){
                 <div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:20}}>
                   <div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Period Growth by Platform</div>
                   <ChartReveal><ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={[{name:"FB Followers",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;})} barSize={50}>
+                    <BarChart data={[{name:"FB Followers",value:fbEarnedResolved,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;})} barSize={50}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.rule}/>
                       <XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/>
                       <YAxis tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/>
                       <Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/>
-                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{[{name:"FB Followers",value:fbEarned,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;}).map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Bar>
+                      <Bar dataKey="value" name="Earned" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{[{name:"FB Followers",value:fbEarnedResolved,color:P.fb},{name:"IG Followers",value:igEarned,color:P.ig},{name:"TT Follows",value:ttEarned,color:P.tt}].sort(function(a,b){return b.value-a.value;}).map(function(d,i){return <Cell key={i} fill={d.color}/>;})}</Bar>
                     </BarChart>
                   </ResponsiveContainer></ChartReveal>
                 </div>
