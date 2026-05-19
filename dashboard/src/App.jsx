@@ -6481,8 +6481,16 @@ export default function MediaOnGas(){
                         // pass returned nothing for that ad. resultType
                         // stays "follows" so the card always headlines
                         // FOLLOWS / PAGE LIKES, never impressions.
+                        // Same bug class as TikTok: a.follows / a.pageLikes
+                        // do NOT exist on Meta ad objects (only results /
+                        // followsRaw / followsTrue), so the old fallback
+                        // was always 0 and FB showed 0 whenever followsTrue
+                        // was 0. Use the fields that actually exist:
+                        // followsTrue (optimization_goal-gated per-ad page
+                        // likes, best) else followsRaw (raw per-ad
+                        // pageLikes+follows) else results.
                         var ft=parseFloat(a.followsTrue||0);
-                        var fallbackFol=parseFloat(a.follows||0)+parseFloat(a.pageLikes||0);
+                        var fallbackFol=parseFloat(a.followsRaw||0)||parseFloat(a.results||0);
                         var folRes=ft>0?ft:fallbackFol;
                         return Object.assign({},a,{results:folRes,resultType:"follows"});
                       });
@@ -7336,8 +7344,8 @@ export default function MediaOnGas(){
                   return Object.assign({},a,{results:ttFol,resultType:"follows"});
                 }
                 var ft=parseFloat(a.followsTrue||0);
-                if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
-                return Object.assign({},a,{resultType:"follows"});
+                var fbFol=ft>0?ft:(parseFloat(a.followsRaw||0)||parseFloat(a.results||0));
+                return Object.assign({},a,{results:fbFol,resultType:"follows"});
               });
             }
             // Awareness ads land in the landing-page bucket (no awareness
