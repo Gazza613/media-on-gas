@@ -467,6 +467,13 @@ export default async function handler(req, res) {
           if (sample) console.log("[action_reactions] sample from " + account.name + ":", JSON.stringify(sample.action_reactions));
           else console.log("[action_reactions] " + account.name + ": " + rxnRows.length + " rows but none had action_reactions populated");
         }
+        // Meta returns reaction action_type using its OWN enum names:
+        // like, love, wow, haha, sorry, anger. Our buckets are
+        // like/love/haha/wow/sad/angry, so "sorry" and "anger" matched
+        // nothing and every Sad + Angry reaction was silently dropped
+        // (which also systematically inflated brand sentiment, the
+        // negative reactions never counted). Normalise both names.
+        var RXN_NAME = { like: "like", love: "love", wow: "wow", haha: "haha", sorry: "sad", anger: "angry", sad: "sad", angry: "angry" };
         rxnRows.forEach(function(rr) {
           if (!rr.action_reactions || !Array.isArray(rr.action_reactions)) return;
           var rawPub = String(rr.publisher_platform || "facebook").toLowerCase();
@@ -478,8 +485,8 @@ export default async function handler(req, res) {
           var row = rowMap[uniqueIdRx];
           if (!row) return;
           rr.action_reactions.forEach(function(ar) {
-            var rt = String(ar.action_type || "").toLowerCase();
-            if (row.reactionsByType[rt] !== undefined) row.reactionsByType[rt] += parseInt(ar.value || 0, 10);
+            var rt = RXN_NAME[String(ar.action_type || "").toLowerCase()];
+            if (rt && row.reactionsByType[rt] !== undefined) row.reactionsByType[rt] += parseInt(ar.value || 0, 10);
           });
         });
       } catch (rxnErr) { console.error("Meta action_reactions breakdown error", account.name, rxnErr); }
