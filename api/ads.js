@@ -1106,6 +1106,11 @@ export default async function handler(req, res) {
           }
           var follows = parseInt(mt.follows || 0);
           var likes = parseInt(mt.likes || 0);
+          // Per-ad video completions. TikTok does NOT attribute follows
+          // per ad (only campaign level), so for follower ads this is
+          // the honest rankable per-ad signal, same shape as the IG
+          // profile-visits proxy. See project_followers_truth.
+          var ttVViews = parseInt(mt.video_views_p100 || 0);
           var ttSpend = parseFloat(mt.spend || 0);
           var ttImps = parseInt(mt.impressions || 0);
           var ttClicks = parseInt(mt.clicks || 0);
@@ -1150,6 +1155,7 @@ export default async function handler(req, res) {
             results: ttResCount,
             resultType: ttResType,
             followsRaw: follows,
+            videoViews: ttVViews,
             videoId: ad.video_id || "",
             placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });

@@ -6364,8 +6364,8 @@ export default function MediaOnGas(){
                   if(ff2==="TEXT")return{label:"TEXT",color:P.caption};
                   return{label:"STATIC",color:P.cyan};
                 };
-                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
-                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
+                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="tt_views"?"VIDEO VIEWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
+                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="tt_views"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
                 // Awareness/reach campaigns must NOT be judged on landing-page
                 // clicks (Phase 1 rule). Same detection the backend
                 // isAwarenessObjective uses: objective field or a name token.
@@ -6452,7 +6452,18 @@ export default function MediaOnGas(){
                           var ck=parseFloat(a.clicks||0);
                           return Object.assign({},a,{results:ck,resultType:"profile_visits"});
                         }
-                        // FB + TikTok page follows. Prefer followsTrue
+                        if(pg.key==="TikTok"){
+                          // TikTok does NOT attribute follows per ad
+                          // (campaign-level only), so '0 FOLLOWS' is a
+                          // measurement gap, not a failed ad. Mirror the
+                          // IG proxy: rank on per-ad video completions
+                          // (the honest signal TikTok returns per ad),
+                          // fall back to impressions. Real follows stay
+                          // the campaign-level Community Growth figure.
+                          var vv=parseFloat(a.videoViews||0);
+                          return vv>0?Object.assign({},a,{results:vv,resultType:"tt_views"}):Object.assign({},a,{results:parseFloat(a.impressions||0),resultType:"impressions"});
+                        }
+                        // FB page follows. Prefer followsTrue
                         // (no-breakdown per-ad, the optimization_goal-gated
                         // page-like number). Fall back to the raw per-ad
                         // follows + pageLikes so a genuine page-like ad is
@@ -7306,6 +7317,13 @@ export default function MediaOnGas(){
                   var ck=parseFloat(a.clicks||0);
                   return Object.assign({},a,{results:ck,resultType:"profile_visits"});
                 }
+                if(pk==="TikTok"){
+                  // TikTok attributes follows at campaign level only;
+                  // rank per-ad on video completions (honest per-ad
+                  // signal), fall back to impressions. Mirrors IG.
+                  var vv=parseFloat(a.videoViews||0);
+                  return vv>0?Object.assign({},a,{results:vv,resultType:"tt_views"}):Object.assign({},a,{results:parseFloat(a.impressions||0),resultType:"impressions"});
+                }
                 var ft=parseFloat(a.followsTrue||0);
                 if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
                 return Object.assign({},a,{resultType:"follows"});
@@ -7349,8 +7367,8 @@ export default function MediaOnGas(){
             filteredAds.forEach(function(a){totalSpend+=a.spend;totalImps+=a.impressions;totalClicks+=a.clicks;});
             var blendedCtr=totalImps>0?(totalClicks/totalImps*100):0;
 
-            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
-            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
+            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="tt_views"?"VIDEO VIEWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
+            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="tt_views"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
             // Format badge color + label
             var fmtMeta=function(f){
               var ff=(f||"STATIC").toUpperCase();
