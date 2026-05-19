@@ -144,6 +144,44 @@ export default async function handler(req, res) {
           accRes.variants.push({ tag: v.tag, error: String(pe && pe.message || pe) });
         }
       }
+      // PAID-AD reaction probe (the actual goal): each ad's dark post
+      // is its creative.effective_object_story_id. Reactions per type
+      // come from that POST object's reactions.type(X).summary(true) —
+      // /{page}/posts excludes dark/ad posts (that's why it showed 0).
+      // Grab a few ads with delivery, resolve their story ids, sum the
+      // per-type reactions across them.
+      try {
+        var adsU = "https://graph.facebook.com/v25.0/" + acc.id + "/ads?fields=id,name,creative{effective_object_story_id}&limit=15&access_token=" + metaToken;
+        var adsR = await fetch(adsU);
+        var adsJ = await adsR.json();
+        var storyIds = [];
+        (adsJ && adsJ.data ? adsJ.data : []).forEach(function(ad) {
+          var sid = ad.creative && ad.creative.effective_object_story_id;
+          if (sid && storyIds.indexOf(sid) < 0 && storyIds.length < 5) storyIds.push(sid);
+        });
+        var adRx = { tested: storyIds.length, like: 0, love: 0, wow: 0, haha: 0, sad: 0, angry: 0, lastError: null, sample: null };
+        if (adsJ && adsJ.error) adRx.lastError = "ads list: " + (adsJ.error.message || adsJ.error.type);
+        for (var si = 0; si < storyIds.length; si++) {
+          var sf = "reactions.type(LIKE).limit(0).summary(true).as(like)," +
+                   "reactions.type(LOVE).limit(0).summary(true).as(love)," +
+                   "reactions.type(WOW).limit(0).summary(true).as(wow)," +
+                   "reactions.type(HAHA).limit(0).summary(true).as(haha)," +
+                   "reactions.type(SAD).limit(0).summary(true).as(sad)," +
+                   "reactions.type(ANGRY).limit(0).summary(true).as(angry)";
+          var psU = "https://graph.facebook.com/v25.0/" + storyIds[si] + "?fields=" + encodeURIComponent(sf) + "&access_token=" + metaToken;
+          try {
+            var psR = await fetch(psU);
+            var psJ = await psR.json();
+            if (psJ && psJ.error) { adRx.lastError = "(#" + psJ.error.code + ") " + psJ.error.message; continue; }
+            if (!adRx.sample) adRx.sample = psJ;
+            ["like", "love", "wow", "haha", "sad", "angry"].forEach(function(rk) {
+              var n = psJ[rk] && psJ[rk].summary && psJ[rk].summary.total_count;
+              if (typeof n === "number") adRx[rk] += n;
+            });
+          } catch (pse) { adRx.lastError = String(pse && pse.message || pse); }
+        }
+        accRes.adPostReactions = adRx;
+      } catch (ade) { accRes.adPostReactions = { error: String(ade && ade.message || ade) }; }
       probeOut.push(accRes);
     }
     // Page Insights reaction probe — the source we just wired in.

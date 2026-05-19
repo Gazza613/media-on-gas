@@ -2382,6 +2382,11 @@ function CampaignAuditModal(props){
                   <div style={{color:P.caption,wordBreak:"break-all"}}>sampleActions: {JSON.stringify(v.sampleActions)}</div>
                 </div>;
               })}
+              {acc.adPostReactions&&(function(){var a=acc.adPostReactions;var tot=(a.like||0)+(a.love||0)+(a.wow||0)+(a.haha||0)+(a.sad||0)+(a.angry||0);return <div style={{fontSize:10,fontFamily:fm,marginTop:6,paddingLeft:8,borderLeft:"2px solid "+P.solar+"77"}}>
+                <div style={{color:P.solar,fontWeight:800}}>PAID-AD reactions (ad dark post · the goal)</div>
+                <div style={{color:P.caption}}>ads tested {String(a.tested||0)}{a.lastError?(" · ERROR "+a.lastError):""}{a.error?(" · "+a.error):""}</div>
+                <div style={{color:tot>0?P.mint:P.caption,wordBreak:"break-all"}}><strong>like={String(a.like||0)} love={String(a.love||0)} wow={String(a.wow||0)} haha={String(a.haha||0)} sad={String(a.sad||0)} angry={String(a.angry||0)}</strong></div>
+              </div>;})()}
             </div>;
           })}
           <div style={{fontSize:11,fontWeight:800,color:P.orchid,fontFamily:fm,margin:"14px 0 6px"}}>PAGE INSIGHTS · post_reactions_by_type_total (the wired-in source)</div>
