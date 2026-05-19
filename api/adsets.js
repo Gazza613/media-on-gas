@@ -160,6 +160,15 @@ export default async function handler(req, res) {
           var spend = (r._spend * spendScale);
           var imps = Math.round(r._impressions * impsScale);
           var clicks = Math.round(r._clicks * clicksScale);
+          // Recompute CTR/CPC/CPM from the SCALED raw counts. Taking
+          // them from the unscaled API breakdown made the displayed
+          // rate disagree with the displayed spend/clicks/impressions
+          // whenever the publisher-breakdown scale factor != 1 (the
+          // Targeting tab "rate doesn't match the numbers next to it"
+          // symptom). Mirrors api/ads.js + api/campaigns.js.
+          var aCtr = imps > 0 ? (clicks / imps * 100) : 0;
+          var aCpc = clicks > 0 ? (spend / clicks) : 0;
+          var aCpm = imps > 0 ? (spend / imps * 1000) : 0;
           allAdsets.push({
             platform: r.platform,
             accountName: r.accountName,
@@ -171,9 +180,9 @@ export default async function handler(req, res) {
             reach: r._reach.toString(),
             frequency: r.frequency,
             spend: spend.toFixed(2),
-            cpm: r.cpm,
-            cpc: r.cpc,
-            ctr: r.ctr,
+            cpm: aCpm.toFixed(2),
+            cpc: aCpc.toFixed(2),
+            ctr: aCtr.toFixed(2),
             clicks: clicks.toString(),
             leads: r.leads,
             appInstalls: r.appInstalls,

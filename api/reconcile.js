@@ -232,7 +232,12 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
         clicks: parseInt(m.clicks || 0),
         reach: parseInt(m.reach || 0),
         leads: 0,
-        followersCombined: parseInt(m.follows || 0) + parseInt(m.likes || 0),
+        // TikTok follower result = follows ONLY. m.likes is video
+        // hearts (engagement), NOT follows — adding it over-stated the
+        // truth side and produced false drift on the Ground Truth tab
+        // vs the dashboard, which uses follows-only for TikTok. Must
+        // match _pulseShared / email / command-centre.
+        followersCombined: parseInt(m.follows || 0),
         appInstalls: 0
       };
     });
@@ -426,7 +431,13 @@ async function fetchDashboardNumbers(req, from, to) {
         clicks: parseFloat(c.clicks || 0),
         reach: parseFloat(c.reach || 0),
         leads: parseFloat(c.leads || 0),
-        followersCombined: parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0) + parseFloat(c.likes || 0),
+        // Canonical follower result = pageLikes + follows ONLY (the
+        // exact metric _pulseShared / email-share / command-centre
+        // use). c.likes is post reactions / TikTok video hearts, NOT
+        // follows; including it made the Ground Truth tab show false
+        // red/yellow drift on follower campaigns even when the
+        // dashboard was correct.
+        followersCombined: parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0),
         appInstalls: parseFloat(c.appInstalls || 0)
       };
     });
