@@ -286,7 +286,47 @@ export default async function handler(req, res) {
         }
       }
     } catch (mpe) { pageProbe.push({ note: "page probe failed", error: String(mpe && mpe.message || mpe) }); }
-    res.status(200).json({ rxnprobe: true, from: from, to: to, tokenInfo: tokenInfo, accounts: probeOut, pageReactions: pageProbe });
+
+    // TikTok per-AD metric probe. User says TikTok Ads Manager shows
+    // follows at AD level for the MTN "Follow & Likes" campaigns, yet
+    // our AUCTION_AD report read follows=0. Don't assume a limitation —
+    // pull a broad valid BASIC metric set per ad and SHOW every value
+    // so we can see which field actually carries the follow result
+    // (follows vs result vs profile_visits vs ...). Probed metrics are
+    // requested individually so one unsupported metric can't 400 the
+    // whole call and hide the rest.
+    var ttProbe = { advertiser: ttAdvId ? "set" : "MISSING", rows: [], errors: [] };
+    try {
+      if (ttToken && ttAdvId) {
+        var ttCandidates = ["spend","impressions","clicks","follows","likes","comments","shares","profile_visits","video_play_actions","video_views_p100","result","cost_per_result","secondary_goal_result","real_time_result"];
+        var ttGot = {};
+        for (var tci = 0; tci < ttCandidates.length; tci++) {
+          var mname = ttCandidates[tci];
+          var mset = encodeURIComponent(JSON.stringify(["ad_name","campaign_name", mname]));
+          var tU = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_AD&dimensions=" + encodeURIComponent(JSON.stringify(["ad_id"])) + "&metrics=" + mset + "&start_date=" + from + "&end_date=" + to + "&page_size=20";
+          try {
+            var tR = await fetch(tU, { headers: { "Access-Token": ttToken } });
+            var tJ = await tR.json();
+            if (tJ && tJ.code !== 0) { ttProbe.errors.push(mname + ": code " + tJ.code + " " + (tJ.message || "")); continue; }
+            var list = (tJ.data && tJ.data.list) || [];
+            list.forEach(function(row) {
+              var aid = String((row.dimensions || {}).ad_id || "");
+              if (!aid) return;
+              if (!ttGot[aid]) ttGot[aid] = { ad: (row.metrics && row.metrics.ad_name) || "", camp: (row.metrics && row.metrics.campaign_name) || "", m: {} };
+              if (row.metrics && row.metrics[mname] !== undefined) ttGot[aid].m[mname] = row.metrics[mname];
+            });
+          } catch (te) { ttProbe.errors.push(mname + ": " + String(te && te.message || te)); }
+        }
+        var aids = Object.keys(ttGot);
+        // Surface the ads whose campaign name looks like the MoMo
+        // follow ones first, but include any if none match.
+        var pick = aids.filter(function(id){ return /like|follow|momo/i.test(ttGot[id].camp); });
+        if (pick.length === 0) pick = aids;
+        ttProbe.rows = pick.slice(0, 8).map(function(id){ return { adId: id, ad: ttGot[id].ad, camp: ttGot[id].camp, metrics: ttGot[id].m }; });
+      }
+    } catch (tpe) { ttProbe.errors.push("probe failed: " + String(tpe && tpe.message || tpe)); }
+
+    res.status(200).json({ rxnprobe: true, from: from, to: to, tokenInfo: tokenInfo, accounts: probeOut, pageReactions: pageProbe, ttProbe: ttProbe });
     return;
   }
 

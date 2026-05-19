@@ -2409,6 +2409,15 @@ function CampaignAuditModal(props){
               <div style={{color:P.caption,wordBreak:"break-all"}}>sampleValue: {JSON.stringify(pr.sampleValue)}</div>
             </div>;
           })}
+          {rxnProbe[0].data.ttProbe&&(function(){var tp=rxnProbe[0].data.ttProbe;return <div style={{marginTop:14,borderTop:"1px dashed "+P.rule,paddingTop:10}}>
+            <div style={{fontSize:11,fontWeight:800,color:P.tt,fontFamily:fm,marginBottom:6}}>TIKTOK PER-AD METRICS · which field carries the follow result</div>
+            <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginBottom:6}}>advertiser: {String(tp.advertiser)}{tp.errors&&tp.errors.length?(" · unsupported: "+tp.errors.join(" | ")):""}</div>
+            {(tp.rows||[]).length===0&&<div style={{fontSize:10,color:P.caption,fontFamily:fm}}>(no TikTok ad rows returned)</div>}
+            {(tp.rows||[]).map(function(r,ri){return <div key={ri} style={{fontSize:10,fontFamily:fm,color:P.txt,marginBottom:8,paddingLeft:8,borderLeft:"2px solid "+P.tt+"55"}}>
+              <div style={{color:P.label,fontWeight:700,wordBreak:"break-all"}}>{r.camp} · {r.ad}</div>
+              <div style={{color:P.txt,wordBreak:"break-all"}}>{Object.keys(r.metrics||{}).map(function(k){return k+"="+r.metrics[k];}).join("  ·  ")||"(no metrics)"}</div>
+            </div>;})}
+          </div>;})()}
         </div>}
         {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14,maxHeight:"60vh",overflowY:"auto",overflowX:"hidden",paddingRight:8,WebkitOverflowScrolling:"touch"}}>
           <div style={{fontSize:10,color:P.caption,fontFamily:fm}}>Window queried: <strong style={{color:P.txt}}>{dbgState[0].window||(props.dateFrom+" to "+props.dateTo)}</strong> · one card = one real Meta campaign ID (same name can repeat across IDs)</div>
