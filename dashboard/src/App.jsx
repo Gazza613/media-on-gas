@@ -3979,7 +3979,12 @@ export default function MediaOnGas(){
       var pg=matchedIgPages[id];
       igGrowthOverride+=parseFloat((pg.instagram_business_account&&pg.instagram_business_account.follower_growth)||0);
     });
-    var wow=function(points){if(!points||points.length<2)return null;var last=points[points.length-1],prev=points[points.length-2];if(prev.results<=0&&last.results<=0)return null;if(prev.results===0)return {delta:100,direction:"up",label:"new"};var d=((last.results-prev.results)/prev.results)*100;return{delta:Math.abs(d),direction:d>=0?"up":"down",label:(d>=0?"+":"-")+Math.abs(d).toFixed(2)+"%"};};
+    var wow=function(points){if(!points||points.length<2)return null;var last=points[points.length-1],prev=points[points.length-2];if(prev.results<=0&&last.results<=0)return null;
+      // Suppress the misleading "-100.00%" badge: a final week at zero
+      // is almost always an incomplete / no-delivery last bucket, not a
+      // real total collapse. No tag rather than a false -100%.
+      if(last.results<=0)return null;
+      if(prev.results===0)return {delta:100,direction:"up",label:"new"};var d=((last.results-prev.results)/prev.results)*100;return{delta:Math.abs(d),direction:d>=0?"up":"down",label:(d>=0?"+":"-")+Math.abs(d).toFixed(2)+"%"};};
     var sparkPath=function(points,h,w){if(!points||points.length===0)return"";var vals=points.map(function(p){return p.results;});var max=Math.max.apply(null,vals.concat([1]));var min=Math.min.apply(null,vals);var range=max-min||1;return points.map(function(p,i){var x=(i/(Math.max(points.length-1,1)))*w;var y=h-((p.results-min)/range)*h;return(i===0?"M":"L")+x.toFixed(1)+","+y.toFixed(1);}).join(" ");};
     var sparkArea=function(points,h,w){if(!points||points.length===0)return"";var path=sparkPath(points,h,w);if(!path)return"";return path+" L"+w+","+h+" L0,"+h+" Z";};
     return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
