@@ -6247,7 +6247,8 @@ export default function MediaOnGas(){
                   shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                   comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                 };
-                var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).sort(function(a,b){return b.value-a.value;});
+                var splitUnavailable=["love","haha","wow","sad","angry"].every(function(t){return (totals[t]||0)===0;})&&(totals.other||0)>0;
+                var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).filter(function(r){return !(splitUnavailable&&(r.key==="love"||r.key==="haha"||r.key==="wow"||r.key==="sad"||r.key==="angry"));}).sort(function(a,b){return b.value-a.value;});
                 var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.mint,"BRAND PULSE",Ic.pulse(P.mint,18))}
@@ -6259,6 +6260,7 @@ export default function MediaOnGas(){
                       the bar fill width, with a 60 ms per-row stagger so
                       the bars cascade in top-to-bottom as the team
                       scrolls to Brand Pulse. */}
+                  {splitUnavailable&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginBottom:12,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8,border:"1px solid "+P.rule}}>Per-type reaction split (Love, Haha, Wow, Sad, Angry) is not exposed by Meta for paid ads without the Page engagement permission, so these reactions are counted within Other Reactions, not a measured zero. The sentiment band above already treats every unclassified reaction conservatively (worst case = negative for the floor).</div>}
                   {rows.map(function(r,idx){
                     var pct=maxVal>0?(r.value/maxVal*100):0;
                     var ppParts=[];
@@ -8851,7 +8853,8 @@ export default function MediaOnGas(){
                   // Keep every row, even at 0, so the reader can verify which
                   // reactions the brand got and which it didn't. Sort by
                   // value desc so the dominant reaction always leads.
-                  var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).sort(function(a,b){return b.value-a.value;});
+                  var splitUnavailable=["love","haha","wow","sad","angry"].every(function(t){return (totals[t]||0)===0;})&&(totals.other||0)>0;
+                var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).filter(function(r){return !(splitUnavailable&&(r.key==="love"||r.key==="haha"||r.key==="wow"||r.key==="sad"||r.key==="angry"));}).sort(function(a,b){return b.value-a.value;});
                   var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                   return <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(244,63,94,0.04) 50%,rgba(168,85,247,0.06))",borderRadius:16,padding:"22px 24px",marginBottom:20,border:"1px solid "+P.rule}}>
                     <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}@keyframes sentRing{from{stroke-dashoffset:314}to{stroke-dashoffset:var(--sent-offset)}}"}</style>
@@ -8866,6 +8869,7 @@ export default function MediaOnGas(){
                         bar fill width gates on intersection via GrowBar
                         so the row's labels and counts are static and
                         only the bars cascade in as the team scrolls. */}
+                    {splitUnavailable&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginBottom:12,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8,border:"1px solid "+P.rule}}>Per-type reaction split (Love, Haha, Wow, Sad, Angry) is not exposed by Meta for paid ads without the Page engagement permission, so these reactions are counted within Other Reactions, not a measured zero. The sentiment band above already treats every unclassified reaction conservatively (worst case = negative for the floor).</div>}
                     {rows.map(function(r,idx){
                       var pct=maxVal>0?(r.value/maxVal*100):0;
                       var ppParts=[];
