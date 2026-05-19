@@ -1263,6 +1263,17 @@ export default async function handler(req, res) {
     var pagesRes = await fetch("https://graph.facebook.com/v25.0/me/accounts?fields=name,id,fan_count,followers_count,access_token,instagram_business_account{id,username,followers_count}&limit=50&access_token=" + metaToken);
     var pagesJson = await pagesRes.json();
     if (pagesJson.data) {
+      // Request-scoped short-circuit. Without pages_read_engagement
+      // EVERY page's reactions /posts call returns #10, and doing one
+      // failed Graph round-trip per page (~25) added seconds of dead
+      // latency to /api/campaigns on every cold cache (slowing the
+      // whole Summary load incl. thumbnails) for zero data. Once any
+      // page returns the access error the token lacks the scope for
+      // all of them, so skip the rest. Self-heals: the day the scope
+      // is granted the first call succeeds, this never trips, all
+      // pages fetch normally. No data change (reactions stay "Other"
+      // until the token is fixed anyway).
+      var pageReadBlocked = false;
       for (var pi = 0; pi < pagesJson.data.length; pi++) {
         var pg = pagesJson.data[pi];
         var pgToken = pg.access_token || metaToken;
@@ -1324,8 +1335,9 @@ export default async function handler(req, res) {
         // .type() enum is LIKE/LOVE/WOW/HAHA/SAD/ANGRY (no sorry/anger
         // alias needed here, unlike the actions enum).
         pg.reactionsByType = { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
-        pg.reactionsAccessBlocked = false;
+        pg.reactionsAccessBlocked = pageReadBlocked;
         try {
+          if (pageReadBlocked) throw { __skip: true };
           var prFields = "id," +
             "reactions.type(LIKE).limit(0).summary(true).as(like)," +
             "reactions.type(LOVE).limit(0).summary(true).as(love)," +
@@ -1343,7 +1355,7 @@ export default async function handler(req, res) {
               // #10 / #200 = missing pages_read_engagement / Page
               // Public Content Access. Flag it so the UI can say WHY
               // the split is unavailable rather than imply zero.
-              if (prJson.error.code === 10 || prJson.error.code === 200) pg.reactionsAccessBlocked = true;
+              if (prJson.error.code === 10 || prJson.error.code === 200) { pg.reactionsAccessBlocked = true; pageReadBlocked = true; }
               console.warn("[page-reactions] error", pg.name, prJson.error.code, prJson.error.message);
               break;
             }
@@ -1356,7 +1368,7 @@ export default async function handler(req, res) {
             });
             prNext = prJson.paging && prJson.paging.next ? prJson.paging.next : null;
           }
-        } catch (prErr) { console.error("Page reactions error", pg.id, prErr); }
+        } catch (prErr) { if (!(prErr && prErr.__skip)) console.error("Page reactions error", pg.id, prErr); }
         delete pg.access_token;
       }
       pageData = pagesJson.data;
