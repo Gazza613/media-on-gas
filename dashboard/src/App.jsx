@@ -6423,8 +6423,11 @@ export default function MediaOnGas(){
                   // meaningless spend/reach. Every other objective is
                   // unchanged: same spend/result + CPL/CPC/CPF/etc.
                   var crAwr=ad.resultType==="reach"||ad.resultType==="impressions";
-                  var crImp=parseFloat(ad.impressions||0);
-                  var crVal=crAwr?(crImp>0?ad.spend/crImp*1000:0):(ad.results>0?ad.spend/ad.results:0);
+                  // For a reach-objective ad the efficiency denominator is
+                  // REACH (the KPI), not impressions, so the per-1,000 cost
+                  // reflects what was actually optimised for.
+                  var crBase=ad.resultType==="reach"?parseFloat(ad.results||ad.reach||0):parseFloat(ad.impressions||0);
+                  var crVal=crAwr?(crBase>0?ad.spend/crBase*1000:0):(ad.results>0?ad.spend/ad.results:0);
                   var crStr=fR(crVal)+" "+(crAwr?"CPM":costPerLabelS(ad.resultType));
                   return <div key={ad.adId+"_"+pgShort+"_"+rank} style={{background:"rgba(0,0,0,0.35)",borderRadius:12,border:"1px solid "+objAccent+"35",overflow:"hidden",display:"flex",flexDirection:"column"}}>
                     <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
@@ -6438,19 +6441,26 @@ export default function MediaOnGas(){
                       </div>
                       {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                       {hasThumb(ad)&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
-                        {/* IMPRESSIONS fallback is ONLY for awareness ads
-                            (resultType reach/impressions) and Instagram
-                            cards with 0 attributed results (Meta books IG
-                            conversions to the FB split). A Facebook /
-                            TikTok follower-objective card must ALWAYS
-                            headline its FOLLOWS / PAGE LIKES result with
-                            its label, even when the count is 0, never an
-                            IMPRESSIONS number it was not optimised for. */}
+                        {/* Headline the metric the ad was optimised for.
+                            REACH ads (awareness, the Psycho Bunny KPI) show
+                            REACH, never an impressions number. IMPRESSIONS
+                            only when reach is genuinely unavailable. IG with
+                            no attributed result falls back to reach (else
+                            impressions) since Meta books IG conversions to
+                            the FB split. Follower / lead cards always show
+                            their own result label, even at 0. */}
                         {(function(){
-                          var awrFallback=(ad.resultType==="reach"||ad.resultType==="impressions")||(parseFloat(ad.results||0)<=0&&ad.platform==="Instagram");
+                          var rt=ad.resultType;
+                          var rch=parseFloat(ad.reach||0);
+                          var lbl,val;
+                          if(rt==="reach"){ lbl="REACH"; val=fmt(parseFloat(ad.results||0)||rch); }
+                          else if(rt==="impressions"){ lbl="IMPRESSIONS"; val=fmt(parseFloat(ad.impressions||0)||parseFloat(ad.results||0)); }
+                          else if(parseFloat(ad.results||0)>0){ lbl=resultLabelS(rt); val=fmt(ad.results); }
+                          else if(ad.platform==="Instagram"){ lbl=rch>0?"REACH":"IMPRESSIONS"; val=fmt(rch>0?rch:parseFloat(ad.impressions||0)); }
+                          else { lbl=resultLabelS(rt); val="0"; }
                           return [
-                            <div key="l" style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{awrFallback?"IMPRESSIONS":resultLabelS(ad.resultType)}</div>,
-                            <div key="v" style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{awrFallback?fmt(ad.impressions):(parseFloat(ad.results||0)>0?fmt(ad.results):"0")}</div>
+                            <div key="l" style={{fontSize:8,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.5,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{lbl}</div>,
+                            <div key="v" style={{fontSize:24,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{val}</div>
                           ];
                         })()}
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(crStr):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
