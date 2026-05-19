@@ -4322,7 +4322,7 @@ export default function MediaOnGas(){
             // so the totals reconcile with the Summary Objective tile.
             var stageDef={
               awareness:{key:"impressions",label:"Ads Served",costLabel:"Cost Per 1K Ads Served",accent:P.cyan,accentDeep:"#0891b2",deep:"#155e75",cool:"#0891b2",warm:"#22d3ee",hot:"#67e8f9",icon:Ic.eye,title:"Awareness",subtitle:"Top of funnel - who saw your ads",field:function(r){return r.impressions||0;}},
-              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.solar,accentDeep:"#d97706",deep:"#92400e",cool:"#d97706",warm:"#f59e0b",hot:"#fbbf24",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel - who responded",field:function(r){return r.clicks||0;}},
+              engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.mint,accentDeep:"#059669",deep:"#065f46",cool:"#059669",warm:"#10b981",hot:"#34d399",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel - who responded",field:function(r){return r.clicks||0;}},
               objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel - who actually converted",field:function(r){var type=rowObjectiveType(r);var rs=r.results||{};if(type==="Leads")return rs.leads||0;if(type==="Followers")return (rs.follows||0)+(rs.pageLikes||0);return r.clicks||0;}}
             };
 
