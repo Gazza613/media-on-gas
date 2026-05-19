@@ -865,13 +865,13 @@ function SentimentTruthCard(props){
   var statusColor=statusGood?P.mint:P.rose;
   var spread=s.best-s.worst;
   return <div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 20px",marginBottom:18,border:"1px solid "+s.color+"30"}}>
-    <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:18,alignItems:"center"}}>
-      <div style={{display:"flex",alignItems:"center",gap:16}}>
-        <svg width="108" height="108" viewBox="0 0 120 120" style={{flexShrink:0}}>
-          <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="10" fill="none"/>
-          <circle cx="60" cy="60" r="50" stroke={s.color} strokeWidth="10" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
-          <text x="60" y="58" textAnchor="middle" style={{fontSize:16,fontWeight:900,fill:s.color,fontFamily:fm,letterSpacing:-0.5}}>{s.worst.toFixed(2)+"%"}</text>
-          <text x="60" y="74" textAnchor="middle" style={{fontSize:7.5,fontWeight:700,fill:"rgba(255,251,248,0.58)",fontFamily:fm,letterSpacing:1.5}}>POSITIVE FLOOR</text>
+    <div style={{display:"grid",gridTemplateColumns:"180px 1fr",gap:24,alignItems:"center"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width="150" height="150" viewBox="0 0 120 120" style={{flexShrink:0}}>
+          <circle cx="60" cy="60" r="50" stroke={P.rule} strokeWidth="8" fill="none"/>
+          <circle cx="60" cy="60" r="50" stroke={s.color} strokeWidth="8" fill="none" strokeLinecap="round" transform="rotate(-90 60 60)" strokeDasharray={circ} strokeDashoffset={offset} style={{transition:"stroke-dashoffset 1.2s ease-out"}}/>
+          <text x="60" y="57" textAnchor="middle" style={{fontSize:15,fontWeight:900,fill:s.color,fontFamily:fm,letterSpacing:-0.3}}>{s.worst.toFixed(2)+"%"}</text>
+          <text x="60" y="72" textAnchor="middle" style={{fontSize:6,fontWeight:700,fill:"rgba(255,251,248,0.55)",fontFamily:fm,letterSpacing:1.8}}>POSITIVE FLOOR</text>
         </svg>
       </div>
       <div>
