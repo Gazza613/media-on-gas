@@ -4265,6 +4265,13 @@ export default function MediaOnGas(){
             var genderOrder=["female","male"];
             var genderLabel={female:"Female",male:"Male"};
             var agRows=agRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
+            // Honest transparency: the male/female split is of the
+            // gender-IDENTIFIED audience only. Meta returns 'unknown'
+            // gender for blocked/private profiles; that volume is
+            // excluded from the split. Measure it on impressions (the
+            // most complete metric) so we can disclose how much of
+            // reach the split does NOT represent.
+            var genderUntaggedPct=(function(){var tot=0,unk=0;agRowsRaw.forEach(function(r){var im=parseFloat(r.impressions||0)||0;tot+=im;if(genderOrder.indexOf(String(r.gender||"").toLowerCase())<0)unk+=im;});return tot>0?(unk/tot*100):0;})();
 
             if(agRows.length===0&&regRows.length===0&&devRows.length===0&&cityRows.length===0){
               demoFallback = <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"40px 24px",textAlign:"center",color:P.label,fontFamily:fm,fontSize:13,lineHeight:1.7}}>No demographic data returned for the selected campaigns and period yet. Try a wider date range, or confirm campaigns have demographic targeting enabled on the platform.</div>;
@@ -4741,9 +4748,14 @@ export default function MediaOnGas(){
               var brandOf=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("iphone")>=0)return "iPhone";if(s.indexOf("ipad")>=0)return "iPad";if(s.indexOf("android")>=0&&s.indexOf("tab")>=0)return "Android Tablet";if(s.indexOf("android")>=0)return "Android Phone";if(s.indexOf("windows")>=0)return "Windows PC";if(s.indexOf("mac")>=0||s.indexOf("macintosh")>=0)return "Mac";return null;};
               var brandSums={};
               devData.forEach(function(r){var b=brandOf(r.device);if(!b)return;brandSums[b]=(brandSums[b]||0)+stage.field(r);});
-              var brandTotal=0;Object.keys(brandSums).forEach(function(k){brandTotal+=brandSums[k];});
+              // Denominator = ALL device traffic for this stage, not just
+              // brand-classified rows. Excluding generic/desktop/unknown
+              // devices from the denominator silently inflated the top
+              // brand (a real ~96% Android read as ~98%+). Now it is the
+              // honest share of every device delivered.
+              var brandAllTotal=0;devData.forEach(function(r){brandAllTotal+=stage.field(r);});
               var topBrand=null;Object.keys(brandSums).forEach(function(k){if(!topBrand||brandSums[k]>brandSums[topBrand])topBrand=k;});
-              var brandShare=topBrand&&brandTotal>0?(brandSums[topBrand]/brandTotal*100):0;
+              var brandShare=topBrand&&brandAllTotal>0?(brandSums[topBrand]/brandAllTotal*100):0;
               var brandColor=P.rose;
               return <div>
                 {data.map(function(d,di){var pct=max>0?(d.value/max)*100:0;var share=hundredths[di]/100;var tip=d.name+", "+share.toFixed(2)+"% share of device-tagged "+stage.label.toLowerCase();return <div key={d.key} title={tip} style={{marginBottom:14,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
@@ -4758,7 +4770,7 @@ export default function MediaOnGas(){
                     <div style={{width:pct+"%",height:"100%",background:"linear-gradient(90deg,"+d.color+"88,"+d.color+")",borderRadius:6,boxShadow:"0 0 10px "+d.color+"55",transition:"width 0.6s ease"}}></div>
                   </div>
                 </div>;})}
-                {topBrand&&<div title={"Top brand among device-tagged "+stage.label.toLowerCase()+", "+brandShare.toFixed(2)+"% of brand-tagged rows. Separate read from the Mobile / Desktop / Tablet split above, not part of the 100%."} style={{marginTop:6,paddingTop:12,borderTop:"1px dashed "+P.rule,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
+                {topBrand&&<div title={topBrand+" is "+brandShare.toFixed(2)+"% of ALL "+stage.label.toLowerCase()+" device traffic (every device Meta returned, including generic/desktop/unclassified). Separate read from the Mobile / Desktop / Tablet split above, not part of that 100%."} style={{marginTop:6,paddingTop:12,borderTop:"1px dashed "+P.rule,cursor:"default",transition:"transform 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateX(2px)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateX(0)";}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,fontSize:12,fontFamily:fm}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{width:10,height:10,borderRadius:"50%",background:brandColor,boxShadow:"0 0 10px "+brandColor+"88"}}></span>
@@ -4961,6 +4973,7 @@ export default function MediaOnGas(){
               return <div>
                 {row("Female",fShare,"#ec4899")}
                 {row("Male",mShare,"#3b82f6")}
+                {genderUntaggedPct>=1&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginTop:2}}>{genderUntaggedPct.toFixed(2)+"% of reach was untagged by Meta (blocked or private profiles) and is excluded from this split. The percentages are of the gender-identified audience only, not total reach."}</div>}
               </div>;
             };
 
