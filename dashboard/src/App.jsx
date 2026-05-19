@@ -2384,6 +2384,17 @@ function CampaignAuditModal(props){
               })}
             </div>;
           })}
+          <div style={{fontSize:11,fontWeight:800,color:P.orchid,fontFamily:fm,margin:"14px 0 6px"}}>PAGE INSIGHTS · post_reactions_by_type_total (the wired-in source)</div>
+          {(rxnProbe[0].data.pageReactions||[]).map(function(pr,pri){
+            var sk=pr.sumKeys||{};
+            var skStr=Object.keys(sk).length?Object.keys(sk).map(function(k){return k+"="+sk[k];}).join(" · "):"(none)";
+            return <div key={pri} style={{fontSize:10,fontFamily:fm,color:P.txt,marginBottom:8,paddingLeft:8,borderLeft:"2px solid "+P.orchid+"55"}}>
+              <div style={{color:P.label,fontWeight:700}}>{pr.page||pr.note||"?"}{pr.hasOwnToken===false?" (NO own page token → using system token)":""}</div>
+              <div style={{color:P.caption}}>http {String(pr.httpStatus)} · dataRows {String(pr.dataRows)} · valueCount {String(pr.valueCount)}{pr.metaError?(" · ERROR "+pr.metaError):""}{pr.error?(" · "+pr.error):""}</div>
+              <div style={{color:Object.keys(sk).length?P.mint:P.caption,wordBreak:"break-all"}}>summed types: {skStr}</div>
+              <div style={{color:P.caption,wordBreak:"break-all"}}>sampleValue: {JSON.stringify(pr.sampleValue)}</div>
+            </div>;
+          })}
         </div>}
         {dbgState[0].rows&&Object.keys(dbgState[0].rows).length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:14,maxHeight:"60vh",overflowY:"auto",overflowX:"hidden",paddingRight:8,WebkitOverflowScrolling:"touch"}}>
           <div style={{fontSize:10,color:P.caption,fontFamily:fm}}>Window queried: <strong style={{color:P.txt}}>{dbgState[0].window||(props.dateFrom+" to "+props.dateTo)}</strong> · one card = one real Meta campaign ID (same name can repeat across IDs)</div>

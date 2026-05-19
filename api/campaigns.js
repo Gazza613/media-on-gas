@@ -146,7 +146,49 @@ export default async function handler(req, res) {
       }
       probeOut.push(accRes);
     }
-    res.status(200).json({ rxnprobe: true, from: from, to: to, accounts: probeOut });
+    // Page Insights reaction probe — the source we just wired in.
+    // Shows EXACTLY what /{page}/insights?metric=post_reactions_by_type_total
+    // returns per page (status, Meta error, raw value shape, whether
+    // the page has its own token) so we can see why reactionsByType is
+    // still empty: deprecated metric? permission? wrong shape? cache?
+    var pageProbe = [];
+    try {
+      var mePR = await fetch("https://graph.facebook.com/v25.0/me/accounts?fields=name,id,access_token&limit=50&access_token=" + metaToken);
+      var meJ = await mePR.json();
+      var pgs = (meJ && meJ.data) || [];
+      if (meJ && meJ.error) pageProbe.push({ note: "me/accounts error", error: meJ.error.message || meJ.error.type });
+      for (var ppi = 0; ppi < pgs.length && ppi < 25; ppi++) {
+        var ppg = pgs[ppi];
+        var ppTok = ppg.access_token || metaToken;
+        var hasOwn = !!ppg.access_token;
+        var mPrimary = "post_reactions_by_type_total";
+        var purl2 = "https://graph.facebook.com/v25.0/" + ppg.id + "/insights?metric=" + mPrimary + "&period=day&since=" + encodeURIComponent(from) + "&until=" + encodeURIComponent(to) + "&access_token=" + ppTok;
+        try {
+          var pr2 = await fetch(purl2);
+          var pj2 = await pr2.json();
+          var dArr = (pj2 && pj2.data) || [];
+          var vals = dArr[0] && Array.isArray(dArr[0].values) ? dArr[0].values : [];
+          var nonEmpty = null;
+          for (var vi = 0; vi < vals.length && !nonEmpty; vi++) {
+            var vv = vals[vi] && vals[vi].value;
+            if (vv && typeof vv === "object" && Object.keys(vv).length > 0) nonEmpty = vals[vi];
+          }
+          pageProbe.push({
+            page: ppg.name,
+            hasOwnToken: hasOwn,
+            httpStatus: pr2.status,
+            metaError: pj2 && pj2.error ? (pj2.error.message || pj2.error.type) : null,
+            dataRows: dArr.length,
+            valueCount: vals.length,
+            sampleValue: nonEmpty || (vals[0] || "no values"),
+            sumKeys: (function(){var s={};vals.forEach(function(x){var o=x&&x.value;if(o&&typeof o==="object")Object.keys(o).forEach(function(k){s[k]=(s[k]||0)+parseInt(o[k]||0,10);});});return s;})()
+          });
+        } catch (ppe) {
+          pageProbe.push({ page: ppg.name, hasOwnToken: hasOwn, error: String(ppe && ppe.message || ppe) });
+        }
+      }
+    } catch (mpe) { pageProbe.push({ note: "page probe failed", error: String(mpe && mpe.message || mpe) }); }
+    res.status(200).json({ rxnprobe: true, from: from, to: to, accounts: probeOut, pageReactions: pageProbe });
     return;
   }
 
