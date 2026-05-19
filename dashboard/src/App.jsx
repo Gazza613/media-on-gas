@@ -2371,6 +2371,14 @@ function CampaignAuditModal(props){
         {rxnProbe[0].error&&<div style={{fontSize:11,color:P.warning||"#fbbf24",fontFamily:fm,marginTop:8}}>Reaction probe: {rxnProbe[0].error}</div>}
         {rxnProbe[0].data&&<div style={{marginTop:10,maxHeight:"55vh",overflowY:"auto",background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px"}}>
           <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginBottom:8}}>Raw Meta reaction-breakdown probe · {rxnProbe[0].data.from} to {rxnProbe[0].data.to} · find the variant whose sampleActions contains an action_reaction key</div>
+          {rxnProbe[0].data.tokenInfo&&(function(){var t=rxnProbe[0].data.tokenInfo;var ok=t.hasPagesReadEngagement===true;return <div style={{marginBottom:12,padding:"10px 12px",borderRadius:8,border:"1px solid "+(ok?P.mint:P.rose)+"66",background:(ok?P.mint:P.rose)+"12"}}>
+            <div style={{fontSize:11,fontWeight:800,color:ok?P.mint:P.rose,fontFamily:fm,marginBottom:4}}>PRODUCTION TOKEN (process.env.META_ACCESS_TOKEN) — the one the dashboard actually uses</div>
+            <div style={{fontSize:10,color:P.txt,fontFamily:fm,lineHeight:1.7,wordBreak:"break-all"}}>
+              identity: {String(t.me||"?")} · type: {String(t.type||"?")} · app: {String(t.appId||"?")} · expires: {String(t.expiresAt||"?")}<br/>
+              <strong style={{color:ok?P.mint:P.rose}}>pages_read_engagement: {ok?"YES ✓":"NO ✗ — this is why reactions are blocked"}</strong><br/>
+              scopes: {String(t.scopes||t.debugError||t.error||"(none returned)")}
+            </div>
+          </div>;})()}
           {(rxnProbe[0].data.accounts||[]).map(function(acc,ai){
             return <div key={ai} style={{marginBottom:12,borderBottom:"1px solid "+P.rule,paddingBottom:8}}>
               <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,marginBottom:4}}>{acc.account}</div>

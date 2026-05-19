@@ -106,6 +106,29 @@ export default async function handler(req, res) {
   // resolved the page-like attribution. Returns early; no heavy work.
   if (req.query.rxnprobe === "1" && isAdminOrSuperadmin(req.authPrincipal || {})) {
     var probeTR = JSON.stringify({ since: from, until: to });
+    // Identity + scopes of the ACTUAL production token the dashboard
+    // uses (process.env.META_ACCESS_TOKEN) — NOT a Graph Explorer
+    // token. debug_token shows type, app, expiry and the real granted
+    // scopes, this definitively answers whether the deployed token
+    // has pages_read_engagement, ending any "but the token has it"
+    // ambiguity (an Explorer token's scopes are irrelevant unless that
+    // exact token is the env var).
+    var tokenInfo = {};
+    try {
+      var meR = await fetch("https://graph.facebook.com/v25.0/me?fields=id,name&access_token=" + metaToken);
+      var meJ = await meR.json();
+      tokenInfo.me = meJ && meJ.error ? ("ERROR " + (meJ.error.message || meJ.error.type)) : (meJ.name + " (" + meJ.id + ")");
+      var dbgR = await fetch("https://graph.facebook.com/v25.0/debug_token?input_token=" + metaToken + "&access_token=" + metaToken);
+      var dbgJ = await dbgR.json();
+      var d = (dbgJ && dbgJ.data) || {};
+      var scopes = d.scopes || [];
+      tokenInfo.type = d.type || "?";
+      tokenInfo.appId = d.app_id || "?";
+      tokenInfo.expiresAt = d.expires_at ? new Date(d.expires_at * 1000).toISOString() : (d.data_access_expires_at ? "data-access " + new Date(d.data_access_expires_at * 1000).toISOString() : "never/unknown");
+      tokenInfo.hasPagesReadEngagement = scopes.indexOf("pages_read_engagement") >= 0;
+      tokenInfo.scopes = scopes.join(", ");
+      if (dbgJ && dbgJ.error) tokenInfo.debugError = dbgJ.error.message || dbgJ.error.type;
+    } catch (tie) { tokenInfo.error = String(tie && tie.message || tie); }
     var variants = [
       { tag: "actions+action_breakdowns=action_reaction (current)", url: "fields=actions&action_breakdowns=action_reaction&level=campaign&breakdowns=publisher_platform" },
       { tag: "actions+action_breakdowns=action_reaction (NO publisher breakdown)", url: "fields=actions&action_breakdowns=action_reaction&level=campaign" },
@@ -263,7 +286,7 @@ export default async function handler(req, res) {
         }
       }
     } catch (mpe) { pageProbe.push({ note: "page probe failed", error: String(mpe && mpe.message || mpe) }); }
-    res.status(200).json({ rxnprobe: true, from: from, to: to, accounts: probeOut, pageReactions: pageProbe });
+    res.status(200).json({ rxnprobe: true, from: from, to: to, tokenInfo: tokenInfo, accounts: probeOut, pageReactions: pageProbe });
     return;
   }
 
