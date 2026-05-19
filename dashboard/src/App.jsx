@@ -6247,7 +6247,7 @@ export default function MediaOnGas(){
                   shares:{label:"Shares",color:P.orchid,icon:Ic.share(P.orchid,18)},
                   comments:{label:"Comments",color:P.cyan,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={P.cyan} strokeWidth="1.8" fill={P.cyan+"25"} strokeLinejoin="round"/></svg>}
                 };
-                var splitUnavailable=["love","haha","wow","sad","angry"].every(function(t){return (totals[t]||0)===0;})&&(totals.other||0)>0;
+                var splitUnavailable=["love","haha","wow","sad","angry"].every(function(t){return (parseFloat(totals[t])||0)<1;})&&(parseFloat(totals.other)||0)>=1;
                 var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).filter(function(r){return !(splitUnavailable&&(r.key==="love"||r.key==="haha"||r.key==="wow"||r.key==="sad"||r.key==="angry"));}).sort(function(a,b){return b.value-a.value;});
                 var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
@@ -8853,7 +8853,7 @@ export default function MediaOnGas(){
                   // Keep every row, even at 0, so the reader can verify which
                   // reactions the brand got and which it didn't. Sort by
                   // value desc so the dominant reaction always leads.
-                  var splitUnavailable=["love","haha","wow","sad","angry"].every(function(t){return (totals[t]||0)===0;})&&(totals.other||0)>0;
+                  var splitUnavailable=["love","haha","wow","sad","angry"].every(function(t){return (parseFloat(totals[t])||0)<1;})&&(parseFloat(totals.other)||0)>=1;
                 var rows=types.map(function(t){var m2=typeMeta[t]||{label:String(t),color:P.label,icon:null};return {key:t,label:m2.label,color:m2.color,icon:m2.icon,value:totals[t]||0,perPlat:{FB:perPlat.Facebook[t]||0,IG:perPlat.Instagram[t]||0,TT:perPlat.TikTok[t]||0}};}).filter(function(r){return !(splitUnavailable&&(r.key==="love"||r.key==="haha"||r.key==="wow"||r.key==="sad"||r.key==="angry"));}).sort(function(a,b){return b.value-a.value;});
                   var maxVal=rows.reduce(function(a,r){return Math.max(a,r.value);},0);
                   return <div style={{background:"linear-gradient(135deg,rgba(52,211,153,0.06),rgba(244,63,94,0.04) 50%,rgba(168,85,247,0.06))",borderRadius:16,padding:"22px 24px",marginBottom:20,border:"1px solid "+P.rule}}>
