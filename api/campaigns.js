@@ -489,70 +489,25 @@ export default async function handler(req, res) {
         }
       }
 
-      // Secondary insights call for action_reactions breakdown only. Isolating
-      // this keeps the main campaign query reliable — early deploys mixed
-      // action_reactions into the main fields list and caused Meta to drop
-      // campaign rows from certain accounts.
-      try {
-        // CORRECT Meta method for the reaction-type split: the `actions`
-        // field with action_breakdowns=action_reaction. "action_reactions"
-        // is NOT a valid Meta insights field — Meta silently omits unknown
-        // fields (no error), so the old call returned rows with no
-        // breakdown at all and EVERY Facebook/Instagram reaction fell
-        // into "Other Reactions" (only TikTok's own API populated like).
-        // With action_breakdowns=action_reaction each post_reaction is
-        // split with an `action_reaction` discriminator: like, love, wow,
-        // haha, sorry, anger. Kept a SEPARATE call — mixing reaction
-        // breakdowns into the main query made Meta drop campaign rows.
-        var rxnUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=actions&action_breakdowns=action_reaction&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
-        var rxnRows = [];
-        var rxnNext = rxnUrl;
-        var rxnGuard = 0;
-        while (rxnNext && rxnGuard < 10) {
-          rxnGuard++;
-          var rxnPageRes = await fetch(rxnNext);
-          if (!rxnPageRes.ok) {
-            var errText = await rxnPageRes.text();
-            console.warn("[reactions] non-ok response", account.name, rxnPageRes.status, errText.substring(0, 300));
-            break;
-          }
-          var rxnPageData = await rxnPageRes.json();
-          if (rxnPageData.data) rxnRows = rxnRows.concat(rxnPageData.data);
-          rxnNext = rxnPageData.paging && rxnPageData.paging.next ? rxnPageData.paging.next : null;
-        }
-        // Meta's reaction enum: like, love, wow, haha, sorry, anger.
-        // Our buckets are like/love/haha/wow/sad/angry, so sorry->sad
-        // and anger->angry MUST be normalised or negative reactions are
-        // dropped (which inflates brand sentiment).
-        var RXN_NAME = { like: "like", love: "love", wow: "wow", haha: "haha", sorry: "sad", anger: "angry", sad: "sad", angry: "angry" };
-        if (rxnRows.length > 0) {
-          var dbgS = null;
-          for (var di = 0; di < rxnRows.length && !dbgS; di++) {
-            var acts0 = rxnRows[di].actions || [];
-            for (var dj = 0; dj < acts0.length; dj++) { if (acts0[dj].action_reaction) { dbgS = acts0[dj]; break; } }
-          }
-          console.log("[reactions] " + account.name + ": " + rxnRows.length + " rows, sample=" + (dbgS ? JSON.stringify(dbgS) : "no action_reaction key in any actions[]"));
-        }
-        rxnRows.forEach(function(rr) {
-          if (!rr.actions || !Array.isArray(rr.actions)) return;
-          var rawPub = String(rr.publisher_platform || "facebook").toLowerCase();
-          var pub;
-          if (rawPub === "instagram" || rawPub === "threads") pub = "instagram";
-          else if (rawPub === "facebook" || rawPub === "audience_network" || rawPub === "messenger" || rawPub === "oculus") pub = "facebook";
-          else return;
-          var row = rowMap[rr.campaign_id + "_" + pub];
-          if (!row) return;
-          rr.actions.forEach(function(a) {
-            // Reaction-split rows carry an action_reaction discriminator;
-            // fall back to action_type if Meta returns the reaction as
-            // the type itself. Anything not a known reaction is ignored
-            // (it stays in the post_reaction total -> Other Reactions),
-            // so this can only classify, never fabricate.
-            var rk = RXN_NAME[String(a.action_reaction || "").toLowerCase()] || RXN_NAME[String(a.action_type || "").toLowerCase()];
-            if (rk && row.reactionsByType[rk] !== undefined) row.reactionsByType[rk] += parseInt(a.value || 0, 10);
-          });
-        });
-      } catch (rxnErr) { console.error("Meta reactions breakdown error", account.name, rxnErr); }
+      // Per-type reaction split is NOT available from the Ads/Marketing
+      // Insights API. PROVEN via the ?rxnprobe diagnostic across all 6
+      // accounts: `action_reactions` is not a valid field; combining
+      // action_breakdowns=action_reaction with breakdowns=
+      // publisher_platform is a hard Meta #100 error; and even WITHOUT
+      // the publisher breakdown Meta returns only post_reaction as a
+      // single total with NO per-type discriminator. So no ads-insights
+      // call here can ever populate reactionsByType — every prior
+      // attempt just 400-errored 6x per request for nothing.
+      //
+      // The Like/Love/Haha/Wow/Sad/Angry split lives in the PAGE
+      // Insights API (post_reactions_by_type_total / the page's post
+      // objects), which is page-level (the brand's content, organic +
+      // paid), the conceptually correct source for sentiment. That is
+      // a separate integration (TODO: feed reactionsByType from the
+      // page token, same place fb-page-snapshot reads). Until then
+      // reactionsByType stays 0 and the honest post_reaction TOTAL
+      // (set from the main call) shows under "Other Reactions" rather
+      // than a fabricated split. See project_sentiment_ground_truth.
 
       // Ad-level publisher_platform SUPPLEMENT. Meta's campaign-level
       // publisher_platform breakdown sometimes silently drops a publisher
