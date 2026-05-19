@@ -6462,15 +6462,16 @@ export default function MediaOnGas(){
                           return Object.assign({},a,{results:ck,resultType:"profile_visits"});
                         }
                         if(pg.key==="TikTok"){
-                          // TikTok does NOT attribute follows per ad
-                          // (campaign-level only), so '0 FOLLOWS' is a
-                          // measurement gap, not a failed ad. Mirror the
-                          // IG proxy: rank on per-ad video completions
-                          // (the honest signal TikTok returns per ad),
-                          // fall back to impressions. Real follows stay
-                          // the campaign-level Community Growth figure.
-                          var vv=parseFloat(a.videoViews||0);
-                          return vv>0?Object.assign({},a,{results:vv,resultType:"tt_views"}):Object.assign({},a,{results:parseFloat(a.impressions||0),resultType:"impressions"});
+                          // TikTok DOES attribute follows per ad (proven
+                          // via probe: follows=934/291/189...). ads.js
+                          // already set a.results = real per-ad follows
+                          // for follower campaigns. Use it directly —
+                          // the old code recomputed from Meta-only
+                          // fields (followsTrue/pageLikes) that don't
+                          // exist on TikTok ad objects, which is what
+                          // produced the false "0 FOLLOWS".
+                          var ttFol=parseFloat(a.results||0)||parseFloat(a.followsRaw||0);
+                          return Object.assign({},a,{results:ttFol,resultType:"follows"});
                         }
                         // FB page follows. Prefer followsTrue
                         // (no-breakdown per-ad, the optimization_goal-gated
@@ -7327,11 +7328,12 @@ export default function MediaOnGas(){
                   return Object.assign({},a,{results:ck,resultType:"profile_visits"});
                 }
                 if(pk==="TikTok"){
-                  // TikTok attributes follows at campaign level only;
-                  // rank per-ad on video completions (honest per-ad
-                  // signal), fall back to impressions. Mirrors IG.
-                  var vv=parseFloat(a.videoViews||0);
-                  return vv>0?Object.assign({},a,{results:vv,resultType:"tt_views"}):Object.assign({},a,{results:parseFloat(a.impressions||0),resultType:"impressions"});
+                  // TikTok attributes follows per ad; ads.js already set
+                  // a.results to the real per-ad follows for follower
+                  // campaigns. Use it (do not recompute from Meta-only
+                  // fields — that was the 0 FOLLOWS bug).
+                  var ttFol=parseFloat(a.results||0)||parseFloat(a.followsRaw||0);
+                  return Object.assign({},a,{results:ttFol,resultType:"follows"});
                 }
                 var ft=parseFloat(a.followsTrue||0);
                 if(ft>0)return Object.assign({},a,{results:ft,resultType:"follows"});
