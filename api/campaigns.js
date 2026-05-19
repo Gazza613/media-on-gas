@@ -173,6 +173,42 @@ export default async function handler(req, res) {
             var vv = vals[vi] && vals[vi].value;
             if (vv && typeof vv === "object" && Object.keys(vv).length > 0) nonEmpty = vals[vi];
           }
+          // Candidate fix: per-post reactions.type(X).summary(true).
+          // The deprecated-metric path above returns 200+empty for
+          // every page; this is the supported method. Probe the first
+          // 12 pages (covers MTN/Psycho, which sort early) to bound
+          // call volume.
+          var viaPosts = null;
+          if (ppi < 12) {
+            try {
+              var rxFields = "id,created_time," +
+                "reactions.type(LIKE).limit(0).summary(true).as(like)," +
+                "reactions.type(LOVE).limit(0).summary(true).as(love)," +
+                "reactions.type(WOW).limit(0).summary(true).as(wow)," +
+                "reactions.type(HAHA).limit(0).summary(true).as(haha)," +
+                "reactions.type(SAD).limit(0).summary(true).as(sad)," +
+                "reactions.type(ANGRY).limit(0).summary(true).as(angry)";
+              var postsUrl = "https://graph.facebook.com/v25.0/" + ppg.id + "/posts?fields=" + encodeURIComponent(rxFields) + "&since=" + encodeURIComponent(from) + "&until=" + encodeURIComponent(to) + "&limit=50&access_token=" + ppTok;
+              var prP = await fetch(postsUrl);
+              var pjP = await prP.json();
+              var posts = (pjP && pjP.data) || [];
+              var sums = { like: 0, love: 0, wow: 0, haha: 0, sad: 0, angry: 0 };
+              posts.forEach(function(po) {
+                ["like", "love", "wow", "haha", "sad", "angry"].forEach(function(rk) {
+                  var node = po[rk];
+                  var c = node && node.summary && node.summary.total_count;
+                  if (typeof c === "number") sums[rk] += c;
+                });
+              });
+              viaPosts = {
+                httpStatus: prP.status,
+                metaError: pjP && pjP.error ? (pjP.error.message || pjP.error.type) : null,
+                postCount: posts.length,
+                summed: sums,
+                samplePost: posts[0] || "no posts"
+              };
+            } catch (vpe) { viaPosts = { error: String(vpe && vpe.message || vpe) }; }
+          }
           pageProbe.push({
             page: ppg.name,
             hasOwnToken: hasOwn,
@@ -181,7 +217,8 @@ export default async function handler(req, res) {
             dataRows: dArr.length,
             valueCount: vals.length,
             sampleValue: nonEmpty || (vals[0] || "no values"),
-            sumKeys: (function(){var s={};vals.forEach(function(x){var o=x&&x.value;if(o&&typeof o==="object")Object.keys(o).forEach(function(k){s[k]=(s[k]||0)+parseInt(o[k]||0,10);});});return s;})()
+            sumKeys: (function(){var s={};vals.forEach(function(x){var o=x&&x.value;if(o&&typeof o==="object")Object.keys(o).forEach(function(k){s[k]=(s[k]||0)+parseInt(o[k]||0,10);});});return s;})(),
+            viaPosts: viaPosts
           });
         } catch (ppe) {
           pageProbe.push({ page: ppg.name, hasOwnToken: hasOwn, error: String(ppe && ppe.message || ppe) });

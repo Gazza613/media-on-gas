@@ -2391,7 +2391,8 @@ function CampaignAuditModal(props){
             return <div key={pri} style={{fontSize:10,fontFamily:fm,color:P.txt,marginBottom:8,paddingLeft:8,borderLeft:"2px solid "+P.orchid+"55"}}>
               <div style={{color:P.label,fontWeight:700}}>{pr.page||pr.note||"?"}{pr.hasOwnToken===false?" (NO own page token → using system token)":""}</div>
               <div style={{color:P.caption}}>http {String(pr.httpStatus)} · dataRows {String(pr.dataRows)} · valueCount {String(pr.valueCount)}{pr.metaError?(" · ERROR "+pr.metaError):""}{pr.error?(" · "+pr.error):""}</div>
-              <div style={{color:Object.keys(sk).length?P.mint:P.caption,wordBreak:"break-all"}}>summed types: {skStr}</div>
+              <div style={{color:Object.keys(sk).length?P.mint:P.caption,wordBreak:"break-all"}}>insights metric (deprecated path) summed: {skStr}</div>
+              {pr.viaPosts&&(function(){var vp=pr.viaPosts;var vs=vp.summed||{};var vsum=(vs.like||0)+(vs.love||0)+(vs.wow||0)+(vs.haha||0)+(vs.sad||0)+(vs.angry||0);return <div style={{marginTop:3,color:vsum>0?P.mint:P.caption,wordBreak:"break-all"}}>via /posts reactions.type(): http {String(vp.httpStatus)}{vp.metaError?(" · ERROR "+vp.metaError):""}{vp.error?(" · "+vp.error):""} · posts {String(vp.postCount)} · <strong>like={String(vs.like||0)} love={String(vs.love||0)} wow={String(vs.wow||0)} haha={String(vs.haha||0)} sad={String(vs.sad||0)} angry={String(vs.angry||0)}</strong></div>;})()}
               <div style={{color:P.caption,wordBreak:"break-all"}}>sampleValue: {JSON.stringify(pr.sampleValue)}</div>
             </div>;
           })}
