@@ -444,7 +444,17 @@ export default async function handler(req, res) {
       // action_reactions into the main fields list and caused Meta to drop
       // campaign rows from certain accounts.
       try {
-        var rxnUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,action_reactions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+        // CORRECT Meta method for the reaction-type split: the `actions`
+        // field with action_breakdowns=action_reaction. "action_reactions"
+        // is NOT a valid Meta insights field — Meta silently omits unknown
+        // fields (no error), so the old call returned rows with no
+        // breakdown at all and EVERY Facebook/Instagram reaction fell
+        // into "Other Reactions" (only TikTok's own API populated like).
+        // With action_breakdowns=action_reaction each post_reaction is
+        // split with an `action_reaction` discriminator: like, love, wow,
+        // haha, sorry, anger. Kept a SEPARATE call — mixing reaction
+        // breakdowns into the main query made Meta drop campaign rows.
+        var rxnUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=actions&action_breakdowns=action_reaction&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
         var rxnRows = [];
         var rxnNext = rxnUrl;
         var rxnGuard = 0;
@@ -453,43 +463,46 @@ export default async function handler(req, res) {
           var rxnPageRes = await fetch(rxnNext);
           if (!rxnPageRes.ok) {
             var errText = await rxnPageRes.text();
-            console.warn("[action_reactions] non-ok response", account.name, rxnPageRes.status, errText.substring(0, 300));
+            console.warn("[reactions] non-ok response", account.name, rxnPageRes.status, errText.substring(0, 300));
             break;
           }
           var rxnPageData = await rxnPageRes.json();
           if (rxnPageData.data) rxnRows = rxnRows.concat(rxnPageData.data);
           rxnNext = rxnPageData.paging && rxnPageData.paging.next ? rxnPageData.paging.next : null;
         }
-        // Log a sample so we can verify Meta is returning the full reaction
-        // breakdown (like, love, haha, wow, sad, angry) and not just 'like'.
-        if (rxnRows.length > 0) {
-          var sample = rxnRows.find(function(r) { return r.action_reactions && r.action_reactions.length > 0; });
-          if (sample) console.log("[action_reactions] sample from " + account.name + ":", JSON.stringify(sample.action_reactions));
-          else console.log("[action_reactions] " + account.name + ": " + rxnRows.length + " rows but none had action_reactions populated");
-        }
-        // Meta returns reaction action_type using its OWN enum names:
-        // like, love, wow, haha, sorry, anger. Our buckets are
-        // like/love/haha/wow/sad/angry, so "sorry" and "anger" matched
-        // nothing and every Sad + Angry reaction was silently dropped
-        // (which also systematically inflated brand sentiment, the
-        // negative reactions never counted). Normalise both names.
+        // Meta's reaction enum: like, love, wow, haha, sorry, anger.
+        // Our buckets are like/love/haha/wow/sad/angry, so sorry->sad
+        // and anger->angry MUST be normalised or negative reactions are
+        // dropped (which inflates brand sentiment).
         var RXN_NAME = { like: "like", love: "love", wow: "wow", haha: "haha", sorry: "sad", anger: "angry", sad: "sad", angry: "angry" };
+        if (rxnRows.length > 0) {
+          var dbgS = null;
+          for (var di = 0; di < rxnRows.length && !dbgS; di++) {
+            var acts0 = rxnRows[di].actions || [];
+            for (var dj = 0; dj < acts0.length; dj++) { if (acts0[dj].action_reaction) { dbgS = acts0[dj]; break; } }
+          }
+          console.log("[reactions] " + account.name + ": " + rxnRows.length + " rows, sample=" + (dbgS ? JSON.stringify(dbgS) : "no action_reaction key in any actions[]"));
+        }
         rxnRows.forEach(function(rr) {
-          if (!rr.action_reactions || !Array.isArray(rr.action_reactions)) return;
+          if (!rr.actions || !Array.isArray(rr.actions)) return;
           var rawPub = String(rr.publisher_platform || "facebook").toLowerCase();
           var pub;
           if (rawPub === "instagram" || rawPub === "threads") pub = "instagram";
           else if (rawPub === "facebook" || rawPub === "audience_network" || rawPub === "messenger" || rawPub === "oculus") pub = "facebook";
           else return;
-          var uniqueIdRx = rr.campaign_id + "_" + pub;
-          var row = rowMap[uniqueIdRx];
+          var row = rowMap[rr.campaign_id + "_" + pub];
           if (!row) return;
-          rr.action_reactions.forEach(function(ar) {
-            var rt = RXN_NAME[String(ar.action_type || "").toLowerCase()];
-            if (rt && row.reactionsByType[rt] !== undefined) row.reactionsByType[rt] += parseInt(ar.value || 0, 10);
+          rr.actions.forEach(function(a) {
+            // Reaction-split rows carry an action_reaction discriminator;
+            // fall back to action_type if Meta returns the reaction as
+            // the type itself. Anything not a known reaction is ignored
+            // (it stays in the post_reaction total -> Other Reactions),
+            // so this can only classify, never fabricate.
+            var rk = RXN_NAME[String(a.action_reaction || "").toLowerCase()] || RXN_NAME[String(a.action_type || "").toLowerCase()];
+            if (rk && row.reactionsByType[rk] !== undefined) row.reactionsByType[rk] += parseInt(a.value || 0, 10);
           });
         });
-      } catch (rxnErr) { console.error("Meta action_reactions breakdown error", account.name, rxnErr); }
+      } catch (rxnErr) { console.error("Meta reactions breakdown error", account.name, rxnErr); }
 
       // Ad-level publisher_platform SUPPLEMENT. Meta's campaign-level
       // publisher_platform breakdown sometimes silently drops a publisher
