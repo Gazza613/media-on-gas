@@ -1209,36 +1209,53 @@ export default async function handler(req, res) {
             pg.instagram_business_account.follower_growth = totalGrowth;
           } catch (igErr) { console.error("IG insights error", igErr); }
         }
-        // Page-level reaction-type split. This is the ONLY place Meta
-        // exposes Like/Love/Haha/Wow/Sad/Angry (the Ads API only gives
-        // the post_reaction total — proven via ?rxnprobe). Page-level =
-        // all reactions on the page's posts (organic + paid), the
-        // correct basis for brand sentiment. Meta's enum is
-        // like/love/wow/haha/sorry/anger -> normalise sorry=sad,
-        // anger=angry. Non-fatal; runs only on a cold campaigns cache.
+        // Per-type reaction split. PROVEN via ?rxnprobe across all
+        // sources: the Ads API only gives the post_reaction TOTAL; the
+        // page-insights metric post_reactions_by_type_total is dead
+        // (200 + 0 rows everywhere); the ONLY working method is per
+        // published post: /{page}/posts with reactions.type(X).summary.
+        // That requires the `pages_read_engagement` permission on the
+        // token — without it Meta returns error #10 and this stays 0
+        // (honest "Other Reactions"). The moment that permission is
+        // granted to the system user / page tokens, this populates
+        // automatically with no further code change. Non-fatal; only
+        // runs on a cold campaigns-response cache. Meta's reactions
+        // .type() enum is LIKE/LOVE/WOW/HAHA/SAD/ANGRY (no sorry/anger
+        // alias needed here, unlike the actions enum).
         pg.reactionsByType = { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
+        pg.reactionsAccessBlocked = false;
         try {
-          var prUrl = "https://graph.facebook.com/v25.0/" + pg.id + "/insights?metric=post_reactions_by_type_total&period=day&since=" + encodeURIComponent(from) + "&until=" + encodeURIComponent(to) + "&access_token=" + pgToken;
-          var prRes = await fetch(prUrl);
-          if (prRes.status === 200) {
+          var prFields = "id," +
+            "reactions.type(LIKE).limit(0).summary(true).as(like)," +
+            "reactions.type(LOVE).limit(0).summary(true).as(love)," +
+            "reactions.type(WOW).limit(0).summary(true).as(wow)," +
+            "reactions.type(HAHA).limit(0).summary(true).as(haha)," +
+            "reactions.type(SAD).limit(0).summary(true).as(sad)," +
+            "reactions.type(ANGRY).limit(0).summary(true).as(angry)";
+          var prNext = "https://graph.facebook.com/v25.0/" + pg.id + "/posts?fields=" + encodeURIComponent(prFields) + "&since=" + encodeURIComponent(from) + "&until=" + encodeURIComponent(to) + "&limit=100&access_token=" + pgToken;
+          var prGuard = 0;
+          while (prNext && prGuard < 8) {
+            prGuard++;
+            var prRes = await fetch(prNext);
             var prJson = await prRes.json();
-            var PR_MAP = { like: "like", love: "love", wow: "wow", haha: "haha", sorry: "sad", anger: "angry" };
-            if (prJson.data && prJson.data[0] && Array.isArray(prJson.data[0].values)) {
-              prJson.data[0].values.forEach(function(val) {
-                var obj = val && val.value;
-                if (obj && typeof obj === "object") {
-                  Object.keys(obj).forEach(function(k) {
-                    var nk = PR_MAP[String(k).toLowerCase()];
-                    if (nk) pg.reactionsByType[nk] += parseInt(obj[k] || 0, 10);
-                  });
-                }
-              });
+            if (prJson && prJson.error) {
+              // #10 / #200 = missing pages_read_engagement / Page
+              // Public Content Access. Flag it so the UI can say WHY
+              // the split is unavailable rather than imply zero.
+              if (prJson.error.code === 10 || prJson.error.code === 200) pg.reactionsAccessBlocked = true;
+              console.warn("[page-reactions] error", pg.name, prJson.error.code, prJson.error.message);
+              break;
             }
-          } else {
-            var prErrTxt = await prRes.text();
-            console.warn("[page-reactions] non-ok", pg.name, prRes.status, prErrTxt.substring(0, 200));
+            (prJson.data || []).forEach(function(po) {
+              ["like", "love", "wow", "haha", "sad", "angry"].forEach(function(rk) {
+                var node = po[rk];
+                var c = node && node.summary && node.summary.total_count;
+                if (typeof c === "number") pg.reactionsByType[rk] += c;
+              });
+            });
+            prNext = prJson.paging && prJson.paging.next ? prJson.paging.next : null;
           }
-        } catch (prErr) { console.error("Page reactions insights error", pg.id, prErr); }
+        } catch (prErr) { console.error("Page reactions error", pg.id, prErr); }
         delete pg.access_token;
       }
       pageData = pagesJson.data;
