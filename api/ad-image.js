@@ -237,6 +237,11 @@ export default async function handler(req, res) {
   var cacheKey = platform + "|" + adId + (wantWinner ? "|w" : "");
   var cached = resolveCache[cacheKey];
   if (cached && Date.now() - cached.ts < RESOLVE_TTL_MS) {
+    // Tell the browser to cache the redirect itself (max-age matches the
+    // server-side resolveCache TTL). Without this header repeat thumbnail
+    // loads on tab switches re-hit the proxy for every tile; with it the
+    // browser short-circuits the entire round-trip to the cached CDN URL.
+    res.setHeader("Cache-Control", "private, max-age=600");
     res.redirect(302, cached.url);
     return;
   }
@@ -325,5 +330,6 @@ export default async function handler(req, res) {
       console.error("ad-image raw stream failed", String(e && e.message || e));
     }
   }
+  res.setHeader("Cache-Control", "private, max-age=600");
   res.redirect(302, cdnUrl);
 }

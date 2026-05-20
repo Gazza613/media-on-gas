@@ -3254,7 +3254,7 @@ function ChatPanel(props){
                 var accent=platColors[ad.platform]||P.ember;
                 return <div key={ai} onClick={function(){if(props.onOpenAd)props.onOpenAd(ad);}} style={{display:"flex",gap:10,background:"rgba(0,0,0,0.35)",border:"1px solid "+accent+"35",borderLeft:"3px solid "+accent,borderRadius:12,padding:10,textDecoration:"none",color:"inherit",cursor:"pointer"}}>
                   <div style={{width:74,height:74,borderRadius:8,flexShrink:0,overflow:"hidden",background:"linear-gradient(135deg,"+accent+"55,"+accent+"10 55%,#0a0618)",position:"relative"}}>
-                    {ad.thumbnail?<img src={ad.thumbnail} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:800,letterSpacing:1}}>{ad.platform}</div>}
+                    {ad.thumbnail?<img src={ad.thumbnail} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:800,letterSpacing:1}}>{ad.platform}</div>}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -4723,11 +4723,12 @@ export default function MediaOnGas(){
               var agg=authPlat;
               var totalImp=agg.Facebook.imp+agg.Instagram.imp+agg.TikTok.imp+agg.Google.imp;
               var totalClk=agg.Facebook.clk+agg.Instagram.clk+agg.TikTok.clk+agg.Google.clk;
+              var totalSpend=agg.Facebook.spend+agg.Instagram.spend+agg.TikTok.spend+agg.Google.spend;
               var meta=[{k:"Facebook",color:P.fb,glyph:"f"},{k:"Instagram",color:P.ig,glyph:"IG"},{k:"TikTok",color:P.tt,glyph:"TT"},{k:"Google",color:P.gd,glyph:"G"}];
               return <div style={{background:"linear-gradient(145deg,#1f1534,#120a1f)",borderRadius:16,padding:"22px 22px 18px",border:"1px solid rgba(255,255,255,0.08)",marginBottom:24}}>
                 <div style={{fontSize:11,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2.5,textTransform:"uppercase",marginBottom:16}}>Platform Mix · Share of Clicks</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
-                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var tip=m.k+" — "+clkShare.toFixed(2)+"% share of clicks, "+impShare.toFixed(2)+"% share of ads served across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                  {meta.map(function(m){var d=agg[m.k];var impShare=totalImp>0?(d.imp/totalImp*100):0;var clkShare=totalClk>0?(d.clk/totalClk*100):0;var spendShare=totalSpend>0?(d.spend/totalSpend*100):0;var tip=m.k+" — "+clkShare.toFixed(2)+"% share of clicks, "+impShare.toFixed(2)+"% share of ads served, "+fR(d.spend)+" spend ("+spendShare.toFixed(2)+"% of total) across the selected campaigns.";return <div key={m.k} title={tip} style={{background:"rgba(0,0,0,0.32)",border:"1px solid "+m.color+"45",borderRadius:14,padding:"18px 16px",position:"relative",overflow:"hidden",cursor:"default",transition:"transform 0.2s ease, box-shadow 0.2s ease"}} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px "+m.color+"35";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
                     <div style={{position:"absolute",left:0,top:0,bottom:0,width:"4px",background:m.color,boxShadow:"0 0 14px "+m.color+"aa"}}></div>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                       <div style={{width:28,height:28,borderRadius:8,background:m.color+"22",border:"1px solid "+m.color+"45",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:m.color,fontFamily:fm,letterSpacing:0.5}}>{m.glyph}</div>
@@ -4741,6 +4742,10 @@ export default function MediaOnGas(){
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontFamily:fm,color:P.label,marginTop:10,letterSpacing:0.5}}>
                       <span>{impShare.toFixed(2)+"% of ads served"}</span>
+                    </div>
+                    <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid "+m.color+"22",display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                      <span style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase"}}>Media Spend</span>
+                      <span style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:0.3}}>{fR(d.spend)}</span>
                     </div>
                   </div>;})}
                 </div>
@@ -6579,7 +6584,7 @@ export default function MediaOnGas(){
                           {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{crStr}</div>}
                         </div>}
                       </div>
-                      {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
+                      {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                       {hasThumb(ad)&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"12px 18px",borderRadius:10,textAlign:"center",minWidth:100}}>
                         {/* Headline the metric the ad was optimised for.
                             REACH ads (awareness, the Psycho Bunny KPI) show
@@ -7457,7 +7462,7 @@ export default function MediaOnGas(){
               return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
-                  {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
+                  {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
                   {hasThumb(ad)&&<div style={{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%)",padding:"14px 22px",borderRadius:12,textAlign:"center",minWidth:110}}>
                     {/* IG publisher rows often carry ad.results=0 because Meta
                         books conversion actions to the Facebook split; fall
@@ -7507,7 +7512,7 @@ export default function MediaOnGas(){
                       shows through. */}
                   <div onClick={hasThumb(ad)?function(){setPreviewAd(ad);}:undefined} style={{position:"relative",width:48,height:48,borderRadius:6,overflow:"hidden",background:"linear-gradient(135deg,"+adPlatC+"55,"+adPlatC+"15)",display:"flex",alignItems:"center",justifyContent:"center",cursor:hasThumb(ad)?"pointer":"default"}}>
                     <span style={{color:"#fff",fontSize:8,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{adPlatShort.toUpperCase()}</span>
-                    {hasThumb(ad)&&<img src={thumbFor(ad)} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>}
+                    {hasThumb(ad)&&<img src={thumbFor(ad)} alt="" loading="lazy" decoding="async" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>}
                   </div>
                 </td>
                 <td style={{padding:"8px 12px",border:"1px solid "+P.rule,maxWidth:280}}>
@@ -7768,7 +7773,7 @@ export default function MediaOnGas(){
                   var ps=platShort2[ad.platform]||ad.platform;
                   var fm2=fmtMeta(ad.format);
                   var thumbBlock=<div style={{position:"relative",width:64,height:64,flexShrink:0,borderRadius:8,overflow:"hidden",background:"linear-gradient(135deg,"+pc+"55,"+pc+"15)"}}>
-                    {hasThumb(ad)?<img src={thumbFor(ad)} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
+                    {hasThumb(ad)?<img src={thumbFor(ad)} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:9,fontFamily:fm,fontWeight:900,letterSpacing:1}}>{ps.toUpperCase()}</div>}
                     <div style={{position:"absolute",top:2,right:2,background:fm2.color,color:textOnAccent(fm2.color),fontSize:7,fontWeight:900,padding:"1px 4px",borderRadius:3,fontFamily:fm,letterSpacing:0.5}}>{fm2.label}</div>
                   </div>;
                   return <div style={{display:"flex",gap:12,background:"rgba(0,0,0,0.3)",borderRadius:10,padding:10,border:"1px solid "+P.rule,alignItems:"center"}}>
