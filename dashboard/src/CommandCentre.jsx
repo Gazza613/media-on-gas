@@ -22,6 +22,13 @@ export default function CommandCentre(props) {
   // what needs a human now" — both modes are first-class.
   var fm0 = useState("all"), filterMode = fm0[0], setFilterMode = fm0[1];
 
+  // Client filter: "" (or "all") shows every client section; any other
+  // value isolates that one client. The TOC chip strip doubles as the
+  // selector — click a client chip to filter to it, click 'All' to
+  // restore. Keeps the page focused when a media analyst wants to
+  // work one client end-to-end without scrolling past the others.
+  var cf0 = useState(""), clientFilter = cf0[0], setClientFilter = cf0[1];
+
   // Best-practices playbook fetched from /api/best-practices (which
   // reads the Redis copy refreshed monthly by the cron, falling back
   // to a bundled JSON file if Redis is empty). Loaded once on mount,
@@ -1014,26 +1021,53 @@ export default function CommandCentre(props) {
         // the right section on click. Strips non-letter/digit chars.
         var slugOf = function(name) { return "gas-cc-" + String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"); };
 
+        // Apply client filter: empty (or "all") shows everything;
+        // any other value isolates that one client section.
+        var visibleClients = clientFilter && clientFilter !== "all"
+          ? perClient.filter(function(e) { return e.grp.client === clientFilter; })
+          : perClient;
+
         return <React.Fragment>
-          {/* Per-client TOC chip strip — click jumps to that client's
-              section below. Each chip stays the same compact size so
-              the strip works as quick navigation, not a heading. */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
+          {/* Client filter / TOC strip. The 'All' pill on the left
+              clears the filter; clicking any client chip isolates
+              that client (page shows just their section). The chip
+              also still scrolls to the section via the # anchor for
+              backward-compatibility with bookmarked links. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22, alignItems: "center" }}>
+            <span style={{ fontSize: 9, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginRight: 4 }}>View</span>
+            <button onClick={function() { setClientFilter(""); }}
+              style={{ background: !clientFilter || clientFilter === "all" ? P.mint + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (!clientFilter || clientFilter === "all" ? P.mint : P.rule), borderRadius: 8, padding: "8px 14px", fontSize: 11, fontWeight: 800, fontFamily: fm, color: !clientFilter || clientFilter === "all" ? P.mint : P.label, letterSpacing: 1, textTransform: "uppercase", cursor: "pointer" }}>
+              All clients · {perClient.length}
+            </button>
             {s.data.clients.map(function(grp) {
               var col = grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint;
-              return <a key={grp.client} href={"#" + slugOf(grp.client)}
-                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, textDecoration: "none", cursor: "pointer" }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: P.txt }}>{grp.client}</span>
+              var isOn = clientFilter === grp.client;
+              return <button key={grp.client}
+                onClick={function() {
+                  setClientFilter(isOn ? "" : grp.client);
+                  // Brief tick so the section renders before the anchor
+                  // scroll fires.
+                  setTimeout(function() {
+                    var el = document.getElementById(slugOf(grp.client));
+                    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 60);
+                }}
+                style={{ background: isOn ? col + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (isOn ? col : P.rule), borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, cursor: "pointer", outline: "none" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: isOn ? col : P.txt }}>{grp.client}</span>
                 <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{grp.rollup.live} live · {R(grp.rollup.spendPeriod)}</span>
                 {grp.rollup.alerts > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: col, letterSpacing: 1 }}>{grp.rollup.alerts} ALERTS</span>}
-              </a>;
+              </button>;
             })}
           </div>
 
-          {/* Per-client sections. Each client carries its own buckets
-              and its own growth plan, so the team reads top-to-bottom
-              per client rather than hopping between them. */}
-          {perClient.map(function(entry) {
+          {/* Per-client sections. When a single client is filtered the
+              other sections are skipped entirely. Each client carries
+              its own buckets and its own growth plan. */}
+          {visibleClients.length === 0 && clientFilter && <Glass st={{ padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 13, color: P.label, fontFamily: fm }}>‘{clientFilter}’ has nothing matching the current filters in this window.</div>
+            <button onClick={function() { setClientFilter(""); }} style={{ marginTop: 10, background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>Show all clients</button>
+          </Glass>}
+          {visibleClients.map(function(entry) {
             var grp = entry.grp;
             var buckets = entry.buckets;
             var slug = slugOf(grp.client);
