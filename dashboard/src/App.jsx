@@ -4401,7 +4401,14 @@ export default function MediaOnGas(){
               if(mp.instagram_business_account)demoIgGrowth+=parseFloat(mp.instagram_business_account.follower_growth||0);
             });
             var demoTtE=0;sel.forEach(function(c){if(c.platform==="TikTok")demoTtE+=parseFloat(c.follows||0);});
-            var demoEarnedTotal=demoFbGrowth+demoIgGrowth+demoTtE;
+            // Demographics Followers headline must equal Summary / Community
+            // / Deep Dive / Creative (project_followers_truth). Same
+            // fbEarnedResolved formula: snapshot when it spans the window,
+            // else the per-ad attributable page-like result.
+            var demoFbGrowthKnown=demoMatchedPages.some(function(mp){return typeof mp.follower_growth==="number";});
+            var demoFbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)demoFbPaidPL+=parseFloat(camp.pageLikes||0);});
+            var demoFbEarnedResolved=(demoFbGrowthKnown&&demoFbGrowth>0)?demoFbGrowth:demoFbPaidPL;
+            var demoEarnedTotal=demoFbEarnedResolved+demoIgGrowth+demoTtE;
             if(demoEarnedTotal>0){
               authObj=authObj-authObjFollowersRaw+demoEarnedTotal;
             }
@@ -7276,7 +7283,13 @@ export default function MediaOnGas(){
             var creativeIgGrowth=0;var creativeFbGrowth=0;
             creativeMatchedPages.forEach(function(mpg){if(typeof mpg.follower_growth==="number")creativeFbGrowth+=mpg.follower_growth;if(mpg.instagram_business_account)creativeIgGrowth+=parseFloat(mpg.instagram_business_account.follower_growth||0);});
             var creativeTtE=0;selCamps.forEach(function(c){if(c.platform==="TikTok")creativeTtE+=parseFloat(c.follows||0);});
-            var creativeEarnedTotal=creativeFbGrowth+creativeIgGrowth+creativeTtE;
+            // Same fbEarnedResolved as Summary / Community / Deep Dive,
+            // so the Creative tab's Followers headline reconciles instead
+            // of falling behind to raw snapshot when it is still building.
+            var creativeFbGrowthKnown=creativeMatchedPages.some(function(mp){return typeof mp.follower_growth==="number";});
+            var creativeFbPaidPL=0;selCamps.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)creativeFbPaidPL+=parseFloat(camp.pageLikes||0);});
+            var creativeFbEarnedResolved=(creativeFbGrowthKnown&&creativeFbGrowth>0)?creativeFbGrowth:creativeFbPaidPL;
+            var creativeEarnedTotal=creativeFbEarnedResolved+creativeIgGrowth+creativeTtE;
 
             var platformGroup=function(p){
               if(p==="Facebook")return "Facebook";
@@ -8063,7 +8076,16 @@ export default function MediaOnGas(){
               for(var ovs=0;ovs<sel.length;ovs++){var ovBest=null;var ovSc=0;for(var ovp=0;ovp<pages.length;ovp++){var ovScore=autoMatchPage(sel[ovs].campaignName,pages[ovp].name);if(ovScore>ovSc){ovSc=ovScore;ovBest=pages[ovp];}}if(ovBest&&ovSc>=2&&!ovMatchedIds[ovBest.id]){ovMatchedPages.push(ovBest);ovMatchedIds[ovBest.id]=true;}}
               var ovFbGrowth=0,ovIgGrowth=0;ovMatchedPages.forEach(function(mp){if(typeof mp.follower_growth==="number")ovFbGrowth+=mp.follower_growth;if(mp.instagram_business_account)ovIgGrowth+=parseFloat(mp.instagram_business_account.follower_growth||0);});
               var ovTtE=0;sel.forEach(function(c){if(c.platform==="TikTok")ovTtE+=parseFloat(c.follows||0);});
-              var ovEarnedTotal=ovFbGrowth+ovIgGrowth+ovTtE;
+              // Deep Dive Followers & Likes must equal Summary / Community.
+              // Mirror fbEarnedResolved: whole-account snapshot when the
+              // daily history spans the window, else the per-ad attributable
+              // page-like result (fbPaidPL). Without this, Deep Dive read
+              // 8.7K while Summary read 8.5K — project_followers_truth
+              // violation. Filter and formula identical to Summary ~5599.
+              var ovFbGrowthKnown=ovMatchedPages.some(function(mp){return typeof mp.follower_growth==="number";});
+              var ovFbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)ovFbPaidPL+=parseFloat(camp.pageLikes||0);});
+              var ovFbEarnedResolved=(ovFbGrowthKnown&&ovFbGrowth>0)?ovFbGrowth:ovFbPaidPL;
+              var ovEarnedTotal=ovFbEarnedResolved+ovIgGrowth+ovTtE;
               var platOrder={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
               var objOrder={"Clicks to App Store":0,"Landing Page Clicks":1,"Leads":2,"Followers & Likes":3,"Traffic":4};
               
