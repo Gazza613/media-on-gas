@@ -3330,6 +3330,11 @@ function genFlags(m,t,camps){
   // disposition logic in the daily Pulse email so dashboard and email
   // tell the same story.
   camps.filter(function(c){return parseFloat(c.spend)>3000;}).forEach(function(c){
+    // Snapshot the flag-list length before this campaign's pushes so we
+    // can tag every flag we push for this campaign with its campaign
+    // reference. The Optimisation tab uses these to render a thumbnail
+    // of the actual ad alongside the recommendation.
+    var startIdx=fl.length;
     var cCtr=parseFloat(c.ctr||0);var cCpc=parseFloat(c.cpc||0);
     var cSpend=parseFloat(c.spend);var cImps=parseFloat(c.impressions||0);
     var obj=String(c.objective||"").toLowerCase();
@@ -3403,6 +3408,15 @@ function genFlags(m,t,camps){
       if(cCtr<0.6&&cImps>10000)fl.push({id:id++,severity:"critical",platform:c.platform||"Meta",metric:"Underperforming Campaign",currentValue:pc(cCtr)+" Click Through Rate on "+fR(cSpend),threshold:"0.60% Click Through Rate",message:"Campaign ‘"+c.campaignName+"’ is delivering "+pc(cCtr)+" Click Through Rate with "+fR(cSpend)+" invested against "+fmt(cImps)+" impressions. This level of engagement failure with meaningful spend indicates a structural issue with either creative relevance, audience targeting, or landing page experience.",recommendation:"Conduct a three-part diagnostic: (1) Creative, are the first 3 seconds compelling enough to stop the scroll? (2) Audience, is the targeting aligned with the offer? (3) Landing page, does the destination match the ad promise? Pause the lowest-performing ad sets and reallocate budget to campaigns delivering above "+pc(1.0)+" Click Through Rate.",status:"open"});
       else if(cCtr<1.0&&cImps>5000)fl.push({id:id++,severity:"warning",platform:c.platform||"Meta",metric:"Below-Benchmark Campaign",currentValue:pc(cCtr)+" Click Through Rate",threshold:"1.00%",message:"Campaign ‘"+c.campaignName+"’ at "+pc(cCtr)+" Click Through Rate is underperforming against the 1.0% benchmark with "+fR(cSpend)+" spend.",recommendation:"Review the top 3 ad creatives within this campaign. Replace the lowest performer with a new variant testing a different hook, format, or value proposition.",status:"open"});
       if(cCpc>8&&c.platform==="Meta")fl.push({id:id++,severity:"warning",platform:"Meta",metric:"High CPC Campaign",currentValue:fR(cCpc)+" Cost Per Click",threshold:"R8.00",message:"Campaign ‘"+c.campaignName+"’ is running at "+fR(cCpc)+" Cost Per Click, well above the efficient range. This inflated cost-per-click is dragging down the blended account Cost Per Click.",recommendation:"Review the bid strategy on this campaign. Switch from lowest-cost to cost-cap bidding with a target CPC of "+fR(cCpc*0.6)+". If performance doesn’t improve within 48 hours, consolidate this campaign’s budget into higher-performing campaigns.",status:"open"});
+    }
+    // Tag every flag pushed for this campaign with its identifiers so
+    // the Optimisation tab can render a thumbnail and a name-deeplink.
+    var rawId=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+    for(var fi=startIdx;fi<fl.length;fi++){
+      fl[fi].campaignId=c.campaignId;
+      fl[fi].rawCampaignId=rawId;
+      fl[fi].campaignPlatform=c.platform;
+      fl[fi].campaignName=c.campaignName;
     }
   });
   if(blendedCpc>0&&blendedCpc<2.0)fl.push({id:id++,severity:"positive",platform:"Cross-platform",metric:"Blended Cost Efficiency",currentValue:fR(blendedCpc)+" blended Cost Per Click",threshold:"R2.00",message:"The cross-platform blended Cost Per Click of "+fR(blendedCpc)+" confirms the multi-channel strategy is delivering cost-efficient engagement. The combination of Meta’s targeted clicks and TikTok’s volume-driven engagement is optimising the overall cost base.",recommendation:"This efficiency level supports budget scaling. Model a 15-20% budget increase across both platforms and monitor whether the blended Cost Per Click holds below R2.00, if it does, the campaign has room to grow without sacrificing efficiency.",status:"open"});
@@ -9043,22 +9057,93 @@ export default function MediaOnGas(){
           </div>
 
           {flags.length===0&&<div style={{padding:40,textAlign:"center",color:P.caption,fontFamily:fm}}>No flags. Select campaigns and refresh.</div>}
-          {flags.map(function(f){
-            var c={critical:P.critical,warning:P.warning,info:P.info,positive:P.positive}[f.severity]||P.info;
-            return<div key={f.id} style={{padding:"18px 22px",marginBottom:10,background:P.glass,border:"1px solid "+P.rule,borderLeft:"4px solid "+c,borderRadius:"0 12px 12px 0"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}><SevBadge s={f.severity}/><Pill name={f.platform} color={f.platform==="TikTok"?P.tt:f.platform==="Cross-platform"?P.orchid:P.fb}/></div>
-                <div style={{display:"flex",gap:6}}>
-                  {f.status==="open"&&<button onClick={function(){ack(f.id);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"5px 12px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Acknowledge</button>}
-                  {(f.status==="open"||f.status==="acknowledged")&&<button onClick={function(){resolve(f.id);}} style={{background:P.mint+"15",border:"1px solid "+P.mint+"30",borderRadius:8,padding:"5px 12px",color:P.mint,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Resolve</button>}
-                  {f.status==="resolved"&&<span style={{fontSize:10,color:P.mint,fontFamily:fm,fontWeight:700}}>Resolved</span>}
+
+          {flags.length>0&&(function(){
+            // Top-ad-per-campaign thumbnail map. For each campaign with
+            // ads in the current window, pick the highest-spend ad: its
+            // thumbnail is the most-representative creative for that
+            // campaign and matches what the Creative tab considers the
+            // hero. Falls back to "" when the campaign has no ads
+            // (e.g. cross-platform / blended flags with no campaign).
+            var topAdByCampaign={};
+            (adsList||[]).forEach(function(a){
+              if(!a||!a.campaignId)return;
+              var keys=[String(a.campaignId)];
+              var raw=String(a.campaignId).replace(/_facebook$/,"").replace(/_instagram$/,"");
+              if(raw&&raw!==String(a.campaignId))keys.push(raw);
+              var sp=parseFloat(a.spend||0);
+              keys.forEach(function(k){
+                var cur=topAdByCampaign[k];
+                if(!cur||sp>cur.spend)topAdByCampaign[k]={spend:sp,ad:a};
+              });
+            });
+
+            // Render a single flag card. Includes a thumbnail when the
+            // flag is tied to a specific campaign and we have an ad for
+            // it; blended / cross-platform flags render without one.
+            var renderFlagCard=function(f,sectionColor){
+              var sevC={critical:P.critical,warning:P.warning,info:P.info,positive:P.positive}[f.severity]||P.info;
+              var entry=f.campaignId?(topAdByCampaign[f.campaignId]||topAdByCampaign[f.rawCampaignId]||null):null;
+              var topAd=entry?entry.ad:null;
+              var thumbSrc=topAd?thumbFor(topAd):"";
+              var canThumb=!!(topAd&&hasThumb(topAd));
+              return <div key={f.id} style={{display:"flex",gap:14,padding:"16px 18px",marginBottom:10,background:P.glass,border:"1px solid "+P.rule,borderLeft:"4px solid "+sevC,borderRadius:"0 12px 12px 0",alignItems:"stretch"}}>
+                {/* Ad thumbnail (88x88) for campaign-level flags. The
+                    cyan/ember gradient placeholder shows whenever we
+                    can't resolve a real creative thumbnail so the row
+                    always stays visually anchored. */}
+                {f.campaignId&&<div style={{flexShrink:0,width:88,height:88,borderRadius:10,overflow:"hidden",border:"1px solid "+P.rule,background:"#0c0716",position:"relative",cursor:canThumb?"pointer":"default"}} onClick={canThumb?function(){setPreviewAd(topAd);}:undefined}>
+                  {canThumb?<img src={thumbSrc} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.display="none";}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,"+(P.cyan||"#22D3EE")+"22,"+(P.ember||"#F96203")+"15)",color:"#fff",fontSize:14,fontWeight:900,fontFamily:fm,letterSpacing:1}}>{(function(){var p=String(f.campaignPlatform||f.platform||"").toLowerCase();return p.indexOf("facebook")>=0?"FB":p.indexOf("instagram")>=0?"IG":p.indexOf("tiktok")>=0?"TT":p.indexOf("google")>=0?"GA":"AD";})()}</div>}
+                  {canThumb&&<span style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.65)",color:"#fff",fontSize:8,fontWeight:800,fontFamily:fm,letterSpacing:0.5,textAlign:"center",padding:"2px 0",textTransform:"uppercase"}}>View ad</span>}
+                </div>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:12,flexWrap:"wrap"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><SevBadge s={f.severity}/><Pill name={f.platform} color={f.platform==="TikTok"?P.tt:f.platform==="Cross-platform"?P.orchid:P.fb}/></div>
+                    <div style={{display:"flex",gap:6}}>
+                      {f.status==="open"&&<button onClick={function(){ack(f.id);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"5px 12px",color:P.label,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Acknowledge</button>}
+                      {(f.status==="open"||f.status==="acknowledged")&&<button onClick={function(){resolve(f.id);}} style={{background:P.mint+"15",border:"1px solid "+P.mint+"30",borderRadius:8,padding:"5px 12px",color:P.mint,fontSize:10,fontWeight:700,fontFamily:fm,cursor:"pointer"}}>Resolve</button>}
+                      {f.status==="resolved"&&<span style={{fontSize:10,color:P.mint,fontFamily:fm,fontWeight:700}}>Resolved</span>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:13,fontWeight:700,color:P.txt,marginBottom:6}}>{f.metric}: {f.currentValue} {f.severity!=="positive"?"exceeds":"beats"} {f.threshold} threshold</div>
+                  <div style={{fontSize:12,color:P.label,lineHeight:1.8}}>{f.message}</div>
+                  <div style={{fontSize:12,color:sevC,marginTop:8}}><strong>Recommendation:</strong> {f.recommendation}</div>
                 </div>
-              </div>
-              <div style={{fontSize:13,fontWeight:700,color:P.txt,marginBottom:6}}>{f.metric}: {f.currentValue} {f.severity!=="positive"?"exceeds":"beats"} {f.threshold} threshold</div>
-              <div style={{fontSize:12,color:P.label,lineHeight:1.8}}>{f.message}</div>
-              <div style={{fontSize:12,color:c,marginTop:8}}><strong>Recommendation:</strong> {f.recommendation}</div>
-            </div>;
-          })}
+              </div>;
+            };
+
+            // Priority buckets so the operator sees what to handle
+            // first. Mirrors the Command Centre ordering: high-severity
+            // first, then medium, then scale opportunities, then
+            // informational. Each section suppressed when its bucket
+            // is empty so the page only shows what's relevant.
+            var byBucket={critical:[],warning:[],positive:[],info:[]};
+            flags.forEach(function(f){
+              if(byBucket[f.severity])byBucket[f.severity].push(f);
+              else byBucket.info.push(f);
+            });
+            var sectionDefs=[
+              {key:"critical",label:"Needs immediate attention",sub:"High-severity flags. Resolve today to protect the spend.",color:P.critical},
+              {key:"warning",label:"Needs a human in the loop",sub:"Medium-severity flags. Review and decide before they escalate.",color:P.warning},
+              {key:"positive",label:"Scale opportunity",sub:"Strong performance signals. Pour budget here before auction dynamics shift.",color:P.positive||P.mint},
+              {key:"info",label:"Informational",sub:"Useful context, no immediate action required.",color:P.info||P.cyan}
+            ];
+            return <React.Fragment>
+              {sectionDefs.map(function(def){
+                var rows=byBucket[def.key];
+                if(!rows||rows.length===0)return null;
+                return <div key={def.key} style={{marginBottom:28}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,paddingBottom:8,borderBottom:"1px solid "+def.color+"55"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                      <span style={{background:def.color+"22",border:"1px solid "+def.color+"66",color:def.color,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1.5,padding:"4px 10px",borderRadius:5,textTransform:"uppercase"}}>{def.label} · {rows.length}</span>
+                      <span style={{fontSize:11,color:P.label,fontFamily:fm,fontStyle:"italic"}}>{def.sub}</span>
+                    </div>
+                  </div>
+                  {rows.map(function(f){return renderFlagCard(f,def.color);})}
+                </div>;
+              })}
+            </React.Fragment>;
+          })()}
 
           <Insight title="Optimisation Summary" accent={P.warning} icon={Ic.alert(P.warning,16)}>{flags.length} flags generated from selected campaign data. {openFlags} require attention. Review recommendations and take action to maintain optimal performance. Flags refresh when you change dates or campaign selection.</Insight>
         </div>)}
