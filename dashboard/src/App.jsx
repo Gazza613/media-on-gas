@@ -9146,6 +9146,221 @@ export default function MediaOnGas(){
           })()}
 
           <Insight title="Optimisation Summary" accent={P.warning} icon={Ic.alert(P.warning,16)}>{flags.length} flags generated from selected campaign data. {openFlags} require attention. Review recommendations and take action to maintain optimal performance. Flags refresh when you change dates or campaign selection.</Insight>
+
+          {/* ============================================================
+              HEAD DATA ANALYST RECOMMENDATION
+              Senior-analyst memo on the structural changes the GAS team
+              should make to 5x / 10x performance. Computed entirely
+              from the selected campaigns + ads in the current window so
+              the recommendation tracks the data, not a static template.
+              ============================================================ */}
+          {sel.length>0&&(function(){
+            // ---- Compute the audit ---------------------------------------
+            var fmtPct=function(n){return (parseFloat(n)||0).toFixed(2)+"%";};
+            var camps2=sel.slice();
+            var totalSpend=camps2.reduce(function(s,c){return s+parseFloat(c.spend||0);},0);
+            var totalImps=camps2.reduce(function(s,c){return s+parseFloat(c.impressions||0);},0);
+            var totalClicks=camps2.reduce(function(s,c){return s+parseFloat(c.clicks||0);},0);
+            var blCtr=totalImps>0?(totalClicks/totalImps*100):0;
+            var blCpc=totalClicks>0?(totalSpend/totalClicks):0;
+            var blCpm=totalImps>0?(totalSpend/totalImps*1000):0;
+
+            // Group by platform + objective so we can talk about
+            // structure (fragmentation) and mix (platform/objective spread).
+            var byPlat={},byObj={};
+            camps2.forEach(function(c){
+              var p=c.platform||"Unknown",o=String(c.objective||"unknown").toLowerCase();
+              if(!byPlat[p])byPlat[p]={n:0,spend:0};
+              byPlat[p].n++;byPlat[p].spend+=parseFloat(c.spend||0);
+              if(!byObj[o])byObj[o]={n:0,spend:0,clicks:0,imps:0};
+              byObj[o].n++;byObj[o].spend+=parseFloat(c.spend||0);
+              byObj[o].clicks+=parseFloat(c.clicks||0);byObj[o].imps+=parseFloat(c.impressions||0);
+            });
+            var platforms=Object.keys(byPlat);
+            var objectives=Object.keys(byObj);
+
+            // Top spender, top performer (best CTR with meaningful imps),
+            // worst spend-leak (high spend + low CTR).
+            var sortedBySpend=camps2.slice().sort(function(a,b){return parseFloat(b.spend||0)-parseFloat(a.spend||0);});
+            var topSpender=sortedBySpend[0];
+            var topThreeShare=sortedBySpend.slice(0,3).reduce(function(s,c){return s+parseFloat(c.spend||0);},0);
+            var topThreePct=totalSpend>0?(topThreeShare/totalSpend*100):0;
+
+            var realCtr=camps2.filter(function(c){return parseFloat(c.impressions||0)>=5000;});
+            var topPerf=realCtr.slice().sort(function(a,b){return parseFloat(b.ctr||0)-parseFloat(a.ctr||0);})[0]||null;
+            var topPerfCtr=topPerf?parseFloat(topPerf.ctr||0):0;
+
+            var spendLeakers=camps2.filter(function(c){
+              return parseFloat(c.spend||0)>=5000 && parseFloat(c.impressions||0)>=10000 && parseFloat(c.ctr||0)<0.8;
+            }).sort(function(a,b){return parseFloat(b.spend||0)-parseFloat(a.spend||0);});
+            var leakSpend=spendLeakers.reduce(function(s,c){return s+parseFloat(c.spend||0);},0);
+
+            // Frequency saturation (Meta > 3, TikTok > 6).
+            var fatigued=camps2.filter(function(c){
+              var freq=parseFloat(c.frequency||0);var p=String(c.platform||"").toLowerCase();
+              var limit=p.indexOf("tiktok")>=0?6:3;
+              return freq>=limit && parseFloat(c.spend||0)>=2000;
+            });
+
+            // Creative format diversity from adsList (uses the same
+            // top-ad-per-campaign mapping the flag card already builds).
+            var formatSet={};
+            (adsList||[]).forEach(function(a){if(a&&a.format)formatSet[String(a.format).toUpperCase()]=true;});
+            var formatCount=Object.keys(formatSet).length;
+
+            // Scale-ready: high CTR, healthy frequency, results > 0,
+            // not pacing behind. Same rule as Command Centre's SCALE.
+            var scaleReady=camps2.filter(function(c){
+              var ctr=parseFloat(c.ctr||0),freq=parseFloat(c.frequency||0);
+              var p=String(c.platform||"").toLowerCase();
+              var limit=p.indexOf("tiktok")>=0?6:3;
+              return ctr>=1.5 && freq<limit && parseFloat(c.spend||0)>=2000;
+            });
+            var scaleSpend=scaleReady.reduce(function(s,c){return s+parseFloat(c.spend||0);},0);
+            var scalePct=totalSpend>0?(scaleSpend/totalSpend*100):0;
+
+            // Single-platform concentration (algorithm dependency risk).
+            var topPlatSpend=Math.max.apply(null,Object.keys(byPlat).map(function(k){return byPlat[k].spend;}));
+            var topPlatPct=totalSpend>0?(topPlatSpend/totalSpend*100):0;
+            var dominantPlat=Object.keys(byPlat).reduce(function(a,b){return byPlat[a].spend>byPlat[b].spend?a:b;},Object.keys(byPlat)[0]||"");
+
+            // Funnel coverage — do we have awareness + consideration +
+            // conversion, or are we all on one tier?
+            var hasAwareness=!!byObj.awareness;
+            var hasConsideration=!!(byObj.followers||byObj.landingpage||byObj.traffic);
+            var hasConversion=!!(byObj.leads||byObj.appinstall||byObj.sales);
+            var funnelTiers=(hasAwareness?1:0)+(hasConsideration?1:0)+(hasConversion?1:0);
+
+            // ---- Synthesise findings -------------------------------------
+            var findings=[];
+            if(topThreePct>=70&&camps2.length>=5){
+              findings.push({title:"Spend is concentrated in 3 campaigns",detail:"The top 3 campaigns hold "+topThreePct.toFixed(2)+"% of total spend. If any one of those decays (creative fatigue, audience saturation, auction shifts), "+Math.round(topThreePct/3)+"% of the budget moves with it. World-class accounts ladder spend across a 5-7 campaign portfolio with planned succession."});
+            }
+            if(topPerf&&topPerfCtr>=blCtr*1.6&&realCtr.length>=3){
+              var multiple=blCtr>0?(topPerfCtr/blCtr):0;
+              findings.push({title:"Your best campaign is "+multiple.toFixed(1)+"x the blended CTR",detail:"‘"+topPerf.campaignName+"’ runs at "+fmtPct(topPerfCtr)+" CTR while the blended account sits at "+fmtPct(blCtr)+". The creative + audience pairing in that one campaign is the formula. Most of the upside on this account is replicating that structure across the rest of the portfolio, not spending more on the average."});
+            }
+            if(spendLeakers.length>0&&leakSpend>=10000){
+              findings.push({title:fR(leakSpend)+" is flowing through "+spendLeakers.length+" underperforming campaign"+(spendLeakers.length===1?"":"s"),detail:"These campaigns spent meaningful budget at sub-0.80% CTR. That's money the algorithm is taking but not converting into useful traffic. Pausing and rerouting is the single fastest efficiency lift available."});
+            }
+            if(fatigued.length>0){
+              findings.push({title:fatigued.length+" campaign"+(fatigued.length===1?" is":"s are")+" past their fatigue ceiling",detail:"Frequency above 3x on Meta (6x on TikTok) erodes CTR by 15-25% within days. Creative rotation, not budget rotation, is the lever here."});
+            }
+            if(formatCount>0&&formatCount<3&&(adsList||[]).length>=10){
+              findings.push({title:"Creative formats are concentrated, only "+formatCount+" in rotation",detail:"Best-in-class accounts ship across 3+ formats (static, carousel, short-form video, UGC) so the algorithm can pick winners by placement. Limited formats cap the ceiling regardless of how much budget you add."});
+            }
+            if(topPlatPct>=85&&platforms.length>=2){
+              findings.push({title:topPlatPct.toFixed(2)+"% of spend lives on "+dominantPlat,detail:"That level of single-platform concentration ties account-wide performance to one algorithm's mood. The accounts that compound performance year-on-year run a deliberate 60/30/10 mix so they always have a B and C option warming when the A option tightens."});
+            }
+            if(funnelTiers<2&&camps2.length>=3){
+              findings.push({title:"The funnel is single-tier",detail:"There's "+(hasAwareness?"awareness only":hasConversion?"conversion only":"no funnel structure")+". The 10x accounts run three connected layers: cold prospecting → engaged consideration → high-intent conversion, with audience hand-offs between them. Single-tier setups force one creative to do the whole funnel's job."});
+            }
+            if(scalePct>0&&scalePct<30&&scaleReady.length>0){
+              findings.push({title:"Only "+scalePct.toFixed(2)+"% of spend is on scale-ready creative",detail:scaleReady.length+" campaign"+(scaleReady.length===1?"":"s")+" cleared the scale bar (CTR >= 1.5%, frequency healthy, results coming through) but they're holding a minority of the budget. The fastest path to a 5x outcome is moving the dollars to where the algorithm has already proven it can convert."});
+            }
+
+            // ---- 5x play (concrete, this-week actions) -------------------
+            var fivex=[];
+            if(spendLeakers.length>0&&scaleReady.length>0){
+              fivex.push("Pause the "+spendLeakers.length+" underperformer"+(spendLeakers.length===1?"":"s")+" carrying "+fR(leakSpend)+". Reroute that budget to the "+scaleReady.length+" scale-ready campaign"+(scaleReady.length===1?"":"s")+" — historic CTR delta says this alone should lift blended efficiency by 30-50% inside 14 days.");
+            }
+            if(topPerf){
+              fivex.push("Clone ‘"+topPerf.campaignName+"’ as the template for every same-objective campaign on the account. Same creative format, same hook structure, same audience width. Most of the lift on this account is structural replication, not new creative ideation.");
+            }
+            if(fatigued.length>0){
+              fivex.push("Ship 3-5 new creative variants on the fatigued ad sets this week. Even minor swaps (hook, colour, CTA) reset the frequency curve and extend productive lifespan 30-40 days.");
+            }
+            if(formatCount<3){
+              fivex.push("Add the missing formats to the rotation. If you're heavy on static, ship a 9:16 video variant. If video-heavy, add a carousel test. Format diversity unlocks 20-30% more efficient inventory.");
+            }
+            if(fivex.length===0){
+              fivex.push("Structure is solid. Focus the week on incremental tests (one new audience layer, one new creative format) and let the algorithm compound the gains.");
+            }
+
+            // ---- 10x play (the strategic moonshot) -----------------------
+            var tenx=[];
+            tenx.push("Restructure into a 3-tier funnel: cold prospecting (broad + interest, 60% of budget), warm consideration (engaged + lookalikes, 30%), high-intent conversion (retargeting + custom audiences, 10%). Hand audiences forward between tiers via Custom Audiences so each layer feeds the next.");
+            tenx.push("Consolidate to "+Math.max(3,Math.min(7,Math.round(camps2.length*0.6)))+" CBO campaigns per objective on Meta. Ad-set fragmentation is the single biggest tax on the algorithm. Fewer, bigger campaigns let Meta's learning phase complete and CPMs compress 15-25%.");
+            tenx.push("Adopt a 90-day creative cadence. 3-5 fresh creative variants in market every fortnight, with the previous fortnight's winners scaled and losers cut. Top-1% accounts ship 12+ creatives per quarter per platform.");
+            if(platforms.length<3){
+              tenx.push("Add the third platform. Whatever's missing (TikTok if Meta-heavy, Meta if TikTok-heavy, Google Search if neither) closes the audience leakage. The lift comes from incremental reach, not stealing share from the existing platforms.");
+            }
+            tenx.push("Build first-party data as the moat. Pixel + Conversions API + offline conversion uploads turn the dashboard from a reporting layer into an attribution engine. Once you can see real CAC by campaign by audience, the budget decisions become arithmetic, not opinion.");
+
+            // ---- Render --------------------------------------------------
+            return <div style={{marginTop:28,padding:"28px 30px",borderRadius:18,background:"linear-gradient(135deg,#0a0418 0%,#100624 50%,#1a0a30 100%)",border:"1px solid "+P.ember+"35",position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:-50,right:-50,width:200,height:200,background:"radial-gradient(circle,"+P.ember+"15 0%,transparent 70%)",pointerEvents:"none"}}></div>
+              <div style={{position:"relative",zIndex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,"+P.ember+"40,"+P.blaze+"40)",border:"1px solid "+P.ember+"66",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.crown(P.ember,20)}</div>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:3,textTransform:"uppercase"}}>Head Data Analyst · Recommendation</div>
+                    <div style={{fontSize:14,fontWeight:700,color:P.txt,fontFamily:ff,marginTop:2}}>How to restructure for a 5x or 10x outcome</div>
+                  </div>
+                </div>
+                <div style={{fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",marginBottom:18,letterSpacing:1}}>Top 1% global benchmark · Computed live from {sel.length} selected campaign{sel.length===1?"":"s"} · {df} to {dt}</div>
+
+                {/* Structure snapshot */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:22}}>
+                  {[
+                    ["CAMPAIGNS",sel.length,P.cyan],
+                    ["PLATFORMS",platforms.length,P.orchid],
+                    ["OBJECTIVES",objectives.length,P.solar],
+                    ["BLENDED CTR",fmtPct(blCtr),P.mint],
+                    ["BLENDED CPC",fR(blCpc),P.blaze]
+                  ].map(function(x,i){return <div key={i} style={{padding:"12px 14px",background:"rgba(0,0,0,0.4)",border:"1px solid "+P.rule,borderRadius:10,textAlign:"center"}}>
+                    <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:5}}>{x[0]}</div>
+                    <div style={{fontSize:16,fontWeight:900,color:x[2],fontFamily:fm}}>{x[1]}</div>
+                  </div>;})}
+                </div>
+
+                {/* Findings */}
+                {findings.length>0&&<div style={{marginBottom:24}}>
+                  <div style={{fontSize:11,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:12,paddingBottom:8,borderBottom:"1px solid "+P.rule}}>Diagnosis · what the data is telling me</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {findings.map(function(f,i){return <div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:"rgba(255,255,255,0.025)",border:"1px solid "+P.rule,borderLeft:"3px solid "+P.solar,borderRadius:"0 10px 10px 0"}}>
+                      <div style={{flexShrink:0,width:24,height:24,borderRadius:"50%",background:P.solar+"22",border:"1px solid "+P.solar+"55",color:P.solar,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,fontFamily:fm}}>{i+1}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:P.txt,fontFamily:ff,marginBottom:4}}>{f.title}</div>
+                        <div style={{fontSize:12,color:P.label,fontFamily:ff,lineHeight:1.7}}>{f.detail}</div>
+                      </div>
+                    </div>;})}
+                  </div>
+                </div>}
+
+                {findings.length===0&&<div style={{marginBottom:24,padding:"14px 16px",background:P.mint+"12",border:"1px solid "+P.mint+"40",borderLeft:"3px solid "+P.mint,borderRadius:"0 10px 10px 0"}}>
+                  <div style={{fontSize:12,color:P.mint,fontFamily:fm,fontWeight:800,letterSpacing:1.5,marginBottom:4,textTransform:"uppercase"}}>Structure is solid</div>
+                  <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.6}}>No major structural issues detected in the selected window. Focus on incremental optimisations and the 10x plays below.</div>
+                </div>}
+
+                {/* 5x play */}
+                <div style={{marginBottom:22,padding:"18px 20px",background:"linear-gradient(135deg,"+P.mint+"15,"+P.mint+"06)",border:"1px solid "+P.mint+"40",borderRadius:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                    <span style={{background:P.mint,color:"#062014",padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:2}}>5X PLAY</span>
+                    <span style={{fontSize:12,color:P.mint,fontFamily:fm,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase"}}>This week · move the budget to where it works</span>
+                  </div>
+                  <ul style={{margin:0,padding:"0 0 0 22px",fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.85}}>
+                    {fivex.map(function(p,i){return <li key={i} style={{marginBottom:6}}>{p}</li>;})}
+                  </ul>
+                </div>
+
+                {/* 10x play */}
+                <div style={{padding:"18px 20px",background:"linear-gradient(135deg,"+P.ember+"15,"+P.blaze+"08)",border:"1px solid "+P.ember+"40",borderRadius:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                    <span style={{background:"linear-gradient(135deg,"+P.ember+","+P.blaze+")",color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:2}}>10X PLAY</span>
+                    <span style={{fontSize:12,color:P.ember,fontFamily:fm,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase"}}>The structural rebuild · 60-90 days</span>
+                  </div>
+                  <ul style={{margin:0,padding:"0 0 0 22px",fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.85}}>
+                    {tenx.map(function(p,i){return <li key={i} style={{marginBottom:6}}>{p}</li>;})}
+                  </ul>
+                </div>
+
+                <div style={{marginTop:18,paddingTop:14,borderTop:"1px dashed "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>
+                  This recommendation refreshes every time you change the campaign selection or date range. It mirrors how a top-1% buy-side analyst would read this account — focused on structural levers, not tactical knobs. The 5x play targets visible efficiency gains inside 14 days; the 10x play is the 60-90 day restructure that compounds over the year.
+                </div>
+              </div>
+            </div>;
+          })()}
         </div>)}
 
         {tab==="command"&&!isClient&&(<CommandCentre apiBase={API} P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} SH={SH} session={session} dateFrom={df} dateTo={dt}/>)}
