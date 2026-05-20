@@ -342,18 +342,34 @@ export default function CommandCentre(props) {
           return filterMode === "attention" ? (c.alerts && c.alerts.length > 0) : true;
         };
 
-        // Sort each bucket by spend so the most material rows surface
-        // first within the bucket. Each entry keeps its client label.
-        var byBucket = { attention: [], watch: [], scale: [], healthy: [], paused: [], ended: [] };
-        s.data.clients.forEach(function(grp) {
+        // Per-client buckets. Each client gets their OWN classification
+        // pass so the GAS team can scan a client section start-to-end
+        // (live work → triage → scale → paused/ended → growth plan)
+        // rather than hopping back-and-forth between clients. This is
+        // the structural pivot the user asked for: MTN MoMo and MTN
+        // MoMo POS are separate clients (backend keeps accountName
+        // distinct) and must read as separate sections.
+        var bucketsForClient = function(grp) {
+          var b = { attention: [], watch: [], scale: [], healthy: [], paused: [], ended: [] };
           grp.campaigns.forEach(function(c) {
             if (!passFilter(c)) return;
-            var b = classify(c);
-            byBucket[b].push({ client: grp.client, c: c });
+            var k = classify(c);
+            b[k].push({ client: grp.client, c: c });
           });
-        });
-        Object.keys(byBucket).forEach(function(k) {
-          byBucket[k].sort(function(a, b) { return (b.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
+          Object.keys(b).forEach(function(k) {
+            b[k].sort(function(a, c) { return (c.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
+          });
+          return b;
+        };
+        var perClient = s.data.clients.map(function(grp) {
+          var b = bucketsForClient(grp);
+          return { grp: grp, buckets: b };
+        }).filter(function(x) {
+          // Hide a client section entirely when filter is "attention"
+          // and they have zero alerted campaigns. In "all" mode they
+          // always render so the GAS team has total visibility.
+          if (filterMode !== "attention") return true;
+          return x.buckets.attention.length > 0 || x.buckets.watch.length > 0;
         });
 
         // Section definitions render in priority order. Each section
@@ -404,226 +420,41 @@ export default function CommandCentre(props) {
           }
         ];
 
-        var anyVisible = sectionDefs.some(function(d) { return byBucket[d.key].length > 0; });
-        if (!anyVisible) {
-          if (filterMode === "attention") {
-            return <Glass st={{ padding: 24, textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
-              <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
-            </Glass>;
-          }
-          return null;
-        }
-
-        return <React.Fragment>
-          {/* Compact per-client overview chip strip so the operator can
-              still see per-client roll-ups now that the main layout is
-              priority-bucket based rather than per-client grouped. */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
-            {s.data.clients.map(function(grp) {
-              var col = grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint;
-              return <div key={grp.client} style={{ background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: P.txt }}>{grp.client}</span>
-                <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{grp.rollup.live} live · {R(grp.rollup.spendPeriod)}</span>
-                {grp.rollup.alerts > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: col, letterSpacing: 1 }}>{grp.rollup.alerts} ALERTS</span>}
-              </div>;
-            })}
-          </div>
-
-          {sectionDefs.map(function(def) {
-            var rows = byBucket[def.key];
-            if (rows.length === 0) return null;
-            return <div key={def.key} style={{ marginBottom: 28 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 8, borderBottom: (def.dimmed ? "1px dashed " : "1px solid ") + def.color + (def.dimmed ? "55" : "55") }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ background: def.color + "22", border: "1px solid " + def.color + "66", color: def.color, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "4px 10px", borderRadius: 5, textTransform: "uppercase" }}>{def.label} · {rows.length}</span>
-                  <span style={{ fontSize: 11, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{def.sub}</span>
-                </div>
-              </div>
-              {rows.map(function(r) {
-                return <div key={r.c.campaignId} style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 9, color: P.caption, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, marginLeft: 4 }}>{r.client}</div>
-                  {renderCampaignRow(r.c, def.dimmed)}
-                </div>;
-              })}
-            </div>;
-          })}
-        </React.Fragment>;
-      })()}
-
-      <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
-        Internal operations view, scoped to your selected dates. The headline metric and cost match the campaign's own KPI (leads, page likes on Facebook, profile visits on Instagram, follows on TikTok, app store clicks, traffic clicks, or impressions for awareness). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets resolve at ad-set level via Graph. Not shown to clients.
-      </div>
-
-      {/* ============================================================
-          HEAD DATA ANALYST RECOMMENDATION
-          Senior-analyst memo at the bottom of the Command Centre.
-          Computed live from every in-flight campaign across all
-          clients in the selected window, so the GAS team gets one
-          data-driven restructure brief covering the whole book.
-          ============================================================ */}
-      {(function() {
-        var fR = function(n) { return "R" + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }); };
+        // ===== Per-client Growth Plan helpers =====
+        var fR2 = function(n) { return "R" + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }); };
         var fmtPct = function(n) { return (parseFloat(n) || 0).toFixed(2) + "%"; };
 
-        // Flatten every in-flight campaign across clients. The Command
-        // Centre /api/command-centre endpoint already filters out
-        // dormant campaigns, so this list is the "live book".
-        var allCamps = [];
-        s.data.clients.forEach(function(grp) {
-          grp.campaigns.forEach(function(c) { allCamps.push({ client: grp.client, c: c }); });
-        });
-        if (allCamps.length === 0) return null;
+        // Build a same-origin /api/ad-image proxy URL for a specific
+        // ad (Meta/TikTok). Uses the session token via the &st= query
+        // param the proxy already accepts, so <img src=> works without
+        // custom headers. Falls back to a.thumbnail when the platform
+        // isn't supported by the proxy or no adId is present.
+        var adThumbUrl = function(a) {
+          if (!a) return "";
+          if (!a.adId) return a.thumbnail || "";
+          var pLow = String(a.platform || "").toLowerCase();
+          var pKey = (pLow.indexOf("instagram") >= 0 || pLow.indexOf("facebook") >= 0) ? "meta" : (pLow.indexOf("tiktok") >= 0 ? "tiktok" : "");
+          if (!pKey) return a.thumbnail || "";
+          var cId = String(a.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "");
+          var auth = session ? ("&st=" + encodeURIComponent(session)) : "";
+          return apiBase + "/api/ad-image?platform=" + pKey + "&adId=" + encodeURIComponent(a.adId) + (cId ? ("&campaignId=" + encodeURIComponent(cId)) : "") + auth;
+        };
 
-        var totalSpend = allCamps.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
-        var totalImps = allCamps.reduce(function(a, x) { return a + (x.c.delivery.impressions || 0); }, 0);
-        var totalClicks = allCamps.reduce(function(a, x) { return a + (x.c.delivery.clicks || 0); }, 0);
-        var blCtr = totalImps > 0 ? (totalClicks / totalImps * 100) : 0;
-        var blCpc = totalClicks > 0 ? (totalSpend / totalClicks) : 0;
-
-        // Group by platform + objective for structure + mix findings.
-        var byPlat = {}, byObj = {}, byClient = {};
-        allCamps.forEach(function(x) {
-          var c = x.c;
-          var p = c.platform || "Unknown", o = String(c.objective || "unknown").toLowerCase();
-          if (!byPlat[p]) byPlat[p] = { n: 0, spend: 0 };
-          byPlat[p].n++; byPlat[p].spend += (c.delivery.spendPeriod || 0);
-          if (!byObj[o]) byObj[o] = { n: 0, spend: 0 };
-          byObj[o].n++; byObj[o].spend += (c.delivery.spendPeriod || 0);
-          if (!byClient[x.client]) byClient[x.client] = { n: 0, spend: 0 };
-          byClient[x.client].n++; byClient[x.client].spend += (c.delivery.spendPeriod || 0);
-        });
-        var platforms = Object.keys(byPlat);
-        var objectives = Object.keys(byObj);
-        var clients = Object.keys(byClient);
-
-        // Top spender, top performer, spend leakers (sub-0.80% CTR
-        // with meaningful budget), fatigued (Meta freq>3, TikTok freq>6),
-        // scale-ready (the SCALE bucket criteria).
-        var sortedSpend = allCamps.slice().sort(function(a, b) { return (b.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
-        var top3 = sortedSpend.slice(0, 3);
-        var top3Spend = top3.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
-        var top3Pct = totalSpend > 0 ? (top3Spend / totalSpend * 100) : 0;
-
-        var realCtr = allCamps.filter(function(x) { return (x.c.delivery.impressions || 0) >= 5000; });
-        var topPerf = realCtr.slice().sort(function(a, b) { return (b.c.delivery.ctr || 0) - (a.c.delivery.ctr || 0); })[0] || null;
-        var topPerfCtr = topPerf ? (topPerf.c.delivery.ctr || 0) : 0;
-
-        var spendLeakers = allCamps.filter(function(x) {
-          var c = x.c;
-          return (c.delivery.spendPeriod || 0) >= 5000 && (c.delivery.impressions || 0) >= 10000 && (c.delivery.ctr || 0) < 0.8;
-        });
-        var leakSpend = spendLeakers.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
-
-        var fatigued = allCamps.filter(function(x) {
-          var c = x.c;
-          var freq = c.delivery.frequency || 0;
-          var p = String(c.platform || "").toLowerCase();
-          var limit = p.indexOf("tiktok") >= 0 ? 6 : 3;
-          return freq >= limit && (c.delivery.spendPeriod || 0) >= 2000;
-        });
-
-        var formatSet = {};
-        (adsList || []).forEach(function(a) { if (a && a.format) formatSet[String(a.format).toUpperCase()] = true; });
-        var formatCount = Object.keys(formatSet).length;
-
-        var scaleReady = allCamps.filter(function(x) {
-          var c = x.c;
-          var ctr = c.delivery.ctr || 0, freq = c.delivery.frequency || 0;
-          var p = String(c.platform || "").toLowerCase();
-          var limit = p.indexOf("tiktok") >= 0 ? 6 : 3;
-          var paceOK = !c.pacing || c.pacing.state === "on_track" || c.pacing.state === "ahead" || c.pacing.state === "na";
-          return ctr >= 1.5 && freq < limit && (c.delivery.spendPeriod || 0) >= 2000 && paceOK;
-        });
-        var scaleSpend = scaleReady.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
-        var scalePct = totalSpend > 0 ? (scaleSpend / totalSpend * 100) : 0;
-
-        var topPlatSpend = Math.max.apply(null, Object.keys(byPlat).map(function(k) { return byPlat[k].spend; }));
-        var topPlatPct = totalSpend > 0 ? (topPlatSpend / totalSpend * 100) : 0;
-        var dominantPlat = Object.keys(byPlat).reduce(function(a, b) { return byPlat[a].spend > byPlat[b].spend ? a : b; }, Object.keys(byPlat)[0] || "");
-
-        var hasAwareness = !!byObj.awareness;
-        var hasConsideration = !!(byObj.followers || byObj.landingpage || byObj.traffic);
-        var hasConversion = !!(byObj.leads || byObj.appinstall || byObj.sales);
-        var funnelTiers = (hasAwareness ? 1 : 0) + (hasConsideration ? 1 : 0) + (hasConversion ? 1 : 0);
-
-        // Helper: turn a list of {client, c} entries into an array of
-        // {thumbnail, label} the renderer can show as a small preview
-        // strip. Entries with no thumbnail are still included so the
-        // count matches but render as a labelled placeholder.
-        var toThumbItems = function(entries) {
-          return entries.map(function(x) {
-            return { thumbnail: x.c.thumbnail || "", label: x.c.campaignName + " · " + x.client, platform: x.c.platform || "" };
+        // Two thumb-item factories: one for campaign rows (uses the
+        // server-attached c.thumbnail), one for ad rows (uses the
+        // adThumbUrl proxy so the URL is always fresh).
+        var campThumbs = function(entries) {
+          return (entries || []).map(function(x) {
+            return { thumbnail: (x.c && x.c.thumbnail) || "", label: (x.c && x.c.campaignName) || "", platform: (x.c && x.c.platform) || "" };
+          });
+        };
+        var adThumbs = function(ads) {
+          return (ads || []).map(function(a) {
+            return { thumbnail: adThumbUrl(a), label: a.adName || a.campaignName || "", platform: a.platform || "" };
           });
         };
 
-        // Synthesise findings, each gated on a real threshold so the
-        // memo only mentions what actually exists in the data. Each
-        // finding may carry a `thumbs` array of campaigns to preview.
-        var findings = [];
-        if (top3Pct >= 70 && allCamps.length >= 5) {
-          findings.push({ title: "Spend is concentrated in 3 campaigns", detail: "The top 3 campaigns hold " + top3Pct.toFixed(2) + "% of total live spend across the portfolio. If any one of those decays (creative fatigue, audience saturation, auction shifts), ~" + Math.round(top3Pct / 3) + "% of the budget moves with it. World-class accounts ladder spend across a 5-7 campaign portfolio with planned succession.", thumbs: toThumbItems(top3) });
-        }
-        if (topPerf && topPerfCtr >= blCtr * 1.6 && realCtr.length >= 3) {
-          var multiple = blCtr > 0 ? (topPerfCtr / blCtr) : 0;
-          findings.push({ title: "The best campaign is " + multiple.toFixed(1) + "x the blended CTR", detail: "‘" + topPerf.c.campaignName + "’ at " + topPerf.client + " runs at " + fmtPct(topPerfCtr) + " CTR while the blended book sits at " + fmtPct(blCtr) + ". The creative + audience pairing in that one campaign is the formula. Most of the upside on this book is replicating that structure across the rest of the portfolio, not spending more on the average.", thumbs: toThumbItems([topPerf]) });
-        }
-        if (spendLeakers.length > 0 && leakSpend >= 10000) {
-          var leakClientCounts = {};
-          spendLeakers.forEach(function(x) { leakClientCounts[x.client] = (leakClientCounts[x.client] || 0) + 1; });
-          var leakClientList = Object.keys(leakClientCounts).map(function(k) { return k + " (" + leakClientCounts[k] + ")"; }).join(", ");
-          findings.push({ title: fR(leakSpend) + " is flowing through " + spendLeakers.length + " underperforming campaign" + (spendLeakers.length === 1 ? "" : "s"), detail: "Across " + leakClientList + ", these campaigns spent meaningful budget at sub-0.80% CTR. That's money the algorithm is taking but not converting into useful traffic. Pausing and rerouting is the single fastest efficiency lift available.", thumbs: toThumbItems(spendLeakers.slice(0, 6)), totalThumbs: spendLeakers.length });
-        }
-        if (fatigued.length > 0) {
-          findings.push({ title: fatigued.length + " campaign" + (fatigued.length === 1 ? " is" : "s are") + " past their fatigue ceiling", detail: "Frequency above 3x on Meta (6x on TikTok) erodes CTR by 15-25% within days. Creative rotation, not budget rotation, is the lever here.", thumbs: toThumbItems(fatigued.slice(0, 6)), totalThumbs: fatigued.length });
-        }
-        if (formatCount > 0 && formatCount < 3 && (adsList || []).length >= 10) {
-          findings.push({ title: "Creative formats are concentrated, only " + formatCount + " in rotation", detail: "Best-in-class accounts ship across 3+ formats (static, carousel, short-form video, UGC) so the algorithm can pick winners by placement. Limited formats cap the ceiling regardless of how much budget is added." });
-        }
-        if (topPlatPct >= 85 && platforms.length >= 2) {
-          findings.push({ title: topPlatPct.toFixed(2) + "% of spend lives on " + dominantPlat, detail: "That level of single-platform concentration ties book-wide performance to one algorithm's mood. The accounts that compound performance year-on-year run a deliberate 60/30/10 mix so they always have a B and C option warming when the A option tightens." });
-        }
-        if (funnelTiers < 2 && allCamps.length >= 3) {
-          findings.push({ title: "The funnel is single-tier", detail: "There's " + (hasAwareness ? "awareness only" : hasConversion ? "conversion only" : "no funnel structure") + ". The 10x accounts run three connected layers: cold prospecting → engaged consideration → high-intent conversion, with audience hand-offs between them. Single-tier setups force one creative to do the whole funnel's job." });
-        }
-        if (scalePct > 0 && scalePct < 30 && scaleReady.length > 0) {
-          findings.push({ title: "Only " + scalePct.toFixed(2) + "% of spend is on scale-ready creative", detail: scaleReady.length + " campaign" + (scaleReady.length === 1 ? "" : "s") + " cleared the scale bar (CTR ≥ 1.5%, frequency healthy, results coming through) but they're holding a minority of the budget. The fastest path to a 5x outcome is moving the dollars to where the algorithm has already proven it can convert.", thumbs: toThumbItems(scaleReady.slice(0, 6)), totalThumbs: scaleReady.length });
-        }
-
-        // 5X play items now carry optional thumbs so the analyst memo
-        // shows the actual creatives the recommendation refers to. The
-        // GAS analyst can see at a glance which ad they're being asked
-        // to pause / clone / refresh without going hunting.
-        var fivex = [];
-        if (spendLeakers.length > 0 && scaleReady.length > 0) {
-          fivex.push({ text: "Pause the " + spendLeakers.length + " underperformer" + (spendLeakers.length === 1 ? "" : "s") + " carrying " + fR(leakSpend) + ". Reroute that budget to the " + scaleReady.length + " scale-ready campaign" + (scaleReady.length === 1 ? "" : "s") + ", historic CTR delta says this alone should lift blended efficiency by 30-50% inside 14 days.", thumbs: toThumbItems(spendLeakers.slice(0, 4).concat(scaleReady.slice(0, 4))), totalThumbs: spendLeakers.length + scaleReady.length });
-        }
-        if (topPerf) {
-          fivex.push({ text: "Clone ‘" + topPerf.c.campaignName + "’ (" + topPerf.client + ") as the template for every same-objective campaign on the book. Same creative format, same hook structure, same audience width. Most of the lift on this book is structural replication, not new creative ideation.", thumbs: toThumbItems([topPerf]) });
-        }
-        if (fatigued.length > 0) {
-          fivex.push({ text: "Ship 3-5 new creative variants on the fatigued ad sets this week. Even minor swaps (hook, colour, CTA) reset the frequency curve and extend productive lifespan 30-40 days.", thumbs: toThumbItems(fatigued.slice(0, 4)), totalThumbs: fatigued.length });
-        }
-        if (formatCount < 3) {
-          fivex.push({ text: "Add the missing formats to the rotation. If the book is heavy on static, ship a 9:16 video variant. If video-heavy, add a carousel test. Format diversity unlocks 20-30% more efficient inventory." });
-        }
-        if (fivex.length === 0) {
-          fivex.push({ text: "Structure is solid. Focus the week on incremental tests (one new audience layer, one new creative format) and let the algorithm compound the gains." });
-        }
-
-        var tenx = [];
-        tenx.push("Restructure every client into a 3-tier funnel: cold prospecting (broad + interest, 60% of budget), warm consideration (engaged + lookalikes, 30%), high-intent conversion (retargeting + custom audiences, 10%). Hand audiences forward between tiers via Custom Audiences so each layer feeds the next.");
-        tenx.push("Consolidate to " + Math.max(3, Math.min(7, Math.round(allCamps.length * 0.6 / Math.max(1, clients.length)))) + " CBO campaigns per client per objective on Meta. Ad-set fragmentation is the single biggest tax on the algorithm. Fewer, bigger campaigns let Meta's learning phase complete and CPMs compress 15-25%.");
-        tenx.push("Adopt a 90-day creative cadence across the agency. 3-5 fresh creative variants in market every fortnight per client, with the previous fortnight's winners scaled and losers cut. Top-1% accounts ship 12+ creatives per quarter per platform.");
-        if (platforms.length < 3) {
-          tenx.push("Add the third platform across the book. Whatever's missing (TikTok if Meta-heavy, Meta if TikTok-heavy, Google Search if neither) closes the audience leakage. The lift comes from incremental reach, not stealing share from the existing platforms.");
-        }
-        tenx.push("Build first-party data as the agency moat. Pixel + Conversions API + offline conversion uploads turn this dashboard from a reporting layer into an attribution engine. Once GAS can see real CAC by campaign by audience by client, the budget decisions become arithmetic, not opinion.");
-
-        // Small reusable thumbnail strip: shows up to `max` square
-        // previews and a +N counter when the underlying list is longer.
-        // Items with no thumbnail render a platform-glyph placeholder so
-        // the strip's length always matches the count.
+        // Strip of square previews with a "+N more" chip when capped.
         var thumbStrip = function(items, total, max) {
           if (!items || items.length === 0) return null;
           var cap = max || 6;
@@ -635,92 +466,440 @@ export default function CommandCentre(props) {
           };
           return <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
             {shown.map(function(it, i) {
-              return <div key={i} title={it.label} style={{ width: 54, height: 54, borderRadius: 8, overflow: "hidden", border: "1px solid " + P.rule, background: "#0c0716", position: "relative", flexShrink: 0 }}>
+              return <div key={i} title={it.label} style={{ width: 56, height: 56, borderRadius: 8, overflow: "hidden", border: "1px solid " + P.rule, background: "#0c0716", position: "relative", flexShrink: 0 }}>
                 {it.thumbnail
-                  ? <img src={it.thumbnail} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={function(e){ e.target.style.display = "none"; }}/>
+                  ? <img src={it.thumbnail} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={function(e) { e.target.style.display = "none"; }}/>
                   : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg," + (P.cyan || "#22D3EE") + "22," + (P.ember || "#F96203") + "15)", color: "#fff", fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 0.5 }}>{glyph(it.platform)}</div>}
               </div>;
             })}
-            {rest > 0 && <div style={{ width: 54, height: 54, borderRadius: 8, border: "1px dashed " + P.rule, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: P.label, fontFamily: fm, flexShrink: 0 }}>+{rest}</div>}
+            {rest > 0 && <div style={{ width: 56, height: 56, borderRadius: 8, border: "1px dashed " + P.rule, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: P.label, fontFamily: fm, flexShrink: 0 }}>+{rest}</div>}
           </div>;
         };
 
-        return <div style={{ marginTop: 28, padding: "32px 34px", borderRadius: 18, background: "linear-gradient(135deg,#0a0418 0%,#100624 50%,#1a0a30 100%)", border: "1px solid " + (P.ember || "#F96203") + "35", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "absolute", top: -50, right: -50, width: 200, height: 200, background: "radial-gradient(circle," + (P.ember || "#F96203") + "15 0%,transparent 70%)", pointerEvents: "none" }}></div>
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 8 }}>
-              <div style={{ width: 56, height: 56, borderRadius: 12, background: "linear-gradient(135deg," + (P.ember || "#F96203") + "40," + (P.blaze || "#FF3D00") + "40)", border: "1px solid " + (P.ember || "#F96203") + "66", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{Ic.crown ? Ic.crown(P.ember || "#F96203", 28) : null}</div>
-              <div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: P.ember || "#F96203", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", lineHeight: 1.1 }}>Head Data Analyst</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: ff, marginTop: 4, letterSpacing: 1, textTransform: "uppercase" }}>Growth Plan</div>
+        // Build the per-client growth plan: scoped to ONE client only.
+        // Returns the full memo JSX (or null when client has nothing to
+        // recommend, but that's rare). The memo gives the GAS team
+        // concrete advice on how to pick best audiences, ads, and
+        // objectives, with ad thumbnails wherever possible.
+        var renderClientGrowthPlan = function(grp, allAds) {
+          var camps = grp.campaigns.map(function(c) { return { client: grp.client, c: c }; });
+          if (camps.length === 0) return null;
+
+          // Scope the ads list to this client by matching campaignId.
+          var clientCampIds = {};
+          grp.campaigns.forEach(function(c) {
+            if (c.campaignId) clientCampIds[String(c.campaignId)] = true;
+            var raw = String(c.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "");
+            if (raw) clientCampIds[raw] = true;
+          });
+          var clientAds = (allAds || []).filter(function(a) {
+            if (!a || !a.campaignId) return false;
+            var k = String(a.campaignId);
+            return clientCampIds[k] || clientCampIds[k.replace(/_facebook$/, "").replace(/_instagram$/, "")];
+          });
+
+          var totalSpend = camps.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
+          var totalImps = camps.reduce(function(a, x) { return a + (x.c.delivery.impressions || 0); }, 0);
+          var totalClicks = camps.reduce(function(a, x) { return a + (x.c.delivery.clicks || 0); }, 0);
+          var blCtr = totalImps > 0 ? (totalClicks / totalImps * 100) : 0;
+          var blCpc = totalClicks > 0 ? (totalSpend / totalClicks) : 0;
+
+          // Grouping by platform + objective (for funnel + mix advice).
+          var byPlat = {}, byObj = {};
+          camps.forEach(function(x) {
+            var c = x.c, p = c.platform || "Unknown", o = String(c.objective || "unknown").toLowerCase();
+            if (!byPlat[p]) byPlat[p] = { n: 0, spend: 0 };
+            byPlat[p].n++; byPlat[p].spend += (c.delivery.spendPeriod || 0);
+            if (!byObj[o]) byObj[o] = { n: 0, spend: 0, results: 0 };
+            byObj[o].n++; byObj[o].spend += (c.delivery.spendPeriod || 0); byObj[o].results += (c.delivery.result || 0);
+          });
+          var platforms = Object.keys(byPlat);
+          var objectives = Object.keys(byObj);
+
+          var sortedSpend = camps.slice().sort(function(a, b) { return (b.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
+          var top3 = sortedSpend.slice(0, 3);
+          var top3Spend = top3.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
+          var top3Pct = totalSpend > 0 ? (top3Spend / totalSpend * 100) : 0;
+
+          var realCtr = camps.filter(function(x) { return (x.c.delivery.impressions || 0) >= 5000; });
+          var topPerf = realCtr.slice().sort(function(a, b) { return (b.c.delivery.ctr || 0) - (a.c.delivery.ctr || 0); })[0] || null;
+          var topPerfCtr = topPerf ? (topPerf.c.delivery.ctr || 0) : 0;
+
+          var spendLeakers = camps.filter(function(x) {
+            var c = x.c;
+            return (c.delivery.spendPeriod || 0) >= 5000 && (c.delivery.impressions || 0) >= 10000 && (c.delivery.ctr || 0) < 0.8;
+          });
+          var leakSpend = spendLeakers.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
+
+          var fatigued = camps.filter(function(x) {
+            var c = x.c, freq = c.delivery.frequency || 0;
+            var p = String(c.platform || "").toLowerCase();
+            var limit = p.indexOf("tiktok") >= 0 ? 6 : 3;
+            return freq >= limit && (c.delivery.spendPeriod || 0) >= 2000;
+          });
+
+          var scaleReady = camps.filter(function(x) {
+            var c = x.c, ctr = c.delivery.ctr || 0, freq = c.delivery.frequency || 0;
+            var p = String(c.platform || "").toLowerCase();
+            var limit = p.indexOf("tiktok") >= 0 ? 6 : 3;
+            var paceOK = !c.pacing || c.pacing.state === "on_track" || c.pacing.state === "ahead" || c.pacing.state === "na";
+            return ctr >= 1.5 && freq < limit && (c.delivery.spendPeriod || 0) >= 2000 && paceOK;
+          });
+          var scaleSpend = scaleReady.reduce(function(a, x) { return a + (x.c.delivery.spendPeriod || 0); }, 0);
+          var scalePct = totalSpend > 0 ? (scaleSpend / totalSpend * 100) : 0;
+
+          // Format mix from ad-level data (per client).
+          var formatSet = {};
+          clientAds.forEach(function(a) { if (a && a.format) formatSet[String(a.format).toUpperCase()] = true; });
+          var formatList = Object.keys(formatSet);
+          var formatCount = formatList.length;
+
+          // Ad-level winners + losers for the CREATIVE advice section.
+          var realAds = clientAds.filter(function(a) { return (a.impressions || 0) >= 1000; });
+          var sortedAds = realAds.slice().sort(function(a, b) { return (b.ctr || 0) - (a.ctr || 0); });
+          var topAds = sortedAds.slice(0, 3);
+          var worstAds = clientAds.filter(function(a) { return (a.spend || 0) >= 500 && (a.impressions || 0) >= 3000 && (a.ctr || 0) < 0.8; })
+            .sort(function(a, b) { return (b.spend || 0) - (a.spend || 0); }).slice(0, 3);
+          var fatiguedAds = clientAds.filter(function(a) {
+            var p = String(a.platform || "").toLowerCase();
+            var limit = p.indexOf("tiktok") >= 0 ? 6 : 3;
+            return (a.frequency || 0) >= limit && (a.spend || 0) >= 300;
+          }).slice(0, 6);
+
+          var topPlatSpend = platforms.length > 0 ? Math.max.apply(null, platforms.map(function(k) { return byPlat[k].spend; })) : 0;
+          var topPlatPct = totalSpend > 0 ? (topPlatSpend / totalSpend * 100) : 0;
+          var dominantPlat = platforms.reduce(function(a, b) { return (byPlat[a] || { spend: 0 }).spend > (byPlat[b] || { spend: 0 }).spend ? a : b; }, platforms[0] || "");
+
+          var hasAwareness = !!byObj.awareness;
+          var hasConsideration = !!(byObj.followers || byObj.landingpage || byObj.traffic);
+          var hasConversion = !!(byObj.leads || byObj.appinstall || byObj.sales);
+          var funnelTiers = (hasAwareness ? 1 : 0) + (hasConsideration ? 1 : 0) + (hasConversion ? 1 : 0);
+
+          // ---- DIAGNOSIS ----
+          var findings = [];
+          if (top3Pct >= 70 && camps.length >= 5) {
+            findings.push({ title: "Spend is concentrated in 3 campaigns", detail: "The top 3 campaigns hold " + top3Pct.toFixed(2) + "% of this client's spend. If any one of those decays, ~" + Math.round(top3Pct / 3) + "% of the budget moves with it. Ladder spend across 5-7 campaigns with planned succession.", thumbs: campThumbs(top3) });
+          }
+          if (topPerf && topPerfCtr >= blCtr * 1.6 && realCtr.length >= 3) {
+            var multiple = blCtr > 0 ? (topPerfCtr / blCtr) : 0;
+            findings.push({ title: "The best campaign is " + multiple.toFixed(1) + "x the blended CTR", detail: "‘" + topPerf.c.campaignName + "’ runs at " + fmtPct(topPerfCtr) + " CTR vs " + fmtPct(blCtr) + " blended. The creative + audience pairing in that campaign is the formula. Most of the upside on this client is replicating that structure across the rest of the portfolio.", thumbs: campThumbs([topPerf]) });
+          }
+          if (spendLeakers.length > 0 && leakSpend >= 5000) {
+            findings.push({ title: fR2(leakSpend) + " is flowing through " + spendLeakers.length + " underperforming campaign" + (spendLeakers.length === 1 ? "" : "s"), detail: "These campaigns spent meaningful budget at sub-0.80% CTR. Money the algorithm is taking but not converting into useful traffic. Pausing and rerouting is the single fastest efficiency lift available.", thumbs: campThumbs(spendLeakers.slice(0, 6)), totalThumbs: spendLeakers.length });
+          }
+          if (fatigued.length > 0) {
+            findings.push({ title: fatigued.length + " campaign" + (fatigued.length === 1 ? " is" : "s are") + " past the fatigue ceiling", detail: "Frequency above 3x on Meta (6x on TikTok) erodes CTR by 15-25% within days. Creative rotation, not budget rotation, is the lever here.", thumbs: campThumbs(fatigued.slice(0, 6)), totalThumbs: fatigued.length });
+          }
+          if (formatCount > 0 && formatCount < 3 && clientAds.length >= 10) {
+            findings.push({ title: "Creative formats are concentrated, only " + formatCount + " in rotation (" + formatList.join(", ") + ")", detail: "Top-1% accounts ship across 3+ formats (static, carousel, short-form video, UGC) so the algorithm can pick winners by placement. Limited formats cap the ceiling regardless of how much budget is added." });
+          }
+          if (topPlatPct >= 85 && platforms.length >= 2) {
+            findings.push({ title: topPlatPct.toFixed(2) + "% of spend lives on " + dominantPlat, detail: "Single-platform concentration ties account performance to one algorithm's mood. The accounts that compound year-on-year run a 60/30/10 mix so they always have a B and C option warming." });
+          }
+          if (funnelTiers < 2 && camps.length >= 3) {
+            findings.push({ title: "The funnel is single-tier", detail: "Only " + (hasAwareness ? "awareness" : hasConversion ? "conversion" : hasConsideration ? "consideration" : "one tier") + " is running. Add the missing tiers so audiences flow cold → warm → hot. Single-tier setups force one creative to do the whole funnel's job." });
+          }
+          if (scalePct > 0 && scalePct < 30 && scaleReady.length > 0) {
+            findings.push({ title: "Only " + scalePct.toFixed(2) + "% of spend is on scale-ready creative", detail: scaleReady.length + " campaign" + (scaleReady.length === 1 ? "" : "s") + " cleared the scale bar but they're holding a minority of the budget. Move dollars to where the algorithm has already proven it can convert.", thumbs: campThumbs(scaleReady.slice(0, 6)), totalThumbs: scaleReady.length });
+          }
+
+          // ---- AUDIENCES advice ----
+          var audAdvice = [];
+          if (fatigued.length > 0) {
+            audAdvice.push("Frequency is climbing on " + fatigued.length + " campaign" + (fatigued.length === 1 ? "" : "s") + " — the audiences are too narrow. Broaden them: add a 1-3% Lookalike off your top converter list at Meta, or layer a wider interest stack on top of the current targeting.");
+          }
+          if (topPerf && realCtr.length >= 2) {
+            audAdvice.push("Build a Custom Audience of engagers from ‘" + topPerf.c.campaignName + "’ (the highest-CTR campaign for this client) and retarget them with a conversion creative. The handover from cold to warm is where 10x accounts compound.");
+          }
+          if (funnelTiers < 2 && camps.length >= 2) {
+            audAdvice.push("Funnel is missing the " + (hasAwareness ? "conversion" : "cold-prospecting") + " tier. Add a " + (hasAwareness ? "retargeting + lookalike layer on top of the warm engagers" : "broad + interest layer at the top") + " so audiences flow into the next tier.");
+          }
+          if (audAdvice.length === 0) {
+            audAdvice.push("Audience signals look healthy. Refresh lookalike audiences quarterly (1%, 2%, 3% seeded on different conversion windows) to keep the algorithm exploring fresh edges.");
+          }
+
+          // ---- CREATIVE advice ----
+          var creAdvice = [];
+          if (topAds.length > 0) {
+            creAdvice.push("Best-performing ad" + (topAds.length === 1 ? "" : "s") + " by CTR: clone this hook + format combination across the rest of the rotation. The team's strongest ammunition this week.");
+          }
+          if (worstAds.length > 0) {
+            creAdvice.push(worstAds.length + " ad" + (worstAds.length === 1 ? " is" : "s are") + " burning budget at sub-0.80% CTR. Pause now and redirect spend to the top performers above.");
+          }
+          if (fatiguedAds.length > 0) {
+            creAdvice.push("Ship 3-5 new variants on the fatigued ads this week. Even minor swaps (hook, colour, CTA) reset the frequency curve and extend productive lifespan 30-40 days.");
+          }
+          if (formatCount > 0 && formatCount < 3) {
+            creAdvice.push("Format mix is " + formatCount + " (" + formatList.join(", ") + "). Add a " + (formatList.indexOf("VIDEO") < 0 ? "9:16 short-form video" : formatList.indexOf("CAROUSEL") < 0 ? "carousel" : "UGC-style static") + " variant so the algorithm can pick winners by placement.");
+          }
+          if (creAdvice.length === 0) {
+            creAdvice.push("Creative is doing its job. Maintain a 2-week refresh cadence and document what's working so it's repeatable on the next campaign.");
+          }
+
+          // ---- OBJECTIVES advice ----
+          var objMix = Object.keys(byObj).map(function(k) { return { name: k, count: byObj[k].n, spend: byObj[k].spend, pct: totalSpend > 0 ? (byObj[k].spend / totalSpend * 100) : 0 }; }).sort(function(a, b) { return b.spend - a.spend; });
+          var objAdvice = [];
+          if (funnelTiers < 2 && camps.length >= 3) {
+            objAdvice.push("Single-tier funnel: only " + (hasAwareness ? "awareness" : hasConversion ? "conversion" : hasConsideration ? "consideration" : "one tier") + " is running. World-class accounts run a 60/30/10 split across cold prospecting → warm consideration → high-intent conversion. Add the missing tiers.");
+          }
+          if (objMix.length > 0 && objMix[0].pct >= 70) {
+            objAdvice.push((objMix[0].pct).toFixed(0) + "% of spend sits on " + objMix[0].name + ". Diversifying across two objectives gives the algorithm more signals to optimise against and reduces single-objective risk.");
+          }
+          if (objMix.length >= 2 && funnelTiers >= 2) {
+            objAdvice.push("Objective mix looks sensible. Track results-per-objective weekly: the highest results-to-spend ratio earns the next budget increase, the lowest gets a creative refresh before being pulled.");
+          }
+          if (objAdvice.length === 0) {
+            objAdvice.push("Objective mix is balanced. Continue weekly attribution checks so each objective stays in its lane.");
+          }
+
+          // ---- 5X PLAY ----
+          var fivex = [];
+          if (spendLeakers.length > 0 && scaleReady.length > 0) {
+            fivex.push({ text: "Pause the " + spendLeakers.length + " underperformer" + (spendLeakers.length === 1 ? "" : "s") + " carrying " + fR2(leakSpend) + " — reroute that budget to the " + scaleReady.length + " scale-ready campaign" + (scaleReady.length === 1 ? "" : "s") + ". Historic CTR delta says this alone should lift blended efficiency by 30-50% inside 14 days.", thumbs: campThumbs(spendLeakers.slice(0, 4).concat(scaleReady.slice(0, 4))), totalThumbs: spendLeakers.length + scaleReady.length });
+          }
+          if (topPerf) {
+            fivex.push({ text: "Clone ‘" + topPerf.c.campaignName + "’ as the template for every same-objective campaign on this client. Same creative format, same hook structure, same audience width. Replication beats reinvention.", thumbs: campThumbs([topPerf]) });
+          }
+          if (fatiguedAds.length > 0) {
+            fivex.push({ text: "Ship 3-5 new creative variants on the " + fatiguedAds.length + " fatigued ad" + (fatiguedAds.length === 1 ? "" : "s") + " this week. Minor swaps (hook, colour, CTA) reset the frequency curve.", thumbs: adThumbs(fatiguedAds.slice(0, 4)), totalThumbs: fatiguedAds.length });
+          }
+          if (formatCount < 3) {
+            fivex.push({ text: "Add the missing formats to the rotation. If heavy on static, ship a 9:16 video variant. If video-heavy, add a carousel. Format diversity unlocks 20-30% more efficient inventory." });
+          }
+          if (fivex.length === 0) {
+            fivex.push({ text: "Structure is solid for this client. Focus the week on incremental tests (one new audience layer, one new creative variant) and let the algorithm compound the gains." });
+          }
+
+          // ---- 10X PLAY ----
+          var tenx = [];
+          tenx.push("Restructure into a 3-tier funnel: cold prospecting (broad + interest, 60% of budget), warm consideration (engaged + lookalikes, 30%), high-intent conversion (retargeting + custom audiences, 10%). Hand audiences forward between tiers via Custom Audiences so each layer feeds the next.");
+          tenx.push("Consolidate to " + Math.max(3, Math.min(7, Math.round(camps.length * 0.6))) + " CBO campaigns per objective on Meta. Ad-set fragmentation is the single biggest tax on the algorithm. Fewer, bigger campaigns let learning phase complete and CPMs compress 15-25%.");
+          tenx.push("Adopt a 90-day creative cadence. 3-5 fresh creative variants in market every fortnight, previous fortnight's winners scaled, losers cut. Top-1% accounts ship 12+ creatives per quarter per platform.");
+          if (platforms.length < 3) {
+            tenx.push("Add the third platform. Whatever's missing (TikTok if Meta-heavy, Meta if TikTok-heavy, Google Search if neither) closes the audience leakage. The lift comes from incremental reach, not from stealing share.");
+          }
+          tenx.push("Build first-party data as the moat for this client. Pixel + Conversions API + offline conversion uploads turn the dashboard into an attribution engine. Once GAS can see real CAC by campaign by audience, budget decisions become arithmetic, not opinion.");
+
+          // ---- Render ----
+          return <div style={{ marginTop: 22, padding: "28px 30px", borderRadius: 16, background: "linear-gradient(135deg,#0a0418 0%,#100624 50%,#1a0a30 100%)", border: "1px solid " + (P.ember || "#F96203") + "35", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: -50, right: -50, width: 200, height: 200, background: "radial-gradient(circle," + (P.ember || "#F96203") + "15 0%,transparent 70%)", pointerEvents: "none" }}></div>
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 12, background: "linear-gradient(135deg," + (P.ember || "#F96203") + "40," + (P.blaze || "#FF3D00") + "40)", border: "1px solid " + (P.ember || "#F96203") + "66", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{Ic.crown ? Ic.crown(P.ember || "#F96203", 26) : null}</div>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: P.ember || "#F96203", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", lineHeight: 1.1 }}>Growth Plan</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: P.txt, fontFamily: ff, marginTop: 4, letterSpacing: 1 }}>Head Data Analyst memo for <span style={{ color: P.ember || "#F96203" }}>{grp.client}</span></div>
+                </div>
               </div>
-            </div>
-            <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic", marginBottom: 20, letterSpacing: 1 }}>Top 1% global benchmark · Computed live across {clients.length} client{clients.length === 1 ? "" : "s"} · {allCamps.length} in-flight campaign{allCamps.length === 1 ? "" : "s"} · {dateFrom} to {dateTo}</div>
+              <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic", marginBottom: 18, letterSpacing: 1 }}>Top-1% global benchmark · {camps.length} campaign{camps.length === 1 ? "" : "s"} · {clientAds.length} ad{clientAds.length === 1 ? "" : "s"} · {dateFrom} to {dateTo}</div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 22 }}>
-              {[
-                ["CLIENTS", clients.length, P.cyan],
-                ["CAMPAIGNS", allCamps.length, P.orchid],
-                ["PLATFORMS", platforms.length, P.solar],
-                ["BLENDED CTR", fmtPct(blCtr), P.mint],
-                ["BLENDED CPC", fR(blCpc), P.blaze]
-              ].map(function(x, i) { return <div key={i} style={{ padding: "12px 14px", background: "rgba(0,0,0,0.4)", border: "1px solid " + P.rule, borderRadius: 10, textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1.5, marginBottom: 5 }}>{x[0]}</div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: x[2], fontFamily: fm }}>{x[1]}</div>
-              </div>; })}
-            </div>
-
-            {findings.length > 0 && <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>Diagnosis · what the data is telling me</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {findings.map(function(f, i) { return <div key={i} style={{ display: "flex", gap: 12, padding: "14px 16px", background: "rgba(255,255,255,0.025)", border: "1px solid " + P.rule, borderLeft: "3px solid " + P.solar, borderRadius: "0 10px 10px 0" }}>
-                  <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: P.solar + "22", border: "1px solid " + P.solar + "55", color: P.solar, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{i + 1}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: P.txt, fontFamily: ff, marginBottom: 5 }}>{f.title}</div>
-                    <div style={{ fontSize: 12, color: P.label, fontFamily: ff, lineHeight: 1.7 }}>{f.detail}</div>
-                    {f.thumbs && thumbStrip(f.thumbs, f.totalThumbs)}
-                  </div>
+              {/* Mini stats strip for this client. */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 22 }}>
+                {[
+                  ["SPEND", fR2(totalSpend), P.ember],
+                  ["BLENDED CTR", fmtPct(blCtr), P.mint],
+                  ["BLENDED CPC", fR2(blCpc), P.blaze],
+                  ["PLATFORMS", platforms.length, P.orchid],
+                  ["OBJECTIVES", objectives.length, P.solar]
+                ].map(function(x, i) { return <div key={i} style={{ padding: "12px 14px", background: "rgba(0,0,0,0.4)", border: "1px solid " + P.rule, borderRadius: 10, textAlign: "center" }}>
+                  <div style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1.5, marginBottom: 5 }}>{x[0]}</div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: x[2], fontFamily: fm }}>{x[1]}</div>
                 </div>; })}
               </div>
-            </div>}
 
-            {findings.length === 0 && <div style={{ marginBottom: 24, padding: "14px 16px", background: P.mint + "12", border: "1px solid " + P.mint + "40", borderLeft: "3px solid " + P.mint, borderRadius: "0 10px 10px 0" }}>
-              <div style={{ fontSize: 12, color: P.mint, fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, marginBottom: 4, textTransform: "uppercase" }}>Structure is solid</div>
-              <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6 }}>No major structural issues detected in the selected window. Focus on incremental optimisations and the 10x plays below.</div>
-            </div>}
+              {/* Diagnosis */}
+              {findings.length > 0 && <div style={{ marginBottom: 22 }}>
+                <div style={{ fontSize: 11, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>Diagnosis · what the data is telling me</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {findings.map(function(f, i) { return <div key={i} style={{ display: "flex", gap: 12, padding: "14px 16px", background: "rgba(255,255,255,0.025)", border: "1px solid " + P.rule, borderLeft: "3px solid " + P.solar, borderRadius: "0 10px 10px 0" }}>
+                    <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: P.solar + "22", border: "1px solid " + P.solar + "55", color: P.solar, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{i + 1}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: P.txt, fontFamily: ff, marginBottom: 5 }}>{f.title}</div>
+                      <div style={{ fontSize: 12, color: P.label, fontFamily: ff, lineHeight: 1.7 }}>{f.detail}</div>
+                      {f.thumbs && thumbStrip(f.thumbs, f.totalThumbs)}
+                    </div>
+                  </div>; })}
+                </div>
+              </div>}
 
-            <div style={{ marginBottom: 22, padding: "20px 22px", background: "linear-gradient(135deg," + P.mint + "15," + P.mint + "06)", border: "1px solid " + P.mint + "40", borderRadius: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <span style={{ background: P.mint, color: "#062014", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>5X PLAY</span>
-                <span style={{ fontSize: 12, color: P.mint, fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>This week · move the budget to where it works</span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {fivex.map(function(p, i) { return <div key={i} style={{ display: "flex", gap: 12, padding: "12px 14px", background: "rgba(0,0,0,0.25)", border: "1px solid " + P.mint + "22", borderRadius: 10 }}>
-                  <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: P.mint + "22", border: "1px solid " + P.mint + "55", color: P.mint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{i + 1}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.7 }}>{p.text || p}</div>
-                    {p.thumbs && thumbStrip(p.thumbs, p.totalThumbs)}
+              {findings.length === 0 && <div style={{ marginBottom: 22, padding: "14px 16px", background: P.mint + "12", border: "1px solid " + P.mint + "40", borderLeft: "3px solid " + P.mint, borderRadius: "0 10px 10px 0" }}>
+                <div style={{ fontSize: 12, color: P.mint, fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, marginBottom: 4, textTransform: "uppercase" }}>Structure is solid</div>
+                <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6 }}>No major structural issues detected for this client in this window. Focus on incremental optimisations and the 10X plays below.</div>
+              </div>}
+
+              {/* AUDIENCES · ADS · OBJECTIVES — three concrete how-to-pick sections */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 22 }}>
+                {/* AUDIENCES */}
+                <div style={{ padding: "16px 18px", background: "rgba(168,85,247,0.08)", border: "1px solid " + (P.orchid || "#A855F7") + "40", borderLeft: "3px solid " + (P.orchid || "#A855F7"), borderRadius: "0 12px 12px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <span style={{ background: (P.orchid || "#A855F7") + "22", color: P.orchid || "#A855F7", padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5 }}>1</span>
+                    <span style={{ fontSize: 14, fontWeight: 900, color: P.orchid || "#A855F7", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>How to pick the best audiences</span>
                   </div>
-                </div>; })}
+                  <ul style={{ margin: 0, padding: "0 0 0 20px", fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.85 }}>
+                    {audAdvice.map(function(a, i) { return <li key={i} style={{ marginBottom: 5 }}>{a}</li>; })}
+                  </ul>
+                </div>
+
+                {/* ADS */}
+                <div style={{ padding: "16px 18px", background: "rgba(255,107,0,0.08)", border: "1px solid " + (P.ember || "#F96203") + "40", borderLeft: "3px solid " + (P.ember || "#F96203"), borderRadius: "0 12px 12px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <span style={{ background: (P.ember || "#F96203") + "22", color: P.ember || "#F96203", padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5 }}>2</span>
+                    <span style={{ fontSize: 14, fontWeight: 900, color: P.ember || "#F96203", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>How to pick the best ads</span>
+                  </div>
+                  <ul style={{ margin: 0, padding: "0 0 0 20px", fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.85 }}>
+                    {creAdvice.map(function(a, i) { return <li key={i} style={{ marginBottom: 5 }}>{a}</li>; })}
+                  </ul>
+                  {topAds.length > 0 && <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: P.mint, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Top performers · clone these</div>
+                    {thumbStrip(adThumbs(topAds), topAds.length)}
+                  </div>}
+                  {worstAds.length > 0 && <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: P.critical || "#ef4444", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Spend leakers · pause these</div>
+                    {thumbStrip(adThumbs(worstAds), worstAds.length)}
+                  </div>}
+                  {fatiguedAds.length > 0 && <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: P.warning || "#fbbf24", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>Fatigued · refresh these</div>
+                    {thumbStrip(adThumbs(fatiguedAds), fatiguedAds.length)}
+                  </div>}
+                </div>
+
+                {/* OBJECTIVES */}
+                <div style={{ padding: "16px 18px", background: "rgba(34,211,238,0.08)", border: "1px solid " + (P.cyan || "#22D3EE") + "40", borderLeft: "3px solid " + (P.cyan || "#22D3EE"), borderRadius: "0 12px 12px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <span style={{ background: (P.cyan || "#22D3EE") + "22", color: P.cyan || "#22D3EE", padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5 }}>3</span>
+                    <span style={{ fontSize: 14, fontWeight: 900, color: P.cyan || "#22D3EE", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>How to pick the best objectives</span>
+                  </div>
+                  <ul style={{ margin: 0, padding: "0 0 0 20px", fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.85, marginBottom: 8 }}>
+                    {objAdvice.map(function(a, i) { return <li key={i} style={{ marginBottom: 5 }}>{a}</li>; })}
+                  </ul>
+                  {objMix.length > 0 && <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {objMix.map(function(o, i) { return <div key={i} style={{ padding: "6px 10px", background: "rgba(0,0,0,0.35)", border: "1px solid " + P.rule, borderRadius: 8, fontFamily: fm }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: P.cyan || "#22D3EE", letterSpacing: 1, textTransform: "uppercase" }}>{o.name}</span>
+                      <span style={{ fontSize: 10, color: P.label, marginLeft: 8 }}>{o.count} · {o.pct.toFixed(0)}% · {fR2(o.spend)}</span>
+                    </div>; })}
+                  </div>}
+                </div>
+              </div>
+
+              {/* 5X PLAY */}
+              <div style={{ marginBottom: 16, padding: "18px 20px", background: "linear-gradient(135deg," + P.mint + "15," + P.mint + "06)", border: "1px solid " + P.mint + "40", borderRadius: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                  <span style={{ background: P.mint, color: "#062014", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>5X PLAY</span>
+                  <span style={{ fontSize: 12, color: P.mint, fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>This week · move the budget to where it works</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {fivex.map(function(p, i) { return <div key={i} style={{ display: "flex", gap: 12, padding: "12px 14px", background: "rgba(0,0,0,0.25)", border: "1px solid " + P.mint + "22", borderRadius: 10 }}>
+                    <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: P.mint + "22", border: "1px solid " + P.mint + "55", color: P.mint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{i + 1}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.7 }}>{p.text}</div>
+                      {p.thumbs && thumbStrip(p.thumbs, p.totalThumbs)}
+                    </div>
+                  </div>; })}
+                </div>
+              </div>
+
+              {/* 10X PLAY */}
+              <div style={{ padding: "18px 20px", background: "linear-gradient(135deg," + (P.ember || "#F96203") + "15," + (P.blaze || "#FF3D00") + "08)", border: "1px solid " + (P.ember || "#F96203") + "40", borderRadius: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                  <span style={{ background: "linear-gradient(135deg," + (P.ember || "#F96203") + "," + (P.blaze || "#FF3D00") + ")", color: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>10X PLAY</span>
+                  <span style={{ fontSize: 12, color: P.ember || "#F96203", fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>Structural rebuild · 60-90 days</span>
+                </div>
+                <ul style={{ margin: 0, padding: "0 0 0 22px", fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.85 }}>
+                  {tenx.map(function(p, i) { return <li key={i} style={{ marginBottom: 6 }}>{p}</li>; })}
+                </ul>
               </div>
             </div>
+          </div>;
+        };
 
-            <div style={{ padding: "18px 20px", background: "linear-gradient(135deg," + (P.ember || "#F96203") + "15," + (P.blaze || "#FF3D00") + "08)", border: "1px solid " + (P.ember || "#F96203") + "40", borderRadius: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <span style={{ background: "linear-gradient(135deg," + (P.ember || "#F96203") + "," + (P.blaze || "#FF3D00") + ")", color: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>10X PLAY</span>
-                <span style={{ fontSize: 12, color: P.ember || "#F96203", fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>The structural rebuild · 60-90 days</span>
-              </div>
-              <ul style={{ margin: 0, padding: "0 0 0 22px", fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.85 }}>
-                {tenx.map(function(p, i) { return <li key={i} style={{ marginBottom: 6 }}>{p}</li>; })}
-              </ul>
-            </div>
+        if (perClient.length === 0) {
+          if (filterMode === "attention") {
+            return <Glass st={{ padding: 24, textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
+              <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
+            </Glass>;
+          }
+          return null;
+        }
 
-            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px dashed " + P.rule, fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic", lineHeight: 1.6 }}>
-              This recommendation refreshes every time the Command Centre reloads or the date range changes. It mirrors how a top-1% buy-side analyst would read this whole book of business, focused on structural levers, not tactical knobs. The 5x play targets visible efficiency gains inside 14 days; the 10x play is the 60-90 day restructure that compounds over the year.
-            </div>
+        // Anchor-friendly slug per client so the TOC chip strip jumps to
+        // the right section on click. Strips non-letter/digit chars.
+        var slugOf = function(name) { return "gas-cc-" + String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"); };
+
+        return <React.Fragment>
+          {/* Per-client TOC chip strip — click jumps to that client's
+              section below. Each chip stays the same compact size so
+              the strip works as quick navigation, not a heading. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
+            {s.data.clients.map(function(grp) {
+              var col = grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint;
+              return <a key={grp.client} href={"#" + slugOf(grp.client)}
+                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, textDecoration: "none", cursor: "pointer" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: P.txt }}>{grp.client}</span>
+                <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{grp.rollup.live} live · {R(grp.rollup.spendPeriod)}</span>
+                {grp.rollup.alerts > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: col, letterSpacing: 1 }}>{grp.rollup.alerts} ALERTS</span>}
+              </a>;
+            })}
           </div>
-        </div>;
+
+          {/* Per-client sections. Each client carries its own buckets
+              and its own growth plan, so the team reads top-to-bottom
+              per client rather than hopping between them. */}
+          {perClient.map(function(entry) {
+            var grp = entry.grp;
+            var buckets = entry.buckets;
+            var slug = slugOf(grp.client);
+            return <section key={grp.client} id={slug} style={{ marginBottom: 36, paddingBottom: 22, borderBottom: "1px solid " + P.rule }}>
+              {/* Big client header — the user explicitly asked for the
+                  client names to be bigger and clearly separated. */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18, padding: "16px 0", borderBottom: "2px solid " + (grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint) + "55" }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Client</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1, lineHeight: 1 }}>{grp.client}</div>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontFamily: fm }}>
+                  {[
+                    ["LIVE", N(grp.rollup.live), P.mint],
+                    ["PERIOD", R(grp.rollup.spendPeriod), P.ember],
+                    ["TODAY", R(grp.rollup.spendToday), P.solar],
+                    ["RESULTS", N(grp.rollup.results), P.cyan],
+                    ["ALERTS", N(grp.rollup.alerts), grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.label]
+                  ].map(function(m, i) {
+                    return <div key={i} style={{ padding: "8px 12px", background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderRadius: 8, textAlign: "right", minWidth: 70 }}>
+                      <div style={{ fontSize: 8, color: P.label, letterSpacing: 1, marginBottom: 2 }}>{m[0]}</div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: m[2] }}>{m[1]}</div>
+                    </div>;
+                  })}
+                </div>
+              </div>
+
+              {/* Per-client priority buckets. Same sectionDefs as before,
+                  scoped to this client. Empty buckets render nothing. */}
+              {sectionDefs.map(function(def) {
+                var rows = buckets[def.key];
+                if (!rows || rows.length === 0) return null;
+                return <div key={def.key} style={{ marginBottom: 22 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 8, borderBottom: (def.dimmed ? "1px dashed " : "1px solid ") + def.color + "55" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ background: def.color + "22", border: "1px solid " + def.color + "66", color: def.color, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "4px 10px", borderRadius: 5, textTransform: "uppercase" }}>{def.label} · {rows.length}</span>
+                      <span style={{ fontSize: 11, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{def.sub}</span>
+                    </div>
+                  </div>
+                  {rows.map(function(r) { return renderCampaignRow(r.c, def.dimmed); })}
+                </div>;
+              })}
+
+              {/* Per-client growth plan (Head Analyst memo, scoped). */}
+              {renderClientGrowthPlan(grp, adsList)}
+            </section>;
+          })}
+        </React.Fragment>;
       })()}
+
+      <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
+        Internal operations view, scoped to your selected dates. The headline metric and cost match the campaign's own KPI (leads, page likes on Facebook, profile visits on Instagram, follows on TikTok, app store clicks, traffic clicks, or impressions for awareness). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets resolve at ad-set level via Graph. Not shown to clients.
+      </div>
+
     </div>}
   </div>;
 }
