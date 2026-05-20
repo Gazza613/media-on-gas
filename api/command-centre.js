@@ -9,11 +9,17 @@
 
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
-import { fetchCampaigns, fetchAdsByCampaign } from "./_pulseShared.js";
+import { fetchCampaigns, fetchAdsByCampaign, redisGetJson, redisSetJson } from "./_pulseShared.js";
 import { readRecentPerf, ymd } from "./_perfSnapshots.js";
 import { fetchAdsetPacing, paceAdset } from "./_adsetBudgets.js";
 
-export const config = { maxDuration: 60 };
+// 180s gives a cold platform pull room to complete without 504ing
+// (Vercel's default ceiling is now 300s; 180 is the safety margin we
+// chose). Subsequent calls hit the Redis response cache below and
+// return inside ~200ms, so this only matters for the first cold hit
+// each ~3-minute window.
+export const config = { maxDuration: 180 };
+var CACHE_TTL_SECONDS = 180;
 
 function sast(offsetDays) {
   return new Date(Date.now() + 2 * 60 * 60 * 1000 + (offsetDays || 0) * 24 * 60 * 60 * 1000);
@@ -207,6 +213,27 @@ export default async function handler(req, res) {
     (Date.parse(pacingEnd + "T00:00:00Z") - Date.parse(periodFrom + "T00:00:00Z")) / 86400000) + 1);
   // "Today" spend only means something when today is inside the window.
   var todayInWindow = todayStr >= periodFrom && todayStr <= periodTo;
+
+  // Cross-instance response cache. Subsequent loads in the same 3-min
+  // window return the cached payload in ~200ms instead of paying the
+  // 20-40s upstream pull again. The first cold hit per window still
+  // pays the full cost, but the user's retry no longer 504s because
+  // the second call now reads the cache the first warmed.
+  // Cache key includes the date range and a static version so we can
+  // bust the cache by bumping the version when the response shape
+  // changes. Bypass=1 query forces a recompute.
+  var bypassCache = String(req.query.fresh || "").trim() === "1";
+  var cacheKey = "cc:v2:" + periodFrom + "..." + periodTo;
+  if (!bypassCache) {
+    try {
+      var cached = await redisGetJson(cacheKey);
+      if (cached && cached.ok) {
+        res.setHeader("X-Cache", "HIT");
+        res.status(200).json(cached);
+        return;
+      }
+    } catch (_) { /* ignore, fall through to recompute */ }
+  }
 
   var periodData, todayData;
   try {
@@ -516,11 +543,19 @@ export default async function handler(req, res) {
   summary.spendToday = parseFloat(summary.spendToday.toFixed(2));
   summary.spendPeriod = parseFloat(summary.spendPeriod.toFixed(2));
 
-  res.status(200).json({
+  var payload = {
     ok: true,
     generatedAt: new Date().toISOString(),
     period: { from: periodFrom, to: periodTo, label: "Selected period" },
     summary: summary,
     clients: clientList
-  });
+  };
+
+  // Best-effort response cache so subsequent loads in this window don't
+  // pay the 20-40s upstream cost. Fire-and-forget — never block the
+  // response on a slow Redis write.
+  try { redisSetJson(cacheKey, payload, CACHE_TTL_SECONDS); } catch (_) {}
+
+  res.setHeader("X-Cache", "MISS");
+  res.status(200).json(payload);
 }

@@ -82,6 +82,41 @@ export async function redisSetIfAbsent(key, ttlSeconds) {
   } catch (_) { return null; }
 }
 
+// Generic JSON cache get/set against Upstash. Fail-open on any error so
+// the calling endpoint can fall back to recomputing. Used for response
+// caches that benefit from sharing across function instances (e.g. the
+// Command Centre cold-pull, which otherwise blows past the 60s timeout
+// every time the per-instance cache is cold).
+export async function redisGetJson(key) {
+  var creds = getRedisCreds();
+  if (!creds) return null;
+  try {
+    var r = await fetch(creds.url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + creds.token, "Content-Type": "application/json" },
+      body: JSON.stringify(["GET", key])
+    });
+    if (!r.ok) return null;
+    var d = await r.json();
+    if (!d || typeof d.result !== "string") return null;
+    try { return JSON.parse(d.result); } catch (_) { return null; }
+  } catch (_) { return null; }
+}
+export async function redisSetJson(key, value, ttlSeconds) {
+  var creds = getRedisCreds();
+  if (!creds) return false;
+  try {
+    var r = await fetch(creds.url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + creds.token, "Content-Type": "application/json" },
+      body: JSON.stringify(["SET", key, JSON.stringify(value), "EX", String(ttlSeconds)])
+    });
+    if (!r.ok) return false;
+    var d = await r.json();
+    return d && d.result === "OK";
+  } catch (_) { return false; }
+}
+
 // ============================================================================
 // Palette (mirrors dashboard's P.* tokens so emails feel continuous)
 // ============================================================================

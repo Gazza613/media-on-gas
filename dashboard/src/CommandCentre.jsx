@@ -48,8 +48,18 @@ export default function CommandCentre(props) {
   // One-shot fetch. Tolerates a non-JSON body (Vercel function timeout
   // returns an HTML 504, which r.json() throws on) and reports the real
   // status code instead of silently falling to "Network error".
-  var fetchOnce = function(signal) {
-    var qs = (dateFrom && dateTo) ? ("?from=" + encodeURIComponent(dateFrom) + "&to=" + encodeURIComponent(dateTo)) : "";
+  var fetchOnce = function(signal, opts) {
+    var parts = [];
+    if (dateFrom && dateTo) {
+      parts.push("from=" + encodeURIComponent(dateFrom));
+      parts.push("to=" + encodeURIComponent(dateTo));
+    }
+    // fresh=1 bypasses the server response cache. The Refresh button
+    // sets this so an operator who needs the latest numbers can force
+    // a recompute. Background reloads (date change, mount) use the
+    // cache to stay snappy.
+    if (opts && opts.fresh) parts.push("fresh=1");
+    var qs = parts.length ? ("?" + parts.join("&")) : "";
     return fetch(apiBase + "/api/command-centre" + qs, {
       headers: { "x-session-token": session || "" },
       signal: signal
@@ -62,7 +72,7 @@ export default function CommandCentre(props) {
     });
   };
 
-  var load = function() {
+  var load = function(opts) {
     // Bump the generation; any pending response from an earlier load()
     // will be discarded by safeSet because its myGen no longer matches.
     var myGen = ++genRef.current;
@@ -81,7 +91,7 @@ export default function CommandCentre(props) {
       return err && (err.name === "AbortError" || /aborted|abort/i.test(String(err.message || "")));
     };
 
-    fetchOnce(signal)
+    fetchOnce(signal, opts)
       .then(function(x) {
         // Success on first try.
         if (x.ok && x.d && x.d.ok) { safeSet(myGen, { loading: false, error: "", data: x.d }); return; }
@@ -96,13 +106,15 @@ export default function CommandCentre(props) {
         }
         // Brief pause so the upstream cache has a chance to warm. Skip
         // the retry if this load was superseded while we were waiting.
+        // The retry never passes fresh=1 — we WANT it to hit the cache
+        // the first attempt warmed.
         retryTimerRef.current = setTimeout(function() {
           if (myGen !== genRef.current) return;
           fetchOnce(signal)
             .then(function(y) {
               if (y.ok && y.d && y.d.ok) { safeSet(myGen, { loading: false, error: "", data: y.d }); return; }
               var em2 = (y.d && y.d.error)
-                || (y.status === 504 ? "Upstream timed out (the cold platform pull took longer than 60s). Retry in a moment." : ("Failed (HTTP " + y.status + ")"));
+                || (y.status === 504 ? "Upstream is taking longer than usual (3 minute timeout). Try Refresh again in a moment, the cache should have warmed by then." : ("Failed (HTTP " + y.status + ")"));
               safeSet(myGen, { loading: false, error: em2, data: null });
             })
             .catch(function(err) {
@@ -233,7 +245,7 @@ export default function CommandCentre(props) {
             </button>;
           })}
         </div>
-        <button onClick={load} disabled={s.loading} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: s.loading ? P.dim : P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: s.loading ? "wait" : "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.loading ? "Loading…" : "Refresh"}</button>
+        <button onClick={function(){ load({ fresh: true }); }} disabled={s.loading} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: s.loading ? P.dim : P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: s.loading ? "wait" : "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.loading ? "Loading…" : "Refresh"}</button>
       </div>
     </div>
 
