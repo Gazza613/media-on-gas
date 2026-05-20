@@ -270,7 +270,9 @@ export default function CommandCentre(props) {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                   {statusChip(c)}
                   <span style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{c.platform}</span>
-                  {!hasAlert && !dimmed && <span style={{ background: P.mint + "20", border: "1px solid " + P.mint + "55", color: P.mint, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>Healthy · no alerts</span>}
+                  {/* Per-row 'Healthy · no alerts' chip removed: the
+                      section header already says SCALE READY / WATCH
+                      LIST / etc., so the chip duplicated the signal. */}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, wordBreak: "break-word", lineHeight: 1.4 }}>{c.campaignName}</div>
                 <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, marginTop: 2 }}>{c.objective}{c.endDate ? " · ends " + c.endDate : ""}</div>
@@ -360,7 +362,7 @@ export default function CommandCentre(props) {
           },
           {
             key: "watch",
-            label: "Needs a human in the loop",
+            label: "Watch list",
             sub: "Medium-severity flags. Review and decide before they escalate.",
             color: P.warning || "#fbbf24",
             dimmed: false
@@ -372,13 +374,12 @@ export default function CommandCentre(props) {
             color: P.mint || "#34D399",
             dimmed: false
           },
-          {
-            key: "healthy",
-            label: "Healthy",
-            sub: "Live and on track. Nothing to do, kept for visibility.",
-            color: P.cyan || "#22d3ee",
-            dimmed: false
-          },
+          // Healthy bucket dropped intentionally: live + no alerts + not
+          // scale-grade campaigns simply don't render in any section.
+          // classify() still returns "healthy" for them, but nothing
+          // consumes that bucket so they stay off the page. Removed
+          // because it cluttered the view without showing anything the
+          // operator could act on.
           {
             key: "paused",
             label: "Paused or ended this period",

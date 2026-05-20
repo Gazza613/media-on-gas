@@ -9124,7 +9124,7 @@ export default function MediaOnGas(){
             });
             var sectionDefs=[
               {key:"critical",label:"Needs immediate attention",sub:"High-severity flags. Resolve today to protect the spend.",color:P.critical},
-              {key:"warning",label:"Needs a human in the loop",sub:"Medium-severity flags. Review and decide before they escalate.",color:P.warning},
+              {key:"warning",label:"Watch list",sub:"Medium-severity flags. Review and decide before they escalate.",color:P.warning},
               {key:"positive",label:"Scale opportunity",sub:"Strong performance signals. Pour budget here before auction dynamics shift.",color:P.positive||P.mint},
               {key:"info",label:"Informational",sub:"Useful context, no immediate action required.",color:P.info||P.cyan}
             ];
