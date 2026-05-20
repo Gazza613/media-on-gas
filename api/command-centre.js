@@ -155,8 +155,14 @@ export default async function handler(req, res) {
 
   var periodData, todayData;
   try {
-    var jobs = [ fetchCampaigns(periodFrom, periodTo, dashKey) ];
-    if (todayInWindow) jobs.push(fetchCampaigns(todayStr, todayStr, dashKey));
+    // Reuse the dashboard /api/campaigns 5-min response cache instead of
+    // forcing fresh=1: the command centre is consulted continuously and
+    // does not need bleeding-edge numbers. fresh=1 was timing the
+    // function out (two ~30s upstream pulls back-to-back exceeded
+    // Vercel's 60s ceiling), surfacing as "Network error" on the
+    // dashboard. Cache lag is at most 5 min, which is fine here.
+    var jobs = [ fetchCampaigns(periodFrom, periodTo, dashKey, { fresh: false }) ];
+    if (todayInWindow) jobs.push(fetchCampaigns(todayStr, todayStr, dashKey, { fresh: false }));
     var pair = await Promise.all(jobs);
     periodData = pair[0];
     todayData = todayInWindow ? pair[1] : { campaigns: [] };

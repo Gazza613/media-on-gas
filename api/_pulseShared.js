@@ -515,8 +515,15 @@ export function detectAnomalies(yesterday, baseline, rmY, opts) {
 // and /api/ads endpoints the dashboard uses, with ?fresh=1 so the report
 // always reflects the most current upstream truth.
 // ============================================================================
-export async function fetchCampaigns(from, to, apiKey) {
-  var u = ORIGIN + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&fresh=1";
+export async function fetchCampaigns(from, to, apiKey, opts) {
+  // `opts.fresh` defaults to true for back-compat: existing email /
+  // snapshot callers want the most current upstream truth. The Command
+  // Centre passes { fresh: false } so it can reuse the dashboard's
+  // 5-min response cache and stay under the function timeout on cold
+  // multi-platform pulls. The Command Centre runs N times an hour, the
+  // cache is exactly what's wanted there.
+  var fresh = !opts || opts.fresh !== false;
+  var u = ORIGIN + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + (fresh ? "&fresh=1" : "");
   var r = await fetch(u, { headers: { "x-api-key": apiKey || "" } });
   if (!r.ok) throw new Error("campaigns fetch failed " + r.status);
   return await r.json();

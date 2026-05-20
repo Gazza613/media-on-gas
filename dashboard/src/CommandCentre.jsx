@@ -12,16 +12,53 @@ export default function CommandCentre(props) {
 
   var st = useState({ loading: true, error: "", data: null }), s = st[0], setS = st[1];
 
+  // One-shot fetch. Tolerates a non-JSON body (Vercel function timeout
+  // returns an HTML 504, which r.json() throws on) and reports the real
+  // status code instead of silently falling to "Network error".
+  var fetchOnce = function() {
+    var qs = (dateFrom && dateTo) ? ("?from=" + encodeURIComponent(dateFrom) + "&to=" + encodeURIComponent(dateTo)) : "";
+    return fetch(apiBase + "/api/command-centre" + qs, { headers: { "x-session-token": session || "" } })
+      .then(function(r) {
+        return r.text().then(function(t) {
+          var d = null;
+          try { d = t ? JSON.parse(t) : null; } catch (_) { d = null; }
+          return { ok: r.ok, status: r.status, d: d, body: t };
+        });
+      });
+  };
+
   var load = function() {
     setS({ loading: true, error: "", data: null });
-    var qs = (dateFrom && dateTo) ? ("?from=" + encodeURIComponent(dateFrom) + "&to=" + encodeURIComponent(dateTo)) : "";
-    fetch(apiBase + "/api/command-centre" + qs, { headers: { "x-session-token": session || "" } })
-      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, d: d }; }); })
+    fetchOnce()
       .then(function(x) {
-        if (!x.ok || !x.d || !x.d.ok) { setS({ loading: false, error: (x.d && x.d.error) || ("Failed (" + x.status + ")"), data: null }); return; }
-        setS({ loading: false, error: "", data: x.d });
+        // Success on first try.
+        if (x.ok && x.d && x.d.ok) { setS({ loading: false, error: "", data: x.d }); return; }
+        // Treat 5xx / parse failures as transient and retry once. Cold
+        // upstream pulls (Meta+TikTok+Google) sometimes need a second
+        // pass after a function timeout to land on a warm cache.
+        var transient = !x.ok && (x.status === 504 || x.status === 502 || x.status === 503 || x.status === 0 || !x.d);
+        if (!transient) {
+          var em = (x.d && x.d.error) || ("Failed (HTTP " + x.status + ")");
+          setS({ loading: false, error: em, data: null });
+          return;
+        }
+        // Brief pause so the upstream cache has a chance to warm.
+        setTimeout(function() {
+          fetchOnce()
+            .then(function(y) {
+              if (y.ok && y.d && y.d.ok) { setS({ loading: false, error: "", data: y.d }); return; }
+              var em2 = (y.d && y.d.error)
+                || (y.status === 504 ? "Upstream timed out (the cold platform pull took longer than 60s). Retry in a moment." : ("Failed (HTTP " + y.status + ")"));
+              setS({ loading: false, error: em2, data: null });
+            })
+            .catch(function(err) {
+              setS({ loading: false, error: "Network error: " + String((err && err.message) || err), data: null });
+            });
+        }, 1500);
       })
-      .catch(function() { setS({ loading: false, error: "Network error", data: null }); });
+      .catch(function(err) {
+        setS({ loading: false, error: "Network error: " + String((err && err.message) || err), data: null });
+      });
   };
   // Re-pull when the dashboard period changes so the command centre
   // always matches the dates the operator has selected.
