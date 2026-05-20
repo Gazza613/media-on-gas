@@ -282,7 +282,17 @@ export default function CommandCentre(props) {
                 <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, marginTop: 2 }}>{c.objective}{c.endDate ? " · ends " + c.endDate : ""}</div>
               </div>
               <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontFamily: fm }}>
-                {[["SPEND", R(c.delivery.spendPeriod)], ["TODAY", R(c.delivery.spendToday)], ["IMPR", N(c.delivery.impressions)], ["CLICKS", N(c.delivery.clicks)], ["CTR", c.delivery.ctr.toFixed(2) + "%"], ["CPM", R(c.delivery.cpm)], [(c.delivery.resultLabel || "RESULTS").toUpperCase(), N(c.delivery.result)], [c.delivery.costLabel || "CPR", c.delivery.result > 0 ? R(c.delivery.costPer) : "-"], ["FREQ", c.delivery.frequency.toFixed(2)]].map(function(m, i) {
+                {(function() {
+                  // Defensive numeric coerce so a stray undefined/null
+                  // from the API doesn't crash the whole tab on a
+                  // `.toFixed()` call. Was previously trusting
+                  // c.delivery.ctr / .frequency to always be present
+                  // and numeric, which is the suspected cause of the
+                  // 'Command tab crashing' user report.
+                  var d = c.delivery || {};
+                  var n = function(v) { var x = parseFloat(v); return isFinite(x) ? x : 0; };
+                  return [["SPEND", R(n(d.spendPeriod))], ["TODAY", R(n(d.spendToday))], ["IMPR", N(n(d.impressions))], ["CLICKS", N(n(d.clicks))], ["CTR", n(d.ctr).toFixed(2) + "%"], ["CPM", R(n(d.cpm))], [(d.resultLabel || "RESULTS").toUpperCase(), N(n(d.result))], [d.costLabel || "CPR", n(d.result) > 0 ? R(n(d.costPer)) : "-"], ["FREQ", n(d.frequency).toFixed(2)]];
+                })().map(function(m, i) {
                   return <div key={i} style={{ textAlign: "right", minWidth: 52 }}>
                     <div style={{ fontSize: 8, color: P.label, letterSpacing: 1, marginBottom: 2 }}>{m[0]}</div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: P.txt }}>{m[1]}</div>
