@@ -330,6 +330,10 @@ export default function CommandCentre(props) {
         var classify = function(c) {
           if (hasSev(c, "high")) return "attention";
           if (hasSev(c, "medium")) return "watch";
+          // Split out ended (end date passed) from paused (operator
+          // turned it off but end date still in future) — the team
+          // wants those reading separately at the bottom.
+          if (c.ended) return "ended";
           if (!c.live) return "paused";
           if (isScaleCandidate(c)) return "scale";
           return "healthy";
@@ -340,7 +344,7 @@ export default function CommandCentre(props) {
 
         // Sort each bucket by spend so the most material rows surface
         // first within the bucket. Each entry keeps its client label.
-        var byBucket = { attention: [], watch: [], scale: [], healthy: [], paused: [] };
+        var byBucket = { attention: [], watch: [], scale: [], healthy: [], paused: [], ended: [] };
         s.data.clients.forEach(function(grp) {
           grp.campaigns.forEach(function(c) {
             if (!passFilter(c)) return;
@@ -386,8 +390,15 @@ export default function CommandCentre(props) {
           // operator could act on.
           {
             key: "paused",
-            label: "Paused or ended this period",
-            sub: "Not in delivery. For reference only.",
+            label: "Paused this period",
+            sub: "Operator turned these off but the end date is still in the future. Reactivate or extend if needed.",
+            color: P.solar || "#fbbf24",
+            dimmed: true
+          },
+          {
+            key: "ended",
+            label: "Ended this period",
+            sub: "End date has passed. Closed out, kept for reference only.",
             color: P.label || "#9ca3af",
             dimmed: true
           }
