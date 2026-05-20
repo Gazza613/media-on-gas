@@ -11,6 +11,12 @@ export default function CommandCentre(props) {
   var dateFrom = props.dateFrom || "", dateTo = props.dateTo || "";
 
   var st = useState({ loading: true, error: "", data: null }), s = st[0], setS = st[1];
+  // Filter mode: "all" shows every in-flight campaign for situational
+  // load/delivery awareness; "attention" collapses to only the rows
+  // that have one or more alerts, so end-of-day triage is fast. Default
+  // "all" because the page header is "live load, delivery, pacing AND
+  // what needs a human now" — both modes are first-class.
+  var fm0 = useState("all"), filterMode = fm0[0], setFilterMode = fm0[1];
 
   // Generation counter + abort controller + alive flag. The user can
   // navigate away from the Command Centre tab while a fetch is still
@@ -207,11 +213,24 @@ export default function CommandCentre(props) {
     <SH icon={Ic.radar ? Ic.radar(P.solar, 20) : Ic.flag(P.solar, 20)} title="Command Centre"
       sub="Internal. Live load, delivery, pacing and what needs a human now, month to date" accent={P.solar} />
 
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 18px" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 18px", gap: 10, flexWrap: "wrap" }}>
       <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
         {s.data ? ("Period " + s.data.period.from + " to " + s.data.period.to + " · generated " + new Date(s.data.generatedAt).toLocaleString()) : ""}
       </div>
-      <button onClick={load} disabled={s.loading} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: s.loading ? P.dim : P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: s.loading ? "wait" : "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.loading ? "Loading…" : "Refresh"}</button>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {/* All / Needs attention toggle so the operator can collapse
+            healthy rows when triaging. Healthy = zero alerts. */}
+        <div style={{ display: "inline-flex", border: "1px solid " + P.rule, borderRadius: 8, overflow: "hidden" }}>
+          {[["all","All"], ["attention","Needs attention"]].map(function(opt) {
+            var on = filterMode === opt[0];
+            return <button key={opt[0]} onClick={function(){ setFilterMode(opt[0]); }}
+              style={{ background: on ? P.solar + "22" : "transparent", border: "none", padding: "7px 12px", color: on ? P.solar : P.label, fontSize: 10, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>
+              {opt[1]}
+            </button>;
+          })}
+        </div>
+        <button onClick={load} disabled={s.loading} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: s.loading ? P.dim : P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: s.loading ? "wait" : "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.loading ? "Loading…" : "Refresh"}</button>
+      </div>
     </div>
 
     {s.loading && <Glass st={{ padding: 28, textAlign: "center" }}><div style={{ fontSize: 13, color: P.label, fontFamily: fm }}>Reading live delivery across all clients…</div></Glass>}
@@ -228,17 +247,37 @@ export default function CommandCentre(props) {
 
       {s.data.clients.length === 0 && <Glass st={{ padding: 24, textAlign: "center" }}><div style={{ fontSize: 13, color: P.caption, fontFamily: ff }}>Nothing in flight this month.</div></Glass>}
 
-      {s.data.clients.map(function(grp) {
-        return <div key={grp.client} style={{ marginBottom: 26 }}>
+      {(function() {
+        // Apply the filter toggle. "attention" mode hides client groups
+        // that have zero alerts entirely; "all" mode shows everything.
+        var visibleClients = s.data.clients.map(function(grp) {
+          var camps = filterMode === "attention"
+            ? grp.campaigns.filter(function(c) { return c.alerts && c.alerts.length > 0; })
+            : grp.campaigns;
+          return { grp: grp, camps: camps };
+        }).filter(function(x) { return x.camps.length > 0; });
+
+        if (filterMode === "attention" && visibleClients.length === 0) {
+          return <Glass st={{ padding: 24, textAlign: "center" }}>
+            <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
+            <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
+          </Glass>;
+        }
+
+        return visibleClients.map(function(vc) {
+          var grp = vc.grp;
+          var camps = vc.camps;
+          return <div key={grp.client} style={{ marginBottom: 26 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1 }}>{grp.client}</div>
             <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
               {grp.rollup.live} live · {R(grp.rollup.spendPeriod)} period · {R(grp.rollup.spendToday)} today · {N(grp.rollup.results)} results
               {grp.rollup.alerts > 0 && <span style={{ color: P.critical || "#ef4444", fontWeight: 800 }}> · {grp.rollup.alerts} alerts</span>}
+              {grp.rollup.alerts === 0 && <span style={{ color: P.mint, fontWeight: 800 }}> · all healthy</span>}
             </div>
           </div>
 
-          {grp.campaigns.map(function(c) {
+          {camps.map(function(c) {
             var hasAlert = c.alerts.length > 0;
             var amUrl = c.adsManagerUrl || "";
             var gradA = (P.cyan || "#22D3EE"), gradB = (P.ember || "#F96203");
@@ -254,9 +293,14 @@ export default function CommandCentre(props) {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
                 {thumb}
                 <div style={{ flex: 1, minWidth: 220 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                     {statusChip(c)}
                     <span style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{c.platform}</span>
+                    {/* Healthy chip: zero alerts means this row is here
+                        for situational load/delivery awareness, not
+                        triage. Without this it looked unexplained when
+                        a row had no flagged comments below the metrics. */}
+                    {!hasAlert && <span style={{ background: P.mint + "20", border: "1px solid " + P.mint + "55", color: P.mint, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>Healthy · no alerts</span>}
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, wordBreak: "break-word", lineHeight: 1.4 }}>{c.campaignName}</div>
                   <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, marginTop: 2 }}>{c.objective}{c.endDate ? " · ends " + c.endDate : ""}</div>
@@ -287,7 +331,8 @@ export default function CommandCentre(props) {
             </Glass>;
           })}
         </div>;
-      })}
+        });
+      })()}
 
       <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
         Internal operations view, scoped to your selected dates. The headline metric and cost match the campaign's own KPI (leads, page likes on Facebook, profile visits on Instagram, follows on TikTok, app store clicks, traffic clicks, or impressions for awareness). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets resolve at ad-set level via Graph. Not shown to clients.
