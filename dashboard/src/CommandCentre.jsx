@@ -301,84 +301,137 @@ export default function CommandCentre(props) {
           </Glass>;
         };
 
-        // A paused campaign with a HIGH-severity alert (e.g.
-        // 'Status is active but the end date has passed') should still
-        // surface in the main list — those need a decision. Everything
-        // else with c.live === false (paused, status not active) drops
-        // to the bottom section for reference.
-        var isUrgent = function(c) {
-          return c.alerts && c.alerts.some(function(a) { return a.severity === "high"; });
+        // Classify each campaign into a priority bucket so the media
+        // operator sees what to handle first, what to watch, what to
+        // scale, what's healthy, and what's not in delivery. Order is
+        // by urgency (ATTENTION first, PAUSED last).
+        //   attention -> any HIGH severity alert
+        //   watch     -> any MEDIUM severity alert (no high)
+        //   paused    -> c.live === false (and no urgent alert)
+        //   scale     -> no medium/high alerts, performing strongly
+        //   healthy   -> no medium/high alerts, steady but not scale
+        // Low-severity alerts (pacing_ahead) don't trigger WATCH —
+        // they're informational and may actually push a row into SCALE.
+        var hasSev = function(c, sev) {
+          return c.alerts && c.alerts.some(function(a) { return a.severity === sev; });
         };
-        var inMain = function(c) { return c.live === true || isUrgent(c); };
+        var isScaleCandidate = function(c) {
+          var d = c.delivery || {};
+          var freqLimit = /tiktok/i.test(String(c.platform || "")) ? 6 : 3;
+          var paceOK = !c.pacing || c.pacing.state === "on_track" || c.pacing.state === "ahead" || c.pacing.state === "na" || c.pacing.state === "unknown";
+          return (d.result > 0) && (d.ctr >= 1.5) && (d.frequency < freqLimit) && paceOK;
+        };
+        var classify = function(c) {
+          if (hasSev(c, "high")) return "attention";
+          if (hasSev(c, "medium")) return "watch";
+          if (!c.live) return "paused";
+          if (isScaleCandidate(c)) return "scale";
+          return "healthy";
+        };
         var passFilter = function(c) {
           return filterMode === "attention" ? (c.alerts && c.alerts.length > 0) : true;
         };
 
-        // Build the main (live + urgent-paused) groups per client.
-        var mainGroups = s.data.clients.map(function(grp) {
-          return { grp: grp, camps: grp.campaigns.filter(function(c) { return inMain(c) && passFilter(c); }) };
-        }).filter(function(x) { return x.camps.length > 0; });
-
-        // Build a flat list of paused-for-reference rows across clients.
-        // Sorted by spend so the most material paused work surfaces
-        // first. Each entry keeps its client label for the header.
-        var pausedRows = [];
+        // Sort each bucket by spend so the most material rows surface
+        // first within the bucket. Each entry keeps its client label.
+        var byBucket = { attention: [], watch: [], scale: [], healthy: [], paused: [] };
         s.data.clients.forEach(function(grp) {
           grp.campaigns.forEach(function(c) {
-            if (!inMain(c) && passFilter(c)) pausedRows.push({ client: grp.client, c: c });
+            if (!passFilter(c)) return;
+            var b = classify(c);
+            byBucket[b].push({ client: grp.client, c: c });
           });
         });
-        pausedRows.sort(function(a, b) { return (b.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
-
-        var liveSection = mainGroups.map(function(vc) {
-          var grp = vc.grp;
-          var camps = vc.camps;
-          return <div key={grp.client} style={{ marginBottom: 26 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1 }}>{grp.client}</div>
-              <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
-                {grp.rollup.live} live · {R(grp.rollup.spendPeriod)} period · {R(grp.rollup.spendToday)} today · {N(grp.rollup.results)} results
-                {grp.rollup.alerts > 0 && <span style={{ color: P.critical || "#ef4444", fontWeight: 800 }}> · {grp.rollup.alerts} alerts</span>}
-                {grp.rollup.alerts === 0 && <span style={{ color: P.mint, fontWeight: 800 }}> · all healthy</span>}
-              </div>
-            </div>
-            {camps.map(function(c) { return renderCampaignRow(c, false); })}
-          </div>;
+        Object.keys(byBucket).forEach(function(k) {
+          byBucket[k].sort(function(a, b) { return (b.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
         });
 
-        // Compact reference list of paused campaigns this period.
-        // Lower priority than the live work above; the user explicitly
-        // does not want paused rows mixed in with live triage.
-        var pausedSection = pausedRows.length > 0
-          ? <div style={{ marginTop: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px dashed " + P.rule }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ background: P.solar + "22", border: "1px solid " + P.solar + "55", color: P.solar, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "4px 10px", borderRadius: 5, textTransform: "uppercase" }}>Paused</span>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>Paused this period · {pausedRows.length}</div>
-                </div>
-                <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic" }}>For reference, not flagged as urgent</div>
-              </div>
-              {pausedRows.map(function(p) {
-                return <div key={p.c.campaignId} style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 9, color: P.caption, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, marginLeft: 4 }}>{p.client}</div>
-                  {renderCampaignRow(p.c, true)}
-                </div>;
-              })}
-            </div>
-          : null;
+        // Section definitions render in priority order. Each section
+        // is suppressed when its bucket is empty so the page only
+        // shows what's relevant. Colors mirror the alert severity
+        // palette so the visual hierarchy reinforces the priority.
+        var sectionDefs = [
+          {
+            key: "attention",
+            label: "Needs immediate attention",
+            sub: "High-severity alerts. Open Ads Manager and fix today.",
+            color: P.critical || "#ef4444",
+            dimmed: false
+          },
+          {
+            key: "watch",
+            label: "Needs a human in the loop",
+            sub: "Medium-severity flags. Review and decide before they escalate.",
+            color: P.warning || "#fbbf24",
+            dimmed: false
+          },
+          {
+            key: "scale",
+            label: "Scale ready",
+            sub: "Strong CTR, healthy frequency, results coming through. Candidates for more budget.",
+            color: P.mint || "#34D399",
+            dimmed: false
+          },
+          {
+            key: "healthy",
+            label: "Healthy",
+            sub: "Live and on track. Nothing to do, kept for visibility.",
+            color: P.cyan || "#22d3ee",
+            dimmed: false
+          },
+          {
+            key: "paused",
+            label: "Paused or ended this period",
+            sub: "Not in delivery. For reference only.",
+            color: P.label || "#9ca3af",
+            dimmed: true
+          }
+        ];
 
-        // Empty-state copy when the attention filter zeroes both
-        // sections (everything is healthy).
-        if (filterMode === "attention" && mainGroups.length === 0 && pausedRows.length === 0) {
-          return <Glass st={{ padding: 24, textAlign: "center" }}>
-            <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
-            <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
-          </Glass>;
+        var anyVisible = sectionDefs.some(function(d) { return byBucket[d.key].length > 0; });
+        if (!anyVisible) {
+          if (filterMode === "attention") {
+            return <Glass st={{ padding: 24, textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
+              <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
+            </Glass>;
+          }
+          return null;
         }
 
         return <React.Fragment>
-          {liveSection}
-          {pausedSection}
+          {/* Compact per-client overview chip strip so the operator can
+              still see per-client roll-ups now that the main layout is
+              priority-bucket based rather than per-client grouped. */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
+            {s.data.clients.map(function(grp) {
+              var col = grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint;
+              return <div key={grp.client} style={{ background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: P.txt }}>{grp.client}</span>
+                <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{grp.rollup.live} live · {R(grp.rollup.spendPeriod)}</span>
+                {grp.rollup.alerts > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: col, letterSpacing: 1 }}>{grp.rollup.alerts} ALERTS</span>}
+              </div>;
+            })}
+          </div>
+
+          {sectionDefs.map(function(def) {
+            var rows = byBucket[def.key];
+            if (rows.length === 0) return null;
+            return <div key={def.key} style={{ marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 8, borderBottom: (def.dimmed ? "1px dashed " : "1px solid ") + def.color + (def.dimmed ? "55" : "55") }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ background: def.color + "22", border: "1px solid " + def.color + "66", color: def.color, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "4px 10px", borderRadius: 5, textTransform: "uppercase" }}>{def.label} · {rows.length}</span>
+                  <span style={{ fontSize: 11, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{def.sub}</span>
+                </div>
+              </div>
+              {rows.map(function(r) {
+                return <div key={r.c.campaignId} style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 9, color: P.caption, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, marginLeft: 4 }}>{r.client}</div>
+                  {renderCampaignRow(r.c, def.dimmed)}
+                </div>;
+              })}
+            </div>;
+          })}
         </React.Fragment>;
       })()}
 

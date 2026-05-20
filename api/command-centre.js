@@ -303,7 +303,14 @@ export default async function handler(req, res) {
 
     // Current-state alerts (deliberately conservative to avoid noise).
     var alerts = [];
-    if (statusActive && ended) {
+    // Only flag "active but past end date" when the campaign is ALSO
+    // still delivering today. If todaySpend is zero, the operator has
+    // already effectively turned it off (or the platform stopped
+    // delivery automatically) and the warning is noise — even if
+    // Meta's `effective_status` is still nominally ACTIVE due to a
+    // cache lag or campaign-vs-adset toggle mismatch. Was firing on
+    // ENDED rows the user had already paused at campaign level.
+    if (statusActive && ended && todaySpend > 0) {
       alerts.push({ severity: "high", code: "ended_still_active", message: "Status is active but the end date has passed. Turn it off or extend it." });
     }
     // "No spend today" is only a real stall signal when (a) the campaign
