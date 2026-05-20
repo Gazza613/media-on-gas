@@ -306,8 +306,27 @@ export default async function handler(req, res) {
     if (statusActive && ended) {
       alerts.push({ severity: "high", code: "ended_still_active", message: "Status is active but the end date has passed. Turn it off or extend it." });
     }
+    // "No spend today" is only a real stall signal when (a) the campaign
+    // had been delivering at a meaningful daily pace (not just a R20/day
+    // dribble where R0 in any given day is normal), AND (b) it is late
+    // enough in the SAST day for the lack of delivery to be unusual
+    // (Meta/TikTok delivery is often back-loaded; R0 at 09:00 SAST is
+    // typical and not actionable). Without these gates the alert
+    // appeared on every low-volume campaign every morning, training the
+    // operator to ignore it.
     if (todayInWindow && live && periodSpend > 0 && todaySpend === 0 && !ended) {
-      alerts.push({ severity: "medium", code: "today_no_spend", message: "Was delivering in this period but no spend today. Check it has not stalled." });
+      var avgDaily = elapsedDays > 0 ? periodSpend / elapsedDays : 0;
+      // SAST = UTC+2 (no DST). getUTCHours then +2 for the local hour.
+      var sastHour = (new Date(Date.now() + 2 * 60 * 60 * 1000)).getUTCHours();
+      var meaningfulPace = avgDaily >= 100;
+      var lateEnough = sastHour >= 14; // past 14:00 SAST
+      if (meaningfulPace && lateEnough) {
+        alerts.push({
+          severity: "medium",
+          code: "today_no_spend",
+          message: "Was delivering ~R" + Math.round(avgDaily) + "/day but no spend today by " + sastHour + ":00 SAST. Check it has not stalled."
+        });
+      }
     }
     // Money out, nothing delivered (objective-agnostic). Zero clicks is
     // NOT the signal — a follower / awareness campaign legitimately has
