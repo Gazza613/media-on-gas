@@ -248,90 +248,138 @@ export default function CommandCentre(props) {
       {s.data.clients.length === 0 && <Glass st={{ padding: 24, textAlign: "center" }}><div style={{ fontSize: 13, color: P.caption, fontFamily: ff }}>Nothing in flight this month.</div></Glass>}
 
       {(function() {
-        // Apply the filter toggle. "attention" mode hides client groups
-        // that have zero alerts entirely; "all" mode shows everything.
-        var visibleClients = s.data.clients.map(function(grp) {
-          var camps = filterMode === "attention"
-            ? grp.campaigns.filter(function(c) { return c.alerts && c.alerts.length > 0; })
-            : grp.campaigns;
-          return { grp: grp, camps: camps };
+        // Single row renderer reused by both the live section (top) and
+        // the paused section (bottom). dimmed=true mutes the row a bit
+        // so the paused section reads as reference rather than action.
+        var renderCampaignRow = function(c, dimmed) {
+          var hasAlert = c.alerts.length > 0;
+          var amUrl = c.adsManagerUrl || "";
+          var gradA = (P.cyan || "#22D3EE"), gradB = (P.ember || "#F96203");
+          var thumb = <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer"
+              title={amUrl ? "Open this campaign in Ads Manager" : "Ads Manager link unavailable"}
+              style={{ flexShrink: 0, width: 88, height: 88, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "#0c0716", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none", opacity: dimmed ? 0.75 : 1 }}>
+            {c.thumbnail
+              ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>}
+            {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
+          </a>;
+          return <Glass key={c.campaignId} accent={hasAlert ? sevColor(c.alerts[0].severity) : (dimmed ? P.rule : P.rule)} st={{ padding: 16, marginBottom: 10, opacity: dimmed ? 0.82 : 1 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+              {thumb}
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  {statusChip(c)}
+                  <span style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{c.platform}</span>
+                  {!hasAlert && !dimmed && <span style={{ background: P.mint + "20", border: "1px solid " + P.mint + "55", color: P.mint, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>Healthy · no alerts</span>}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, wordBreak: "break-word", lineHeight: 1.4 }}>{c.campaignName}</div>
+                <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, marginTop: 2 }}>{c.objective}{c.endDate ? " · ends " + c.endDate : ""}</div>
+              </div>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontFamily: fm }}>
+                {[["SPEND", R(c.delivery.spendPeriod)], ["TODAY", R(c.delivery.spendToday)], ["IMPR", N(c.delivery.impressions)], ["CLICKS", N(c.delivery.clicks)], ["CTR", c.delivery.ctr.toFixed(2) + "%"], ["CPM", R(c.delivery.cpm)], [(c.delivery.resultLabel || "RESULTS").toUpperCase(), N(c.delivery.result)], [c.delivery.costLabel || "CPR", c.delivery.result > 0 ? R(c.delivery.costPer) : "-"], ["FREQ", c.delivery.frequency.toFixed(2)]].map(function(m, i) {
+                  return <div key={i} style={{ textAlign: "right", minWidth: 52 }}>
+                    <div style={{ fontSize: 8, color: P.label, letterSpacing: 1, marginBottom: 2 }}>{m[0]}</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: P.txt }}>{m[1]}</div>
+                  </div>;
+                })}
+              </div>
+            </div>
+            {!dimmed && <div style={{ marginTop: 12, maxWidth: c.pacing && c.pacing.mode === "adset" ? 520 : 360 }}>{pacingBar(c.pacing)}</div>}
+            {hasAlert && <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              {c.alerts.map(function(a, i) {
+                var col = sevColor(a.severity);
+                return <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: col + "18", border: "1px solid " + col + "55", borderLeft: "5px solid " + col, borderRadius: 12 }}>
+                  <span style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", background: col, display: "flex", alignItems: "center", justifyContent: "center" }}>{sevIcon(a.severity, 20)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: col, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>{a.severity} · needs attention</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: P.txt, fontFamily: ff, lineHeight: 1.55 }}>{a.message}</div>
+                  </div>
+                  {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "9px 14px", color: col, fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Fix in Ads Manager ↗</a>}
+                </div>;
+              })}
+            </div>}
+          </Glass>;
+        };
+
+        // A paused campaign with a HIGH-severity alert (e.g.
+        // 'Status is active but the end date has passed') should still
+        // surface in the main list — those need a decision. Everything
+        // else with c.live === false (paused, status not active) drops
+        // to the bottom section for reference.
+        var isUrgent = function(c) {
+          return c.alerts && c.alerts.some(function(a) { return a.severity === "high"; });
+        };
+        var inMain = function(c) { return c.live === true || isUrgent(c); };
+        var passFilter = function(c) {
+          return filterMode === "attention" ? (c.alerts && c.alerts.length > 0) : true;
+        };
+
+        // Build the main (live + urgent-paused) groups per client.
+        var mainGroups = s.data.clients.map(function(grp) {
+          return { grp: grp, camps: grp.campaigns.filter(function(c) { return inMain(c) && passFilter(c); }) };
         }).filter(function(x) { return x.camps.length > 0; });
 
-        if (filterMode === "attention" && visibleClients.length === 0) {
+        // Build a flat list of paused-for-reference rows across clients.
+        // Sorted by spend so the most material paused work surfaces
+        // first. Each entry keeps its client label for the header.
+        var pausedRows = [];
+        s.data.clients.forEach(function(grp) {
+          grp.campaigns.forEach(function(c) {
+            if (!inMain(c) && passFilter(c)) pausedRows.push({ client: grp.client, c: c });
+          });
+        });
+        pausedRows.sort(function(a, b) { return (b.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
+
+        var liveSection = mainGroups.map(function(vc) {
+          var grp = vc.grp;
+          var camps = vc.camps;
+          return <div key={grp.client} style={{ marginBottom: 26 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1 }}>{grp.client}</div>
+              <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
+                {grp.rollup.live} live · {R(grp.rollup.spendPeriod)} period · {R(grp.rollup.spendToday)} today · {N(grp.rollup.results)} results
+                {grp.rollup.alerts > 0 && <span style={{ color: P.critical || "#ef4444", fontWeight: 800 }}> · {grp.rollup.alerts} alerts</span>}
+                {grp.rollup.alerts === 0 && <span style={{ color: P.mint, fontWeight: 800 }}> · all healthy</span>}
+              </div>
+            </div>
+            {camps.map(function(c) { return renderCampaignRow(c, false); })}
+          </div>;
+        });
+
+        // Compact reference list of paused campaigns this period.
+        // Lower priority than the live work above; the user explicitly
+        // does not want paused rows mixed in with live triage.
+        var pausedSection = pausedRows.length > 0
+          ? <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px dashed " + P.rule }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ background: P.solar + "22", border: "1px solid " + P.solar + "55", color: P.solar, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "4px 10px", borderRadius: 5, textTransform: "uppercase" }}>Paused</span>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>Paused this period · {pausedRows.length}</div>
+                </div>
+                <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic" }}>For reference, not flagged as urgent</div>
+              </div>
+              {pausedRows.map(function(p) {
+                return <div key={p.c.campaignId} style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 9, color: P.caption, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, marginLeft: 4 }}>{p.client}</div>
+                  {renderCampaignRow(p.c, true)}
+                </div>;
+              })}
+            </div>
+          : null;
+
+        // Empty-state copy when the attention filter zeroes both
+        // sections (everything is healthy).
+        if (filterMode === "attention" && mainGroups.length === 0 && pausedRows.length === 0) {
           return <Glass st={{ padding: 24, textAlign: "center" }}>
             <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
             <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
           </Glass>;
         }
 
-        return visibleClients.map(function(vc) {
-          var grp = vc.grp;
-          var camps = vc.camps;
-          return <div key={grp.client} style={{ marginBottom: 26 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid " + P.rule }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1 }}>{grp.client}</div>
-            <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
-              {grp.rollup.live} live · {R(grp.rollup.spendPeriod)} period · {R(grp.rollup.spendToday)} today · {N(grp.rollup.results)} results
-              {grp.rollup.alerts > 0 && <span style={{ color: P.critical || "#ef4444", fontWeight: 800 }}> · {grp.rollup.alerts} alerts</span>}
-              {grp.rollup.alerts === 0 && <span style={{ color: P.mint, fontWeight: 800 }}> · all healthy</span>}
-            </div>
-          </div>
-
-          {camps.map(function(c) {
-            var hasAlert = c.alerts.length > 0;
-            var amUrl = c.adsManagerUrl || "";
-            var gradA = (P.cyan || "#22D3EE"), gradB = (P.ember || "#F96203");
-            var thumb = <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer"
-                title={amUrl ? "Open this campaign in Ads Manager" : "Ads Manager link unavailable"}
-                style={{ flexShrink: 0, width: 88, height: 88, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "#0c0716", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none" }}>
-              {c.thumbnail
-                ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
-                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>}
-              {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
-            </a>;
-            return <Glass key={c.campaignId} accent={hasAlert ? sevColor(c.alerts[0].severity) : P.rule} st={{ padding: 16, marginBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-                {thumb}
-                <div style={{ flex: 1, minWidth: 220 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                    {statusChip(c)}
-                    <span style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{c.platform}</span>
-                    {/* Healthy chip: zero alerts means this row is here
-                        for situational load/delivery awareness, not
-                        triage. Without this it looked unexplained when
-                        a row had no flagged comments below the metrics. */}
-                    {!hasAlert && <span style={{ background: P.mint + "20", border: "1px solid " + P.mint + "55", color: P.mint, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1, padding: "3px 8px", borderRadius: 5, textTransform: "uppercase" }}>Healthy · no alerts</span>}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, wordBreak: "break-word", lineHeight: 1.4 }}>{c.campaignName}</div>
-                  <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, marginTop: 2 }}>{c.objective}{c.endDate ? " · ends " + c.endDate : ""}</div>
-                </div>
-                <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontFamily: fm }}>
-                  {[["SPEND", R(c.delivery.spendPeriod)], ["TODAY", R(c.delivery.spendToday)], ["IMPR", N(c.delivery.impressions)], ["CLICKS", N(c.delivery.clicks)], ["CTR", c.delivery.ctr.toFixed(2) + "%"], ["CPM", R(c.delivery.cpm)], [(c.delivery.resultLabel || "RESULTS").toUpperCase(), N(c.delivery.result)], [c.delivery.costLabel || "CPR", c.delivery.result > 0 ? R(c.delivery.costPer) : "-"], ["FREQ", c.delivery.frequency.toFixed(2)]].map(function(m, i) {
-                    return <div key={i} style={{ textAlign: "right", minWidth: 52 }}>
-                      <div style={{ fontSize: 8, color: P.label, letterSpacing: 1, marginBottom: 2 }}>{m[0]}</div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: P.txt }}>{m[1]}</div>
-                    </div>;
-                  })}
-                </div>
-              </div>
-              <div style={{ marginTop: 12, maxWidth: c.pacing && c.pacing.mode === "adset" ? 520 : 360 }}>{pacingBar(c.pacing)}</div>
-              {hasAlert && <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-                {c.alerts.map(function(a, i) {
-                  var col = sevColor(a.severity);
-                  return <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: col + "18", border: "1px solid " + col + "55", borderLeft: "5px solid " + col, borderRadius: 12 }}>
-                    <span style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", background: col, display: "flex", alignItems: "center", justifyContent: "center" }}>{sevIcon(a.severity, 20)}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 900, color: col, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>{a.severity} · needs attention</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: P.txt, fontFamily: ff, lineHeight: 1.55 }}>{a.message}</div>
-                    </div>
-                    {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "9px 14px", color: col, fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Fix in Ads Manager ↗</a>}
-                  </div>;
-                })}
-              </div>}
-            </Glass>;
-          })}
-        </div>;
-        });
+        return <React.Fragment>
+          {liveSection}
+          {pausedSection}
+        </React.Fragment>;
       })()}
 
       <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
