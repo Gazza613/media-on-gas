@@ -21,10 +21,26 @@ function sast(offsetDays) {
 function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
 
 var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+// Detect campaign names that belong to a "POS" sub-division. POS is a
+// separate book of business (lead-gen only) that lives INSIDE the
+// parent ad account on Meta — so accountName alone groups it with the
+// parent. Match POS as a word boundary so we don't trip on words like
+// 'compose'.
+var POS_TAG = /(^|[_\s\-])POS([_\s\-]|$)/i;
 function clientOf(c) {
   var raw = String(c.accountName || "").trim();
   var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
-  return clean || raw || "Unknown";
+  var base = clean || raw || "Unknown";
+  // POS sub-division split: if the campaign name carries POS and the
+  // base client name doesn't already, route it to '{base} POS'. The
+  // user explicitly wants MTN MoMo POS (lead gen) read as its own
+  // client section, separate from MTN MoMo (which is mixed: clicks to
+  // app store, landing-page traffic, follower/likes).
+  var nm = String(c.campaignName || "");
+  if (POS_TAG.test(nm) && !POS_TAG.test(base)) {
+    return base + " POS";
+  }
+  return base;
 }
 
 function isActiveStatus(s) {
