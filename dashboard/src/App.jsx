@@ -3723,30 +3723,38 @@ export default function MediaOnGas(){
   var authHeaders=function(){if(viewToken)return{"Authorization":"Bearer "+viewToken};return{"x-session-token":session||""};};
   var isAuthed=function(){return !!session||!!viewToken;};
 
-  // Thumbnail helper. `ad.thumbnail` in the ads payload is a raw signed Meta
-  // CDN URL captured when the ads cache was built, and those signatures
-  // expire within ~1 hour and can also point at low-res poster variants. By
-  // the time a client opens their share link the next day, every tile image
-  // is stale or a 192x192 fuzz. Route every tile through /api/ad-image
-  // instead, which re-resolves on demand to the largest-area creative asset
-  // and 302-redirects the browser to a fresh CDN URL each view. The proxy
-  // has a 10 min server-side cache plus browser cache, so a page with 50
-  // ads does one network round-trip per ad only on the first load.
+  // Thumbnail helper. `ad.thumbnail` in the ads payload is a raw signed
+  // Meta CDN URL captured when the ads cache was built. Those signatures
+  // expire within ~1 hour, so a CLIENT opening a share link the next day
+  // sees a stale URL — we have to route every client tile through
+  // /api/ad-image which re-resolves to a fresh CDN URL on demand.
+  //
+  // For the TEAM viewing the live dashboard, ad.thumbnail comes from a
+  // /api/ads response that's at most ~5 min stale, well inside the
+  // signed-URL TTL. There's no benefit to round-tripping through the
+  // proxy on a session that's actively viewing — it just adds the
+  // thundering-herd: 30+ /api/ad-image requests in parallel waiting on
+  // Graph fetches, which is what was making Summary tiles slow / blank.
+  // So: team + has a raw thumbnail + not a MIXED DCO ad => use raw.
+  // Everything else (clients, MIXED DCO winner-selection, ads that
+  // arrived with no thumbnail) still goes through the proxy.
   var thumbFor=function(ad){
     if(!ad)return "";
     var pLow=String(ad.platform||"").toLowerCase();
     var pKey=pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0?"meta":pLow.indexOf("tiktok")>=0?"tiktok":"";
-    if(pKey&&ad.adId){
-      var cId=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
-      var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&session?("&st="+encodeURIComponent(session)):"");
-      // MIXED (Meta DCO) ads bundle many creatives under one ad id. Ask
-      // the proxy for the WINNING creative in the set (best by results)
-      // instead of the largest-by-area asset, so the card thumbnail is
-      // the creative that actually performed. Meta-only concept.
-      var win=(pKey==="meta"&&(String(ad.format||"").toUpperCase()==="MIXED"||ad.multiCreative))?"&winner=1":"";
-      return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+win+auth;
-    }
-    return ad.thumbnail||"";
+    if(!pKey||!ad.adId)return ad.thumbnail||"";
+    var isMixed=(pKey==="meta"&&(String(ad.format||"").toUpperCase()==="MIXED"||ad.multiCreative));
+    // Fast path: team session with a fresh raw thumbnail, no winner
+    // re-selection needed. Skip the proxy entirely.
+    if(!isClient&&ad.thumbnail&&!isMixed)return ad.thumbnail;
+    var cId=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
+    var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&session?("&st="+encodeURIComponent(session)):"");
+    // MIXED (Meta DCO) ads bundle many creatives under one ad id. Ask
+    // the proxy for the WINNING creative in the set (best by results)
+    // instead of the largest-by-area asset, so the card thumbnail is
+    // the creative that actually performed. Meta-only concept.
+    var win=isMixed?"&winner=1":"";
+    return API+"/api/ad-image?platform="+pKey+"&adId="+encodeURIComponent(ad.adId)+(cId?("&campaignId="+encodeURIComponent(cId)):"")+win+auth;
   };
   // Whether the ad has a resolvable thumbnail source. True when the ad-image
   // proxy can attempt resolution (Meta/TikTok with an adId) even if ads.js
