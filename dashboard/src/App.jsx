@@ -4225,7 +4225,11 @@ export default function MediaOnGas(){
     if(ecoOn)tabs.push({id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
   } else {
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"optimise",label:"Optimisation"+(openFlags>0?" ("+openFlags+")":""),icon:Ic.flag(P.warning,16)},{id:"command",label:"Command",icon:Ic.flag(P.solar,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
-    if(ecoOn)tabs.splice(1,0,{id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
+    // Ecommerce tab is ALWAYS visible to the GAS team (even when the
+    // selected client has no GA4 connection — the panel itself renders a
+    // "no ecommerce connection yet" empty state). Clients still only see
+    // it when their own KPI profile has ecommerce enabled (above).
+    tabs.splice(1,0,{id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
   }
   useEffect(function(){if(isClient&&tab!=="summary"&&!(ecoOn&&tab==="ecommerce"))setTab("summary");},[isClient,tab,ecoOn]);
   // Scroll to top whenever the tab changes so each page lands cleanly
@@ -6891,8 +6895,8 @@ export default function MediaOnGas(){
           })()}
         </div>)}
 
-        {tab==="ecommerce"&&ecoOn&&(<div>
-          <SH icon={Ic.cart(P.mint,20)} title="Ecommerce" sub={df+" to "+dt+" | Site & online store performance from Google Analytics"} accent={P.mint}/>
+        {tab==="ecommerce"&&(ecoOn||!isClient)&&(<div>
+          <SH icon={Ic.cart(P.mint,20)} title="Ecommerce" sub={df+" to "+dt+(ecoOn?" | Site & online store performance from Google Analytics":" | Internal team view, select a client with a GA4 connection")} accent={P.mint}/>
           {ecoLoading&&!ecoData&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"80px 40px",gap:20}}>
             <div style={{width:46,height:46,border:"3px solid "+P.rule,borderTop:"3px solid "+P.mint,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
             <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
