@@ -3724,29 +3724,33 @@ export default function MediaOnGas(){
   var isAuthed=function(){return !!session||!!viewToken;};
 
   // Thumbnail helper. `ad.thumbnail` in the ads payload is a raw signed
-  // Meta CDN URL captured when the ads cache was built. Those signatures
-  // expire within ~1 hour, so a CLIENT opening a share link the next day
-  // sees a stale URL — we have to route every client tile through
-  // /api/ad-image which re-resolves to a fresh CDN URL on demand.
+  // Meta CDN URL captured when the /api/ads response cache was built.
+  // That cache has a 5-min TTL and Meta's signed-URL TTL is ~1 hour,
+  // so any thumbnail returned to either the team or a client share-link
+  // viewer is well inside the signature window (worst case ~5 min old).
   //
-  // For the TEAM viewing the live dashboard, ad.thumbnail comes from a
-  // /api/ads response that's at most ~5 min stale, well inside the
-  // signed-URL TTL. There's no benefit to round-tripping through the
-  // proxy on a session that's actively viewing — it just adds the
-  // thundering-herd: 30+ /api/ad-image requests in parallel waiting on
-  // Graph fetches, which is what was making Summary tiles slow / blank.
-  // So: team + has a raw thumbnail + not a MIXED DCO ad => use raw.
-  // Everything else (clients, MIXED DCO winner-selection, ads that
-  // arrived with no thumbnail) still goes through the proxy.
+  // Routing every tile through /api/ad-image was the historical
+  // approach but it produced a thundering herd: 30+ proxy requests in
+  // parallel, each waiting on Meta Graph fetches. Under load several
+  // tiles stalled or 404'd before the browser timed out — the blank
+  // cards on Summary the user just reported.
+  //
+  // Fast path now covers BOTH team and client share-link viewers: if
+  // a raw thumbnail is present and the ad is not a MIXED DCO ad, use
+  // ad.thumbnail directly. The proxy still runs only for:
+  //   - MIXED DCO ads (need ?winner=1 server-side re-selection)
+  //   - ads that arrived with no thumbnail (proxy attempts resolution
+  //     from image_hash / video_id)
+  // Emails continue to use the proxy via raw=1 (separate code path).
   var thumbFor=function(ad){
     if(!ad)return "";
     var pLow=String(ad.platform||"").toLowerCase();
     var pKey=pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0?"meta":pLow.indexOf("tiktok")>=0?"tiktok":"";
     if(!pKey||!ad.adId)return ad.thumbnail||"";
     var isMixed=(pKey==="meta"&&(String(ad.format||"").toUpperCase()==="MIXED"||ad.multiCreative));
-    // Fast path: team session with a fresh raw thumbnail, no winner
-    // re-selection needed. Skip the proxy entirely.
-    if(!isClient&&ad.thumbnail&&!isMixed)return ad.thumbnail;
+    // Fast path: fresh raw thumbnail, no winner re-selection needed.
+    // Skip the proxy entirely. Applies to team AND client viewers.
+    if(ad.thumbnail&&!isMixed)return ad.thumbnail;
     var cId=String(ad.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
     var auth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&session?("&st="+encodeURIComponent(session)):"");
     // MIXED (Meta DCO) ads bundle many creatives under one ad id. Ask
