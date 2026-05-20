@@ -190,7 +190,15 @@ export default function CommandCentre(props) {
       </div>;
     }
     if (!p || p.state === "na" || p.ratioPct == null) {
-      return <span style={{ fontSize: 10, color: P.caption, fontFamily: fm, lineHeight: 1.5 }}>{(p && p.note) || "Budget pacing not available at campaign level."}</span>;
+      // No pacing bar when budget is set at ad-set level or not exposed
+      // at campaign level: the verbose explanatory copy added noise on
+      // every ABO row without helping the operator decide anything. The
+      // tile's spend / today / alerts already carry the actionable info.
+      // p.note kept available for future use; rendered only when set.
+      if (p && p.note) {
+        return <span style={{ fontSize: 10, color: P.caption, fontFamily: fm, lineHeight: 1.5 }}>{p.note}</span>;
+      }
+      return null;
     }
     return bar(p.actualToDate, p.expectedToDate, p.ratioPct, p.state, R(p.actualToDate) + " / ~" + R(p.expectedToDate) + " " + (p.budgetMode === "lifetime" ? "(lifetime)" : "(daily)"));
   };
@@ -282,7 +290,7 @@ export default function CommandCentre(props) {
       })}
 
       <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
-        Internal operations view, scoped to your selected dates. The headline metric and cost are the campaign's own objective (installs / leads / followers / clicks / impressions). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets set at ad-set level are noted rather than guessed. Not shown to clients.
+        Internal operations view, scoped to your selected dates. The headline metric and cost match the campaign's own KPI (leads, page likes on Facebook, profile visits on Instagram, follows on TikTok, app store clicks, traffic clicks, or impressions for awareness). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets resolve at ad-set level via Graph. Not shown to clients.
       </div>
     </div>}
   </div>;

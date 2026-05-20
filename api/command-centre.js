@@ -65,6 +65,14 @@ function adsManagerUrlFor(c) {
 // clicks for traffic, impressions for awareness) instead of always
 // assuming "leads". Canon objective first, campaign-name fallback,
 // mirrors the dashboard's classification.
+//
+// FOLLOWERS family is platform-aware to match the rest of the dashboard
+// (Summary / Community / Deep Dive / Creative / Demographics):
+//   Facebook  -> c.pageLikes, label "Page Likes"     (per-ad attribution,
+//                gated server-side by ad-set optimization_goal=PAGE_LIKES)
+//   Instagram -> c.clicks,    label "Profile Visits" (Meta does NOT
+//                attribute IG follows per ad; clicks is the proxy)
+//   TikTok    -> c.follows,   label "Follows"        (real per-ad attrib)
 function resolveObjective(c) {
   var canon = String(c.objective || "").toLowerCase();
   var nm = String(c.campaignName || "").toLowerCase();
@@ -75,6 +83,10 @@ function resolveObjective(c) {
   else if (canon === "landingpage" || /landing|traffic|paidsearch|homeloan/.test(nm)) fam = "traffic";
   else fam = "awareness";
   var spend = num(c.spend);
+  var plat = String(c.platform || "").toLowerCase();
+  var isFB = plat.indexOf("facebook") >= 0;
+  var isIG = plat.indexOf("instagram") >= 0;
+  var isTT = plat.indexOf("tiktok") >= 0;
   var result, resultLabel, costLabel;
   // App Store campaigns here drive CLICKS TO THE APP STORE, not SDK
   // installs (no install SDK in play). The dashboard classifies these
@@ -82,7 +94,20 @@ function resolveObjective(c) {
   // installs===0 is expected and is NOT a tracking break.
   if (fam === "appinstall") { result = num(c.clicks); resultLabel = "App Store Clicks"; costLabel = "CPC"; }
   else if (fam === "leads") { result = num(c.leads); resultLabel = "Leads"; costLabel = "CPL"; }
-  else if (fam === "followers") { result = num(c.pageLikes) + num(c.follows); resultLabel = "Followers"; costLabel = "CPF"; }
+  else if (fam === "followers") {
+    if (isFB) {
+      result = num(c.pageLikes); resultLabel = "Page Likes"; costLabel = "Cost / Page Like";
+    } else if (isIG) {
+      // Meta doesn't attribute IG follows per ad; the dashboard uses
+      // clicks as the profile-visits proxy on every other surface,
+      // mirror it here so the Command Centre lines up.
+      result = num(c.clicks); resultLabel = "Profile Visits"; costLabel = "Cost / Profile Visit";
+    } else if (isTT) {
+      result = num(c.follows); resultLabel = "Follows"; costLabel = "CPF";
+    } else {
+      result = num(c.pageLikes) + num(c.follows); resultLabel = "Followers"; costLabel = "CPF";
+    }
+  }
   else if (fam === "traffic") { result = num(c.clicks); resultLabel = "Clicks"; costLabel = "CPC"; }
   else { result = num(c.impressions); resultLabel = "Impressions"; costLabel = "CPM"; }
   var costPer = fam === "awareness"
@@ -91,10 +116,24 @@ function resolveObjective(c) {
   return {
     family: fam, result: result, resultLabel: resultLabel,
     costLabel: costLabel, costPer: costPer,
-    // Only LEADS and FOLLOWERS have a discrete tracked conversion whose
-    // absence is a real tracking-break signal. App Store (clicks) and
-    // traffic are click-KPI, awareness has none — never "no results".
-    hasConversion: fam === "leads" || fam === "followers",
+    platform: isFB ? "facebook" : isIG ? "instagram" : isTT ? "tiktok" : "other",
+    // Count this campaign's result in the client-header rollup. True for
+    // any objective with a meaningful per-campaign result (leads, all
+    // followers families incl. FB page likes + IG profile visits).
+    // Awareness has no discrete result, click-KPI families keep their
+    // existing rollup exclusion to avoid double-counting clicks.
+    countsAsResult: fam === "leads" || fam === "followers",
+    // Gate for the "spent + clicked, zero results" alert. Only LEADS and
+    // TikTok FOLLOWERS have per-ad attribution reliable enough to flag:
+    //   - FB followers: zero per-ad page likes is often a tooling artefact
+    //     (ad-set optimization_goal != PAGE_LIKES, so Meta doesn't
+    //     attribute the action per ad). Whole-account snapshot growth on
+    //     Summary is the trustworthy signal there. Don't flag here.
+    //   - IG followers: result IS clicks (profile visits proxy), so the
+    //     "no clicks" branch already handles it, never get a stray
+    //     "no follows" alert.
+    //   - TikTok followers: real per-ad attribution, flag away.
+    hasConversion: fam === "leads" || (fam === "followers" && isTT),
     // Click-KPI objectives: a click-break (spend + impressions but zero
     // clicks) IS a real problem and gets its own alert.
     clickKpi: fam === "appinstall" || fam === "traffic"
@@ -249,11 +288,16 @@ export default async function handler(req, res) {
         note: ""
       };
     } else {
+      // Empty note: the campaign tile's spend / today / alerts already
+      // tell the story. The verbose "Budget is set at ad-set level..."
+      // copy was repetitive on every ABO row and added no actionable
+      // information. The per-ad-set pacing pass below will replace this
+      // pacing object with real numbers when the Graph read succeeds.
       pacing = {
         budgetMode: bMode || "unset", budgetDaily: 0,
         expectedToDate: 0, actualToDate: Math.round(periodSpend),
         ratioPct: null, state: "na",
-        note: "Budget is set at ad-set level (ABO) or not exposed at campaign level. Pacing is not computed here, check the ad sets in Ads Manager."
+        note: ""
       };
     }
 
@@ -279,11 +323,13 @@ export default async function handler(req, res) {
       alerts.push({ severity: "high", code: "no_clicks", message: "R" + periodSpend.toFixed(2) + " spent with impressions but zero " + clkWhat + ". Creative / targeting / destination problem." });
     }
     // "Delivering but zero of its own tracked conversion" — ONLY leads
-    // and followers (a genuine tracked conversion). App Store and
-    // traffic are click-KPI (covered above); awareness has none.
-    // installs===0 on a click-to-store campaign is expected, not a bug.
+    // and TikTok followers (genuine per-ad tracked conversions). FB
+    // followers and IG followers are deliberately excluded via
+    // ob.hasConversion to avoid false noise: FB page-like attribution
+    // is gated by ad-set optimization_goal and IG follows aren't
+    // attributed per ad at all (see resolveObjective).
     if (ob.hasConversion && (clicks >= 50 || periodSpend >= 200) && ob.result === 0) {
-      var noun = ob.family === "followers" ? "new follows" : "leads";
+      var noun = ob.family === "followers" ? "follows" : "leads";
       var cause = ob.family === "followers" ? "the follow CTA / destination" : "a landing page / tracking break";
       alerts.push({ severity: "medium", code: "no_results", message: Math.round(clicks) + " clicks, zero " + noun + ". Likely " + cause + "." });
     }
@@ -347,7 +393,7 @@ export default async function handler(req, res) {
       adsetTargets.push({ accountId: String(c.accountId), rawCampaignId: String(c.rawCampaignId || c.campaignId), entry: entry });
     }
     var rr = clients[cl].rollup;
-    rr.spendPeriod += periodSpend; rr.spendToday += todaySpend; rr.results += (ob.hasConversion ? ob.result : 0);
+    rr.spendPeriod += periodSpend; rr.spendToday += todaySpend; rr.results += (ob.countsAsResult ? ob.result : 0);
     if (live) rr.live++;
     // Alert counters are tallied AFTER the post-loop ad-set pacing pass
     // (which can add a pacing alert), so they are computed in the
