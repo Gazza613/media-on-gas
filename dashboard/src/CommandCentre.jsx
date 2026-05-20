@@ -22,6 +22,20 @@ export default function CommandCentre(props) {
   // what needs a human now" — both modes are first-class.
   var fm0 = useState("all"), filterMode = fm0[0], setFilterMode = fm0[1];
 
+  // Best-practices playbook fetched from /api/best-practices (which
+  // reads the Redis copy refreshed monthly by the cron, falling back
+  // to a bundled JSON file if Redis is empty). Loaded once on mount,
+  // doesn't change with the date picker. Null while loading; falsy
+  // values trigger the in-component hardcoded fallback per section.
+  var bp0 = useState(null), bp = bp0[0], setBp = bp0[1];
+  useEffect(function() {
+    if (!session) return;
+    fetch(apiBase + "/api/best-practices", { headers: { "x-session-token": session } })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d && (d.meta || d.tiktok || d.google)) setBp(d); })
+      .catch(function() { /* silent — the memo has hardcoded fallback */ });
+  }, [session, apiBase]);
+
   // Generation counter + abort controller + alive flag. The user can
   // navigate away from the Command Centre tab while a fetch is still
   // in flight (cold loads of this endpoint can run 20-40s while it
@@ -641,23 +655,41 @@ export default function CommandCentre(props) {
           var hasTikTok = !!byPlat.TikTok;
           var hasGoogle = !!byPlat["Google Ads"] || !!byPlat.Google;
 
+          // Pull a section from the LLM-refreshed playbook (Redis →
+          // cron-written) or fall back to the hardcoded array. The
+          // monthly cron at /api/cron/refresh-best-practices keeps the
+          // platform advice current; this fallback ships the last
+          // committed copy if Redis hasn't been written yet (e.g. the
+          // cron hasn't fired, or ANTHROPIC_API_KEY isn't configured).
+          var fromPlaybook = function(platformKey, section, fallbackArr) {
+            var p = bp && bp[platformKey];
+            var arr = p && p[section];
+            if (Array.isArray(arr) && arr.length) return arr;
+            return fallbackArr;
+          };
+
           // ---- AUDIENCES advice (2026 platform-current best practice) ----
+          // Platform-specific strings come from the LLM-refreshed
+          // playbook (fromPlaybook) so the team always sees this-month
+          // best practice without a code change.
           var audAdvice = [];
-          // The single biggest 2025-2026 shift on Meta: Advantage+
-          // Audience + broad targeting now outperforms narrow lookalikes
-          // on conversion objectives because Meta's algorithm has more
-          // data to learn from. This is the OPPOSITE of pre-2024 advice.
           if (hasMeta) {
-            audAdvice.push("META · The 2026 default is Advantage+ Audience with BROAD targeting (age + country only) — Meta's algorithm now finds converters better than narrow lookalikes do, because iOS14+ + cookie deprecation gutted the signal that narrow targeting used to depend on. Use lookalike/interest as Audience Suggestions only (Meta's term), not as hard segments.");
+            fromPlaybook("meta", "audiences", [
+              "META · The 2026 default is Advantage+ Audience with BROAD targeting (age + country only) — Meta's algorithm now finds converters better than narrow lookalikes do, because iOS14+ + cookie deprecation gutted the signal that narrow targeting used to depend on. Use lookalike/interest as Audience Suggestions only (Meta's term), not as hard segments."
+            ]).forEach(function(s) { audAdvice.push(s); });
           }
           if (fatigued.length > 0) {
             audAdvice.push(fatigued.length + " campaign" + (fatigued.length === 1 ? " is" : "s are") + " above the frequency ceiling — audiences are too narrow. On Meta switch to Advantage+ Audience (broad + signals); on TikTok let Smart+ run audience-free; on Google add Customer Match + Optimized Targeting on top of the existing audience.");
           }
           if (hasTikTok) {
-            audAdvice.push("TIKTOK · Smart+ Campaigns (TikTok's 2026 default) let the algorithm pick audience + creative + placement together — manual targeting loses to Smart+ on 80%+ of accounts in the current auction. If you're still running manual audience, move it to Smart+ and use creator + interest signals as inputs, not constraints.");
+            fromPlaybook("tiktok", "audiences", [
+              "TIKTOK · Smart+ Campaigns (TikTok's 2026 default) let the algorithm pick audience + creative + placement together — manual targeting loses to Smart+ on 80%+ of accounts in the current auction. If you're still running manual audience, move it to Smart+ and use creator + interest signals as inputs, not constraints."
+            ]).forEach(function(s) { audAdvice.push(s); });
           }
           if (hasGoogle) {
-            audAdvice.push("GOOGLE · Stack Customer Match (uploaded converter emails) + Enhanced Conversions + Optimized Targeting on top of every campaign. Google's ML lost ~40% of cookie signal post-2024; first-party data is what feeds it back the learning it needs to find converters at your CAC target.");
+            fromPlaybook("google", "audiences", [
+              "GOOGLE · Stack Customer Match (uploaded converter emails) + Enhanced Conversions + Optimized Targeting on top of every campaign. Google's ML lost ~40% of cookie signal post-2024; first-party data is what feeds it back the learning it needs to find converters at your CAC target."
+            ]).forEach(function(s) { audAdvice.push(s); });
           }
           if (topPerf && realCtr.length >= 2) {
             audAdvice.push("Build a Custom Audience from engagers of ‘" + topPerf.c.campaignName + "’ (the highest-CTR campaign here) and use it as a retargeting seed AND as a 1% Lookalike seed. Engagers from a winning creative are higher-quality than purchasers from a losing one.");
@@ -681,13 +713,19 @@ export default function CommandCentre(props) {
             creAdvice.push("FATIGUED · Refresh the high-frequency ad" + (fatiguedAds.length === 1 ? "" : "s") + " below this week. The hook is the single biggest lever — change the first 1-3 seconds, keep the rest. Even a colour or face swap resets frequency 30-40 days.");
           }
           if (hasMeta) {
-            creAdvice.push("META · Reels is now 60%+ of feed impressions — 9:16 vertical video with sound-on storytelling is the win pattern in 2026. Static + carousel still work for catalog + offer ads but cap them at 40% of ad-set creative for prospecting.");
+            fromPlaybook("meta", "creative", [
+              "META · Reels is now 60%+ of feed impressions — 9:16 vertical video with sound-on storytelling is the win pattern in 2026. Static + carousel still work for catalog + offer ads but cap them at 40% of ad-set creative for prospecting."
+            ]).forEach(function(s) { creAdvice.push(s); });
           }
           if (hasTikTok) {
-            creAdvice.push("TIKTOK · Spark Ads using creator content outperform brand-polished by 30-50% on CTR. Brief 3-5 creators monthly on the offer + the trending audio chart (top 100 in TikTok Library). UGC is the cheapest creative production with the highest auction signal.");
+            fromPlaybook("tiktok", "creative", [
+              "TIKTOK · Spark Ads using creator content outperform brand-polished by 30-50% on CTR. Brief 3-5 creators monthly on the offer + the trending audio chart (top 100 in TikTok Library). UGC is the cheapest creative production with the highest auction signal."
+            ]).forEach(function(s) { creAdvice.push(s); });
           }
           if (hasGoogle) {
-            creAdvice.push("GOOGLE · Performance Max wants 20+ assets per asset group (5+ headlines, 5+ descriptions, 1+ long headline, 5+ images, 1+ logo, 1+ video). Asset gaps tank the ML's exploration budget — fill every slot, including a 9:16 video for YouTube Shorts placements.");
+            fromPlaybook("google", "creative", [
+              "GOOGLE · Performance Max wants 20+ assets per asset group (5+ headlines, 5+ descriptions, 1+ long headline, 5+ images, 1+ logo, 1+ video). Asset gaps tank the ML's exploration budget — fill every slot, including a 9:16 video for YouTube Shorts placements."
+            ]).forEach(function(s) { creAdvice.push(s); });
           }
           if (formatCount > 0 && formatCount < 3) {
             creAdvice.push("Only " + formatCount + " creative format" + (formatCount === 1 ? "" : "s") + " in rotation (" + formatList.join(", ") + "). Add a " + (formatList.indexOf("VIDEO") < 0 ? "9:16 short-form vertical video (the highest-yield format in 2026)" : formatList.indexOf("CAROUSEL") < 0 ? "carousel for catalog / multi-message" : "UGC-style raw-feel static") + " variant — format diversity unlocks 20-30% more efficient inventory because the algorithm gets more placements to pick winners from.");
@@ -706,10 +744,14 @@ export default function CommandCentre(props) {
             objAdvice.push((objMix[0].pct).toFixed(0) + "% of spend sits on " + objMix[0].name + ". Diversifying across two objectives gives the algorithm more signal events to optimise against — a single-objective account loses ~15% efficiency vs a two-objective one in head-to-head agency benchmarks.");
           }
           if (hasMeta && !hasConversion) {
-            objAdvice.push("META · Add a Sales/Leads objective campaign with Conversions API + Pixel + CAPI Gateway wired. iOS14+ + cookie deprecation reduced Pixel-only attribution by ~50%; CAPI recovers most of that. This is non-negotiable for any account where conversion ROI is the KPI.");
+            fromPlaybook("meta", "objectives", [
+              "META · Add a Sales/Leads objective campaign with Conversions API + Pixel + CAPI Gateway wired. iOS14+ + cookie deprecation reduced Pixel-only attribution by ~50%; CAPI recovers most of that. This is non-negotiable for any account where conversion ROI is the KPI."
+            ]).forEach(function(s) { objAdvice.push(s); });
           }
           if (hasGoogle && !hasConversion) {
-            objAdvice.push("GOOGLE · Add a Performance Max campaign with Enhanced Conversions + offline conversion imports. Google's ML needs to see conversions land — without that signal, broad match + automated bidding can't find your converter pocket.");
+            fromPlaybook("google", "objectives", [
+              "GOOGLE · Add a Performance Max campaign with Enhanced Conversions + offline conversion imports. Google's ML needs to see conversions land — without that signal, broad match + automated bidding can't find your converter pocket."
+            ]).forEach(function(s) { objAdvice.push(s); });
           }
           if (objMix.length >= 2 && funnelTiers >= 2 && objAdvice.length === 0) {
             objAdvice.push("Objective mix is sensible. Track results-per-objective weekly: the highest results-to-spend ratio earns the next 15-20% budget increase, the lowest gets a creative refresh before any pause decision.");
@@ -736,20 +778,37 @@ export default function CommandCentre(props) {
             fivex.push({ text: "Structure is solid for this client. Focus the week on incremental tests (one new audience layer, one new creative variant) and let the algorithm compound the gains." });
           }
 
-          // ---- 10X PLAY (2026 platform-current rebuild) ----
+          // ---- STRUCTURAL PLAY (60-90 day rebuild) ----
+          // Renamed from "10X PLAY" — the multiplier framing was a
+          // promise the team didn't want to make. Same content, more
+          // honest label. Strategic platform-rebuild plays come from
+          // the LLM-refreshed playbook (bp.rebuild.{platform}); the
+          // universal plays come from bp.rebuild.universal.
           var tenx = [];
-          tenx.push("Run the 3-tier funnel with audience hand-offs: cold prospecting on Advantage+ Audience / TikTok Smart+ (60% of budget) → warm consideration on Custom Audiences of engagers + 1% Lookalikes (30%) → high-intent conversion via retargeting + Customer Match (10%). Each tier's converters seed the next tier's audience.");
+          var universalRebuild = fromPlaybook("rebuild", "universal", [
+            "Run the 3-tier funnel with audience hand-offs: cold prospecting on Advantage+ Audience / TikTok Smart+ (60% of budget) → warm consideration on Custom Audiences of engagers + 1% Lookalikes (30%) → high-intent conversion via retargeting + Customer Match (10%). Each tier's converters seed the next tier's audience.",
+            "90-day creative cadence: 3-5 fresh variants in market every fortnight per client, previous fortnight's winners scaled (15-20% budget bump), losers cut. Top-1% accounts ship 12+ creatives per quarter per platform — creative volume IS the moat once targeting commoditised.",
+            "First-party data infrastructure: Pixel + Conversions API + offline conversion uploads + Customer Match feed on a 7-day refresh cadence. Once GAS sees real CAC by campaign by audience by creative, budget decisions become arithmetic, not opinion — and the same data improves every platform's ML signal-recovery."
+          ]);
+          if (universalRebuild[0]) tenx.push(universalRebuild[0]);
           if (hasMeta) {
-            tenx.push("META · Consolidate to " + Math.max(2, Math.min(5, Math.round(camps.filter(function(x) { return /facebook|instagram/i.test(x.c.platform || ""); }).length * 0.5))) + " Advantage+ Shopping/Sales campaigns (one per major product/offer line). The 2026 win pattern is FEWER, BIGGER campaigns running on Advantage+ Audience — Meta's ML needs ~50 conversions per ad-set per week to escape learning phase, and ad-set fragmentation starves it of that signal.");
+            var metaCons = Math.max(2, Math.min(5, Math.round(camps.filter(function(x) { return /facebook|instagram/i.test(x.c.platform || ""); }).length * 0.5)));
+            fromPlaybook("rebuild", "meta", [
+              "META · Consolidate to " + metaCons + " Advantage+ Shopping/Sales campaigns (one per major product/offer line). The 2026 win pattern is FEWER, BIGGER campaigns running on Advantage+ Audience — Meta's ML needs ~50 conversions per ad-set per week to escape learning phase, and ad-set fragmentation starves it of that signal."
+            ]).forEach(function(s) { tenx.push(s); });
           }
           if (hasTikTok) {
-            tenx.push("TIKTOK · Migrate every campaign to Smart+ (mandatory on most objectives by mid-2026 anyway). Pipeline 3-5 Spark Ads from creator partners per fortnight, each tied to a trending audio. Auction-side: TikTok rewards 'native-feeling' creative — branded polish actively suppresses delivery.");
+            fromPlaybook("rebuild", "tiktok", [
+              "TIKTOK · Migrate every campaign to Smart+ (mandatory on most objectives by mid-2026 anyway). Pipeline 3-5 Spark Ads from creator partners per fortnight, each tied to a trending audio. Auction-side: TikTok rewards 'native-feeling' creative — branded polish actively suppresses delivery."
+            ]).forEach(function(s) { tenx.push(s); });
           }
           if (hasGoogle) {
-            tenx.push("GOOGLE · Move conversion campaigns to Performance Max with full asset coverage (5+ headlines, 5+ descriptions, 5+ images, 1+ logo, 1+ video at minimum). Wire Enhanced Conversions + offline conversion imports + Customer Match — those three together restore most of the signal cookie deprecation took, and PMax can't optimize without them.");
+            fromPlaybook("rebuild", "google", [
+              "GOOGLE · Move conversion campaigns to Performance Max with full asset coverage (5+ headlines, 5+ descriptions, 5+ images, 1+ logo, 1+ video at minimum). Wire Enhanced Conversions + offline conversion imports + Customer Match — those three together restore most of the signal cookie deprecation took, and PMax can't optimize without them."
+            ]).forEach(function(s) { tenx.push(s); });
           }
-          tenx.push("90-day creative cadence: 3-5 fresh variants in market every fortnight per client, previous fortnight's winners scaled (15-20% budget bump), losers cut. Top-1% accounts ship 12+ creatives per quarter per platform — creative volume IS the moat once targeting commoditised.");
-          tenx.push("First-party data infrastructure: Pixel + Conversions API + offline conversion uploads + Customer Match feed on a 7-day refresh cadence. Once GAS sees real CAC by campaign by audience by creative, budget decisions become arithmetic, not opinion — and the same data improves every platform's ML signal-recovery.");
+          // Tack on the remaining universal plays after platform plays.
+          for (var ui = 1; ui < universalRebuild.length; ui++) tenx.push(universalRebuild[ui]);
           if (platforms.length < 3) {
             tenx.push("Add the third platform. Whatever's missing (TikTok if Meta-heavy, Meta if TikTok-heavy, Google PMax if neither) closes audience-overlap leakage. The lift comes from incremental reach, not from stealing share — most accounts find their lowest-CAC pocket is on the platform they're under-invested on.");
           }
@@ -899,11 +958,11 @@ export default function CommandCentre(props) {
                 </div>
               </div>
 
-              {/* 5X PLAY */}
+              {/* THIS WEEK · tactical reallocation */}
               <div style={{ marginBottom: 16, padding: "18px 20px", background: "linear-gradient(135deg," + P.mint + "15," + P.mint + "06)", border: "1px solid " + P.mint + "40", borderRadius: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <span style={{ background: P.mint, color: "#062014", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>5X PLAY</span>
-                  <span style={{ fontSize: 12, color: P.mint, fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>This week · move the budget to where it works</span>
+                  <span style={{ background: P.mint, color: "#062014", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>This week</span>
+                  <span style={{ fontSize: 12, color: P.mint, fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>Move the budget to where it works</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {fivex.map(function(p, i) { return <div key={i} style={{ display: "flex", gap: 12, padding: "12px 14px", background: "rgba(0,0,0,0.25)", border: "1px solid " + P.mint + "22", borderRadius: 10 }}>
@@ -916,11 +975,12 @@ export default function CommandCentre(props) {
                 </div>
               </div>
 
-              {/* 10X PLAY */}
+              {/* STRUCTURAL PLAY · 60-90 day rebuild (renamed from "10X PLAY"
+                  because the multiplier framing read as a promise) */}
               <div style={{ padding: "18px 20px", background: "linear-gradient(135deg," + (P.ember || "#F96203") + "15," + (P.blaze || "#FF3D00") + "08)", border: "1px solid " + (P.ember || "#F96203") + "40", borderRadius: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <span style={{ background: "linear-gradient(135deg," + (P.ember || "#F96203") + "," + (P.blaze || "#FF3D00") + ")", color: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>10X PLAY</span>
-                  <span style={{ fontSize: 12, color: P.ember || "#F96203", fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>Structural rebuild · 60-90 days</span>
+                  <span style={{ background: "linear-gradient(135deg," + (P.ember || "#F96203") + "," + (P.blaze || "#FF3D00") + ")", color: "#fff", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>Structural play</span>
+                  <span style={{ fontSize: 12, color: P.ember || "#F96203", fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>60-90 day rebuild</span>
                 </div>
                 <ul style={{ margin: 0, padding: "0 0 0 22px", fontSize: 13, color: P.txt, fontFamily: ff, lineHeight: 1.85 }}>
                   {tenx.map(function(p, i) { return <li key={i} style={{ marginBottom: 6 }}>{p}</li>; })}
@@ -928,10 +988,13 @@ export default function CommandCentre(props) {
               </div>
 
               {/* Honest confidence disclaimer + flow guide so the team
-                  knows what they're reading and how reliable it is. */}
+                  knows what they're reading and how reliable it is.
+                  Stamped with the playbook refresh date so the team can
+                  see when the platform advice was last updated by the
+                  monthly auto-refresh cron. */}
               <div style={{ marginTop: 16, padding: "12px 14px", background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderLeft: "3px solid " + P.label, borderRadius: "0 10px 10px 0", fontSize: 10, color: P.label, fontFamily: fm, lineHeight: 1.7, letterSpacing: 0.5 }}>
                 <div style={{ fontWeight: 800, color: P.txt, marginBottom: 4, letterSpacing: 1, textTransform: "uppercase" }}>How to read this memo</div>
-                <div>The Diagnosis findings above are 100% data-driven from this client's live campaigns in your selected window. The Audience / Creative / Objective playbooks reflect 2026-current Meta Advantage+, TikTok Smart+, and Google PMax best practices, calibrated against top-1% agency benchmarks. They're high-confidence direction, not absolute rules — every account has nuance. Use the TL;DR for the week, then drill into the section that matches what you're working on. Click any ad thumbnail to open the full-size creative on Meta's CDN in a new tab.</div>
+                <div>The Diagnosis findings above are 100% data-driven from this client's live campaigns in your selected window. The Audience / Creative / Objective playbooks reflect current Meta Advantage+, TikTok Smart+, and Google PMax best practices, auto-refreshed monthly from a top-1% agency benchmark. They're high-confidence direction, not absolute rules — every account has nuance. Use the TL;DR for the week, then drill into the section that matches what you're working on. Click any ad thumbnail to open the full-size creative on the platform's CDN in a new tab.{bp && bp.asOf ? " · Playbook refreshed " + bp.asOf : ""}</div>
               </div>
             </div>
           </div>;
