@@ -2837,23 +2837,26 @@ function Step6(props) {
 // Success screen
 
 function SuccessScreen(props) {
-  var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, result = props.result;
+  var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, result = props.result || {};
 
   // Split-result shape (one campaign per ratio bucket). Renders one card
   // per campaign so the team can verify each id + jump to Ads Manager.
-  if (result && result.split) {
+  if (result.split) {
+    var splitCampaigns = Array.isArray(result.campaigns) ? result.campaigns : [];
+    var splitRatios = Array.isArray(result.ratios) ? result.ratios : [];
     return <div>
       <Glass accent={P.mint} st={{padding:28}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
           {Ic.check(P.mint,22)}
-          <span style={{fontSize:14,fontWeight:900,color:P.mint,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>{result.campaigns.length} campaigns created (PAUSED)</span>
+          <span style={{fontSize:14,fontWeight:900,color:P.mint,letterSpacing:2,fontFamily:fm,textTransform:"uppercase"}}>{splitCampaigns.length} campaigns created (PAUSED)</span>
         </div>
         <div style={{fontSize:13,color:P.txt,fontFamily:ff,lineHeight:1.7,marginBottom:18}}>
-          One campaign per ratio bucket: {result.ratios.join(", ")}. Each created paused so you can review in Ads Manager and unpause when ready.
+          One campaign per ratio bucket: {splitRatios.join(", ")}. Each created paused so you can review in Ads Manager and unpause when ready.
         </div>
-        {result.campaigns.map(function(c, i){
+        {splitCampaigns.map(function(c, i){
+          c = c || {};
           var r = c.data || {};
-          var ads = r.ads || (r.adId ? [{ adId: r.adId, name: "Ad" }] : []);
+          var ads = Array.isArray(r.ads) ? r.ads : (r.adId ? [{ adId: r.adId, name: "Ad" }] : []);
           return <div key={i} style={{padding:"14px 16px",background:"rgba(0,0,0,0.25)",border:"1px solid "+P.rule,borderRadius:10,marginBottom:10}}>
             <div style={{fontSize:11,fontWeight:800,color:P.cyan,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>
               {c.ratio} &middot; {c.campaignName}
@@ -2878,7 +2881,7 @@ function SuccessScreen(props) {
   }
 
   // Single-campaign result (the original shape).
-  var ads = result.ads || (result.adId ? [{ adId: result.adId, name: "Ad" }] : []);
+  var ads = Array.isArray(result.ads) ? result.ads : (result.adId ? [{ adId: result.adId, name: "Ad" }] : []);
   return <div>
     <Glass accent={P.mint} st={{padding:28}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
