@@ -1042,7 +1042,9 @@ export default function CommandCentre(props) {
                   client names to be bigger and clearly separated. */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18, padding: "16px 0", borderBottom: "2px solid " + (grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint) + "55" }}>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Client</div>
+                  {/* Redundant 'CLIENT' caps label dropped — the big
+                      bold name reads cleanly on its own and the
+                      preceding label was just extra visual space. */}
                   <div style={{ fontSize: 28, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1, lineHeight: 1 }}>{grp.client}</div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontFamily: fm }}>
