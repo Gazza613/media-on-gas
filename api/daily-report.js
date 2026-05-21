@@ -35,7 +35,7 @@ function buildHtml(opts) {
   var anomaliesByType = opts.anomaliesByType || {};
   var totalAnomalies = opts.totalAnomalies || 0;
   var totalCampaignsWatched = opts.totalCampaignsWatched || 0;
-  var diagnostic = opts.diagnostic || {};
+  var notWatched = opts.notWatched || { paused: [], ended: [], awaitingBaseline: [] };
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   // Severity counts for the totals strip
@@ -263,20 +263,42 @@ function buildHtml(opts) {
       '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
       '</td></tr>' +
 
-      // Diagnostic footer line so the team can see exactly what got
-      // counted as "watched" and what got skipped, and why. Surfaces
-      // the gap the user reported (selector shows 22, watched showed
-      // 16, expected 18). Only renders when there's something to say.
+      // "Not watched" block: list every campaign that was skipped or
+      // is still warming up to a baseline, with the reason. Surfaces
+      // exactly what's missing from the watch count so the team can
+      // see the math at a glance instead of asking 'why N not 18?'.
       (function() {
-        var bits = [];
-        bits.push(totalCampaignsWatched + " active in-flight campaign" + (totalCampaignsWatched === 1 ? "" : "s") + " watched");
-        if (diagnostic.skippedEnded > 0) bits.push(diagnostic.skippedEnded + " ended this period (excluded)");
-        if (diagnostic.skippedNotActive > 0) bits.push(diagnostic.skippedNotActive + " paused or pending (excluded)");
-        if (diagnostic.skippedDormant > 0) bits.push(diagnostic.skippedDormant + " with no delivery yet (watched, awaiting baseline)");
-        return '<tr><td style="padding:8px 36px 0;">' +
-          '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;letter-spacing:0.5px;line-height:1.6;text-align:center;">' +
-            escapeHtml(bits.join(" · ")) +
-          '</div></td></tr>';
+        var sections = [];
+        var sectionFor = function(label, color, items) {
+          if (!items || items.length === 0) return "";
+          var rows = items.slice(0, 12).map(function(it) {
+            var endNote = it.endDate ? ' <span style="color:' + P.caption + ';font-size:10px;font-style:italic;">(ends ' + escapeHtml(it.endDate) + ')</span>' : "";
+            return '<tr>' +
+              '<td valign="top" style="padding:6px 0;font-family:Manrope,Helvetica,Arial,sans-serif;border-top:1px solid ' + P.rule + ';">' +
+                '<div style="font-size:11px;color:' + P.txt + ';font-weight:700;line-height:1.4;word-break:break-word;">' + escapeHtml(it.campaignName) +
+                  ' <span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:6px;">' + escapeHtml(it.platform || "") + '</span>' +
+                  endNote +
+                '</div>' +
+                '<div style="font-size:10px;color:' + P.label + ';margin-top:2px;line-height:1.5;font-style:italic;">' + escapeHtml(it.reason) + '</div>' +
+              '</td></tr>';
+          }).join("");
+          var moreRow = items.length > 12
+            ? '<tr><td style="padding:6px 0;border-top:1px solid ' + P.rule + ';font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;">+' + (items.length - 12) + ' more</td></tr>'
+            : "";
+          return '<div style="margin-top:10px;border:1px solid ' + color + '40;border-left:3px solid ' + color + ';border-radius:0 10px 10px 0;background:rgba(0,0,0,0.20);padding:12px 16px;">' +
+            '<div style="display:block;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:' + color + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:6px;">' + escapeHtml(label) + ' · ' + items.length + '</div>' +
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + rows + moreRow + '</table>' +
+          '</div>';
+        };
+        var endedBlock = sectionFor("Ended this period (excluded)", P.label, notWatched.ended);
+        var pausedBlock = sectionFor("Paused or pending (excluded)", P.solar, notWatched.paused);
+        var awaitingBlock = sectionFor("Active but no delivery yet (watched, awaiting baseline)", P.cyan, notWatched.awaitingBaseline);
+        if (!endedBlock && !pausedBlock && !awaitingBlock) return "";
+        return '<tr><td style="padding:8px 36px 4px;">' +
+          '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">Not watched today</div>' +
+          '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;">Every active in-flight campaign is in the watch above. These are the ones the watcher skipped or is still warming up to a baseline for, with the reason. Use this to sanity-check the math behind the count.</div>' +
+          endedBlock + pausedBlock + awaitingBlock +
+          '</td></tr>';
       })() +
 
       '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
@@ -360,29 +382,61 @@ export default async function handler(req, res) {
   // against its baseline.
   var anomaliesByType = {};
   var watchedCount = 0;
-  var skippedNotActive = 0;
-  var skippedEnded = 0;
-  var skippedDormant = 0;
+  // Collect skipped campaigns by reason so the "Not watched" block in
+  // the email can list them by name with the cause. Counts are kept
+  // alongside the lists for the diagnostic footer math.
+  var skippedNotActive = [];
+  var skippedEnded = [];
+  var awaitingBaseline = [];  // watched, but no anomaly possible yet
+  var summarize = function(c, reason) {
+    return {
+      campaignName: String(c.campaignName || "(unnamed)"),
+      platform: String(c.platform || ""),
+      status: String(c.status || "").toLowerCase(),
+      endDate: String(c.endDate || ""),
+      reason: reason
+    };
+  };
   (yesterdayData.campaigns || []).forEach(function(c) {
-    if (!isLive(c)) { skippedNotActive++; return; }
+    if (!isLive(c)) {
+      // Don't list every paused/archived campaign — only those that
+      // delivered or had a baseline (i.e. were RECENTLY live). A
+      // long-archived campaign in the account is not interesting.
+      var hadActivity = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
+      var k0 = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+      var b0 = baseByKey[k0] || null;
+      var baselineMat = b0 && ((parseFloat(b0.spend || 0) > 0) || (parseInt(b0.impressions || 0) > 0));
+      if (hadActivity || baselineMat) {
+        skippedNotActive.push(summarize(c, c.status || "paused"));
+      }
+      return;
+    }
     // Ended campaigns (endDate in the past) are finishing on schedule,
     // not monitored. /api/campaigns returns ACTIVE+SCHEDULED rows for
     // every account, so "active status" alone counted dozens of dead
     // rows ("48 monitored" when ~3 are live).
     var endRaw = c && c.endDate ? String(c.endDate) : "";
-    if (endRaw) { var em = Date.parse(endRaw); if (isFinite(em) && em < Date.now()) { skippedEnded++; return; } }
+    if (endRaw) {
+      var em = Date.parse(endRaw);
+      if (isFinite(em) && em < Date.now()) {
+        skippedEnded.push(summarize(c, "ended " + c.endDate));
+        return;
+      }
+    }
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
     var b = baseByKey[k] || null;
     // Watch ALL active, in-flight campaigns from now on — including
     // brand-new ones that haven't delivered yet and have no baseline.
     // (Previously these were dropped as 'dormant', which left the team
-    // looking at e.g. 16/18 with no visibility on the missing 2.) We
-    // still track the count for a diagnostic footer, so the team can
-    // see if a new campaign is sitting unwatched waiting for data.
+    // looking at e.g. 16/18 with no visibility on the missing 2.) The
+    // 'awaiting baseline' list captures the ones with no delivery yet
+    // so the team can see them by name in the email.
     var deliveredY = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
     var baseMaterial = b && ((parseFloat(b.spend || 0) > 0) || (parseInt(b.impressions || 0) > 0));
-    if (!deliveredY && !baseMaterial) skippedDormant++;
+    if (!deliveredY && !baseMaterial) {
+      awaitingBaseline.push(summarize(c, "no delivery yet, awaiting baseline"));
+    }
     watchedCount++;
 
     var rm = resultMetricFor(c);
@@ -417,10 +471,10 @@ export default async function handler(req, res) {
     anomaliesByType: anomaliesByType,
     totalAnomalies: totalAnomalies,
     totalCampaignsWatched: watchedCount,
-    diagnostic: {
-      skippedNotActive: skippedNotActive,
-      skippedEnded: skippedEnded,
-      skippedDormant: skippedDormant
+    notWatched: {
+      paused: skippedNotActive,
+      ended: skippedEnded,
+      awaitingBaseline: awaitingBaseline
     }
   });
 
