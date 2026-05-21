@@ -820,6 +820,64 @@ export default function CommandCentre(props) {
             tenx.push("Add the third platform. Whatever's missing (TikTok if Meta-heavy, Meta if TikTok-heavy, Google PMax if neither) closes audience-overlap leakage. The lift comes from incremental reach, not from stealing share — most accounts find their lowest-CAC pocket is on the platform they're under-invested on.");
           }
 
+          // ---- INSIDE THE CRYSTAL BALL · ideal setup blueprint ----
+          // Directional (no R-amounts), per-platform "what the perfect
+          // setup looks like in 2026" blueprint. Renders only for the
+          // platforms this client is actually on. Sits visually
+          // separate (gold/purple) so it reads as the vision/north
+          // star, not another tactical to-do.
+          var crystalBall = [];
+          if (hasMeta) {
+            crystalBall.push({
+              platform: "Meta", glyph: "fb",
+              headline: "FB + IG as one funnel under Advantage+",
+              blueprint: [
+                { label: "Campaign count", value: "1-2 Advantage+ Shopping/Sales campaigns per major offer line. Fewer, bigger campaigns let the algorithm escape learning phase." },
+                { label: "Ad sets", value: "1-2 per campaign. Avoid ad-set fragmentation — splitting budget across 5+ ad sets starves each one of conversion signal." },
+                { label: "Audience", value: "Advantage+ Audience (broad, age + country only). Lookalikes and interests sit as Audience Suggestions, never hard segments." },
+                { label: "Creative mix", value: "60% Reels-style 9:16 vertical video · 30% static (catalog/offer) · 10% carousel. Multiple creatives per ad set so Meta can pick winners by placement." },
+                { label: "Tracking", value: "Pixel + Conversions API + CAPI Gateway. iOS14+ + cookie deprecation halved Pixel-only attribution — CAPI recovers most of that signal." },
+                { label: "Refresh cadence", value: "3-5 fresh variants every fortnight. Winners scale 15-20%, losers cut. Hook is the lever — change the first 1-3 seconds first." }
+              ]
+            });
+          }
+          if (hasTikTok) {
+            crystalBall.push({
+              platform: "TikTok", glyph: "tt",
+              headline: "Smart+ on autopilot, creator-led content pipeline",
+              blueprint: [
+                { label: "Campaign type", value: "Smart+ Campaigns end-to-end. Algorithm picks audience + creative + placement together — out-performs manual on 80%+ of accounts." },
+                { label: "Audience", value: "Left blank or with creator/interest signals only. Manual segments constrain Smart+ rather than help it." },
+                { label: "Creative mix", value: "70% Spark Ads from creator partners (raw UGC) · 30% brand-made. UGC out-performs polished brand 30-50% on CTR." },
+                { label: "Audio", value: "Trending audio on at least 50% of variants. Pull from the Top 100 in TikTok's Creator Marketplace audio library each week." },
+                { label: "Hook", value: "First 1-3 seconds is everything. Pattern interrupt + visual hook before brand reveal — branded polish suppresses delivery." },
+                { label: "Refresh cadence", value: "14-day creative cycle. 3-5 Spark Ads from creators per fortnight, last fortnight's winners scaled, losers cut." }
+              ]
+            });
+          }
+          if (hasGoogle) {
+            crystalBall.push({
+              platform: "Google", glyph: "ga",
+              headline: "Performance Max with full first-party signal",
+              blueprint: [
+                { label: "Campaign type", value: "Performance Max for conversion; plus 1 brand Search campaign for defence. PMax is the 2026 default for any account with conversion data." },
+                { label: "Asset coverage", value: "20+ assets per asset group: 5+ headlines, 5+ descriptions, 1+ long headline, 5+ images, 1+ logo, 1+ video (including a 9:16 for YouTube Shorts)." },
+                { label: "Audience signals", value: "Customer Match (uploaded converter emails) + Optimized Targeting stacked on top of every asset group. First-party data is what feeds the ML the signal cookie deprecation took." },
+                { label: "Tracking", value: "Enhanced Conversions + offline conversion imports on a 7-day refresh. Without these the ML can't see conversions land and broad match can't find your converter pocket." },
+                { label: "Bid strategy", value: "Maximize Conversions while learning; switch to Target CPA once you have 30+ conversions/month at a stable cost." },
+                { label: "Asset groups", value: "One asset group per major product/offer. Don't over-fragment — PMax learns better with denser asset groups than thinner ones." }
+              ]
+            });
+          }
+
+          // Universal rules apply regardless of platform mix.
+          var crystalUniversal = [
+            "Funnel split · 60% cold prospecting / 30% warm consideration / 10% high-intent conversion. Each tier feeds the next via Custom Audience hand-offs.",
+            "Creative cadence · 3-5 fresh variants per fortnight per platform. Volume IS the moat once targeting commoditised.",
+            "First-party data · Pixel + CAPI + offline imports + Customer Match refreshed weekly. Same data feeds every platform's ML.",
+            "Test-kill discipline · Winners scale 15-20% per week; losers paused after 7 days. Decisions become arithmetic, not opinion."
+          ];
+
           // ---- TL;DR · Top 3 Moves This Week ----
           // Headline actions surfaced from the 5X play. Each move now
           // carries action / why / how / impact so a junior account
@@ -1099,6 +1157,66 @@ export default function CommandCentre(props) {
                   {tenx.map(function(p, i) { return <li key={i} style={{ marginBottom: 6 }}>{p}</li>; })}
                 </ul>
               </div>
+
+              {/* INSIDE THE CRYSTAL BALL · the ideal-setup blueprint
+                  for this client based on the platforms in play. Sits
+                  visually apart from the rest of the memo (gold/purple
+                  on a slightly tinted background) so it reads as the
+                  destination/vision rather than another to-do item.
+                  Directional only — no R-amounts. */}
+              {crystalBall.length > 0 && <div style={{ marginTop: 16, padding: "22px 22px 20px", borderRadius: 14, background: "linear-gradient(135deg," + (P.solar || "#fbbf24") + "12 0%," + (P.orchid || "#A855F7") + "10 50%," + (P.solar || "#fbbf24") + "08 100%)", border: "1px solid " + (P.solar || "#fbbf24") + "55", position: "relative", overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: -40, right: -40, width: 160, height: 160, background: "radial-gradient(circle," + (P.orchid || "#A855F7") + "30 0%, transparent 70%)", pointerEvents: "none" }}></div>
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 20 }}>🔮</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 900, fontFamily: fm, letterSpacing: 2.5, textTransform: "uppercase", background: "linear-gradient(135deg," + (P.solar || "#fbbf24") + "," + (P.orchid || "#A855F7") + ")", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Inside the Crystal Ball</div>
+                      <div style={{ fontSize: 11, color: P.label, fontFamily: fm, marginTop: 2, letterSpacing: 0.5 }}>What this client's perfect setup looks like, per platform</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic", marginBottom: 16, letterSpacing: 0.5 }}>Directional blueprint based on 2026 platform best practices. The destination, not next week's to-do — the Structural Play above gets you here over 60-90 days.</div>
+
+                  {/* Per-platform blueprint cards. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
+                    {crystalBall.map(function(cb, ci) {
+                      var accent = cb.platform === "Meta" ? (P.fb || "#1877F2") : cb.platform === "TikTok" ? (P.tt || "#22D3EE") : cb.platform === "Google" ? (P.gd || "#34D399") : (P.label || "#9ca3af");
+                      return <div key={ci} style={{ padding: "14px 16px", background: "rgba(0,0,0,0.35)", border: "1px solid " + accent + "40", borderLeft: "3px solid " + accent, borderRadius: "0 12px 12px 0" }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                          <span style={{ background: accent + "22", border: "1px solid " + accent + "66", color: accent, fontSize: 10, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "3px 9px", borderRadius: 5, textTransform: "uppercase" }}>{cb.platform}</span>
+                          <span style={{ fontSize: 12, color: P.txt, fontFamily: ff, fontWeight: 700 }}>{cb.headline}</span>
+                        </div>
+                        <table role="presentation" cellPadding="0" cellSpacing="0" border="0" style={{ width: "100%", borderCollapse: "collapse", fontFamily: ff }}>
+                          <tbody>
+                            {cb.blueprint.map(function(b, bi) {
+                              return <tr key={bi}>
+                                <td style={{ verticalAlign: "top", width: 140, padding: "5px 12px 5px 0", fontSize: 10, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 1.2, textTransform: "uppercase", whiteSpace: "nowrap" }}>{b.label}</td>
+                                <td style={{ verticalAlign: "top", padding: "5px 0", fontSize: 12, color: P.txt, lineHeight: 1.65 }}>{b.value}</td>
+                              </tr>;
+                            })}
+                          </tbody>
+                        </table>
+                      </div>;
+                    })}
+                  </div>
+
+                  {/* Universal rules below the per-platform cards. */}
+                  <div style={{ padding: "12px 14px", background: "rgba(0,0,0,0.25)", border: "1px dashed " + (P.solar || "#fbbf24") + "55", borderRadius: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 900, color: P.solar || "#fbbf24", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Rules of the game · apply regardless of platform</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {crystalUniversal.map(function(r, ri) {
+                        return <div key={ri} style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6 }}>• {r}</div>;
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Missing-platform nudge so the blueprint also points
+                      at the platform this client should add next. */}
+                  {platforms.length < 3 && <div style={{ marginTop: 12, padding: "10px 12px", background: (P.orchid || "#A855F7") + "12", border: "1px solid " + (P.orchid || "#A855F7") + "55", borderRadius: 8, fontSize: 11, color: P.txt, fontFamily: ff, lineHeight: 1.6 }}>
+                    <span style={{ fontWeight: 800, color: P.orchid || "#A855F7", letterSpacing: 1, textTransform: "uppercase", fontSize: 10, fontFamily: fm }}>Missing platform · </span>
+                    {(!hasTikTok ? "TikTok Smart+ is the highest-ROI add for a Meta-heavy account in 2026." : !hasMeta ? "Meta Advantage+ is the natural conversion layer for a TikTok-heavy account." : "Google Performance Max closes the search-intent gap.")}
+                  </div>}
+                </div>
+              </div>}
 
               {/* Honest confidence disclaimer + flow guide so the team
                   knows what they're reading and how reliable it is.
