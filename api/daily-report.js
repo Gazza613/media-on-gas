@@ -35,6 +35,7 @@ function buildHtml(opts) {
   var anomaliesByType = opts.anomaliesByType || {};
   var totalAnomalies = opts.totalAnomalies || 0;
   var totalCampaignsWatched = opts.totalCampaignsWatched || 0;
+  var diagnostic = opts.diagnostic || {};
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   // Severity counts for the totals strip
@@ -45,6 +46,26 @@ function buildHtml(opts) {
     if (sev === 3) critCount += n;
     else if (sev === 2) highCount += n;
     else medCount += n;
+  });
+
+  // Map each anomaly type to one of the 4 axes the GAS team cares
+  // about most (per user direction). Frequency Cliff and Spend Spike
+  // sit outside these four — they still appear in the anomaly cards
+  // below, just not in the axis strip.
+  var AXIS_MAP = {
+    impressions_cliff: "delivery",
+    spend_collapse:    "delivery",
+    cpm_spike:         "delivery",
+    click_collapse:    "clicks",
+    ctr_collapse:      "ctr",
+    conversions_disappeared: "result",
+    lead_volume_drop:        "result",
+    cpr_spike:               "result"
+  };
+  var axisCounts = { delivery: 0, clicks: 0, ctr: 0, result: 0 };
+  Object.keys(anomaliesByType).forEach(function(k) {
+    var ax = AXIS_MAP[k];
+    if (ax) axisCounts[ax] += anomaliesByType[k].length;
   });
 
   // Severity tiles strip
@@ -68,6 +89,29 @@ function buildHtml(opts) {
         '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Medium</div>' +
         '<div style="font-size:22px;font-weight:900;color:' + (medCount > 0 ? P.amber : P.mint) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + medCount + '</div></div></td>' +
     '</tr></table>';
+
+  // What-we-watch axis strip: 4 tiles each showing how many anomalies
+  // fired on that axis yesterday. These are the four metric families
+  // the team agreed matter most: ad delivery, click volume, CTR, and
+  // the campaign's own objective KPI result.
+  var axisTile = function(label, value, color) {
+    var dim = value === 0;
+    return '<td width="25%" style="padding:0 4px;">' +
+      '<div style="background:rgba(255,255,255,0.03);border:1px solid ' + (dim ? P.rule : color + "55") + ';border-radius:10px;padding:12px 10px;text-align:center;">' +
+        '<div style="font-size:9px;color:' + (dim ? P.caption : color) + ';letter-spacing:1.8px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">' + label + '</div>' +
+        '<div style="font-size:18px;font-weight:900;color:' + (dim ? P.mint : color) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + value + '</div>' +
+      '</div></td>';
+  };
+  var axisStrip =
+    '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:8px;font-family:Manrope,Helvetica,Arial,sans-serif;">What we watch · yesterday\'s signals</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+      '<tr>' +
+        axisTile("Ad Delivery", axisCounts.delivery, P.cyan) +
+        axisTile("Clicks", axisCounts.clicks, P.blaze) +
+        axisTile("Click-Through", axisCounts.ctr, P.solar) +
+        axisTile("Objective Result", axisCounts.result, P.ember) +
+      '</tr>' +
+    '</table>';
 
   // Empty state, render a clean "no anomalies" panel so the team knows
   // the watcher ran successfully even when nothing fired.
@@ -203,6 +247,7 @@ function buildHtml(opts) {
       '<tr><td style="padding:0 36px;"><div style="height:1px;background:linear-gradient(90deg,transparent,' + P.ember + ',transparent);"></div></td></tr>' +
 
       '<tr><td style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
+      '<tr><td style="padding:14px 36px 6px;">' + axisStrip + '</td></tr>' +
 
       anomaliesBlock +
 
@@ -217,6 +262,22 @@ function buildHtml(opts) {
       '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
       '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
       '</td></tr>' +
+
+      // Diagnostic footer line so the team can see exactly what got
+      // counted as "watched" and what got skipped, and why. Surfaces
+      // the gap the user reported (selector shows 22, watched showed
+      // 16, expected 18). Only renders when there's something to say.
+      (function() {
+        var bits = [];
+        bits.push(totalCampaignsWatched + " active in-flight campaign" + (totalCampaignsWatched === 1 ? "" : "s") + " watched");
+        if (diagnostic.skippedEnded > 0) bits.push(diagnostic.skippedEnded + " ended this period (excluded)");
+        if (diagnostic.skippedNotActive > 0) bits.push(diagnostic.skippedNotActive + " paused or pending (excluded)");
+        if (diagnostic.skippedDormant > 0) bits.push(diagnostic.skippedDormant + " with no delivery yet (watched, awaiting baseline)");
+        return '<tr><td style="padding:8px 36px 0;">' +
+          '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;letter-spacing:0.5px;line-height:1.6;text-align:center;">' +
+            escapeHtml(bits.join(" · ")) +
+          '</div></td></tr>';
+      })() +
 
       '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
       '<tr><td style="padding:18px 36px 30px;">' +
@@ -299,24 +360,29 @@ export default async function handler(req, res) {
   // against its baseline.
   var anomaliesByType = {};
   var watchedCount = 0;
+  var skippedNotActive = 0;
+  var skippedEnded = 0;
+  var skippedDormant = 0;
   (yesterdayData.campaigns || []).forEach(function(c) {
-    if (!isLive(c)) return;
+    if (!isLive(c)) { skippedNotActive++; return; }
     // Ended campaigns (endDate in the past) are finishing on schedule,
     // not monitored. /api/campaigns returns ACTIVE+SCHEDULED rows for
     // every account, so "active status" alone counted dozens of dead
     // rows ("48 monitored" when ~3 are live).
     var endRaw = c && c.endDate ? String(c.endDate) : "";
-    if (endRaw) { var em = Date.parse(endRaw); if (isFinite(em) && em < Date.now()) return; }
+    if (endRaw) { var em = Date.parse(endRaw); if (isFinite(em) && em < Date.now()) { skippedEnded++; return; } }
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
     var b = baseByKey[k] || null;
-    // "Monitored" = genuinely in flight: delivered yesterday OR has a
-    // material 7-day baseline (so a real spend-collapse is still
-    // caught). A campaign with no delivery either side is dormant and
-    // shouldn't pad the watch count.
+    // Watch ALL active, in-flight campaigns from now on — including
+    // brand-new ones that haven't delivered yet and have no baseline.
+    // (Previously these were dropped as 'dormant', which left the team
+    // looking at e.g. 16/18 with no visibility on the missing 2.) We
+    // still track the count for a diagnostic footer, so the team can
+    // see if a new campaign is sitting unwatched waiting for data.
     var deliveredY = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
     var baseMaterial = b && ((parseFloat(b.spend || 0) > 0) || (parseInt(b.impressions || 0) > 0));
-    if (!deliveredY && !baseMaterial) return;
+    if (!deliveredY && !baseMaterial) skippedDormant++;
     watchedCount++;
 
     var rm = resultMetricFor(c);
@@ -350,7 +416,12 @@ export default async function handler(req, res) {
     dateLabel: dateLabel,
     anomaliesByType: anomaliesByType,
     totalAnomalies: totalAnomalies,
-    totalCampaignsWatched: watchedCount
+    totalCampaignsWatched: watchedCount,
+    diagnostic: {
+      skippedNotActive: skippedNotActive,
+      skippedEnded: skippedEnded,
+      skippedDormant: skippedDormant
+    }
   });
 
   if (dryRun) {
