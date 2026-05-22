@@ -1730,7 +1730,7 @@ export default function CommandCentre(props) {
               </div>
 
               {b.issues.length > 0 && <div style={{ marginBottom: 22 }}>
-                {sectionHeader(d.label + " Flags", b.issues.length, P.critical || "#ef4444", "Campaigns to triage today")}
+                {sectionHeader(d.label + " Flags", b.issues.length, P.critical || "#ef4444", "Campaigns that need a Human in the Loop.")}
                 {b.issues.map(function(e, i) { return renderIssueCard(e, i); })}
               </div>}
 
