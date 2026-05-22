@@ -286,13 +286,49 @@ export default function CommandCentre(props) {
     {s.error && <Glass accent={P.critical || "#ef4444"} st={{ padding: 20 }}><div style={{ fontSize: 13, color: P.critical || "#ef4444", fontFamily: fm }}>{s.error}</div></Glass>}
 
     {s.data && <div>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
-        {card("CAMPAIGNS", N(s.data.summary.campaigns), P.cyan, "in flight this month")}
-        {card("LIVE NOW", N(s.data.summary.live), P.mint)}
-        {card("NEEDS ATTENTION", N(s.data.summary.needsAttention), s.data.summary.needsAttention > 0 ? (P.critical || "#ef4444") : P.mint, N(s.data.summary.alerts) + " alerts")}
-        {card("SPEND TODAY", R(s.data.summary.spendToday), P.solar)}
-        {card("SPEND MTD", R(s.data.summary.spendPeriod), P.ember)}
-      </div>
+      {/* Summary tile totals. When a platform filter is active, the
+          tiles recalculate to that platform's slice — the operator
+          working Facebook for the morning wants Facebook's CAMPAIGNS
+          / LIVE / SPEND, not the cross-platform roll-up. Computed
+          inline (re-uses canonPlatform logic) so the tiles can sit
+          above the IIFE that owns the rest of the page. */}
+      {(function() {
+        var canonPlatTile = function(p) {
+          var s3 = String(p || "").toLowerCase();
+          if (s3.indexOf("instagram") >= 0) return "Instagram";
+          if (s3.indexOf("facebook") >= 0) return "Facebook";
+          if (s3.indexOf("tiktok") >= 0) return "TikTok";
+          if (s3.indexOf("google") >= 0 || s3.indexOf("youtube") >= 0) return "Google";
+          return "Other";
+        };
+        var sum = s.data.summary;
+        var label = "in flight this month";
+        if (platformFilter && platformFilter !== "all") {
+          var camps = 0, live = 0, attn = 0, alerts = 0, spendT = 0, spendP = 0;
+          s.data.clients.forEach(function(grp) {
+            grp.campaigns.forEach(function(c) {
+              if (canonPlatTile(c.platform) !== platformFilter) return;
+              camps++;
+              if (c.live) live++;
+              spendT += (c.delivery && c.delivery.spendToday) || 0;
+              spendP += (c.delivery && c.delivery.spendPeriod) || 0;
+              if (c.alerts && c.alerts.length > 0) {
+                attn++;
+                alerts += c.alerts.length;
+              }
+            });
+          });
+          sum = { campaigns: camps, live: live, needsAttention: attn, alerts: alerts, spendToday: spendT, spendPeriod: spendP };
+          label = platformFilter + " · in flight this month";
+        }
+        return <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
+          {card("CAMPAIGNS", N(sum.campaigns), P.cyan, label)}
+          {card("LIVE NOW", N(sum.live), P.mint)}
+          {card("NEEDS ATTENTION", N(sum.needsAttention), sum.needsAttention > 0 ? (P.critical || "#ef4444") : P.mint, N(sum.alerts) + " alerts")}
+          {card("SPEND TODAY", R(sum.spendToday), P.solar)}
+          {card("SPEND MTD", R(sum.spendPeriod), P.ember)}
+        </div>;
+      })()}
 
       {s.data.clients.length === 0 && <Glass st={{ padding: 24, textAlign: "center" }}><div style={{ fontSize: 13, color: P.caption, fontFamily: ff }}>Nothing in flight this month.</div></Glass>}
 
@@ -1430,14 +1466,27 @@ export default function CommandCentre(props) {
               ]
             };
           }
-          if (code === "cpl_trend_up") {
+          if (code === "cpl_trend_up" || code === "cpf_trend_up" || code === "cpc_trend_up" || code === "cpm_trend_up") {
+            // One fix template covers every cost-per-result trend
+            // alert. The metric label changes per objective so the
+            // copy doesn't say "CPL" on an awareness campaign or
+            // "CPC" on a lead campaign. The diagnostic playbook is
+            // the same: split the drift into CPM (auction pressure)
+            // vs CTR (creative / audience) and act on whichever moved.
+            var metric = code === "cpl_trend_up" ? "CPL"
+                       : code === "cpf_trend_up" ? "CPF"
+                       : code === "cpm_trend_up" ? "CPM" : "CPC";
+            var resultNoun = code === "cpl_trend_up" ? "lead"
+                           : code === "cpf_trend_up" ? "follower / page like"
+                           : code === "cpm_trend_up" ? "1,000 impressions" : "click";
             return {
-              label: "Investigate efficiency drift",
-              why: "CPL trending higher than the trailing median means the same campaign is paying more for the same result. Could be auction-pressure (competitors entered), audience fatigue, creative wear-out, or seasonal drift. Diagnose before scaling spend further.",
+              label: "Investigate " + metric + " drift",
+              why: metric + " trending higher than the trailing median means the campaign is paying more per " + resultNoun + " than it was last week. Could be auction pressure (competitors entered), audience fatigue, creative wear-out, or seasonal drift. Diagnose the cause before scaling spend further — adding budget to a campaign that's already drifting is the most common avoidable spend leak.",
               how: [
-                "Compare CPM and CTR vs the trailing 7-day median. CPM up = auction pressure; CTR down = creative or audience.",
-                "If audience fatigue: refresh creative (frequency_high fix) or widen audience (Advantage+/Smart+).",
-                "If auction pressure: hold spend, don't try to outbid — focus on creative quality which the algorithm rewards more than budget."
+                "Split the drift into CPM vs CTR vs frequency. " + metric + " = CPM × (1 / CTR) ÷ result-rate. If CPM is up, it's auction pressure; if CTR is down, it's creative or audience; if frequency is up, it's audience fatigue.",
+                "Auction pressure: hold spend, don't try to outbid. Focus on creative quality (the algorithm rewards CTR more than budget at this stage).",
+                "Audience fatigue: refresh creative (see the frequency_high fix) or widen audience to Advantage+ / Smart+.",
+                "Creative wear-out: ship 2-3 new variants this week. Even a small change to the first 3 seconds resets the curve."
               ]
             };
           }
@@ -1460,7 +1509,20 @@ export default function CommandCentre(props) {
           { key: "Google", label: "Google Ads", color: "#FBBC05", sub: "Google Display / YouTube / Search" }
         ];
         var platformBuckets = {};
-        platformDefs.forEach(function(d) { platformBuckets[d.key] = { issues: [], scale: [], paused: [], all: [] }; });
+        platformDefs.forEach(function(d) {
+          platformBuckets[d.key] = {
+            issues: [], scale: [], paused: [], all: [],
+            // Per-platform totals so the top-row summary tiles can
+            // recalculate when the operator picks a platform chip.
+            // Earlier behaviour: the tiles always read the cross-
+            // platform summary from the API, so picking Facebook
+            // didn't change the CAMPAIGNS / LIVE NOW / SPEND
+            // headline — that broke the mental model of "I'm
+            // working Facebook now, show me Facebook's load".
+            campaigns: 0, live: 0, needsAttention: 0, alerts: 0,
+            spendToday: 0, spendPeriod: 0
+          };
+        });
         s.data.clients.forEach(function(grp) {
           grp.campaigns.forEach(function(c) {
             var key = canonPlatform(c.platform);
@@ -1476,10 +1538,19 @@ export default function CommandCentre(props) {
             // Google one had a pacing alert).
             if (k !== "paused" && k !== "ended" && !passFilter(c)) return;
             var entry = { client: grp.client, c: c };
-            platformBuckets[key].all.push(entry);
-            if (k === "attention" || k === "watch") platformBuckets[key].issues.push(Object.assign({ sev: k }, entry));
-            else if (k === "scale") platformBuckets[key].scale.push(entry);
-            else if (k === "paused" || k === "ended") platformBuckets[key].paused.push(Object.assign({ bucket: k }, entry));
+            var pb = platformBuckets[key];
+            pb.all.push(entry);
+            pb.campaigns += 1;
+            if (c.live) pb.live += 1;
+            pb.spendToday += (c.delivery && c.delivery.spendToday) || 0;
+            pb.spendPeriod += (c.delivery && c.delivery.spendPeriod) || 0;
+            if (c.alerts && c.alerts.length > 0) {
+              pb.needsAttention += 1;
+              pb.alerts += c.alerts.length;
+            }
+            if (k === "attention" || k === "watch") pb.issues.push(Object.assign({ sev: k }, entry));
+            else if (k === "scale") pb.scale.push(entry);
+            else if (k === "paused" || k === "ended") pb.paused.push(Object.assign({ bucket: k }, entry));
           });
         });
         // Sort within each bucket: high-severity first, then spend.

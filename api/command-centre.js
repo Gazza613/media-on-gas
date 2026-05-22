@@ -214,24 +214,58 @@ function resolveObjective(c) {
   };
 }
 
-// Trend alert from the first-party snapshot history: trailing median
-// daily CPL vs the most recent snapshot day. Silent unless there are
-// >=3 history days WITH leads, so it never cries wolf early.
-function cplTrend(series) {
+// Trend alert from the first-party snapshot history. Objective-aware:
+// every campaign is judged against the cost-per-result for its own
+// objective family (leads → CPL, followers → CPF, traffic / app
+// installs → CPC, awareness → CPM). Median-of-trailing-window
+// baseline because median ignores a single bad day (weekend dump,
+// budget refill spike) the way an average can't; once the campaign
+// has had 2+ off-baseline days in a row, the median drifts and the
+// alert fires. Silent until there are ≥3 history days WITH results
+// so brand-new campaigns can't false-flag. Threshold is 50% above
+// the trailing median which is well above day-to-day noise but
+// below the level a media buyer would shrug off.
+//
+// fam: "leads" | "followers" | "traffic" | "appinstall" | "awareness"
+// platform: "facebook" | "instagram" | "tiktok" | "other" — used to
+// pick the right follower metric on follower campaigns (page likes
+// on FB, profile-visit-proxy clicks on IG, follows on TikTok).
+function cprTrend(series, fam, platform) {
+  var resultOf = function(d) {
+    if (fam === "leads") return num(d.leads);
+    if (fam === "followers") {
+      if (platform === "facebook") return num(d.pageLikes);
+      if (platform === "instagram") return num(d.clicks); // profile-visits proxy
+      if (platform === "tiktok") return num(d.follows);
+      return num(d.pageLikes) + num(d.follows);
+    }
+    if (fam === "traffic" || fam === "appinstall") return num(d.clicks);
+    if (fam === "awareness") return num(d.impressions);
+    return 0;
+  };
+  var label = fam === "leads" ? { metric: "CPL", code: "cpl_trend_up" }
+            : fam === "followers" ? { metric: "CPF", code: "cpf_trend_up" }
+            : fam === "appinstall" ? { metric: "CPC (app store)", code: "cpc_trend_up" }
+            : fam === "traffic" ? { metric: "CPC", code: "cpc_trend_up" }
+            : fam === "awareness" ? { metric: "CPM", code: "cpm_trend_up" }
+            : null;
+  if (!label) return null;
   var pts = (series || []).map(function(d) {
-    var leads = num(d.leads), spend = num(d.spend);
-    return leads > 0 ? { date: d.date, cpl: spend / leads } : null;
+    var r = resultOf(d), spend = num(d.spend);
+    if (r <= 0 || spend <= 0) return null;
+    var cpr = fam === "awareness" ? (spend / r * 1000) : (spend / r);
+    return { date: d.date, cpr: cpr };
   }).filter(Boolean);
   if (pts.length < 3) return null;
   var latest = pts[pts.length - 1];
-  var prior = pts.slice(0, -1).map(function(p) { return p.cpl; }).sort(function(a, b) { return a - b; });
+  var prior = pts.slice(0, -1).map(function(p) { return p.cpr; }).sort(function(a, b) { return a - b; });
   var mid = Math.floor(prior.length / 2);
   var median = prior.length % 2 ? prior[mid] : (prior[mid - 1] + prior[mid]) / 2;
   if (median <= 0) return null;
-  var ratio = latest.cpl / median;
+  var ratio = latest.cpr / median;
   if (ratio >= 1.5) {
-    return { severity: "medium", code: "cpl_trend_up",
-      message: "CPL trending up: latest R" + latest.cpl.toFixed(2) + " vs R" + median.toFixed(2) + " trailing median (" + ((ratio - 1) * 100).toFixed(2) + "% higher)" };
+    return { severity: "medium", code: label.code,
+      message: label.metric + " trending up: latest R" + latest.cpr.toFixed(2) + " vs R" + median.toFixed(2) + " trailing median (" + ((ratio - 1) * 100).toFixed(2) + "% higher)" };
   }
   return null;
 }
@@ -275,12 +309,11 @@ export default async function handler(req, res) {
   // bust the cache by bumping the version when the response shape
   // changes. Bypass=1 query forces a recompute.
   var bypassCache = String(req.query.fresh || "").trim() === "1";
-  // Cache key bumped to v5 after adding the GAS-Agency campaign-name
-  // routing ("GAS | Willowbrook Village |..." surfaces under
-  // Willowbrook, "GAS | MTN MOMO POS |..." surfaces under MTN MoMo
-  // POS). Old payload bucketed them as "GAS Agency" which got
-  // dropped entirely.
-  var cacheKey = "cc:v5:" + periodFrom + "..." + periodTo;
+  // Cache key bumped to v6 after the cplTrend → cprTrend rewrite
+  // (now objective-aware: CPL for leads, CPF for followers, CPC for
+  // traffic / app installs, CPM for awareness). Old v5 entries
+  // would still have the leads-only trend alert shape.
+  var cacheKey = "cc:v6:" + periodFrom + "..." + periodTo;
   if (!bypassCache) {
     try {
       var cached = await redisGetJson(cacheKey);
@@ -476,10 +509,15 @@ export default async function handler(req, res) {
     } else if (pacing && pacing.state === "ahead") {
       alerts.push({ severity: "low", code: "pacing_ahead", message: "Pacing ahead of plan: R" + Math.round(periodSpend) + " vs ~R" + pacing.expectedToDate + " expected. Budget may exhaust early." });
     }
-    // Trend alert from first-party snapshot history (roadmap #1 payoff).
-    // In-memory now, no per-campaign Redis call.
+    // Trend alert from first-party snapshot history. Objective-aware:
+    // CPL for leads, CPF for followers, CPC for traffic / app-store
+    // clicks, CPM for awareness. Each campaign is judged against the
+    // trailing median of its OWN cost-per-result, so a lead-gen
+    // campaign drifting on CPL fires, an awareness campaign drifting
+    // on CPM fires, and a traffic campaign drifting on CPC fires —
+    // we never alert on the wrong metric for the objective.
     try {
-      var trend = cplTrend(seriesFor(id));
+      var trend = cprTrend(seriesFor(id), ob.family, ob.platform);
       if (trend) alerts.push(trend);
     } catch (_) {}
 
