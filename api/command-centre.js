@@ -245,12 +245,11 @@ export default async function handler(req, res) {
   // bust the cache by bumping the version when the response shape
   // changes. Bypass=1 query forces a recompute.
   var bypassCache = String(req.query.fresh || "").trim() === "1";
-  // Cache key version bumped to v3 to evict any payload computed by the
-  // earlier dormant-filter-narrowed code (which surfaced stale Meta
-  // SCHEDULED + TikTok-enabled-but-idle rows and inflated CAMPAIGNS /
-  // LIVE NOW). v2 entries are now ignored, the first load on each
-  // window recomputes against the current code.
-  var cacheKey = "cc:v3:" + periodFrom + "..." + periodTo;
+  // Cache key bumped again (v4) so the previous payload that excluded
+  // GAS Agency from totals is evicted — internal accounts now count
+  // toward CAMPAIGNS / LIVE NOW / SPEND, they just don't get their
+  // own per-client section.
+  var cacheKey = "cc:v4:" + periodFrom + "..." + periodTo;
   if (!bypassCache) {
     try {
       var cached = await redisGetJson(cacheKey);
@@ -311,10 +310,6 @@ export default async function handler(req, res) {
 
   for (var i = 0; i < rows.length; i++) {
     var c = rows[i];
-    // Skip internal accounts (GAS Agency) — they ran ads but they are
-    // not clients on the agency roster, so they don't get a Command
-    // Centre client section or count toward the cross-client totals.
-    if (isInternalAccount(c)) continue;
     var id = String(c.campaignId || c.rawCampaignId || "");
     var statusActive = isActiveStatus(c.status);
     var periodSpend = num(c.spend);
@@ -546,22 +541,39 @@ export default async function handler(req, res) {
   }
 
   // Tally alert counters now that ad-set pacing may have added alerts.
+  // Internal accounts (GAS Agency) still get their own grp.rollup.alerts
+  // computed for completeness, but their alerts do NOT contribute to
+  // the global summary.alerts / needsAttention — those headline tiles
+  // should reflect client-facing campaigns only.
   Object.keys(clients).forEach(function (k) {
     var grp = clients[k];
     grp.rollup.alerts = 0;
+    var isInternal = !!INTERNAL_CLIENTS[String(k || "").toLowerCase()];
     grp.campaigns.forEach(function (cm) {
       var n2 = (cm.alerts && cm.alerts.length) || 0;
       grp.rollup.alerts += n2;
-      summary.alerts += n2;
-      if (n2 > 0) summary.needsAttention++;
+      if (!isInternal) {
+        summary.alerts += n2;
+        if (n2 > 0) summary.needsAttention++;
+      }
     });
   });
 
   // Round rollups; order clients by attention then spend; campaigns
-  // needing attention float to the top of each client.
+  // needing attention float to the top of each client. Internal
+  // accounts (GAS Agency) are dropped from the per-client output here
+  // — they still contributed to the cross-account summary totals
+  // (CAMPAIGNS / LIVE NOW / SPEND TODAY / SPEND MTD) because their
+  // campaigns flowed through the loop above, they just don't get a
+  // client section / chip / Growth Plan of their own.
   var sevRank = { high: 3, medium: 2, low: 1 };
   var topSev = function(a) { return a.reduce(function(m, x) { return Math.max(m, sevRank[x.severity] || 0); }, 0); };
-  var clientList = Object.keys(clients).map(function(k) {
+  var isInternalClient = function(name) {
+    return !!INTERNAL_CLIENTS[String(name || "").toLowerCase()];
+  };
+  var clientList = Object.keys(clients).filter(function(k) {
+    return !isInternalClient(k);
+  }).map(function(k) {
     var grp = clients[k];
     grp.rollup.spendPeriod = parseFloat(grp.rollup.spendPeriod.toFixed(2));
     grp.rollup.spendToday = parseFloat(grp.rollup.spendToday.toFixed(2));
