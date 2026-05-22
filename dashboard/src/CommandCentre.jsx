@@ -18,19 +18,40 @@ var ccPersistedCache = { data: null, dateFrom: "", dateTo: "" };
 // so picking the same current range twice can still hit on the compare
 // side too.
 var ccCompareCache = { data: null, dateFrom: "", dateTo: "" };
-// Same-length window immediately before [from, to]. Used to compute
-// period-over-period deltas. May 1–22 (22 days) -> Apr 9–30.
+// Comparison window for period-over-period deltas. Calendar-month-
+// aware: when the selected range starts on day 1, we compare to the
+// PREVIOUS CALENDAR MONTH at the same day-of-month span (so "May 1
+// → May 31" compares to "April 1 → April 30", and "MTD May 1 → May
+// 22" compares to "April 1 → April 22"). For ranges that don't
+// start on day 1 (Last 7 days, Last 30 days, custom), we fall back
+// to same-length-immediately-before. Previous implementation used
+// same-length-before for everything, which produced "March 31 →
+// April 30" as the comparison for May 1-31 — mathematically a 31-
+// day window but spanning two calendar months, which is the wrong
+// mental model when the operator is thinking "May vs April".
 function previousPeriodWindow(from, to) {
   if (!from || !to) return null;
   var fromMs = Date.parse(from + "T00:00:00Z");
   var toMs = Date.parse(to + "T00:00:00Z");
   if (!isFinite(fromMs) || !isFinite(toMs) || toMs < fromMs) return null;
+  var fromD = new Date(fromMs);
+  var toD = new Date(toMs);
+  var iso = function(d) { return d.toISOString().slice(0, 10); };
+  if (fromD.getUTCDate() === 1) {
+    var py = fromD.getUTCFullYear();
+    var pm = fromD.getUTCMonth() - 1;
+    if (pm < 0) { pm = 11; py -= 1; }
+    var prevFrom = new Date(Date.UTC(py, pm, 1));
+    var daysInPrev = new Date(Date.UTC(py, pm + 1, 0)).getUTCDate();
+    var prevToDay = Math.min(toD.getUTCDate(), daysInPrev);
+    var prevTo = new Date(Date.UTC(py, pm, prevToDay));
+    return { from: iso(prevFrom), to: iso(prevTo) };
+  }
   var DAY = 86400000;
   var lenDays = Math.round((toMs - fromMs) / DAY) + 1;
   var prevToMs = fromMs - DAY;
   var prevFromMs = prevToMs - (lenDays - 1) * DAY;
-  var iso = function(ms) { return new Date(ms).toISOString().slice(0, 10); };
-  return { from: iso(prevFromMs), to: iso(prevToMs) };
+  return { from: iso(new Date(prevFromMs)), to: iso(new Date(prevToMs)) };
 }
 
 export default function CommandCentre(props) {
