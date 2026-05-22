@@ -5,19 +5,21 @@ import React, { useState, useEffect, useRef } from "react";
 // independently admin-gated). Reads /api/command-centre: live delivery
 // + pacing + "what needs a human now", grouped by client.
 
-// Module-scoped cache so the Optimisation page does NOT re-fetch every
-// time the operator navigates back to the tab. Once loaded for a given
-// dateFrom/dateTo window, the payload stays in memory for the rest of
-// the session — only Refresh (manual) or a date-range change triggers
-// a new fetch. Without this the page was paying a full upstream pull
-// every tab switch, which felt heavy when bouncing between Summary
-// and Optimise during triage.
-var ccPersistedCache = { data: null, dateFrom: "", dateTo: "" };
-// Separate cache for the comparison-window payload (delta chips on the
-// summary tiles). Keyed on the comparison range, NOT the current range,
-// so picking the same current range twice can still hit on the compare
-// side too.
-var ccCompareCache = { data: null, dateFrom: "", dateTo: "" };
+// Module-scoped multi-range cache. Keyed by "from..to" so toggling
+// between ANY ranges the operator has already viewed (Today ↔ 7d ↔
+// MTD ↔ 30d ↔ Last Month) is instant after the first load of each.
+// Previously cached only the most-recent range, which meant every
+// preset toggle was a fresh upstream pull. Manual Refresh still
+// bypasses (sets fresh=1 server-side); we never expire entries
+// client-side because the backend's 3-min Redis cache + Refresh
+// button together cover staleness.
+var ccPersistedCache = {};
+// Same shape for the previous-period comparison payload that drives
+// the delta chips. Keyed on the COMPARISON range, not the current
+// range — so two different current ranges that happen to share the
+// same comparison range still hit the cache.
+var ccCompareCache = {};
+var ccCacheKey = function(from, to) { return from + ".." + to; };
 // Comparison window for period-over-period deltas. Calendar-month-
 // aware: when the selected range starts on day 1, we compare to the
 // PREVIOUS CALENDAR MONTH at the same day-of-month span (so "May 1
@@ -68,8 +70,9 @@ export default function CommandCentre(props) {
   // makes "navigate away and come back" instant on the second visit:
   // no loading flash, no upstream pull. Date change or Refresh button
   // re-fetches as before (see the useEffect / load() below).
-  var initialState = (ccPersistedCache.data && ccPersistedCache.dateFrom === dateFrom && ccPersistedCache.dateTo === dateTo)
-    ? { loading: false, error: "", data: ccPersistedCache.data }
+  var ccInitialCacheKey = ccCacheKey(dateFrom, dateTo);
+  var initialState = (ccPersistedCache[ccInitialCacheKey])
+    ? { loading: false, error: "", data: ccPersistedCache[ccInitialCacheKey] }
     : { loading: true, error: "", data: null };
   var st = useState(initialState), s = st[0], setS = st[1];
   // Previous-period comparison payload. Lazy-hydrated from the module
@@ -77,8 +80,8 @@ export default function CommandCentre(props) {
   // a background fetch (see useEffect below). Drives the delta chips
   // on the summary tiles (▲ / ▼ %). Null = no comparison rendered.
   var prevWin0 = previousPeriodWindow(dateFrom, dateTo);
-  var cmpInitial = (prevWin0 && ccCompareCache.data && ccCompareCache.dateFrom === prevWin0.from && ccCompareCache.dateTo === prevWin0.to)
-    ? ccCompareCache.data : null;
+  var cmpInitial = (prevWin0 && ccCompareCache[ccCacheKey(prevWin0.from, prevWin0.to)])
+    ? ccCompareCache[ccCacheKey(prevWin0.from, prevWin0.to)] : null;
   var cs0 = useState(cmpInitial), compareData = cs0[0], setCompareData = cs0[1];
   // Filter mode: "all" shows every in-flight campaign for situational
   // load/delivery awareness; "attention" collapses to only the rows
@@ -183,7 +186,7 @@ export default function CommandCentre(props) {
     // module-level cache. Subsequent mounts (tab switches) hydrate from
     // here instead of paying another upstream pull.
     var cacheAndSet = function(myGen, payload) {
-      ccPersistedCache = { data: payload, dateFrom: dateFrom, dateTo: dateTo };
+      ccPersistedCache[ccCacheKey(dateFrom, dateTo)] = payload;
       safeSet(myGen, { loading: false, error: "", data: payload });
     };
 
@@ -239,8 +242,14 @@ export default function CommandCentre(props) {
     if (typeof window !== "undefined" && window.scrollTo) {
       try { window.scrollTo({ top: 0, behavior: "auto" }); } catch (_) { window.scrollTo(0, 0); }
     }
-    var cacheHit = ccPersistedCache.data && ccPersistedCache.dateFrom === dateFrom && ccPersistedCache.dateTo === dateTo;
-    if (!cacheHit) load();
+    var cached = ccPersistedCache[ccCacheKey(dateFrom, dateTo)];
+    if (cached) {
+      // Hydrate from the keyed cache (instant range toggle) and skip
+      // the upstream pull entirely. Manual Refresh still forces fresh.
+      safeSet(genRef.current, { loading: false, error: "", data: cached });
+    } else {
+      load();
+    }
     return function() {
       aliveRef.current = false;
       if (abortRef.current) { try { abortRef.current.abort(); } catch (_) {} }
@@ -260,8 +269,9 @@ export default function CommandCentre(props) {
     if (!session) return;
     var win = previousPeriodWindow(dateFrom, dateTo);
     if (!win) { setCompareData(null); return; }
-    if (ccCompareCache.data && ccCompareCache.dateFrom === win.from && ccCompareCache.dateTo === win.to) {
-      setCompareData(ccCompareCache.data);
+    var cmpKey = ccCacheKey(win.from, win.to);
+    if (ccCompareCache[cmpKey]) {
+      setCompareData(ccCompareCache[cmpKey]);
       return;
     }
     var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -275,7 +285,7 @@ export default function CommandCentre(props) {
     }).then(function(d) {
       if (!aliveRef.current) return;
       if (d && d.ok) {
-        ccCompareCache = { data: d, dateFrom: win.from, dateTo: win.to };
+        ccCompareCache[cmpKey] = d;
         setCompareData(d);
       }
     }).catch(function() { /* silent — deltas just don't render */ });
