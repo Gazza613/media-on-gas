@@ -426,11 +426,67 @@ export default function CommandCentre(props) {
         var hasSev = function(c, sev) {
           return c.alerts && c.alerts.some(function(a) { return a.severity === sev; });
         };
+        // Pacing alerts (behind / ahead) do NOT block scale routing. A
+        // great-CTR campaign that's pacing behind because the daily
+        // budget is too low is a textbook scale move (raise the budget),
+        // not a watch. The Scale card downstream detects the pacing
+        // alert and switches to "raise budget" guidance.
+        var hasBlockingMedium = function(c) {
+          return c.alerts && c.alerts.some(function(a) {
+            if (a.severity !== "medium") return false;
+            return a.code !== "pacing_behind" && a.code !== "pacing_ahead";
+          });
+        };
+        // Objective-aware scale thresholds. Top-1% media accounts use
+        // different CTR / frequency bars per objective family — applying
+        // a single direct-response bar (CTR ≥ 1.50%, freq < 3) across
+        // every campaign hides genuinely-scalable awareness flights
+        // (1.5% CTR on a brand video is unicorn-rare) and over-rewards
+        // a borderline traffic campaign. Calibrated to 2026 SA media
+        // benchmarks; TikTok tolerates higher frequency than Meta on
+        // every objective.
+        var scaleThreshold = function(fam, platform) {
+          var isTT = /tiktok/i.test(String(platform || ""));
+          if (fam === "awareness")  return { ctr: 0.50, freq: isTT ? 7 : 5,   freqLabel: isTT ? "<7" : "<5" };
+          if (fam === "followers")  return { ctr: 1.00, freq: isTT ? 6 : 3.5, freqLabel: isTT ? "<6" : "<3.5" };
+          if (fam === "appinstall") return { ctr: 1.30, freq: isTT ? 6 : 4,   freqLabel: isTT ? "<6" : "<4" };
+          if (fam === "leads")      return { ctr: 1.20, freq: isTT ? 6 : 3,   freqLabel: isTT ? "<6" : "<3" };
+          if (fam === "traffic")    return { ctr: 1.50, freq: isTT ? 6 : 3,   freqLabel: isTT ? "<6" : "<3" };
+          return { ctr: 1.50, freq: isTT ? 6 : 3, freqLabel: isTT ? "<6" : "<3" };
+        };
+        var familyOf = function(c) {
+          var f = (c && c.delivery && c.delivery.family) || "";
+          if (f) return f;
+          // Backward-compat fallback for cached payloads from before the
+          // backend started exposing delivery.family.
+          var lbl = String((c && c.delivery && c.delivery.resultLabel) || "").toLowerCase();
+          if (lbl === "leads") return "leads";
+          if (lbl === "page likes" || lbl === "profile visits" || lbl === "follows" || lbl === "followers") return "followers";
+          if (lbl === "app store clicks") return "appinstall";
+          if (lbl === "clicks") return "traffic";
+          if (lbl === "impressions") return "awareness";
+          return "unknown";
+        };
         var isScaleCandidate = function(c) {
           var d = c.delivery || {};
-          var freqLimit = /tiktok/i.test(String(c.platform || "")) ? 6 : 3;
-          var paceOK = !c.pacing || c.pacing.state === "on_track" || c.pacing.state === "ahead" || c.pacing.state === "na" || c.pacing.state === "unknown";
-          return (d.result > 0) && (d.ctr >= 1.5) && (d.frequency < freqLimit) && paceOK;
+          var thr = scaleThreshold(familyOf(c), c.platform);
+          var paceOK = !c.pacing || c.pacing.state === "on_track" || c.pacing.state === "ahead" || c.pacing.state === "na" || c.pacing.state === "unknown" || c.pacing.state === "behind";
+          return (d.result > 0) && (d.ctr >= thr.ctr) && (d.frequency < thr.freq) && paceOK;
+        };
+        // Reason a row missed the scale bar — for the empty-Scale
+        // diagnostic ("nearest candidate, blocked by X"). Returns null
+        // when the row IS a scale candidate.
+        var scaleMissReason = function(c) {
+          var d = c.delivery || {};
+          var fam = familyOf(c);
+          var thr = scaleThreshold(fam, c.platform);
+          var reasons = [];
+          if (!(d.result > 0)) reasons.push("no " + String(d.resultLabel || "results").toLowerCase() + " yet");
+          if (d.ctr < thr.ctr) reasons.push("CTR " + Number(d.ctr || 0).toFixed(2) + "% (bar " + thr.ctr.toFixed(2) + "%)");
+          if (d.frequency >= thr.freq) reasons.push("freq " + Number(d.frequency || 0).toFixed(2) + " (bar " + thr.freqLabel + ")");
+          if (hasBlockingMedium(c)) reasons.push("blocked by an active flag");
+          if (reasons.length === 0) return null;
+          return reasons.join(" · ");
         };
         var classify = function(c) {
           // High-severity alerts always float to ATTENTION so a stalled
@@ -443,8 +499,15 @@ export default function CommandCentre(props) {
           // LIST mixed with live campaigns that need triage).
           if (c.ended) return "ended";
           if (!c.live) return "paused";
-          if (hasSev(c, "medium")) return "watch";
+          // Non-pacing medium alerts (frequency_high, no_clicks, no_results,
+          // any cpr_trend_up) block scale routing. Pacing alerts on their
+          // own do not — they're a budget signal, not a quality signal.
+          if (hasBlockingMedium(c)) return "watch";
           if (isScaleCandidate(c)) return "scale";
+          // Pacing-only medium on a row that doesn't qualify for scale
+          // still belongs in watch (a pacing-behind campaign with weak
+          // CTR isn't a scale move, it's a re-evaluate move).
+          if (hasSev(c, "medium")) return "watch";
           return "healthy";
         };
         var passFilter = function(c) {
@@ -1603,22 +1666,35 @@ export default function CommandCentre(props) {
           </div>;
         };
 
-        // Issue card: thumbnail + client + campaign name + alert + one-line context.
+        // Issue card: shows EVERY alert on the campaign (not just the
+        // first), so a campaign with frequency_high + pacing_behind +
+        // cpf_trend_up surfaces all three reasons to the operator
+        // instead of hiding two behind one. Each alert renders as its
+        // own coloured pill + message line, in severity order.
         var renderIssueCard = function(entry, idx) {
           var c = entry.c;
-          var alert = c.alerts && c.alerts[0];
-          var sev = entry.sev || (alert ? alert.severity : "low");
-          var col = sev === "attention" ? (P.critical || "#ef4444") : (P.warning || "#fbbf24");
+          var alerts = (c.alerts && c.alerts.length) ? c.alerts.slice().sort(function(a, b) {
+            var rank = function(s) { return s === "high" ? 3 : s === "medium" ? 2 : 1; };
+            return rank(b.severity) - rank(a.severity);
+          }) : [];
+          var sev = entry.sev || (alerts[0] ? alerts[0].severity : "low");
+          var col = sev === "attention" || sev === "high" ? (P.critical || "#ef4444") : (P.warning || "#fbbf24");
           var amUrl = c.adsManagerUrl || "";
           return <div key={c.campaignId + "-issue-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "55", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
             <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>#{idx + 1} · {sev === "attention" ? "Urgent" : "Watch"}</span>
+                <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>#{idx + 1} · {alerts.length} {alerts.length === 1 ? "flag" : "flags"}</span>
                 <span style={{ fontSize: 10, fontWeight: 800, color: P.mint, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{entry.client}</span>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 4 }}>{c.campaignName}</div>
-              {alert && <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.5 }}>{alert.message}</div>}
+              <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 6 }}>{c.campaignName}</div>
+              {alerts.map(function(a, ai) {
+                var aCol = a.severity === "high" ? (P.critical || "#ef4444") : a.severity === "medium" ? (P.warning || "#fbbf24") : P.label;
+                return <div key={ai} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "flex-start" }}>
+                  <span style={{ flexShrink: 0, marginTop: 4, width: 6, height: 6, borderRadius: "50%", background: aCol }}/>
+                  <span style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.5 }}>{a.message}</span>
+                </div>;
+              })}
               <div style={{ marginTop: 6, fontSize: 10, color: P.label, fontFamily: fm, letterSpacing: 0.5 }}>
                 Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)}
               </div>
@@ -1627,13 +1703,19 @@ export default function CommandCentre(props) {
           </div>;
         };
 
-        var renderFixCard = function(entry, idx, plat) {
+        // One fix card per alert (not per campaign). A campaign with
+        // three alerts now gets three matched fix cards so nothing is
+        // hidden behind c.alerts[0]. Cards carry the campaign name so
+        // the operator can still tell which fix maps to which campaign
+        // when scanning the Fixes section.
+        var renderFixCard = function(entry, idx, alertIdx, plat) {
           var c = entry.c;
-          var alert = c.alerts && c.alerts[0];
-          var fix = fixTemplate(alert ? alert.code : "", plat);
-          return <div key={c.campaignId + "-fix-" + idx} style={{ padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + (P.mint || "#34D399") + "44", borderLeft: "4px solid " + (P.mint || "#34D399"), borderRadius: 10 }}>
+          var alert = c.alerts && c.alerts[alertIdx];
+          if (!alert) return null;
+          var fix = fixTemplate(alert.code, plat);
+          return <div key={c.campaignId + "-fix-" + idx + "-" + alertIdx} style={{ padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + (P.mint || "#34D399") + "44", borderLeft: "4px solid " + (P.mint || "#34D399"), borderRadius: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-              <span style={{ background: (P.mint || "#34D399") + "26", color: P.mint || "#34D399", padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Fix #{idx + 1} · {fix.label}</span>
+              <span style={{ background: (P.mint || "#34D399") + "26", color: P.mint || "#34D399", padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Fix · {fix.label}</span>
               <span style={{ fontSize: 10, fontWeight: 700, color: P.label, fontFamily: fm }}>‘{c.campaignName}’</span>
             </div>
             <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6, marginBottom: 8 }}>{fix.why}</div>
@@ -1734,15 +1816,66 @@ export default function CommandCentre(props) {
                 {b.issues.map(function(e, i) { return renderIssueCard(e, i); })}
               </div>}
 
-              {b.issues.length > 0 && <div style={{ marginBottom: 22 }}>
-                {sectionHeader(d.label + " Fixes", b.issues.length, P.mint || "#34D399", "How to resolve each flag above, in order")}
-                {b.issues.map(function(e, i) { return renderFixCard(e, i, d.key); })}
-              </div>}
+              {b.issues.length > 0 && (function() {
+                // Count total fixes (one per alert, summed across all
+                // flagged campaigns) so the section badge reads "Fixes
+                // N" matching the actual rendered card count.
+                var totalFixes = b.issues.reduce(function(acc, e) { return acc + ((e.c.alerts || []).length); }, 0);
+                return <div style={{ marginBottom: 22 }}>
+                  {sectionHeader(d.label + " Fixes", totalFixes, P.mint || "#34D399", "One fix per flag above, in order")}
+                  {b.issues.map(function(e, i) {
+                    return (e.c.alerts || []).map(function(_, ai) {
+                      return renderFixCard(e, i, ai, d.key);
+                    });
+                  })}
+                </div>;
+              })()}
 
               {b.scale.length > 0 && <div style={{ marginBottom: 22 }}>
                 {sectionHeader(d.label + " Scaling Opportunities", b.scale.length, P.mint || "#34D399", "Strong CTR, healthy frequency, ready for more budget")}
                 {b.scale.map(function(e, i) { return renderScaleCard(e, i); })}
               </div>}
+
+              {/* Empty-Scale diagnostic. When the platform has live
+                  rows but none qualify for scale, surface the reason
+                  and the nearest-miss campaign so the team can see
+                  the page is accurate (not buggy) and what they'd
+                  need to address to unlock it. */}
+              {b.scale.length === 0 && b.all.length > 0 && (function() {
+                // Live rows only — ended/paused can't be scale-ready
+                // by definition, surfacing them as nearest-miss would
+                // mislead.
+                var liveCandidates = b.all.filter(function(e) {
+                  return e.c.live && !e.c.ended;
+                });
+                if (liveCandidates.length === 0) return null;
+                // Pick the row closest to clearing the CTR bar (within
+                // its own objective family) as the nearest miss.
+                var ranked = liveCandidates.map(function(e) {
+                  var fam = familyOf(e.c);
+                  var thr = scaleThreshold(fam, e.c.platform);
+                  var ctr = Number(e.c.delivery.ctr || 0);
+                  return { e: e, fam: fam, thr: thr, gap: thr.ctr - ctr, ctr: ctr, miss: scaleMissReason(e.c) };
+                }).filter(function(r) { return r.miss; });
+                ranked.sort(function(a, c) {
+                  // Smallest CTR gap first; rows already over the CTR
+                  // bar (gap <= 0) but blocked by freq / alerts rank
+                  // before rows that are still below.
+                  var aOver = a.gap <= 0, cOver = c.gap <= 0;
+                  if (aOver !== cOver) return aOver ? -1 : 1;
+                  return Math.abs(a.gap) - Math.abs(c.gap);
+                });
+                var nearest = ranked[0];
+                return <div style={{ marginBottom: 22, padding: "14px 16px", background: "rgba(0,0,0,0.25)", border: "1px dashed " + P.rule, borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: P.label, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>{d.label} Scaling Opportunities · 0</div>
+                  <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6 }}>
+                    No {d.label} campaigns met the scale-ready bar this period. Criteria are objective-aware (CTR 0.50% for awareness, 1.00% followers, 1.20% leads, 1.30% app installs, 1.50% traffic), frequency under the platform's fatigue cap, and no blocking flags.
+                  </div>
+                  {nearest && <div style={{ marginTop: 8, fontSize: 11, color: P.label, fontFamily: fm, lineHeight: 1.6 }}>
+                    Nearest candidate: <span style={{ color: P.txt, fontWeight: 700 }}>‘{nearest.e.c.campaignName}’</span> ({nearest.e.client}) · blocked by {nearest.miss}
+                  </div>}
+                </div>;
+              })()}
 
               {b.paused.length > 0 && <div style={{ marginBottom: 8 }}>
                 {sectionHeader(d.label + " Paused", b.paused.length, P.solar || "#fbbf24", "Operator turned these off — reactivate or extend if needed")}

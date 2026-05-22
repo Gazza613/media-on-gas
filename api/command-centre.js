@@ -309,11 +309,10 @@ export default async function handler(req, res) {
   // bust the cache by bumping the version when the response shape
   // changes. Bypass=1 query forces a recompute.
   var bypassCache = String(req.query.fresh || "").trim() === "1";
-  // Cache key bumped to v6 after the cplTrend → cprTrend rewrite
-  // (now objective-aware: CPL for leads, CPF for followers, CPC for
-  // traffic / app installs, CPM for awareness). Old v5 entries
-  // would still have the leads-only trend alert shape.
-  var cacheKey = "cc:v6:" + periodFrom + "..." + periodTo;
+  // Cache key bumped to v7 to add delivery.family on every entry
+  // (objective-aware scale thresholds + empty-bucket diagnostics on
+  // the dashboard depend on this field being present).
+  var cacheKey = "cc:v7:" + periodFrom + "..." + periodTo;
   if (!bypassCache) {
     try {
       var cached = await redisGetJson(cacheKey);
@@ -548,7 +547,12 @@ export default async function handler(req, res) {
         result: Math.round(ob.result),
         resultLabel: ob.resultLabel,
         costLabel: ob.costLabel,
-        costPer: parseFloat((ob.costPer || 0).toFixed(2))
+        costPer: parseFloat((ob.costPer || 0).toFixed(2)),
+        // Canonical objective family ("leads" / "followers" / "appinstall"
+        // / "traffic" / "awareness") exposed so the dashboard can ladder
+        // scale thresholds + diagnostics by objective without re-running
+        // the resolveObjective regex on the client.
+        family: ob.family
       },
       pacing: pacing,
       alerts: alerts,
