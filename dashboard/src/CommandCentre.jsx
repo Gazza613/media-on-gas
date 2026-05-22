@@ -1729,8 +1729,8 @@ export default function CommandCentre(props) {
           var cdnUrl = c.thumbnail || "";
           return <div key={c.campaignId + "-issue-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "55", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
             {cdnUrl
-              ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
-              : <div>{thumbBox(c, 86)}</div>}
+              ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 106)}</a>
+              : <div>{thumbBox(c, 106)}</div>}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>#{idx + 1} · {alerts.length} {alerts.length === 1 ? "flag" : "flags"}</span>
@@ -1786,8 +1786,8 @@ export default function CommandCentre(props) {
           var col = P.mint || "#34D399";
           return <div key={c.campaignId + "-scale-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "44", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
             {cdnUrl
-              ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
-              : <div>{thumbBox(c, 86)}</div>}
+              ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 106)}</a>
+              : <div>{thumbBox(c, 106)}</div>}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Scale candidate</span>
