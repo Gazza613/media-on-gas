@@ -22,12 +22,14 @@ export default function CommandCentre(props) {
   // what needs a human now" — both modes are first-class.
   var fm0 = useState("all"), filterMode = fm0[0], setFilterMode = fm0[1];
 
-  // Client filter: "" (or "all") shows every client section; any other
-  // value isolates that one client. The TOC chip strip doubles as the
-  // selector — click a client chip to filter to it, click 'All' to
-  // restore. Keeps the page focused when a media analyst wants to
-  // work one client end-to-end without scrolling past the others.
-  var cf0 = useState(""), clientFilter = cf0[0], setClientFilter = cf0[1];
+  // Platform filter: "" (or "all") shows every platform section; any
+  // other value isolates that one platform (Facebook, Instagram,
+  // TikTok, Google). The page is structured per-platform now rather
+  // than per-client because the team works in platform-specific
+  // sprints (someone owns Facebook for the morning, someone else
+  // owns TikTok), and switching mental models between clients was
+  // the navigation friction the team reported.
+  var pf0 = useState(""), platformFilter = pf0[0], setPlatformFilter = pf0[1];
 
   // Best-practices playbook fetched from /api/best-practices (which
   // reads the Redis copy refreshed monthly by the cron, falling back
@@ -1309,87 +1311,327 @@ export default function CommandCentre(props) {
           </div>;
         };
 
-        if (perClient.length === 0) {
+        // ===== PLATFORM-LED RESTRUCTURE =====
+        // Team feedback: per-client sections were heavy and forced
+        // mental-model switches. Optimisation work runs platform-by-
+        // platform (one person owns Facebook for the morning, another
+        // owns TikTok). New structure: flat by platform, with Issues
+        // / Fixes / Scaling / Paused under each platform header. The
+        // client name still appears on every campaign row so context
+        // isn't lost, but the page is read top-to-bottom one platform
+        // at a time. Per-client Growth Plan memos dropped; account-
+        // wide best practices live in the Crystal Ball footer at the
+        // bottom of the page.
+
+        // Canonical platform key. Maps every Meta-derived label
+        // (Facebook, Instagram, Facebook Ads, IG) and every Google
+        // surface (Google Display, YouTube, Google Search) to one of
+        // the four buckets the team operates against.
+        var canonPlatform = function(p) {
+          var s2 = String(p || "").toLowerCase();
+          if (s2.indexOf("instagram") >= 0) return "Instagram";
+          if (s2.indexOf("facebook") >= 0) return "Facebook";
+          if (s2.indexOf("tiktok") >= 0) return "TikTok";
+          if (s2.indexOf("google") >= 0 || s2.indexOf("youtube") >= 0) return "Google";
+          return "Other";
+        };
+
+        // Per-alert-code fix template. One Issue card = one Fix card,
+        // matched by alert code. Each template carries a media-expert
+        // WHY and 3-4 HOW steps so a junior PM can execute without a
+        // glossary. Templates are static — actual numbers from the
+        // alert message are substituted at render time, not here.
+        var fixTemplate = function(code, platform) {
+          var plat = platform;
+          var fb = plat === "Facebook" || plat === "Instagram";
+          if (code === "frequency_high") {
+            return {
+              label: "Refresh creative",
+              why: "Frequency above 3 on " + (fb ? "Meta" : "TikTok at 6") + " is the line where the same person scrolls past your ad without registering it. CTR drops 15-25% within days once you cross. Even a small change to the first 3 seconds resets the curve and extends the productive life by 30-40 days.",
+              how: [
+                "Pick the lowest-performing ad in the ad set.",
+                "Keep the body, swap ONE of: opening 1-3 seconds, dominant colour, CTA wording, or talent face.",
+                "Upload as a NEW ad in the same ad set (don't pause the original, let the algorithm split-test).",
+                "After 5-7 days, pause whichever variant underperforms."
+              ]
+            };
+          }
+          if (code === "pacing_behind") {
+            return {
+              label: "Catch up the spend",
+              why: "Behind-pace burns the back of the window: the budget concentrates into the last week, so the algorithm gets less time to find converters and CPM rises with the rushed delivery. Lift daily by ~20% or extend the end date rather than letting the catch-up happen organically.",
+              how: [
+                "Open the campaign in Ads Manager → budget.",
+                "If you have flexibility on the end date: extend by 5-7 days and the existing daily budget catches up naturally.",
+                "If the end date is fixed: raise daily/lifetime by ~20% so spend lands on plan.",
+                "Don't double the budget overnight — Meta's algorithm needs a gentle ramp to stay in learning-stable."
+              ]
+            };
+          }
+          if (code === "no_clicks") {
+            return {
+              label: "Investigate the click break",
+              why: "Spend with impressions but zero clicks is one of three problems: a destination URL that's broken or geo-blocked, creative that doesn't ask for the click, or audience that's not in market. Worth ten minutes of human attention before paying for another day of delivery.",
+              how: [
+                "Open the destination URL in incognito — does it load? Mobile + desktop.",
+                "Open the ad preview in Ads Manager → check the CTA button is set and the URL parameters look right.",
+                "If both check out, the issue is targeting fit — pause the underperforming ad-set and rebuild on broader audience (Advantage+ on Meta, Smart+ on TikTok).",
+                "Re-launch with a small budget for 48h to confirm the click problem is fixed before scaling."
+              ]
+            };
+          }
+          if (code === "no_results") {
+            return {
+              label: "Plug the conversion leak",
+              why: "Clicks but zero results means the destination isn't converting. Most common: lead-form load error, tracking pixel missing on the thank-you page, or message-to-landing mismatch (the ad promised X, the page sells Y). Find which one before you spend another rand.",
+              how: [
+                "Open the campaign and click through one of your own ads to the landing page.",
+                "Submit the form yourself — does it confirm? Does the event fire in Events Manager / Pixel Helper?",
+                "If the form works but Pixel isn't firing, fix the pixel; if Pixel fires but no conversions are reporting, check attribution window.",
+                "If the form is broken or copy mismatches the ad, fix the page before resuming spend."
+              ]
+            };
+          }
+          if (code === "spend_no_delivery") {
+            return {
+              label: "Resolve the delivery block",
+              why: "Money out, zero impressions = the platform took payment but didn't serve the ad. Usually: ad disapproval, audience-size collapse, account-level billing flag, or a recently-paused parent. Fix is mechanical, not strategic.",
+              how: [
+                "Open the campaign — check the disapproval/policy banner at top of Ads Manager.",
+                "If disapproved: read the policy reason, edit the ad (often image text % or restricted-category copy), resubmit.",
+                "If approved but no delivery: check audience size, schedule, and account billing status.",
+                "Once resolved, give the algorithm 24h to resume before judging delivery."
+              ]
+            };
+          }
+          if (code === "ended_still_active") {
+            return {
+              label: "End or extend",
+              why: "Status reads ACTIVE but the end date has already passed. The platform usually stops serving but keeps charging if billing isn't reconciled. Confirm intent: extend the flight, or turn the campaign off cleanly at the campaign level (not just ad-set).",
+              how: [
+                "Open the campaign in Ads Manager.",
+                "Decide: extend the end date by X days, OR toggle the campaign OFF at campaign level.",
+                "If turning off, double-check there's no ad-set still set to ACTIVE on a different end date underneath."
+              ]
+            };
+          }
+          if (code === "today_no_spend") {
+            return {
+              label: "Check delivery stall",
+              why: "Was delivering at a meaningful daily pace, then stopped. Usually one of: budget exhausted for the day, account billing flag, ad disapproval, or audience cap. Worth checking now because every hour of stalled delivery is an hour of lost reach.",
+              how: [
+                "Open the campaign in Ads Manager — check status indicators and policy banner.",
+                "Look at the daily spend chart for the last 3 days — is today a clean drop-off or has spend been trending down?",
+                "If a clean drop: usually budget cap or billing — refresh card/budget. If trending down: audience fatigue, address that first."
+              ]
+            };
+          }
+          if (code === "cpl_trend_up") {
+            return {
+              label: "Investigate efficiency drift",
+              why: "CPL trending higher than the trailing median means the same campaign is paying more for the same result. Could be auction-pressure (competitors entered), audience fatigue, creative wear-out, or seasonal drift. Diagnose before scaling spend further.",
+              how: [
+                "Compare CPM and CTR vs the trailing 7-day median. CPM up = auction pressure; CTR down = creative or audience.",
+                "If audience fatigue: refresh creative (frequency_high fix) or widen audience (Advantage+/Smart+).",
+                "If auction pressure: hold spend, don't try to outbid — focus on creative quality which the algorithm rewards more than budget."
+              ]
+            };
+          }
+          return {
+            label: "Review and decide",
+            why: "This alert is informational. Review the campaign performance against the client's KPI, decide if action is needed.",
+            how: ["Open the campaign in Ads Manager and review against the client's KPI.", "If action needed, pause/refresh/rebrief as appropriate.", "If not, dismiss and revisit next week."]
+          };
+        };
+
+        // Group every campaign across every client by platform. Apply
+        // the existing classify() so we keep the same severity logic;
+        // the difference is the rows are bucketed by platform rather
+        // than by client. The client name is preserved on each row
+        // so the operator never loses context.
+        var platformDefs = [
+          { key: "Facebook", label: "Facebook", color: "#1877F2", sub: "Meta — Facebook placement" },
+          { key: "Instagram", label: "Instagram", color: "#E1306C", sub: "Meta — Instagram placement" },
+          { key: "TikTok", label: "TikTok", color: "#00F2EA", sub: "TikTok Ads" },
+          { key: "Google", label: "Google Ads", color: "#FBBC05", sub: "Google Display / YouTube / Search" }
+        ];
+        var platformBuckets = {};
+        platformDefs.forEach(function(d) { platformBuckets[d.key] = { issues: [], scale: [], paused: [], all: [] }; });
+        s.data.clients.forEach(function(grp) {
+          grp.campaigns.forEach(function(c) {
+            if (!passFilter(c)) return;
+            var key = canonPlatform(c.platform);
+            if (!platformBuckets[key]) return; // skip "Other"
+            var k = classify(c);
+            var entry = { client: grp.client, c: c };
+            platformBuckets[key].all.push(entry);
+            if (k === "attention" || k === "watch") platformBuckets[key].issues.push(Object.assign({ sev: k }, entry));
+            else if (k === "scale") platformBuckets[key].scale.push(entry);
+            else if (k === "paused" || k === "ended") platformBuckets[key].paused.push(Object.assign({ bucket: k }, entry));
+          });
+        });
+        // Sort within each bucket: high-severity first, then spend.
+        Object.keys(platformBuckets).forEach(function(k) {
+          var b = platformBuckets[k];
+          b.issues.sort(function(a, c) {
+            // Attention > Watch
+            if (a.sev !== c.sev) return a.sev === "attention" ? -1 : 1;
+            return (c.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0);
+          });
+          b.scale.sort(function(a, c) { return (c.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
+          b.paused.sort(function(a, c) { return (c.c.delivery.spendPeriod || 0) - (a.c.delivery.spendPeriod || 0); });
+        });
+
+        // Apply platform filter
+        var platforms = platformDefs.filter(function(d) {
+          if (platformFilter && platformFilter !== "all") return d.key === platformFilter;
+          // Hide platforms with literally nothing in any bucket so a
+          // client without TikTok doesn't show an empty TikTok header.
+          var b = platformBuckets[d.key];
+          return (b.issues.length + b.scale.length + b.paused.length) > 0;
+        });
+
+        if (platforms.length === 0) {
           if (filterMode === "attention") {
             return <Glass st={{ padding: 24, textAlign: "center" }}>
               <div style={{ fontSize: 13, color: P.mint, fontFamily: ff, fontWeight: 700 }}>Nothing needs attention right now.</div>
               <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 6 }}>Every in-flight campaign is healthy in this window. Switch to All to see the live load.</div>
             </Glass>;
           }
+          if (platformFilter) {
+            return <Glass st={{ padding: 24, textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: P.label, fontFamily: fm }}>‘{platformFilter}’ has nothing in this window.</div>
+              <button onClick={function() { setPlatformFilter(""); }} style={{ marginTop: 10, background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>Show all platforms</button>
+            </Glass>;
+          }
           return null;
         }
 
-        // Anchor-friendly slug per client so the TOC chip strip jumps to
-        // the right section on click. Strips non-letter/digit chars.
-        var slugOf = function(name) { return "gas-cc-" + String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"); };
+        // Issue card: thumbnail + client + campaign name + alert + one-line context.
+        var renderIssueCard = function(entry, idx) {
+          var c = entry.c;
+          var alert = c.alerts && c.alerts[0];
+          var sev = entry.sev || (alert ? alert.severity : "low");
+          var col = sev === "attention" ? (P.critical || "#ef4444") : (P.warning || "#fbbf24");
+          var amUrl = c.adsManagerUrl || "";
+          return <div key={c.campaignId + "-issue-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "55", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
+            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ flexShrink: 0, width: 72, height: 72, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "#0c0716", display: "block" }}>
+              {c.thumbnail
+                ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{platShort(c.platform)}</div>}
+            </a>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>#{idx + 1} · {sev === "attention" ? "Urgent" : "Watch"}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: P.mint, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{entry.client}</span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 4 }}>{c.campaignName}</div>
+              {alert && <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.5 }}>{alert.message}</div>}
+              <div style={{ marginTop: 6, fontSize: 10, color: P.label, fontFamily: fm, letterSpacing: 0.5 }}>
+                Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)}
+              </div>
+            </div>
+            {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "8px 12px", color: col, fontSize: 10, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Open ↗</a>}
+          </div>;
+        };
 
-        // Apply client filter: empty (or "all") shows everything;
-        // any other value isolates that one client section.
-        var visibleClients = clientFilter && clientFilter !== "all"
-          ? perClient.filter(function(e) { return e.grp.client === clientFilter; })
-          : perClient;
+        var renderFixCard = function(entry, idx, plat) {
+          var c = entry.c;
+          var alert = c.alerts && c.alerts[0];
+          var fix = fixTemplate(alert ? alert.code : "", plat);
+          return <div key={c.campaignId + "-fix-" + idx} style={{ padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + (P.mint || "#34D399") + "44", borderLeft: "4px solid " + (P.mint || "#34D399"), borderRadius: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+              <span style={{ background: (P.mint || "#34D399") + "26", color: P.mint || "#34D399", padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Fix #{idx + 1} · {fix.label}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: P.label, fontFamily: fm }}>‘{c.campaignName}’</span>
+            </div>
+            <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6, marginBottom: 8 }}>{fix.why}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {fix.how.map(function(step, si) {
+                return <div key={si} style={{ display: "flex", gap: 8, fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.5 }}>
+                  <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: (P.mint || "#34D399") + "22", color: P.mint || "#34D399", border: "1px solid " + (P.mint || "#34D399") + "55", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 900, fontFamily: fm }}>{si + 1}</span>
+                  <span>{step}</span>
+                </div>;
+              })}
+            </div>
+          </div>;
+        };
+
+        var renderScaleCard = function(entry, idx) {
+          var c = entry.c;
+          var amUrl = c.adsManagerUrl || "";
+          var col = P.mint || "#34D399";
+          return <div key={c.campaignId + "-scale-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "44", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
+            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ flexShrink: 0, width: 72, height: 72, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "#0c0716", display: "block" }}>
+              {c.thumbnail
+                ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{platShort(c.platform)}</div>}
+            </a>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Scale candidate</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: P.mint, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>{entry.client}</span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: fm, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 4 }}>{c.campaignName}</div>
+              <div style={{ fontSize: 11, color: P.txt, fontFamily: ff, lineHeight: 1.5 }}>
+                CTR {Number(c.delivery.ctr || 0).toFixed(2)}% is clearing the 1.50% scale bar with healthy frequency. Algorithm has already learned this audience-creative pair; a 15-20% daily-budget lift compounds before efficiency drifts.
+              </div>
+              <div style={{ marginTop: 6, fontSize: 10, color: P.label, fontFamily: fm, letterSpacing: 0.5 }}>
+                Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)} · {(c.delivery.resultLabel || "Results").toUpperCase()} {N(c.delivery.result || 0)}
+              </div>
+            </div>
+            {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "8px 12px", color: col, fontSize: 10, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Open ↗</a>}
+          </div>;
+        };
+
+        var sectionHeader = function(label, count, color, sub) {
+          return <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingBottom: 10, borderBottom: "2px solid " + color + "88" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ background: color + "26", border: "2px solid " + color + "88", color: color, fontSize: 14, fontWeight: 900, fontFamily: fm, letterSpacing: 2, padding: "8px 16px", borderRadius: 8, textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span>{label}</span>
+                <span style={{ background: color + "44", color: color, padding: "2px 9px", borderRadius: 12, fontSize: 13, fontWeight: 900, letterSpacing: 0.5 }}>{count}</span>
+              </span>
+              {sub && <span style={{ fontSize: 12, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{sub}</span>}
+            </div>
+          </div>;
+        };
 
         return <React.Fragment>
-          {/* Client filter / TOC strip. The 'All' pill on the left
-              clears the filter; clicking any client chip isolates
-              that client (page shows just their section). The chip
-              also still scrolls to the section via the # anchor for
-              backward-compatibility with bookmarked links. */}
+          {/* Platform filter chips */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22, alignItems: "center" }}>
-            <span style={{ fontSize: 9, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginRight: 4 }}>View</span>
-            <button onClick={function() { setClientFilter(""); }}
-              style={{ background: !clientFilter || clientFilter === "all" ? P.mint + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (!clientFilter || clientFilter === "all" ? P.mint : P.rule), borderRadius: 8, padding: "8px 14px", fontSize: 11, fontWeight: 800, fontFamily: fm, color: !clientFilter || clientFilter === "all" ? P.mint : P.label, letterSpacing: 1, textTransform: "uppercase", cursor: "pointer" }}>
-              All clients · {perClient.length}
+            <span style={{ fontSize: 9, fontWeight: 800, color: P.label, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginRight: 4 }}>Platform</span>
+            <button onClick={function() { setPlatformFilter(""); }}
+              style={{ background: !platformFilter || platformFilter === "all" ? P.mint + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (!platformFilter || platformFilter === "all" ? P.mint : P.rule), borderRadius: 8, padding: "8px 14px", fontSize: 11, fontWeight: 800, fontFamily: fm, color: !platformFilter || platformFilter === "all" ? P.mint : P.label, letterSpacing: 1, textTransform: "uppercase", cursor: "pointer" }}>
+              All platforms
             </button>
-            {s.data.clients.map(function(grp) {
-              var col = grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint;
-              var isOn = clientFilter === grp.client;
-              return <button key={grp.client}
-                onClick={function() {
-                  // Filter only. The earlier scrollIntoView jump was
-                  // disorienting once filtering was added (clicking a
-                  // client chip both hid the other sections AND
-                  // scrolled, which read as a glitch). Operator can
-                  // still anchor-link in via #gas-cc-<slug> URLs if
-                  // they want the scroll behaviour.
-                  setClientFilter(isOn ? "" : grp.client);
-                }}
-                style={{ background: isOn ? col + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (isOn ? col : P.rule), borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, cursor: "pointer", outline: "none" }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: isOn ? col : P.txt }}>{grp.client}</span>
-                <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{grp.rollup.live} live · {R(grp.rollup.spendPeriod)}</span>
-                {grp.rollup.alerts > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: col, letterSpacing: 1 }}>{grp.rollup.alerts} ALERTS</span>}
+            {platformDefs.map(function(d) {
+              var b = platformBuckets[d.key];
+              var totalRows = b.issues.length + b.scale.length + b.paused.length;
+              if (totalRows === 0) return null;
+              var isOn = platformFilter === d.key;
+              var issueCount = b.issues.length;
+              return <button key={d.key} onClick={function() { setPlatformFilter(isOn ? "" : d.key); }}
+                style={{ background: isOn ? d.color + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (isOn ? d.color : P.rule), borderLeft: "3px solid " + d.color, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, cursor: "pointer", outline: "none" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: isOn ? d.color : P.txt }}>{d.label}</span>
+                <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{totalRows}</span>
+                {issueCount > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: P.critical || "#ef4444", letterSpacing: 1 }}>{issueCount} ISSUES</span>}
               </button>;
             })}
           </div>
 
-          {/* Per-client sections. When a single client is filtered the
-              other sections are skipped entirely. Each client carries
-              its own buckets and its own growth plan. */}
-          {visibleClients.length === 0 && clientFilter && <Glass st={{ padding: 24, textAlign: "center" }}>
-            <div style={{ fontSize: 13, color: P.label, fontFamily: fm }}>‘{clientFilter}’ has nothing matching the current filters in this window.</div>
-            <button onClick={function() { setClientFilter(""); }} style={{ marginTop: 10, background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>Show all clients</button>
-          </Glass>}
-          {visibleClients.map(function(entry) {
-            var grp = entry.grp;
-            var buckets = entry.buckets;
-            var slug = slugOf(grp.client);
-            return <section key={grp.client} id={slug} style={{ marginBottom: 36, paddingBottom: 22, borderBottom: "1px solid " + P.rule }}>
-              {/* Big client header — the user explicitly asked for the
-                  client names to be bigger and clearly separated. */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18, padding: "16px 0", borderBottom: "2px solid " + (grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.mint) + "55" }}>
+          {/* Per-platform sections */}
+          {platforms.map(function(d) {
+            var b = platformBuckets[d.key];
+            return <section key={d.key} style={{ marginBottom: 36, paddingBottom: 22, borderBottom: "1px solid " + P.rule }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18, padding: "16px 0", borderBottom: "2px solid " + d.color + "55" }}>
                 <div>
-                  {/* Redundant 'CLIENT' caps label dropped — the big
-                      bold name reads cleanly on its own and the
-                      preceding label was just extra visual space. */}
-                  <div style={{ fontSize: 28, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 1, lineHeight: 1 }}>{grp.client}</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: d.color, fontFamily: fm, letterSpacing: 1, lineHeight: 1 }}>{d.label}</div>
+                  <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 4 }}>{d.sub}</div>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontFamily: fm }}>
                   {[
-                    ["LIVE", N(grp.rollup.live), P.mint],
-                    ["PERIOD", R(grp.rollup.spendPeriod), P.ember],
-                    ["TODAY", R(grp.rollup.spendToday), P.solar],
-                    ["RESULTS", N(grp.rollup.results), P.cyan],
-                    ["ALERTS", N(grp.rollup.alerts), grp.rollup.alerts > 0 ? (P.critical || "#ef4444") : P.label]
+                    ["ISSUES", N(b.issues.length), b.issues.length > 0 ? (P.critical || "#ef4444") : P.label],
+                    ["SCALE", N(b.scale.length), P.mint],
+                    ["PAUSED", N(b.paused.length), P.solar]
                   ].map(function(m, i) {
                     return <div key={i} style={{ padding: "8px 12px", background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderRadius: 8, textAlign: "right", minWidth: 70 }}>
                       <div style={{ fontSize: 8, color: P.label, letterSpacing: 1, marginBottom: 2 }}>{m[0]}</div>
@@ -1399,34 +1641,58 @@ export default function CommandCentre(props) {
                 </div>
               </div>
 
-              {/* Per-client priority buckets. Same sectionDefs as before,
-                  scoped to this client. Empty buckets render nothing.
-                  Section header is the visual anchor for status (WATCH
-                  LIST / SCALE READY / PAUSED / ENDED) so it carries
-                  more weight than the metric chips above — larger
-                  font, thicker border, count badge sized to read at
-                  the same scale-down ratio. */}
-              {sectionDefs.map(function(def) {
-                var rows = buckets[def.key];
-                if (!rows || rows.length === 0) return null;
-                return <div key={def.key} style={{ marginBottom: 22 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingBottom: 10, borderBottom: (def.dimmed ? "1px dashed " : "2px solid ") + def.color + (def.dimmed ? "55" : "88") }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                      <span style={{ background: def.color + "26", border: "2px solid " + def.color + "88", color: def.color, fontSize: 14, fontWeight: 900, fontFamily: fm, letterSpacing: 2, padding: "8px 16px", borderRadius: 8, textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 10 }}>
-                        <span>{def.label}</span>
-                        <span style={{ background: def.color + "44", color: def.color, padding: "2px 9px", borderRadius: 12, fontSize: 13, fontWeight: 900, letterSpacing: 0.5 }}>{rows.length}</span>
-                      </span>
-                      <span style={{ fontSize: 12, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{def.sub}</span>
-                    </div>
-                  </div>
-                  {rows.map(function(r) { return renderCampaignRow(r.c, def.dimmed); })}
-                </div>;
-              })}
+              {b.issues.length > 0 && <div style={{ marginBottom: 22 }}>
+                {sectionHeader(d.label + " Issues", b.issues.length, P.critical || "#ef4444", "Campaigns to triage today")}
+                {b.issues.map(function(e, i) { return renderIssueCard(e, i); })}
+              </div>}
 
-              {/* Per-client growth plan (Head Analyst memo, scoped). */}
-              {renderClientGrowthPlan(grp, adsList)}
+              {b.issues.length > 0 && <div style={{ marginBottom: 22 }}>
+                {sectionHeader(d.label + " Fixes", b.issues.length, P.mint || "#34D399", "How to resolve each issue above, in order")}
+                {b.issues.map(function(e, i) { return renderFixCard(e, i, d.key); })}
+              </div>}
+
+              {b.scale.length > 0 && <div style={{ marginBottom: 22 }}>
+                {sectionHeader(d.label + " Scaling Opportunities", b.scale.length, P.mint || "#34D399", "Strong CTR, healthy frequency, ready for more budget")}
+                {b.scale.map(function(e, i) { return renderScaleCard(e, i); })}
+              </div>}
+
+              {b.paused.length > 0 && <div style={{ marginBottom: 8 }}>
+                {sectionHeader(d.label + " Paused", b.paused.length, P.solar || "#fbbf24", "Operator turned these off — reactivate or extend if needed")}
+                {b.paused.map(function(r) { return renderCampaignRow(r.c, true); })}
+              </div>}
             </section>;
           })}
+
+          {/* Inside the Crystal Ball — bottom-of-page best-practices
+              training. Account-wide, not per-client. Pulled from the
+              auto-refreshing playbook (/api/best-practices) so the
+              guidance stays current month-on-month. Acts as the
+              team's reference for what good looks like on each
+              platform, regardless of which client they're working on. */}
+          <section style={{ marginTop: 22, padding: "28px 30px", borderRadius: 16, background: "linear-gradient(135deg,#0a0418 0%,#100624 50%,#1a0a30 100%)", border: "1px solid " + (P.orchid || "#A855F7") + "44" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: "linear-gradient(135deg," + (P.orchid || "#A855F7") + "40," + (P.cyan || "#22D3EE") + "40)", border: "1px solid " + (P.orchid || "#A855F7") + "66", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: P.orchid || "#A855F7", fontSize: 22, fontWeight: 900, fontFamily: fm }}>✦</div>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: P.orchid || "#A855F7", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", lineHeight: 1.1 }}>Inside the Crystal Ball</div>
+                <div style={{ fontSize: 11, color: P.caption, fontFamily: fm, marginTop: 4, letterSpacing: 1 }}>Training reference · what top-1% accounts do on each platform · auto-refreshed monthly{bp && bp.asOf ? " · last update " + bp.asOf : ""}</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+              {[
+                { key: "meta", title: "Meta (Facebook + Instagram)", color: "#1877F2", fallback: ["Advantage+ Audience over interest stacks — algorithm-led broad targeting outperforms manual lookalikes in 2026.", "Ship 3-5 fresh creatives per fortnight per ad set so frequency stays under 3 and the algorithm keeps a fresh winner to scale.", "Conversions API + Pixel both firing — first-party signal is non-negotiable for cost-cap and value optimisation."] },
+                { key: "tiktok", title: "TikTok", color: "#00F2EA", fallback: ["Smart+ Campaigns — let TikTok's algorithm find the audience; manual targeting underperforms 25-40% on CPM.", "Spark Ads from creator content beat brand-polished video by 30-50% on CTR. Run 2-3 creators per fortnight as a standing pipeline.", "9:16 native, first 1.5 seconds is a face + hook + on-screen text. Anything that reads as a brand ad gets suppressed."] },
+                { key: "google", title: "Google Ads", color: "#FBBC05", fallback: ["Performance Max (PMax) with rich asset groups + good audience signals — outperforms manual Search + Display split for most direct-response budgets.", "Enhanced Conversions on every PMax campaign — closes the privacy/IDFA attribution gap by 15-25%.", "Don't over-segment: PMax wants ≥30 conversions/30 days per asset group to optimise. Below that, consolidate."] }
+              ].map(function(pl) {
+                var rows = bp && bp[pl.key] && bp[pl.key].rules ? bp[pl.key].rules : pl.fallback;
+                return <div key={pl.key} style={{ padding: "14px 16px", background: "rgba(0,0,0,0.35)", border: "1px solid " + pl.color + "55", borderLeft: "3px solid " + pl.color, borderRadius: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: pl.color, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10 }}>{pl.title}</div>
+                  <ul style={{ margin: 0, padding: "0 0 0 18px", fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.7 }}>
+                    {rows.map(function(r, ri) { return <li key={ri} style={{ marginBottom: 4 }}>{r}</li>; })}
+                  </ul>
+                </div>;
+              })}
+            </div>
+          </section>
         </React.Fragment>;
       })()}
 
