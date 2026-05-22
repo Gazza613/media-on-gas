@@ -344,14 +344,19 @@ export default function CommandCentre(props) {
           // thumbnail URLs are signed + time-limited, so cards that
           // were generated against a fresh cache can fail to load
           // hours later. onError hides the <img>, the glyph div
-          // beneath shows through.
-          var thumb = <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer"
-              title={amUrl ? "Open this campaign in Ads Manager" : "Ads Manager link unavailable"}
-              style={{ flexShrink: 0, width: 106, height: 106, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none", opacity: dimmed ? 0.75 : 1 }}>
+          // beneath shows through. Click opens the actual CDN
+          // creative (the served ad), not Ads Manager — the team
+          // explicitly asked the thumbnail to be a creative preview.
+          // The Ads Manager link lives only on the dedicated 'Fix
+          // in Ads Manager' button per alert.
+          var cdnUrl = c.thumbnail || "";
+          var thumbInner = <div style={{ flexShrink: 0, width: 106, height: 106, borderRadius: 12, overflow: "hidden", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", position: "relative", opacity: dimmed ? 0.75 : 1 }}>
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
             {c.thumbnail && <img src={c.thumbnail} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
-            {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
-          </a>;
+          </div>;
+          var thumb = cdnUrl
+            ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none", cursor: "pointer" }}>{thumbInner}</a>
+            : thumbInner;
           return <Glass key={c.campaignId} accent={hasAlert && !dimmed ? sevColor(c.alerts[0].severity) : P.rule} st={{ padding: 16, marginBottom: 10, opacity: dimmed ? 0.82 : 1 }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
               {thumb}
@@ -1680,8 +1685,15 @@ export default function CommandCentre(props) {
           var sev = entry.sev || (alerts[0] ? alerts[0].severity : "low");
           var col = sev === "attention" || sev === "high" ? (P.critical || "#ef4444") : (P.warning || "#fbbf24");
           var amUrl = c.adsManagerUrl || "";
+          // Thumbnail click opens the actual CDN creative (so the
+          // team can preview the exact ad served), NOT Ads Manager.
+          // The "Open ↗" button on the right of each card is the
+          // single source of truth for jumping into Ads Manager.
+          var cdnUrl = c.thumbnail || "";
           return <div key={c.campaignId + "-issue-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "55", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
-            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
+            {cdnUrl
+              ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
+              : <div>{thumbBox(c, 86)}</div>}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>#{idx + 1} · {alerts.length} {alerts.length === 1 ? "flag" : "flags"}</span>
@@ -1733,9 +1745,12 @@ export default function CommandCentre(props) {
         var renderScaleCard = function(entry, idx) {
           var c = entry.c;
           var amUrl = c.adsManagerUrl || "";
+          var cdnUrl = c.thumbnail || "";
           var col = P.mint || "#34D399";
           return <div key={c.campaignId + "-scale-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "44", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
-            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
+            {cdnUrl
+              ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 86)}</a>
+              : <div>{thumbBox(c, 86)}</div>}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Scale candidate</span>
@@ -1917,9 +1932,9 @@ export default function CommandCentre(props) {
         </React.Fragment>;
       })()}
 
-      <div style={{ fontSize: 9.5, color: P.caption, fontFamily: fm, fontStyle: "italic", marginTop: 8, lineHeight: 1.6 }}>
-        Internal operations view, scoped to your selected dates. The headline metric and cost match the campaign's own KPI (leads, page likes on Facebook, profile visits on Instagram, follows on TikTok, app store clicks, traffic clicks, or impressions for awareness). Pacing covers daily and lifetime budgets over days elapsed in the window; ABO budgets resolve at ad-set level via Graph. Not shown to clients.
-      </div>
+      {/* Moderate breathing room under the Crystal Ball footer
+          (previously a verbose disclaimer block sat here). */}
+      <div style={{ height: 24 }} />
 
     </div>}
   </div>;
