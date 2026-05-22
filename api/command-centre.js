@@ -245,7 +245,12 @@ export default async function handler(req, res) {
   // bust the cache by bumping the version when the response shape
   // changes. Bypass=1 query forces a recompute.
   var bypassCache = String(req.query.fresh || "").trim() === "1";
-  var cacheKey = "cc:v2:" + periodFrom + "..." + periodTo;
+  // Cache key version bumped to v3 to evict any payload computed by the
+  // earlier dormant-filter-narrowed code (which surfaced stale Meta
+  // SCHEDULED + TikTok-enabled-but-idle rows and inflated CAMPAIGNS /
+  // LIVE NOW). v2 entries are now ignored, the first load on each
+  // window recomputes against the current code.
+  var cacheKey = "cc:v3:" + periodFrom + "..." + periodTo;
   if (!bypassCache) {
     try {
       var cached = await redisGetJson(cacheKey);
