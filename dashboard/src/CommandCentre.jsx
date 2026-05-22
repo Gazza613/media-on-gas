@@ -249,7 +249,7 @@ export default function CommandCentre(props) {
   };
 
   return <div>
-    <SH icon={Ic.radar ? Ic.radar(P.solar, 20) : Ic.flag(P.solar, 20)} title="Optimisation Centre"
+    <SH icon={Ic.person ? Ic.person(P.solar, 20) : (Ic.radar ? Ic.radar(P.solar, 20) : Ic.flag(P.solar, 20))} title="Optimisation Centre"
       sub="Internal. Live load, delivery, pacing and what needs a human now, month to date" accent={P.solar} />
 
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 18px", gap: 10, flexWrap: "wrap" }}>

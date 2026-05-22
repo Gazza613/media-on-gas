@@ -413,7 +413,12 @@ flag:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" f
 alert:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={c} strokeWidth="1.5"/><line x1="12" y1="9" x2="12" y2="13" stroke={c} strokeWidth="1.5"/></svg>;},
 fire:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M12 2c0 4-4 6-4 10a6 6 0 0012 0c0-4-4-6-4-10z" stroke={c} strokeWidth="1.5" fill={c+"20"}/></svg>;},
 power:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M18.36 6.64a9 9 0 11-12.73 0" stroke={c} strokeWidth="1.8" strokeLinecap="round"/><line x1="12" y1="2" x2="12" y2="12" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></svg>;},
-cart:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M2 3h2.5l2.3 12.4a1.5 1.5 0 001.5 1.2h8.9a1.5 1.5 0 001.5-1.2L21 7H6" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill={c+"12"}/><circle cx="9" cy="20" r="1.4" fill={c}/><circle cx="18" cy="20" r="1.4" fill={c}/></svg>;}
+cart:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M2 3h2.5l2.3 12.4a1.5 1.5 0 001.5 1.2h8.9a1.5 1.5 0 001.5-1.2L21 7H6" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill={c+"12"}/><circle cx="9" cy="20" r="1.4" fill={c}/><circle cx="18" cy="20" r="1.4" fill={c}/></svg>;},
+// Single centered person silhouette. Distinct from Ic.users (which
+// is offset-left to suggest a group) so Optimise (this person owns
+// the platform today) and Community (the audience / users in the
+// account) read as visually different concepts in the nav.
+person:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke={c} strokeWidth="1.5" fill={c+"15"}/><path d="M4 21v-1.5a8 8 0 0116 0V21" stroke={c} strokeWidth="1.5" strokeLinecap="round"/></svg>;}
 };
 
 function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=props.hv;var s=useState(false);return(<div onMouseEnter={function(){s[1](true);}} onMouseLeave={function(){s[1](false);}} style={Object.assign({background:P.glass,border:"1px solid "+(s[0]&&hv?a+"50":P.rule),borderRadius:16,position:"relative",overflow:"hidden",transition:"all 0.3s ease",transform:s[0]&&hv?"translateY(-2px)":"none",boxShadow:s[0]&&hv?"0 12px 40px "+a+"15":"0 4px 20px rgba(0,0,0,0.25)"},st)}><div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:s[0]&&hv?1:0.4}}/>{props.children}</div>);}
@@ -4360,7 +4365,7 @@ export default function MediaOnGas(){
     // was the only unique value the tab carried isn't used by the team.
     // genFlags() stays alive because Pulse + Command Centre still
     // consume parts of it; only the surface route is removed.
-    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"command",label:"Optimise",icon:Ic.flag(P.solar,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"command",label:"Optimise",icon:Ic.person(P.solar,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
     // Ecommerce tab is ALWAYS visible to the GAS team (even when the
     // selected client has no GA4 connection — the panel itself renders a
     // "no ecommerce connection yet" empty state). Clients still only see
