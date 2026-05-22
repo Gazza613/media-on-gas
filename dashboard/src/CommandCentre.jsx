@@ -1742,7 +1742,7 @@ export default function CommandCentre(props) {
                 </div>;
               })}
               <div style={{ marginTop: 6, fontSize: 10, color: P.label, fontFamily: fm, letterSpacing: 0.5 }}>
-                Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)}
+                Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)} · {(c.delivery.resultLabel || "Results").toUpperCase()} {N(c.delivery.result || 0)}{Number(c.delivery.result || 0) > 0 ? " · " + (c.delivery.costLabel || "CPR") + " " + R(c.delivery.costPer || 0) : ""}
               </div>
             </div>
             {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "8px 12px", color: col, fontSize: 10, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Open ↗</a>}
@@ -1795,7 +1795,7 @@ export default function CommandCentre(props) {
                 CTR {Number(c.delivery.ctr || 0).toFixed(2)}% is clearing the 1.50% scale bar with healthy frequency. Algorithm has already learned this audience-creative pair; a 15-20% daily-budget lift compounds before efficiency drifts.
               </div>
               <div style={{ marginTop: 6, fontSize: 10, color: P.label, fontFamily: fm, letterSpacing: 0.5 }}>
-                Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)} · {(c.delivery.resultLabel || "Results").toUpperCase()} {N(c.delivery.result || 0)}
+                Spend {R(c.delivery.spendPeriod)} · CTR {Number(c.delivery.ctr || 0).toFixed(2)}% · Freq {Number(c.delivery.frequency || 0).toFixed(2)} · {(c.delivery.resultLabel || "Results").toUpperCase()} {N(c.delivery.result || 0)}{Number(c.delivery.result || 0) > 0 ? " · " + (c.delivery.costLabel || "CPR") + " " + R(c.delivery.costPer || 0) : ""}
               </div>
             </div>
             {amUrl && <a href={amUrl} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, background: col + "22", border: "1px solid " + col + "66", borderRadius: 8, padding: "8px 12px", color: col, fontSize: 10, fontWeight: 800, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", whiteSpace: "nowrap" }}>Open ↗</a>}
