@@ -35,6 +35,20 @@ var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
 // words like 'compose', 'position', 'pose'. Mirrors the patterns
 // detectObjective() in api/ads.js already treats as lead-gen.
 var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
+// Internal accounts that the team runs ads on but that are NOT
+// "clients" in the agency-roster sense. GAS Agency is our own
+// in-house ad account (test creatives, agency-brand campaigns); it
+// pollutes the per-client Command Centre because it sits next to
+// real client sections with the same client-header treatment. Filter
+// out any campaign whose accountName matches one of these — the
+// rows still flow through /api/campaigns for any other surface, they
+// just don't get a client header here.
+var INTERNAL_CLIENTS = { "gas agency": true };
+function isInternalAccount(c) {
+  var raw = String(c.accountName || "").trim();
+  var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
+  return !!INTERNAL_CLIENTS[String(clean || raw).toLowerCase()];
+}
 function clientOf(c) {
   var raw = String(c.accountName || "").trim();
   var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
@@ -292,6 +306,10 @@ export default async function handler(req, res) {
 
   for (var i = 0; i < rows.length; i++) {
     var c = rows[i];
+    // Skip internal accounts (GAS Agency) — they ran ads but they are
+    // not clients on the agency roster, so they don't get a Command
+    // Centre client section or count toward the cross-client totals.
+    if (isInternalAccount(c)) continue;
     var id = String(c.campaignId || c.rawCampaignId || "");
     var statusActive = isActiveStatus(c.status);
     var periodSpend = num(c.spend);
