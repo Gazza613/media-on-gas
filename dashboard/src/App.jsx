@@ -3565,14 +3565,43 @@ export default function MediaOnGas(){
     return null;
   };
   var savedRange=loadSavedRange();
-  var ds=useState(savedRange?savedRange.from:monthStart),df=ds[0],setDf=ds[1];
-  var de=useState(savedRange?savedRange.to:monthEnd),dt=de[0],setDt=de[1];
+  // Summary tab default is the full current month (1st → last day).
+  // First mount: tab is "summary", so initial range is always the
+  // month range regardless of any saved range — Summary always
+  // opens on month. Non-Summary tabs restore the saved range via
+  // the tab-change effect below.
+  var ds=useState(monthStart),df=ds[0],setDf=ds[1];
+  var de=useState(monthEnd),dt=de[0],setDt=de[1];
+  // Stash any previously-saved range so we can restore it when the
+  // user navigates off Summary to another tab. Updated whenever the
+  // range changes on a non-Summary tab.
+  var lastSavedRangeRef=useRef(savedRange);
   useEffect(function(){
+    // Persist only when NOT on Summary. Summary's auto-set month
+    // range would otherwise clobber the persisted lens that other
+    // tabs rely on.
+    if(tab==="summary")return;
+    lastSavedRangeRef.current={from:df,to:dt};
     try{
       if(typeof window!=="undefined"&&window.localStorage)
         window.localStorage.setItem("gas:dashboard:dateRange",JSON.stringify({from:df,to:dt}));
     }catch(_){}
-  },[df,dt]);
+  },[df,dt,tab]);
+  // When the operator navigates TO Summary, reset to current month.
+  // When they navigate AWAY from Summary, restore the saved range so
+  // Optimise / Deep Dive / etc. pick up the user's persisted lens.
+  // Picker tweaks while on Summary stick until the next tab switch.
+  useEffect(function(){
+    if(tab==="summary"){
+      if(df!==monthStart)setDf(monthStart);
+      if(dt!==monthEnd)setDt(monthEnd);
+    }else if(lastSavedRangeRef.current){
+      var saved=lastSavedRangeRef.current;
+      if(df!==saved.from)setDf(saved.from);
+      if(dt!==saved.to)setDt(saved.to);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[tab]);
   // Date range presets. Replaces the "free-form calendar only" UX with
   // five common ranges the team actually picks 95% of the time:
   // Today / Last 7 Days / MTD / Last 30 Days / Last Month. The FROM/TO
