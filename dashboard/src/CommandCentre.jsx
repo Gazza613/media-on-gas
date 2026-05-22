@@ -310,7 +310,7 @@ export default function CommandCentre(props) {
               : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>}
             {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
           </a>;
-          return <Glass key={c.campaignId} accent={hasAlert ? sevColor(c.alerts[0].severity) : (dimmed ? P.rule : P.rule)} st={{ padding: 16, marginBottom: 10, opacity: dimmed ? 0.82 : 1 }}>
+          return <Glass key={c.campaignId} accent={hasAlert && !dimmed ? sevColor(c.alerts[0].severity) : P.rule} st={{ padding: 16, marginBottom: 10, opacity: dimmed ? 0.82 : 1 }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
               {thumb}
               <div style={{ flex: 1, minWidth: 220 }}>
