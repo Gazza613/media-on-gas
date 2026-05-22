@@ -3625,7 +3625,14 @@ export default function MediaOnGas(){
   // Summary-only comparison toggle: "off" | "wow" | "mom". When enabled,
   // the Summary tab's KPI tiles render a delta chip next to the value
   // showing vs the equivalent prior period. Other tabs are not affected.
-  var cmo=useState("off"),compareMode=cmo[0],setCompareMode=cmo[1];
+  // Initial compare mode follows the active preset so Summary deltas
+  // light up automatically on first load. MTD / Last Month use "mom"
+  // (calendar-month aware), Today / 7d / 30d use "wow" (same-length
+  // immediately before). Custom ranges default to off — operator
+  // can still flip to WoW or MoM via the toggle.
+  var initialPresetForCompare=matchPreset();
+  var initialCompareMode=initialPresetForCompare==="custom"?"off":(initialPresetForCompare==="mtd"||initialPresetForCompare==="lm")?"mom":"wow";
+  var cmo=useState(initialCompareMode),compareMode=cmo[0],setCompareMode=cmo[1];
   var cmp=useState([]),compareCampaigns=cmp[0],setCompareCampaigns=cmp[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
   var ss=useState([]),selected=ss[0],setSelected=ss[1];
@@ -5542,7 +5549,13 @@ export default function MediaOnGas(){
                 via the useEffect above). FROM/TO inputs stay visible
                 for custom ranges and for confirming the resolved window. */}
             {(function(){var activePreset=matchPreset();var opts=[{k:"today",l:"TODAY"},{k:"7d",l:"7 DAYS"},{k:"mtd",l:"MTD"},{k:"30d",l:"30 DAYS"},{k:"lm",l:"LAST MONTH"}];return <div title="Quick date range" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
-              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
+              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);
+                // Auto-pick the right Summary compare mode for this preset
+                // so the up/down delta chips light up without a second click.
+                // MTD / Last Month -> mom (calendar-month aware). Today /
+                // 7d / 30d -> wow (same-length immediately before).
+                setCompareMode((opt.k==="mtd"||opt.k==="lm")?"mom":"wow");
+              }}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
             </div>;})()}
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
             {/* Summary-only compare toggle. Other tabs show the selected
