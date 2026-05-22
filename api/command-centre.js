@@ -299,18 +299,20 @@ export default async function handler(req, res) {
     var ended = endedInPast(c);
 
     var impressions = num(c.impressions), clicks = num(c.clicks), leads = num(c.leads);
-    // Dormant-noise filter, narrowed: only exclude a row that has no
-    // delivery in the selected window IF it is also NOT platform-active.
-    // Previously this excluded every zero-delivery row regardless of
-    // status — so a campaign Ads Manager calls ACTIVE / ENABLED that
-    // simply hasn't spent yet in the window (just launched, or paused
-    // mid-window then resumed today) disappeared from view AND from
-    // the LIVE NOW count. Operator-reported gap: MTN MoMo Ads Manager
-    // shows 16 live but Command Centre shows 12. Keeping the filter for
-    // PAUSED zero-delivery rows still suppresses the old stale-leftover
-    // noise (e.g. a Feb/Mar/Apr campaign left enabled and never touched
-    // since), because those land in "paused"/"ended" not "active".
-    if (periodSpend === 0 && todaySpend === 0 && impressions === 0 && !statusActive) continue;
+    // The command centre is "what is actually in flight this period".
+    // Require SOME delivery in the selected window (spend, today spend,
+    // or impressions). Earlier this session I tried narrowing this to
+    // "exclude only when paused" so just-launched active rows would
+    // appear; in practice that exposed every Meta SCHEDULED row and
+    // every TikTok-enabled-but-idle row (stale Feb/Mar campaigns the
+    // operator never switched off), exploding CAMPAIGNS 22 -> 50 and
+    // LIVE NOW 16 -> 37 — exactly the dormant noise this filter exists
+    // to suppress. Reverted. The "MTN MoMo Ads Manager shows 16 but
+    // dashboard shows 12" gap is almost certainly Google PMax campaigns
+    // whose GAQL row is filtered upstream because they had no delivery
+    // in the window; the right fix lives in /api/campaigns (a separate
+    // enumeration query), not in widening the dormant gate here.
+    if (periodSpend === 0 && todaySpend === 0 && impressions === 0) continue;
 
     var ctr = num(c.ctr), cpm = num(c.cpm), cpc = num(c.cpc), frequency = num(c.frequency);
     var live = statusActive && !ended;
