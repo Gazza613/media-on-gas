@@ -247,7 +247,7 @@ export default function CommandCentre(props) {
   };
 
   return <div>
-    <SH icon={Ic.radar ? Ic.radar(P.solar, 20) : Ic.flag(P.solar, 20)} title="Command Centre"
+    <SH icon={Ic.radar ? Ic.radar(P.solar, 20) : Ic.flag(P.solar, 20)} title="Optimisation Centre"
       sub="Internal. Live load, delivery, pacing and what needs a human now, month to date" accent={P.solar} />
 
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 18px", gap: 10, flexWrap: "wrap" }}>
@@ -1285,13 +1285,13 @@ export default function CommandCentre(props) {
               var isOn = clientFilter === grp.client;
               return <button key={grp.client}
                 onClick={function() {
+                  // Filter only. The earlier scrollIntoView jump was
+                  // disorienting once filtering was added (clicking a
+                  // client chip both hid the other sections AND
+                  // scrolled, which read as a glitch). Operator can
+                  // still anchor-link in via #gas-cc-<slug> URLs if
+                  // they want the scroll behaviour.
                   setClientFilter(isOn ? "" : grp.client);
-                  // Brief tick so the section renders before the anchor
-                  // scroll fires.
-                  setTimeout(function() {
-                    var el = document.getElementById(slugOf(grp.client));
-                    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }, 60);
                 }}
                 style={{ background: isOn ? col + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (isOn ? col : P.rule), borderLeft: "3px solid " + col, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, cursor: "pointer", outline: "none" }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: isOn ? col : P.txt }}>{grp.client}</span>
