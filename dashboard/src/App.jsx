@@ -9243,7 +9243,11 @@ export default function MediaOnGas(){
               {key:"positive",label:"Scale opportunity",sub:"Strong performance signals. Pour budget here before auction dynamics shift.",color:P.positive||P.mint},
               {key:"info",label:"Informational",sub:"Useful context, no immediate action required.",color:P.info||P.cyan}
             ];
-            return <React.Fragment>
+            // Shorthand <>...</> fragment instead of <React.Fragment>;
+            // App.jsx imports only the hooks from 'react' (no default
+            // React symbol), so <React.Fragment> threw 'React is not
+            // defined' at runtime on the Optimisation tab.
+            return <>
               {sectionDefs.map(function(def){
                 var rows=byBucket[def.key];
                 if(!rows||rows.length===0)return null;
@@ -9257,7 +9261,7 @@ export default function MediaOnGas(){
                   {rows.map(function(f){return renderFlagCard(f,def.color);})}
                 </div>;
               })}
-            </React.Fragment>;
+            </>;
           })()}
 
           <Insight title="Optimisation Summary" accent={P.warning} icon={Ic.alert(P.warning,16)}>{flags.length} flags generated from selected campaign data. {openFlags} require attention. Review recommendations and take action to maintain optimal performance. Flags refresh when you change dates or campaign selection.</Insight>
