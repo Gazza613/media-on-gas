@@ -1613,7 +1613,7 @@ export default function CommandCentre(props) {
                 style={{ background: isOn ? d.color + "22" : "rgba(0,0,0,0.3)", border: "1px solid " + (isOn ? d.color : P.rule), borderLeft: "3px solid " + d.color, borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, fontFamily: fm, cursor: "pointer", outline: "none" }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: isOn ? d.color : P.txt }}>{d.label}</span>
                 <span style={{ fontSize: 9, color: P.label, letterSpacing: 1 }}>{totalRows}</span>
-                {issueCount > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: P.critical || "#ef4444", letterSpacing: 1 }}>{issueCount} ISSUES</span>}
+                {issueCount > 0 && <span style={{ fontSize: 9, fontWeight: 900, color: P.critical || "#ef4444", letterSpacing: 1 }}>{issueCount} FLAGS</span>}
               </button>;
             })}
           </div>
@@ -1629,7 +1629,7 @@ export default function CommandCentre(props) {
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontFamily: fm }}>
                   {[
-                    ["ISSUES", N(b.issues.length), b.issues.length > 0 ? (P.critical || "#ef4444") : P.label],
+                    ["FLAGS", N(b.issues.length), b.issues.length > 0 ? (P.critical || "#ef4444") : P.label],
                     ["SCALE", N(b.scale.length), P.mint],
                     ["PAUSED", N(b.paused.length), P.solar]
                   ].map(function(m, i) {
@@ -1642,12 +1642,12 @@ export default function CommandCentre(props) {
               </div>
 
               {b.issues.length > 0 && <div style={{ marginBottom: 22 }}>
-                {sectionHeader(d.label + " Issues", b.issues.length, P.critical || "#ef4444", "Campaigns to triage today")}
+                {sectionHeader(d.label + " Flags", b.issues.length, P.critical || "#ef4444", "Campaigns to triage today")}
                 {b.issues.map(function(e, i) { return renderIssueCard(e, i); })}
               </div>}
 
               {b.issues.length > 0 && <div style={{ marginBottom: 22 }}>
-                {sectionHeader(d.label + " Fixes", b.issues.length, P.mint || "#34D399", "How to resolve each issue above, in order")}
+                {sectionHeader(d.label + " Fixes", b.issues.length, P.mint || "#34D399", "How to resolve each flag above, in order")}
                 {b.issues.map(function(e, i) { return renderFixCard(e, i, d.key); })}
               </div>}
 
