@@ -35,7 +35,7 @@ function buildHtml(opts) {
   var anomaliesByType = opts.anomaliesByType || {};
   var totalAnomalies = opts.totalAnomalies || 0;
   var totalCampaignsWatched = opts.totalCampaignsWatched || 0;
-  var notWatched = opts.notWatched || { paused: [], ended: [], awaitingBaseline: [] };
+  var sanityChecks = opts.sanityChecks || [];
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
 
   // Severity counts for the totals strip
@@ -48,25 +48,9 @@ function buildHtml(opts) {
     else medCount += n;
   });
 
-  // Map each anomaly type to one of the 4 axes the GAS team cares
-  // about most (per user direction). Frequency Cliff and Spend Spike
-  // sit outside these four — they still appear in the anomaly cards
-  // below, just not in the axis strip.
-  var AXIS_MAP = {
-    impressions_cliff: "delivery",
-    spend_collapse:    "delivery",
-    cpm_spike:         "delivery",
-    click_collapse:    "clicks",
-    ctr_collapse:      "ctr",
-    conversions_disappeared: "result",
-    lead_volume_drop:        "result",
-    cpr_spike:               "result"
-  };
-  var axisCounts = { delivery: 0, clicks: 0, ctr: 0, result: 0 };
-  Object.keys(anomaliesByType).forEach(function(k) {
-    var ax = AXIS_MAP[k];
-    if (ax) axisCounts[ax] += anomaliesByType[k].length;
-  });
+  // 'What we watch' axis strip removed per user direction — the
+  // anomaly cards below already convey which signals fired and the
+  // strip duplicated the count without adding actionable info.
 
   // Severity tiles strip
   var totalsStrip =
@@ -90,28 +74,7 @@ function buildHtml(opts) {
         '<div style="font-size:22px;font-weight:900;color:' + (medCount > 0 ? P.amber : P.mint) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + medCount + '</div></div></td>' +
     '</tr></table>';
 
-  // What-we-watch axis strip: 4 tiles each showing how many anomalies
-  // fired on that axis yesterday. These are the four metric families
-  // the team agreed matter most: ad delivery, click volume, CTR, and
-  // the campaign's own objective KPI result.
-  var axisTile = function(label, value, color) {
-    var dim = value === 0;
-    return '<td width="25%" style="padding:0 4px;">' +
-      '<div style="background:rgba(255,255,255,0.03);border:1px solid ' + (dim ? P.rule : color + "55") + ';border-radius:10px;padding:12px 10px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + (dim ? P.caption : color) + ';letter-spacing:1.8px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">' + label + '</div>' +
-        '<div style="font-size:18px;font-weight:900;color:' + (dim ? P.mint : color) + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + value + '</div>' +
-      '</div></td>';
-  };
-  var axisStrip =
-    '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:8px;font-family:Manrope,Helvetica,Arial,sans-serif;">What we watch · yesterday\'s signals</div>' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
-      '<tr>' +
-        axisTile("Ad Delivery", axisCounts.delivery, P.cyan) +
-        axisTile("Clicks", axisCounts.clicks, P.blaze) +
-        axisTile("Click-Through", axisCounts.ctr, P.solar) +
-        axisTile("Objective Result", axisCounts.result, P.ember) +
-      '</tr>' +
-    '</table>';
+  // (axisStrip removed — no longer rendered.)
 
   // Empty state, render a clean "no anomalies" panel so the team knows
   // the watcher ran successfully even when nothing fired.
@@ -247,9 +210,37 @@ function buildHtml(opts) {
       '<tr><td style="padding:0 36px;"><div style="height:1px;background:linear-gradient(90deg,transparent,' + P.ember + ',transparent);"></div></td></tr>' +
 
       '<tr><td style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
-      '<tr><td style="padding:14px 36px 6px;">' + axisStrip + '</td></tr>' +
 
       anomaliesBlock +
+
+      // Sanity Checks block — sits between the last anomaly flag and
+      // the Open Dashboard CTA per user direction. Lists campaigns
+      // worth a quick look but that don't merit a full anomaly card:
+      // paused-but-recently-active. Ended campaigns are filtered out
+      // entirely upstream — they never appear here. Empty list = the
+      // whole block disappears.
+      (function() {
+        if (!sanityChecks || sanityChecks.length === 0) return "";
+        var rows = sanityChecks.slice(0, 12).map(function(it) {
+          return '<tr>' +
+            '<td valign="top" style="padding:7px 0;font-family:Manrope,Helvetica,Arial,sans-serif;border-top:1px solid ' + P.rule + ';">' +
+              '<div style="font-size:11px;color:' + P.txt + ';font-weight:700;line-height:1.4;word-break:break-word;">' + escapeHtml(it.campaignName) +
+                ' <span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:6px;">' + escapeHtml(it.platform || "") + '</span>' +
+              '</div>' +
+              '<div style="font-size:10px;color:' + P.label + ';margin-top:2px;line-height:1.5;font-style:italic;">' + escapeHtml(it.reason) + '</div>' +
+            '</td></tr>';
+        }).join("");
+        var moreRow = sanityChecks.length > 12
+          ? '<tr><td style="padding:6px 0;border-top:1px solid ' + P.rule + ';font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;">+' + (sanityChecks.length - 12) + ' more</td></tr>'
+          : "";
+        return '<tr><td style="padding:18px 36px 0;">' +
+          '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">Sanity Checks · ' + sanityChecks.length + '</div>' +
+          '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:10px;">Active in-flight campaigns watched above. The list below is worth a quick look — campaigns that were recently delivering but are now paused. Ended campaigns are not included.</div>' +
+          '<div style="border:1px solid ' + (P.solar || "#fbbf24") + '40;border-left:3px solid ' + (P.solar || "#fbbf24") + ';border-radius:0 10px 10px 0;background:rgba(0,0,0,0.20);padding:10px 14px;">' +
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + rows + moreRow + '</table>' +
+          '</div>' +
+        '</td></tr>';
+      })() +
 
       '<tr><td style="padding:24px 36px 8px;" align="center">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
@@ -262,44 +253,6 @@ function buildHtml(opts) {
       '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
       '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
       '</td></tr>' +
-
-      // "Not watched" block: list every campaign that was skipped or
-      // is still warming up to a baseline, with the reason. Surfaces
-      // exactly what's missing from the watch count so the team can
-      // see the math at a glance instead of asking 'why N not 18?'.
-      (function() {
-        var sections = [];
-        var sectionFor = function(label, color, items) {
-          if (!items || items.length === 0) return "";
-          var rows = items.slice(0, 12).map(function(it) {
-            var endNote = it.endDate ? ' <span style="color:' + P.caption + ';font-size:10px;font-style:italic;">(ends ' + escapeHtml(it.endDate) + ')</span>' : "";
-            return '<tr>' +
-              '<td valign="top" style="padding:6px 0;font-family:Manrope,Helvetica,Arial,sans-serif;border-top:1px solid ' + P.rule + ';">' +
-                '<div style="font-size:11px;color:' + P.txt + ';font-weight:700;line-height:1.4;word-break:break-word;">' + escapeHtml(it.campaignName) +
-                  ' <span style="font-size:9px;color:' + P.caption + ';font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-left:6px;">' + escapeHtml(it.platform || "") + '</span>' +
-                  endNote +
-                '</div>' +
-                '<div style="font-size:10px;color:' + P.label + ';margin-top:2px;line-height:1.5;font-style:italic;">' + escapeHtml(it.reason) + '</div>' +
-              '</td></tr>';
-          }).join("");
-          var moreRow = items.length > 12
-            ? '<tr><td style="padding:6px 0;border-top:1px solid ' + P.rule + ';font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;">+' + (items.length - 12) + ' more</td></tr>'
-            : "";
-          return '<div style="margin-top:10px;border:1px solid ' + color + '40;border-left:3px solid ' + color + ';border-radius:0 10px 10px 0;background:rgba(0,0,0,0.20);padding:12px 16px;">' +
-            '<div style="display:block;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:' + color + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:6px;">' + escapeHtml(label) + ' · ' + items.length + '</div>' +
-            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + rows + moreRow + '</table>' +
-          '</div>';
-        };
-        var endedBlock = sectionFor("Ended this period (excluded)", P.label, notWatched.ended);
-        var pausedBlock = sectionFor("Paused or pending (excluded)", P.solar, notWatched.paused);
-        var awaitingBlock = sectionFor("Active but no delivery yet (watched, awaiting baseline)", P.cyan, notWatched.awaitingBaseline);
-        if (!endedBlock && !pausedBlock && !awaitingBlock) return "";
-        return '<tr><td style="padding:8px 36px 4px;">' +
-          '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">Not watched today</div>' +
-          '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;">Every active in-flight campaign is in the watch above. These are the ones the watcher skipped or is still warming up to a baseline for, with the reason. Use this to sanity-check the math behind the count.</div>' +
-          endedBlock + pausedBlock + awaitingBlock +
-          '</td></tr>';
-      })() +
 
       '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
       '<tr><td style="padding:18px 36px 30px;">' +
@@ -382,12 +335,15 @@ export default async function handler(req, res) {
   // against its baseline.
   var anomaliesByType = {};
   var watchedCount = 0;
-  // Collect skipped campaigns by reason so the "Not watched" block in
-  // the email can list them by name with the cause. Counts are kept
-  // alongside the lists for the diagnostic footer math.
-  var skippedNotActive = [];
-  var skippedEnded = [];
-  var awaitingBaseline = [];  // watched, but no anomaly possible yet
+  // Tightened filter per user feedback: 'watched' = active status +
+  // not ended + ACTUALLY DELIVERED (yesterday or in the 7-day baseline).
+  // An account often has 30+ rows reading status=active because Meta /
+  // TikTok / Google don't archive paused campaigns automatically — that
+  // inflates the count without those campaigns being meaningfully live.
+  // The Sanity Checks block surfaces ONLY paused-but-recently-active
+  // campaigns (the operationally interesting cases). Ended campaigns
+  // are filtered out completely — they never appear in any list.
+  var sanityChecks = [];
   var summarize = function(c, reason) {
     return {
       campaignName: String(c.campaignName || "(unnamed)"),
@@ -398,45 +354,38 @@ export default async function handler(req, res) {
     };
   };
   (yesterdayData.campaigns || []).forEach(function(c) {
-    if (!isLive(c)) {
-      // Don't list every paused/archived campaign — only those that
-      // delivered or had a baseline (i.e. were RECENTLY live). A
-      // long-archived campaign in the account is not interesting.
-      var hadActivity = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
-      var k0 = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
-      var b0 = baseByKey[k0] || null;
-      var baselineMat = b0 && ((parseFloat(b0.spend || 0) > 0) || (parseInt(b0.impressions || 0) > 0));
-      if (hadActivity || baselineMat) {
-        skippedNotActive.push(summarize(c, c.status || "paused"));
-      }
-      return;
-    }
-    // Ended campaigns (endDate in the past) are finishing on schedule,
-    // not monitored. /api/campaigns returns ACTIVE+SCHEDULED rows for
-    // every account, so "active status" alone counted dozens of dead
-    // rows ("48 monitored" when ~3 are live).
+    // Ended campaigns are filtered out entirely — never reported in
+    // any list. User explicitly flagged 2024/2025 rows showing up.
     var endRaw = c && c.endDate ? String(c.endDate) : "";
     if (endRaw) {
-      var em = Date.parse(endRaw);
-      if (isFinite(em) && em < Date.now()) {
-        skippedEnded.push(summarize(c, "ended " + c.endDate));
-        return;
+      var emEnd = Date.parse(endRaw);
+      if (isFinite(emEnd) && emEnd < Date.now()) return;
+    }
+
+    // Paused / archived / with-issues. Only surface the ones that had
+    // RECENT activity (delivered yesterday or in the 7-day baseline).
+    // A campaign that hasn't delivered in over a week AND isn't active
+    // is just dead-weight in the account — not interesting.
+    if (!isLive(c)) {
+      var hadActivity0 = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
+      var k0 = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+      var b0 = baseByKey[k0] || null;
+      var baselineMat0 = b0 && ((parseFloat(b0.spend || 0) > 0) || (parseInt(b0.impressions || 0) > 0));
+      if (hadActivity0 || baselineMat0) {
+        sanityChecks.push(summarize(c, "paused but had recent delivery — confirm intended"));
       }
+      return;
     }
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
     var b = baseByKey[k] || null;
-    // Watch ALL active, in-flight campaigns from now on — including
-    // brand-new ones that haven't delivered yet and have no baseline.
-    // (Previously these were dropped as 'dormant', which left the team
-    // looking at e.g. 16/18 with no visibility on the missing 2.) The
-    // 'awaiting baseline' list captures the ones with no delivery yet
-    // so the team can see them by name in the email.
+    // Watched = active + delivered yesterday OR has a material 7-day
+    // baseline. A truly dormant 'active' row (no spend, no impressions,
+    // no baseline) is not counted — that's what inflated the count
+    // to 39 when only 16-18 were genuinely live.
     var deliveredY = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
     var baseMaterial = b && ((parseFloat(b.spend || 0) > 0) || (parseInt(b.impressions || 0) > 0));
-    if (!deliveredY && !baseMaterial) {
-      awaitingBaseline.push(summarize(c, "no delivery yet, awaiting baseline"));
-    }
+    if (!deliveredY && !baseMaterial) return;
     watchedCount++;
 
     var rm = resultMetricFor(c);
@@ -471,11 +420,7 @@ export default async function handler(req, res) {
     anomaliesByType: anomaliesByType,
     totalAnomalies: totalAnomalies,
     totalCampaignsWatched: watchedCount,
-    notWatched: {
-      paused: skippedNotActive,
-      ended: skippedEnded,
-      awaitingBaseline: awaitingBaseline
-    }
+    sanityChecks: sanityChecks
   });
 
   if (dryRun) {
