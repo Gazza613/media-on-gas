@@ -222,7 +222,10 @@ export default function CommandCentre(props) {
       : p.indexOf("tiktok") >= 0 ? "TT" : p.indexOf("google") >= 0 ? "GA"
       : p.indexOf("youtube") >= 0 ? "YT" : (String(p).slice(0, 2).toUpperCase() || "AD");
   };
-  var R = function(n) { return "R" + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); };
+  // Always render Rands with exactly 2 decimal places (R19,395.20,
+  // not R19,395.2). The previous formatter dropped trailing zeros
+  // because only maximumFractionDigits was set.
+  var R = function(n) { return "R" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
   var N = function(n) { return Number(n || 0).toLocaleString(); };
 
   var card = function(label, value, accent, sub) {
