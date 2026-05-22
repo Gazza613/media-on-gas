@@ -344,7 +344,17 @@ export default function CommandCentre(props) {
               </div>
             </div>
             {!dimmed && <div style={{ marginTop: 12, maxWidth: c.pacing && c.pacing.mode === "adset" ? 520 : 360 }}>{pacingBar(c.pacing)}</div>}
-            {hasAlert && <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Alerts are hidden on dimmed (paused / ended) rows. A
+                paused campaign always pacing-behinds itself (the daily
+                target keeps ticking while spend froze), so surfacing
+                that alert under a PAUSED row was tautological noise
+                AND it visually broke the section flow: the next row
+                in PAUSED THIS PERIOD would appear below the alert
+                block of the previous row, looking unrelated to the
+                bucket. High-severity alerts already float to
+                ATTENTION via classify(), so a row that lands here
+                never has anything urgent to surface. */}
+            {hasAlert && !dimmed && <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
               {c.alerts.map(function(a, i) {
                 var col = sevColor(a.severity);
                 return <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: col + "18", border: "1px solid " + col + "55", borderLeft: "5px solid " + col, borderRadius: 12 }}>

@@ -37,28 +37,58 @@ var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
 var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
 // Internal accounts that the team runs ads on but that are NOT
 // "clients" in the agency-roster sense. GAS Agency is our own
-// in-house ad account (test creatives, agency-brand campaigns); it
-// pollutes the per-client Command Centre because it sits next to
-// real client sections with the same client-header treatment. Filter
-// out any campaign whose accountName matches one of these — the
-// rows still flow through /api/campaigns for any other surface, they
-// just don't get a client header here.
+// in-house ad account; in practice it hosts campaigns for real
+// clients (MTN MoMo POS lead-gen, Willowbrook Village leads, etc.)
+// using a "GAS | <CLIENT> |" naming convention. We route those
+// rows to their real client via the campaign name; anything in the
+// internal account that doesn't follow the convention falls back
+// to the account name and gets filtered out of the per-client list
+// at the clientList build step (totals still count it).
 var INTERNAL_CLIENTS = { "gas agency": true };
-function isInternalAccount(c) {
-  var raw = String(c.accountName || "").trim();
-  var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
-  return !!INTERNAL_CLIENTS[String(clean || raw).toLowerCase()];
+// "GAS | Client Name |" inside the campaign name. Captures everything
+// between that "GAS |" prefix and the next pipe as the client. Optional
+// leading token (e.g. "Apr26 | GAS | Willowbrook Village (Cycle2) |
+// Start...") is allowed before the GAS pipe.
+var GAS_PREFIX_CLIENT = /(?:^|\|\s*)GAS\s*\|\s*([^|]+?)\s*\|/i;
+function normalizeRoutedClient(raw) {
+  var s = String(raw || "").trim();
+  // Strip trailing parenthetical cycle tags like " (Cycle2)" so
+  // Apr/May iterations of the same client land in one bucket.
+  s = s.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+  // Collapse runs of whitespace.
+  s = s.replace(/\s+/g, " ");
+  return s;
 }
 function clientOf(c) {
   var raw = String(c.accountName || "").trim();
   var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
   var base = clean || raw || "Unknown";
+  var nm = String(c.campaignName || "");
+  // Internal-account routing. Campaigns sitting in GAS Agency for a
+  // real client carry "GAS | <Client> |" in the name (the team's
+  // naming convention). Surface them under that client instead of
+  // the account-name bucket, otherwise they'd disappear from the
+  // per-client view entirely when GAS Agency is filtered out below.
+  if (INTERNAL_CLIENTS[String(base).toLowerCase()]) {
+    var m = nm.match(GAS_PREFIX_CLIENT);
+    if (m && m[1]) {
+      var routed = normalizeRoutedClient(m[1]);
+      if (routed) {
+        if (POS_TAG.test(nm) && !POS_TAG.test(routed)) return routed + " POS";
+        return routed;
+      }
+    }
+    // No routing tag, leave as the internal account name; the
+    // clientList build step filters internal names out so the
+    // section doesn't render, but the campaign still counts toward
+    // CAMPAIGNS / LIVE NOW / SPEND totals.
+    return base;
+  }
   // POS sub-division split: if the campaign name carries POS and the
   // base client name doesn't already, route it to '{base} POS'. The
   // user explicitly wants MTN MoMo POS (lead gen) read as its own
   // client section, separate from MTN MoMo (which is mixed: clicks to
   // app store, landing-page traffic, follower/likes).
-  var nm = String(c.campaignName || "");
   if (POS_TAG.test(nm) && !POS_TAG.test(base)) {
     return base + " POS";
   }
@@ -245,11 +275,12 @@ export default async function handler(req, res) {
   // bust the cache by bumping the version when the response shape
   // changes. Bypass=1 query forces a recompute.
   var bypassCache = String(req.query.fresh || "").trim() === "1";
-  // Cache key bumped again (v4) so the previous payload that excluded
-  // GAS Agency from totals is evicted — internal accounts now count
-  // toward CAMPAIGNS / LIVE NOW / SPEND, they just don't get their
-  // own per-client section.
-  var cacheKey = "cc:v4:" + periodFrom + "..." + periodTo;
+  // Cache key bumped to v5 after adding the GAS-Agency campaign-name
+  // routing ("GAS | Willowbrook Village |..." surfaces under
+  // Willowbrook, "GAS | MTN MOMO POS |..." surfaces under MTN MoMo
+  // POS). Old payload bucketed them as "GAS Agency" which got
+  // dropped entirely.
+  var cacheKey = "cc:v5:" + periodFrom + "..." + periodTo;
   if (!bypassCache) {
     try {
       var cached = await redisGetJson(cacheKey);
