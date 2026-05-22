@@ -105,58 +105,123 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
   return { color: color, tag: tag, flags: flags, wins: wins, context: context };
 }
 
-// Senior-analyst per-campaign read of the week, synthesised from the
-// week's spend, CTR, CPC, and objective-aligned result vs the prior week.
+// Senior-analyst per-campaign read of the week. Now objective-aware:
+// the lead sentence matches the campaign's primary KPI (reach/CPM for
+// awareness, results/CPR for direct-response, profile visits for IG
+// followers, page-likes for FB followers, etc.). The follow-up
+// sentence covers the adjacent watched metrics — impressions, reach,
+// frequency, CPM, CTR, CPC, pacing — so a reader gets the full
+// performance picture without the lead burying the objective.
+//
+// The previous fixed-order version always led with CTR/CPC, which read
+// as if clicks were the win condition on reach-objective campaigns.
 function analystNote(thisWeek, lastWeek, rmY, ageDays) {
   var spendY = parseFloat(thisWeek.spend || 0);
+  var impsY = parseInt(thisWeek.impressions || 0);
+  var reachY = parseInt(thisWeek.reach || 0);
+  var freqY = parseFloat(thisWeek.frequency || 0);
   var clicksY = parseInt(thisWeek.clicks || 0);
   var ctrY = parseFloat(thisWeek.ctr || 0);
   var cpcY = clicksY > 0 ? spendY / clicksY : null;
+  var cpmY = impsY > 0 ? (spendY / impsY * 1000) : null;
   var resY = rmY.value;
   var isResultObj = rmY.kind === "Leads" || rmY.kind === "Clicks to App Store" || rmY.kind === "Follows + Likes";
+  var isAwareness = isAwarenessObjective(thisWeek);
   var cprY = resY > 0 ? spendY / resY : null;
 
+  var impsB = lastWeek ? parseInt(lastWeek.impressions || 0) : 0;
+  var reachB = lastWeek ? parseInt(lastWeek.reach || 0) : 0;
   var ctrB = lastWeek ? parseFloat(lastWeek.ctr || 0) : 0;
   var clicksB = lastWeek ? parseInt(lastWeek.clicks || 0) : 0;
   var spendB = lastWeek ? parseFloat(lastWeek.spend || 0) : 0;
   var cpcB = clicksB > 0 ? spendB / clicksB : null;
+  var cpmB = impsB > 0 ? (spendB / impsB * 1000) : null;
+  var resB = lastWeek ? (resultMetricFor(lastWeek).value) : 0;
+  var cprB = resB > 0 && spendB > 0 ? spendB / resB : null;
   var ctrDelta = (ctrY > 0 && ctrB > 0) ? ((ctrY - ctrB) / ctrB * 100) : null;
   var cpcDelta = (cpcY !== null && cpcB !== null && cpcB > 0) ? ((cpcY - cpcB) / cpcB * 100) : null;
+  var cpmDelta = (cpmY !== null && cpmB !== null && cpmB > 0) ? ((cpmY - cpmB) / cpmB * 100) : null;
+  var reachDelta = (reachY > 0 && reachB > 0) ? ((reachY - reachB) / reachB * 100) : null;
+  var resDelta = (resY > 0 && resB > 0) ? ((resY - resB) / resB * 100) : null;
+  var cprDelta = (cprY !== null && cprB !== null && cprB > 0) ? ((cprY - cprB) / cprB * 100) : null;
+
+  var fmtDelta = function(d, label) {
+    if (d === null || !isFinite(d)) return "";
+    var sign = d >= 0 ? "up " : "down ";
+    return " (" + sign + Math.abs(d).toFixed(0) + "% wow " + label + ")";
+  };
 
   if (ageDays !== null && ageDays < 7) {
-    return "Week 1 of delivery, insufficient history for a defensible read. CTR " + ctrY.toFixed(2) + "% and CPC " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " are the early-tell signals to watch as the auction settles.";
+    var earlyKpi = isAwareness ? "CPM " + (cpmY !== null ? fmtR(cpmY) : "n/a") + ", frequency " + freqY.toFixed(2) + "x" : (isResultObj && cprY !== null ? rmY.costLabel + " " + fmtR(cprY) : "CTR " + ctrY.toFixed(2) + "% on " + fmtNum(clicksY) + " clicks");
+    return "Week 1 of delivery, insufficient history for a defensible read. " + earlyKpi + " is the early-tell signal as the auction settles. Reach " + fmtNum(reachY) + " · impressions " + fmtNum(impsY) + " · spend " + fmtR(spendY) + " so far.";
   }
 
+  // Result-objective break: real result-objective campaigns earning
+  // clicks but converting zero is the highest-severity signal,
+  // overrides objective-aware lead.
   if (isResultObj && resY === 0 && clicksY >= 200) {
     var postClick = rmY.kind === "Leads" ? "lead form (fields, friction, validation)"
       : rmY.kind === "Clicks to App Store" ? "app store listing (ratings, screenshots, description)"
       : "follow flow (profile content quality, first-impression load)";
-    return fmtNum(clicksY) + " clicks but zero " + rmY.kind.toLowerCase() + " for the week. The creative and targeting are earning attention; the breakdown is post-click. Audit " + postClick + " before allocating another week of spend.";
+    return fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR but zero " + rmY.kind.toLowerCase() + " for the week — the creative and targeting are earning attention, the breakdown is post-click. Audit " + postClick + " before allocating another week. Spend " + fmtR(spendY) + ", reach " + fmtNum(reachY) + " at " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + ".";
   }
 
-  if (ctrDelta !== null && cpcDelta !== null && ctrDelta >= 5 && cpcDelta >= 20) {
-    return "CTR held at " + ctrY.toFixed(2) + "% (up " + ctrDelta.toFixed(0) + "% wow) but CPC climbed " + cpcDelta.toFixed(0) + "% to " + fmtR(cpcY) + ". Creative is still winning attention, the auction is just more crowded. Layer lookalike expansion or shift to Advantage+ placements to cheapen inventory without touching what works.";
+  // ===== Awareness lead =====
+  // For reach/CPM-led campaigns the read should LEAD with reach and
+  // CPM efficiency, not CTR. Clicks become a creative-resonance
+  // supporting signal.
+  if (isAwareness) {
+    var head;
+    if (reachDelta !== null && cpmDelta !== null) {
+      var reachStr = reachY > 0 ? fmtNum(reachY) + " unique reached" + fmtDelta(reachDelta, "reach") : "delivery building";
+      var cpmStr = cpmY !== null ? fmtR(cpmY) + " CPM" + fmtDelta(cpmDelta, "CPM") : "CPM n/a";
+      head = reachStr + " at " + cpmStr + ".";
+    } else {
+      head = fmtNum(reachY) + " unique reached at " + (cpmY !== null ? fmtR(cpmY) : "n/a") + " CPM, frequency " + freqY.toFixed(2) + "x.";
+    }
+    var supporting;
+    if (freqY >= 3.5) supporting = " Frequency " + freqY.toFixed(2) + "x is into saturation — broader targeting or new creative is the lever to keep CPMs honest.";
+    else if (cpmDelta !== null && cpmDelta >= 20) supporting = " CPM up sharply against a flat reach signature suggests auction crowding; pacing intact, watch CPM trajectory next week.";
+    else if (cpmDelta !== null && cpmDelta <= -15) supporting = " CPMs compressing while reach extends — pour 15-20% more budget while the efficiency window is open.";
+    else supporting = " Delivery profile steady — frequency " + freqY.toFixed(2) + "x within healthy band, no creative or bid change indicated.";
+    var ctrSecondary = ctrY > 0 ? " Creative drew " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR — useful resonance signal, though clicks are not the primary objective for this brief." : "";
+    return head + supporting + ctrSecondary;
   }
-  if (ctrDelta !== null && cpcDelta !== null && ctrDelta <= -10 && cpcDelta >= 10) {
-    return "Fatigue signature on the week: CTR down " + Math.abs(ctrDelta).toFixed(0) + "% to " + ctrY.toFixed(2) + "% while CPC climbed " + cpcDelta.toFixed(0) + "% to " + fmtR(cpcY) + ". Rotate creative going into next week before CPC compounds further.";
-  }
-  if (ctrDelta !== null && cpcDelta !== null && ctrDelta >= 10 && cpcDelta <= -10) {
-    return "Both efficiency vectors moving the right way: CTR up " + ctrDelta.toFixed(0) + "% to " + ctrY.toFixed(2) + "%, CPC down " + Math.abs(cpcDelta).toFixed(0) + "% to " + fmtR(cpcY) + ". This is the scale signal, lift the weekly budget 15-20% and let the algorithm extend the win.";
-  }
-  if (ctrDelta !== null && ctrDelta <= -20) {
-    return "CTR fell " + Math.abs(ctrDelta).toFixed(0) + "% wow to " + ctrY.toFixed(2) + "%. Top-of-funnel engagement is softening, which compresses downstream economics. Creative refresh is the first lever, broader targeting second.";
-  }
-  if (cpcDelta !== null && cpcDelta >= 25 && (ctrDelta === null || ctrDelta > -10)) {
-    return "CPC at " + fmtR(cpcY) + " is " + cpcDelta.toFixed(0) + "% above last week while CTR held at " + ctrY.toFixed(2) + "%. Creative is still landing, the auction is just more expensive. Hold for next 7 days to confirm sustained drift before rebidding.";
-  }
+
+  // ===== Direct-response lead =====
+  // Result-objective campaigns lead with results + cost-per-result,
+  // CTR/CPC are supporting context.
   if (isResultObj && resY > 0 && cprY !== null) {
     var resWord = rmY.kind.replace(/s$/, "").toLowerCase();
-    return fmtNum(resY) + " " + rmY.kind.toLowerCase() + " for the week at " + fmtR(cprY) + " per " + resWord + ", driven by " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR and " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Click-to-" + resWord + " conversion " + (clicksY > 0 ? (resY / clicksY * 100).toFixed(2) : "0.00") + "%, delivery profile steady.";
+    var lead = fmtNum(resY) + " " + rmY.kind.toLowerCase() + fmtDelta(resDelta, "results") + " at " + fmtR(cprY) + " " + rmY.costLabel.toLowerCase() + fmtDelta(cprDelta !== null ? -cprDelta : null, "efficiency");
+    var supp = " driven by " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR and " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + " · frequency " + freqY.toFixed(2) + "x.";
+    var verdict = "";
+    if (cprDelta !== null && cprDelta <= -15 && resDelta !== null && resDelta >= 15) verdict = " Scale signal: efficiency improving AND volume up. Lift budget 15-20% next week.";
+    else if (cprDelta !== null && cprDelta >= 25) verdict = " " + rmY.costLabel + " climbing materially — fatigue check on the creative is the first lever before another week's spend.";
+    else if (freqY >= 3) verdict = " Frequency " + freqY.toFixed(2) + "x is elevated — refresh creative before " + rmY.costLabel.toLowerCase() + " compounds.";
+    return lead + supp + verdict;
+  }
+
+  // ===== Mixed / engagement / fallback lead =====
+  // Used when objective isn't clearly awareness or pure-response (e.g.
+  // engagement objectives where clicks/CTR are the optimisation metric).
+  // Lead with CTR + CPC (existing behaviour), then cover delivery.
+  if (ctrDelta !== null && cpcDelta !== null && ctrDelta <= -10 && cpcDelta >= 10) {
+    return "Fatigue signature on the week — CTR down " + Math.abs(ctrDelta).toFixed(0) + "% to " + ctrY.toFixed(2) + "% while CPC climbed " + cpcDelta.toFixed(0) + "% to " + fmtR(cpcY) + ". Rotate creative before CPC compounds. Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "") + " · frequency " + freqY.toFixed(2) + "x.";
+  }
+  if (ctrDelta !== null && cpcDelta !== null && ctrDelta >= 10 && cpcDelta <= -10) {
+    return "Scale signal — CTR up " + ctrDelta.toFixed(0) + "% to " + ctrY.toFixed(2) + "%, CPC down " + Math.abs(cpcDelta).toFixed(0) + "% to " + fmtR(cpcY) + ". Lift budget 15-20% to extend the win. Spend " + fmtR(spendY) + " · reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "") + ".";
+  }
+  if (ctrDelta !== null && ctrDelta <= -20) {
+    return "CTR fell " + Math.abs(ctrDelta).toFixed(0) + "% wow to " + ctrY.toFixed(2) + "% — top-of-funnel engagement is softening. Creative refresh first, broader targeting second. Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "") + " · frequency " + freqY.toFixed(2) + "x.";
+  }
+  if (cpcDelta !== null && cpcDelta >= 25 && (ctrDelta === null || ctrDelta > -10)) {
+    return "CPC at " + fmtR(cpcY) + fmtDelta(cpcDelta, "CPC") + " while CTR held at " + ctrY.toFixed(2) + "% — creative is still landing, the auction is just more expensive. Hold for next 7 days to confirm sustained drift. Spend " + fmtR(spendY) + " · reach " + fmtNum(reachY) + ".";
   }
   if (clicksY > 0 && ctrY > 0) {
-    return ctrY.toFixed(2) + "% CTR on " + fmtNum(clicksY) + " clicks at " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC for the week. Signals sit within band of last week, no creative or bid change indicated.";
+    return ctrY.toFixed(2) + "% CTR on " + fmtNum(clicksY) + " clicks at " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC for the week — signals within band, no change indicated. Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "") + " · frequency " + freqY.toFixed(2) + "x.";
   }
-  return "Limited delivery this week, sample too thin to derive a confident read.";
+  return "Limited delivery this week — spend " + fmtR(spendY) + ", reach " + fmtNum(reachY) + ", impressions " + fmtNum(impsY) + ". Sample too thin to derive a confident read.";
 }
 
 function buildCampaignRows(thisWeekCampaigns, lastWeekCampaigns, adsByCampaign) {

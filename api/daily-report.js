@@ -5,7 +5,7 @@ import {
   ORIGIN, RECIPIENT_LIST, escapeHtml, pad2, ymd, fmtR, fmtNum, fmtDate, sastNow,
   redisSetIfAbsent,
   P, DISP_COLORS,
-  resultMetricFor,
+  resultMetricFor, isAwarenessObjective,
   adsManagerUrl,
   ANOMALY_DEFS, detectAnomalies,
   fetchCampaigns, fetchAdsByCampaign
@@ -36,7 +36,77 @@ function buildHtml(opts) {
   var totalAnomalies = opts.totalAnomalies || 0;
   var totalCampaignsWatched = opts.totalCampaignsWatched || 0;
   var sanityChecks = opts.sanityChecks || [];
+  var perClientSnap = opts.perClientSnap || {};
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+
+  // Per-client objective-aware snapshot. Renders one block per client
+  // with their primary KPI's status leading, then adjacent metrics
+  // (reach, impressions, frequency, CPM, CTR, CPC, results, CPR)
+  // covering the full performance picture. Awareness clients lead
+  // with reach/CPM; result-objective clients lead with the result +
+  // cost-per-result; engagement clients lead with CTR + CPC.
+  var perClientBlock = (function() {
+    var clients = Object.keys(perClientSnap);
+    if (clients.length === 0) return "";
+    clients.sort();
+    var fmtPct = function(p) { return (parseFloat(p) || 0).toFixed(2) + "%"; };
+    var deltaWord = function(d) {
+      if (d === null || !isFinite(d)) return "";
+      if (Math.abs(d) < 5) return " · steady vs 7d avg";
+      return " · " + (d >= 0 ? "up" : "down") + " " + Math.abs(d).toFixed(0) + "% vs 7d avg";
+    };
+    var clientBlocks = clients.map(function(name) {
+      var families = perClientSnap[name];
+      var lines = Object.keys(families).map(function(fam) {
+        var s = families[fam];
+        var dailyB = function(v) { return (v || 0) / 7; };
+        var ctr = s.impressions > 0 ? (s.clicks / s.impressions * 100) : 0;
+        var cpc = s.clicks > 0 ? (s.spend / s.clicks) : null;
+        var cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : null;
+        var freq = s.freqWeightSum > 0 ? (s.freqSum / s.freqWeightSum) : 0;
+        var cpr = s.results > 0 ? (s.spend / s.results) : null;
+        // Day-over-7d-avg deltas where the baseline is material.
+        var reachDelta = dailyB(s.reachB) > 0 ? ((s.reach - dailyB(s.reachB)) / dailyB(s.reachB) * 100) : null;
+        var resultsDelta = dailyB(s.resultsB) > 0 ? ((s.results - dailyB(s.resultsB)) / dailyB(s.resultsB) * 100) : null;
+        var spendDelta = dailyB(s.spendB) > 0 ? ((s.spend - dailyB(s.spendB)) / dailyB(s.spendB) * 100) : null;
+
+        var leadHtml = "";
+        var adjacentHtml = "";
+        if (s.awareness) {
+          // Lead with reach + CPM
+          leadHtml = '<strong style="color:' + P.cyan + ';">Reach ' + fmtNum(s.reach) + '</strong> at ' +
+            (cpm !== null ? fmtR(cpm) + ' CPM' : 'CPM n/a') + ' · freq ' + freq.toFixed(2) + 'x' + escapeHtml(deltaWord(reachDelta));
+          adjacentHtml = fmtNum(s.impressions) + ' impressions · ' + fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
+        } else if (s.kind === "Leads" || s.kind === "Clicks to App Store" || s.kind === "Follows + Likes") {
+          // Lead with results + cost-per-result
+          var resWord = String(s.kind || "results").toLowerCase();
+          leadHtml = '<strong style="color:' + P.mint + ';">' + fmtNum(s.results) + ' ' + escapeHtml(resWord) + '</strong>' +
+            (cpr !== null ? ' at ' + fmtR(cpr) + ' ' + escapeHtml(String(s.costLabel || "cost per result").toLowerCase()) : '') +
+            escapeHtml(deltaWord(resultsDelta));
+          adjacentHtml = fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC') + ' · reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
+        } else {
+          // Engagement / other: lead with CTR + CPC
+          leadHtml = '<strong style="color:' + P.solar + ';">' + fmtPct(ctr) + ' CTR</strong> on ' + fmtNum(s.clicks) + ' clicks at ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC');
+          adjacentHtml = 'Reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
+        }
+        var familyLabel = s.awareness ? "Awareness · reach-led" : (s.kind || "Engagement");
+        return '<tr><td style="padding:8px 0;font-family:Manrope,Helvetica,Arial,sans-serif;border-top:1px solid ' + P.rule + ';">' +
+          '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:1.5px;text-transform:uppercase;font-weight:800;margin-bottom:4px;">' + escapeHtml(familyLabel) + ' · ' + s.camps + ' campaign' + (s.camps === 1 ? '' : 's') + '</div>' +
+          '<div style="font-size:13px;color:' + P.txt + ';line-height:1.5;margin-bottom:3px;">' + leadHtml + '</div>' +
+          '<div style="font-size:11px;color:' + P.label + ';line-height:1.6;">' + adjacentHtml + '</div>' +
+          '</td></tr>';
+      }).join("");
+      return '<div style="margin-top:10px;border:1px solid ' + P.rule + ';border-left:3px solid ' + P.cyan + ';border-radius:0 10px 10px 0;background:rgba(0,0,0,0.20);padding:12px 16px;">' +
+        '<div style="font-size:12px;font-weight:900;letter-spacing:1.5px;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:4px;">' + escapeHtml(name) + '</div>' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + lines + '</table>' +
+      '</div>';
+    }).join("");
+    return '<tr><td style="padding:18px 36px 0;">' +
+      '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">Yesterday by client</div>' +
+      '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:6px;">Each client led with their primary KPI status, then adjacent metrics (reach, impressions, frequency, CPM, CTR, CPC, results, CPR) for the full picture. Deltas are yesterday vs the trailing 7-day daily average.</div>' +
+      clientBlocks +
+      '</td></tr>';
+  })();
 
   // Severity counts for the totals strip
   var critCount = 0, highCount = 0, medCount = 0;
@@ -210,6 +280,7 @@ function buildHtml(opts) {
       '<tr><td style="padding:0 36px;"><div style="height:1px;background:linear-gradient(90deg,transparent,' + P.ember + ',transparent);"></div></td></tr>' +
 
       '<tr><td style="padding:24px 36px 6px;">' + totalsStrip + '</td></tr>' +
+      perClientBlock +
 
       anomaliesBlock +
 
@@ -335,6 +406,7 @@ export default async function handler(req, res) {
   // against its baseline.
   var anomaliesByType = {};
   var watchedCount = 0;
+  var perClientSnap = {}; // client → family → aggregate metrics for the snapshot block
   // Tightened filter per user feedback: 'watched' = active status +
   // not ended + ACTUALLY DELIVERED (yesterday or in the 7-day baseline).
   // An account often has 30+ rows reading status=active because Meta /
@@ -389,6 +461,47 @@ export default async function handler(req, res) {
     watchedCount++;
 
     var rm = resultMetricFor(c);
+
+    // Per-client snapshot accumulation: roll yesterday's delivery into
+    // a per-client + per-objective-family bucket so the email can lead
+    // each client with their primary KPI's status, then cover adjacent
+    // metrics (impressions, reach, frequency, CPM, CTR, CPC, results,
+    // CPR). Awareness campaigns roll into the 'awareness' family;
+    // result-objective campaigns roll into their result family.
+    var clientName = String(c.accountName || "Unknown").replace(/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i, "").replace(/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i, "").trim() || "Unknown";
+    var awareness = isAwarenessObjective(c);
+    var family = awareness ? "awareness" : (rm.kind || "Other");
+    if (!perClientSnap[clientName]) perClientSnap[clientName] = {};
+    if (!perClientSnap[clientName][family]) {
+      perClientSnap[clientName][family] = {
+        family: family,
+        kind: rm.kind,
+        costLabel: rm.costLabel,
+        awareness: awareness,
+        camps: 0, spend: 0, impressions: 0, reach: 0, clicks: 0, results: 0,
+        spendB: 0, impressionsB: 0, reachB: 0, clicksB: 0, resultsB: 0,
+        freqSum: 0, freqWeightSum: 0
+      };
+    }
+    var snap = perClientSnap[clientName][family];
+    snap.camps += 1;
+    snap.spend += parseFloat(c.spend || 0);
+    snap.impressions += parseInt(c.impressions || 0);
+    snap.reach += parseInt(c.reach || 0);
+    snap.clicks += parseInt(c.clicks || 0);
+    snap.results += parseFloat(rm.value || 0);
+    if (parseFloat(c.frequency || 0) > 0 && parseInt(c.impressions || 0) > 0) {
+      snap.freqSum += parseFloat(c.frequency) * parseInt(c.impressions);
+      snap.freqWeightSum += parseInt(c.impressions);
+    }
+    if (b) {
+      snap.spendB += parseFloat(b.spend || 0);
+      snap.impressionsB += parseInt(b.impressions || 0);
+      snap.reachB += parseInt(b.reach || 0);
+      snap.clicksB += parseInt(b.clicks || 0);
+      snap.resultsB += parseFloat((resultMetricFor(b).value) || 0);
+    }
+
     var anomalies = detectAnomalies(c, b, rm);
     if (anomalies.length === 0) return;
 
@@ -420,7 +533,8 @@ export default async function handler(req, res) {
     anomaliesByType: anomaliesByType,
     totalAnomalies: totalAnomalies,
     totalCampaignsWatched: watchedCount,
-    sanityChecks: sanityChecks
+    sanityChecks: sanityChecks,
+    perClientSnap: perClientSnap
   });
 
   if (dryRun) {
