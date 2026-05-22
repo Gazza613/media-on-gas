@@ -13,6 +13,25 @@ import React, { useState, useEffect, useRef } from "react";
 // every tab switch, which felt heavy when bouncing between Summary
 // and Optimise during triage.
 var ccPersistedCache = { data: null, dateFrom: "", dateTo: "" };
+// Separate cache for the comparison-window payload (delta chips on the
+// summary tiles). Keyed on the comparison range, NOT the current range,
+// so picking the same current range twice can still hit on the compare
+// side too.
+var ccCompareCache = { data: null, dateFrom: "", dateTo: "" };
+// Same-length window immediately before [from, to]. Used to compute
+// period-over-period deltas. May 1–22 (22 days) -> Apr 9–30.
+function previousPeriodWindow(from, to) {
+  if (!from || !to) return null;
+  var fromMs = Date.parse(from + "T00:00:00Z");
+  var toMs = Date.parse(to + "T00:00:00Z");
+  if (!isFinite(fromMs) || !isFinite(toMs) || toMs < fromMs) return null;
+  var DAY = 86400000;
+  var lenDays = Math.round((toMs - fromMs) / DAY) + 1;
+  var prevToMs = fromMs - DAY;
+  var prevFromMs = prevToMs - (lenDays - 1) * DAY;
+  var iso = function(ms) { return new Date(ms).toISOString().slice(0, 10); };
+  return { from: iso(prevFromMs), to: iso(prevToMs) };
+}
 
 export default function CommandCentre(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, SH = props.SH;
@@ -32,6 +51,14 @@ export default function CommandCentre(props) {
     ? { loading: false, error: "", data: ccPersistedCache.data }
     : { loading: true, error: "", data: null };
   var st = useState(initialState), s = st[0], setS = st[1];
+  // Previous-period comparison payload. Lazy-hydrated from the module
+  // cache for the matching previous-period window, then refreshed in
+  // a background fetch (see useEffect below). Drives the delta chips
+  // on the summary tiles (▲ / ▼ %). Null = no comparison rendered.
+  var prevWin0 = previousPeriodWindow(dateFrom, dateTo);
+  var cmpInitial = (prevWin0 && ccCompareCache.data && ccCompareCache.dateFrom === prevWin0.from && ccCompareCache.dateTo === prevWin0.to)
+    ? ccCompareCache.data : null;
+  var cs0 = useState(cmpInitial), compareData = cs0[0], setCompareData = cs0[1];
   // Filter mode: "all" shows every in-flight campaign for situational
   // load/delivery awareness; "attention" collapses to only the rows
   // that have one or more alerts, so end-of-day triage is fast. Default
@@ -200,6 +227,40 @@ export default function CommandCentre(props) {
     };
   }, [session, dateFrom, dateTo]);
 
+  // Background fetch for the previous-period payload. Runs in parallel
+  // with the main fetch above (no await chain) so the current-period
+  // tiles paint on time even when the comparison call is slow. The
+  // comparison window is the same length immediately before the
+  // selected one. Server-side response cache (cc:v7:<from>...<to>)
+  // typically holds the previous month's data warm, so the second
+  // call is usually instant. Silent on failure — deltas just don't
+  // render.
+  useEffect(function() {
+    if (!session) return;
+    var win = previousPeriodWindow(dateFrom, dateTo);
+    if (!win) { setCompareData(null); return; }
+    if (ccCompareCache.data && ccCompareCache.dateFrom === win.from && ccCompareCache.dateTo === win.to) {
+      setCompareData(ccCompareCache.data);
+      return;
+    }
+    var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    fetch(apiBase + "/api/command-centre?from=" + encodeURIComponent(win.from) + "&to=" + encodeURIComponent(win.to), {
+      headers: { "x-session-token": session || "" },
+      signal: ctl ? ctl.signal : undefined
+    }).then(function(r) {
+      return r.text().then(function(t) {
+        try { return t ? JSON.parse(t) : null; } catch (_) { return null; }
+      });
+    }).then(function(d) {
+      if (!aliveRef.current) return;
+      if (d && d.ok) {
+        ccCompareCache = { data: d, dateFrom: win.from, dateTo: win.to };
+        setCompareData(d);
+      }
+    }).catch(function() { /* silent — deltas just don't render */ });
+    return function() { if (ctl) { try { ctl.abort(); } catch (_) {} } };
+  }, [session, dateFrom, dateTo, apiBase]);
+
   var sevColor = function(sev) {
     return sev === "high" ? (P.critical || "#ef4444")
       : sev === "medium" ? (P.warning || "#fbbf24")
@@ -228,12 +289,34 @@ export default function CommandCentre(props) {
   var R = function(n) { return "R" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
   var N = function(n) { return Number(n || 0).toLocaleString(); };
 
-  var card = function(label, value, accent, sub) {
+  var card = function(label, value, accent, sub, delta) {
     return <Glass accent={accent} hv={true} st={{ padding: 16, textAlign: "center", flex: 1, minWidth: 130 }}>
       <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", fontFamily: fm, letterSpacing: 2, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 900, color: accent, fontFamily: fm }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 900, color: accent, fontFamily: fm, display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6 }}>
+        <span>{value}</span>
+        {delta}
+      </div>
       {sub && <div style={{ fontSize: 9, color: P.caption, fontFamily: fm, marginTop: 4 }}>{sub}</div>}
     </Glass>;
+  };
+  // Delta chip for period-over-period comparison on the summary
+  // tiles. Returns null when the comparison isn't meaningful (no
+  // previous data, division by zero, or the change is below 1% noise).
+  // lowerIsBetter inverts the color: dropping CPL is good, dropping
+  // SPEND is just a fact (neutral colour either way). For now only
+  // used on count + spend tiles where "up = bigger" reads as positive.
+  var deltaChip = function(current, previous, lowerIsBetter) {
+    var c = Number(current);
+    var p = Number(previous);
+    if (!isFinite(c) || !isFinite(p) || p === 0) return null;
+    var pct = (c - p) / p * 100;
+    if (Math.abs(pct) < 1) return null; // too small to chip, hide
+    var up = pct > 0;
+    var positive = lowerIsBetter ? !up : up;
+    var col = positive ? (P.mint || "#34D399") : (P.critical || "#ef4444");
+    return <span style={{ fontSize: 10, fontWeight: 800, color: col, letterSpacing: 0.5 }}>
+      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
+    </span>;
   };
 
   var statusChip = function(c) {
@@ -289,10 +372,22 @@ export default function CommandCentre(props) {
     <SH icon={Ic.person ? Ic.person(P.solar, 20) : (Ic.radar ? Ic.radar(P.solar, 20) : Ic.flag(P.solar, 20))} title="Optimisation Centre"
       sub="Internal. Live load, delivery, pacing and what needs a human now, month to date." accent={P.solar} />
 
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 18px", gap: 10, flexWrap: "wrap" }}>
-      <div style={{ fontSize: 11, color: P.label, fontFamily: fm }}>
-        {s.data ? ("Period " + s.data.period.from + " to " + s.data.period.to + " · generated " + new Date(s.data.generatedAt).toLocaleString()) : ""}
-      </div>
+    {/* Scope strip — kills the "which numbers are window-scoped vs
+        as-of-now" confusion that was the biggest source of friction
+        on this page. World-class agency tools always label this
+        explicitly. Three labels, each in P.txt for the verb + P.label
+        for the value, so the eye can scan in one pass. */}
+    {s.data && <div style={{ display: "flex", flexWrap: "wrap", gap: 12, rowGap: 6, margin: "10px 0 14px", padding: "10px 14px", background: "rgba(0,0,0,0.25)", border: "1px solid " + P.rule, borderRadius: 8, fontSize: 11, fontFamily: fm, lineHeight: 1.5 }}>
+      <span><span style={{ color: P.txt, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", fontSize: 9, marginRight: 6 }}>Performance metrics</span><span style={{ color: P.label }}>{s.data.period.from} → {s.data.period.to}</span></span>
+      <span style={{ color: P.rule }}>·</span>
+      <span><span style={{ color: P.txt, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", fontSize: 9, marginRight: 6 }}>Live status &amp; flags</span><span style={{ color: P.label }}>as of right now</span></span>
+      <span style={{ color: P.rule }}>·</span>
+      <span><span style={{ color: P.txt, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", fontSize: 9, marginRight: 6 }}>Trend alerts</span><span style={{ color: P.label }}>trailing 8-day baseline</span></span>
+      <span style={{ color: P.rule, marginLeft: "auto" }}>·</span>
+      <span style={{ color: P.caption, fontSize: 10 }}>Generated {new Date(s.data.generatedAt).toLocaleString()}</span>
+    </div>}
+
+    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", margin: "0 0 18px", gap: 10, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {/* All / Needs attention toggle so the operator can collapse
             healthy rows when triaging. Each pill carries a live count so
@@ -358,12 +453,24 @@ export default function CommandCentre(props) {
           sum = { campaigns: camps, live: live, needsAttention: attn, alerts: alerts, spendToday: spendT, spendPeriod: spendP };
           label = platformFilter + " · in flight this month";
         }
+        // Delta chips are computed against the previous-period payload
+        // (compareData). Suppressed when a platform filter is active —
+        // the comparison data is unscoped and showing a cross-platform
+        // delta next to a single-platform total would be misleading.
+        var prevWin = previousPeriodWindow(dateFrom, dateTo);
+        var cmp = (compareData && compareData.summary && (!platformFilter || platformFilter === "all")) ? compareData.summary : null;
+        var dCamp = cmp ? deltaChip(sum.campaigns, cmp.campaigns, false) : null;
+        var dLive = cmp ? deltaChip(sum.live, cmp.live, false) : null;
+        var dAttn = cmp ? deltaChip(sum.needsAttention, cmp.needsAttention, true) : null;
+        var dSpT = cmp ? deltaChip(sum.spendToday, cmp.spendToday, false) : null;
+        var dSpP = cmp ? deltaChip(sum.spendPeriod, cmp.spendPeriod, false) : null;
+        var compareSub = cmp && prevWin ? "vs " + prevWin.from + " → " + prevWin.to : "";
         return <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
-          {card("CAMPAIGNS", N(sum.campaigns), P.cyan, label)}
-          {card("LIVE NOW", N(sum.live), P.mint)}
-          {card("NEEDS ATTENTION", N(sum.needsAttention), sum.needsAttention > 0 ? (P.critical || "#ef4444") : P.mint, N(sum.alerts) + " alerts")}
-          {card("SPEND TODAY", R(sum.spendToday), P.solar)}
-          {card("SPEND MTD", R(sum.spendPeriod), P.ember)}
+          {card("CAMPAIGNS", N(sum.campaigns), P.cyan, compareSub || label, dCamp)}
+          {card("LIVE NOW", N(sum.live), P.mint, compareSub, dLive)}
+          {card("NEEDS ATTENTION", N(sum.needsAttention), sum.needsAttention > 0 ? (P.critical || "#ef4444") : P.mint, compareSub || (N(sum.alerts) + " alerts"), dAttn)}
+          {card("SPEND TODAY", R(sum.spendToday), P.solar, compareSub, dSpT)}
+          {card("SPEND MTD", R(sum.spendPeriod), P.ember, compareSub, dSpP)}
         </div>;
       })()}
 
