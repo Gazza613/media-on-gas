@@ -2038,7 +2038,10 @@ function CampaignAuditModal(props){
       })
       .catch(function(){});
   };
-  useEffect(function(){ if(slaPanelOpen[0]&&props.isSuperadmin){loadSlaLog();loadSlaBaseline();} },[slaPanelOpen[0]]);
+  // Re-load SLA data when the user opens the SLA Nudges tab. Kept the
+  // old slaPanelOpen trigger as a fallback for any code still toggling
+  // it; the canonical trigger now is view==="sla".
+  useEffect(function(){ if((view[0]==="sla"||slaPanelOpen[0])&&props.isSuperadmin){loadSlaLog();loadSlaBaseline();} },[view[0],slaPanelOpen[0]]);
 
   // Diagnostic state for the nudge cron — calls /api/nudge-cron with
   // dryRun=1&verbose=1 so the team can see exactly which clients the
@@ -2313,13 +2316,15 @@ function CampaignAuditModal(props){
           <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage Audit</button>
           {props.isSuperadmin&&<button onClick={function(){view[1]("users");}} style={{background:view[0]==="users"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="users"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="users"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Team Access</button>}
           {props.isSuperadmin&&<button onClick={function(){view[1]("kpi");}} style={{background:view[0]==="kpi"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="kpi"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="kpi"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>KPI Profiles</button>}
+          {props.isSuperadmin&&<button onClick={function(){view[1]("sla");}} style={{background:view[0]==="sla"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="sla"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="sla"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>SLA Nudges</button>}
         </div>
         <div style={{display:"flex",gap:8}}>
           {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
           {view[0]==="audit"&&<button onClick={exportCsv} disabled={filtered.length===0} style={{background:filtered.length===0?"transparent":gEmber,border:"1px solid "+(filtered.length===0?P.rule:"transparent"),borderRadius:10,padding:"8px 14px",color:filtered.length===0?P.caption:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:filtered.length===0?"not-allowed":"pointer",letterSpacing:1.5}}>CSV</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(false);}} disabled={recLoading[0]||recSending[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recLoading[0]?"RUNNING...":"RE-RUN"}</button>}
           {view[0]==="reconcile"&&<button onClick={function(){loadReconcile(true);}} disabled={recLoading[0]||recSending[0]} title="Run check + email Gary if any deltas found" style={{background:recSending[0]?"#555":gEmber,border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:(recLoading[0]||recSending[0])?"wait":"pointer",letterSpacing:1.5}}>{recSending[0]?"SENDING...":"CHECK + ALERT"}</button>}
-          {view[0]==="reconcile"&&props.isSuperadmin&&<button onClick={function(e){e.preventDefault();e.stopPropagation();slaPanelOpen[1](function(v){return !v;});slaErr[1]("");slaResult[1](null);}} title="Reset the SLA nudge baseline so historic gaps stop firing daily reminder emails to AMs" style={{background:slaPanelOpen[0]?P.solar+"20":"transparent",border:"1px solid "+P.solar+"60",borderRadius:10,padding:"8px 14px",color:P.solar,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>SLA NUDGES</button>}
+          {/* SLA NUDGES toolbar button removed — feature moved to its
+              own top-level 'SLA Nudges' tab next to KPI Profiles. */}
           {view[0]==="usage"&&<button onClick={loadUsage} disabled={usageLoading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:usageLoading[0]?"wait":"pointer",letterSpacing:1.5}}>{usageLoading[0]?"LOADING...":"REFRESH"}</button>}
           <button onClick={props.onClose} title="Close" style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:38,height:38,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -2328,10 +2333,10 @@ function CampaignAuditModal(props){
       </div>
       {view[0]==="audit"&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>{loading[0]?"Rounding up your campaigns from every platform, they scatter…":data.length+" active campaigns across "+Object.keys(platforms).length+" platforms (currently enabled or ran in the last 30 days). Filter or search to verify objective accuracy."}</div>}
       {view[0]==="reconcile"&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Ground truth from Meta / TikTok / Google APIs compared to what the dashboard computes for <strong style={{color:P.ember}}>{props.dateFrom}</strong> to <strong style={{color:P.ember}}>{props.dateTo}</strong>. Green = delta less than 1%, yellow = 1 to 5%, red = more than 5%.{recSent[0]?<span style={{color:P.mint,marginLeft:10}}>{recSent[0]}</span>:null}</div>}
-      {view[0]==="reconcile"&&slaPanelOpen[0]&&props.isSuperadmin&&<div style={{marginBottom:14,padding:"14px 16px",background:P.solar+"08",border:"1px solid "+P.solar+"30",borderLeft:"3px solid "+P.solar,borderRadius:"0 12px 12px 0"}}>
+      {view[0]==="sla"&&props.isSuperadmin&&<div style={{fontSize:11,color:P.label,fontFamily:fm,lineHeight:1.5,marginBottom:10}}>Watch the team's report-sending SLA, reset the baseline so historic gaps stop firing daily nudges, and diagnose why a specific client is or isn't being emailed by the watcher.</div>}
+      {view[0]==="sla"&&props.isSuperadmin&&<div style={{marginBottom:14,padding:"14px 16px",background:P.solar+"08",border:"1px solid "+P.solar+"30",borderLeft:"3px solid "+P.solar,borderRadius:"0 12px 12px 0"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
           <span style={{fontSize:11,fontWeight:800,color:P.solar,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Reset SLA Nudge Baseline</span>
-          <button onClick={function(){slaPanelOpen[1](false);slaErr[1]("");slaResult[1](null);}} style={{marginLeft:"auto",background:"transparent",border:"none",color:P.label,fontSize:14,cursor:"pointer",padding:0}}>×</button>
         </div>
         <div style={{fontSize:11,color:P.label,fontFamily:ff,lineHeight:1.7,marginBottom:12}}>
           The SLA watcher emails the AM (and BCC's Gary) once a day per client whose last report is more than 7 days old. Historic gaps fire daily until a fresh report goes out. Resetting the baseline treats every client as if they last sent on the chosen date, so AMs only get nudged for gaps that open up <em>after</em> the baseline.
