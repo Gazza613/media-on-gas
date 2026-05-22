@@ -910,18 +910,68 @@ export default function CommandCentre(props) {
           // analyst can scan it just as fast.
           var topMoves = [];
           if (spendLeakers.length > 0 && scaleReady.length > 0) {
-            topMoves.push({
-              action: "Move " + fR2(leakSpend) + " out of " + spendLeakers.length + " under-performing campaign" + (spendLeakers.length === 1 ? "" : "s") + " and into " + scaleReady.length + " that's already working",
-              why: "These campaigns spent meaningful budget but their click-through rates fell below 0.80% — the algorithm is taking the money but not converting it into useful traffic. Meanwhile the scale-ready campaigns below are clearing the bar (CTR ≥ 1.5%, healthy frequency, results coming through). Moving the budget to where it already converts is the fastest efficiency win available.",
-              how: [
-                "Open the under-performing campaigns in Ads Manager and pause them at the campaign level.",
-                "Open the scale-ready campaigns and increase their daily/lifetime budgets by 15-20% each.",
-                "Don't double the budget overnight — Meta's algorithm needs a gentle ramp to stay in the learning-stable zone.",
-                "Check tomorrow that the scale-ready campaigns are still hitting their cost-per-result targets at the new spend level."
-              ],
-              impact: "Typically 30-50% lift in blended efficiency inside 14 days",
-              thumbs: campThumbs(spendLeakers.slice(0, 3).concat(scaleReady.slice(0, 3)))
-            });
+            // Match leakers to scale-ready candidates by OBJECTIVE family.
+            // A reroute is only meaningful when source and destination
+            // share an objective (lead-gen budget shouldn't silently
+            // become traffic budget). If no same-objective scale-ready
+            // destination exists, the move becomes "pause + hold" with
+            // the explicit reason surfaced.
+            var objKey = function(c) { return String(c.objective || "unknown").toLowerCase(); };
+            var leakObj = {}, scaleObj = {};
+            spendLeakers.forEach(function(x) { var k = objKey(x.c); (leakObj[k] = leakObj[k] || []).push(x); });
+            scaleReady.forEach(function(x) { var k = objKey(x.c); (scaleObj[k] = scaleObj[k] || []).push(x); });
+            // Pick the matched objective with the highest leaked spend.
+            var matchedPairs = Object.keys(leakObj)
+              .filter(function(k) { return scaleObj[k] && scaleObj[k].length > 0; })
+              .map(function(k) {
+                var ls = leakObj[k].reduce(function(s, x) { return s + (x.c.delivery.spendPeriod || 0); }, 0);
+                return { obj: k, leakers: leakObj[k], scaleReady: scaleObj[k], spend: ls };
+              })
+              .sort(function(a, b) { return b.spend - a.spend; });
+            var nameWithCtr = function(x) { return "'" + x.c.campaignName + "' (CTR " + fmtPct(x.c.delivery.ctr || 0) + ", spent " + fR2(x.c.delivery.spendPeriod || 0) + ")"; };
+            var nameWithCtrScale = function(x) { return "'" + x.c.campaignName + "' (CTR " + fmtPct(x.c.delivery.ctr || 0) + ")"; };
+            if (matchedPairs.length > 0) {
+              var pair = matchedPairs[0];
+              var objLabel = pair.obj === "unknown" ? "" : pair.obj + " ";
+              var leakerNames = pair.leakers.slice(0, 3).map(nameWithCtr).join("; ");
+              var scaleNames = pair.scaleReady.slice(0, 3).map(nameWithCtrScale).join("; ");
+              topMoves.push({
+                action: "Move " + fR2(pair.spend) + " out of " + pair.leakers.length + " under-performing " + objLabel + "campaign" + (pair.leakers.length === 1 ? "" : "s") + " into " + Math.min(pair.scaleReady.length, 3) + " same-objective scale-ready campaign" + (Math.min(pair.scaleReady.length, 3) === 1 ? "" : "s"),
+                why: "Under-performing: " + leakerNames + ". Each is below 0.80% CTR with ≥10K impressions — the algorithm is spending but not finding clickers. Same-objective scale-ready candidates: " + scaleNames + " (CTR ≥ 1.5%, healthy frequency, results coming through). Because the objective family matches, this is a true budget shift, the algorithm picks up where it already converts instead of starting from scratch.",
+                how: [
+                  "Match the OBJECTIVE before anything else: only reroute between campaigns with the same outcome family (leads → leads, traffic → traffic, followers → followers). The lift only holds when source and destination measure success the same way.",
+                  "Pause the under-performing campaign(s) at CAMPAIGN level in Ads Manager (not ad-set, so all delivery stops in one click).",
+                  "Open each same-objective scale-ready campaign and raise its daily/lifetime budget by 15-20%. Don't double overnight, the algorithm needs a gentle ramp.",
+                  "Check tomorrow that the scale-ready campaigns are still hitting their cost-per-result at the new spend. Cut the bump back if cost drifts ≥20% off baseline."
+                ],
+                impact: "Typically 30-50% lift in blended efficiency inside 14 days when source and destination share the same objective",
+                // Split thumb groups so the operator can see at a glance
+                // which campaigns to PAUSE vs which to GIVE BUDGET TO. A
+                // single mixed strip was the previous UX and it left the
+                // operator guessing which thumbnail belonged to which side.
+                thumbGroups: [
+                  { label: "Pause these", color: P.critical || "#ef4444", items: campThumbs(pair.leakers.slice(0, 3)) },
+                  { label: "Give budget to these", color: P.mint || "#34D399", items: campThumbs(pair.scaleReady.slice(0, 3)) }
+                ]
+              });
+            } else {
+              // No same-objective destination. Surface as pause + hold.
+              var leakNamesPlain = spendLeakers.slice(0, 3).map(function(x) { return "'" + x.c.campaignName + "' (" + (x.c.objective || "obj?") + ", CTR " + fmtPct(x.c.delivery.ctr || 0) + ", spent " + fR2(x.c.delivery.spendPeriod || 0) + ")"; }).join("; ");
+              topMoves.push({
+                action: "Pause " + fR2(leakSpend) + " across " + spendLeakers.length + " under-performing campaign" + (spendLeakers.length === 1 ? "" : "s") + " — no same-objective scale-ready home for the budget yet",
+                why: "Under-performing: " + leakNamesPlain + ". Each is below 0.80% CTR with ≥10K impressions, so the algorithm is taking the budget without converting it. None of the scale-ready campaigns share the same objective, so rerouting the cash without a same-outcome destination would muddy the read (and could hide a real performance regression). Pause first, free the budget, then rebuild on the same objective.",
+                how: [
+                  "Pause the under-performers at CAMPAIGN level in Ads Manager.",
+                  "Hold the freed budget — don't reroute it into a different-objective scale-ready campaign, that breaks the like-for-like read on every reporting surface.",
+                  "Spin up new creative variants on the same objective(s) at 30-50% of the paused spend.",
+                  "Revisit in 7 days: any new variant clearing 1.2% CTR earns the rerouted budget."
+                ],
+                impact: "Stops the leak immediately. Sets up a clean same-objective rebuild instead of a noisy reroute.",
+                thumbGroups: [
+                  { label: "Pause these", color: P.critical || "#ef4444", items: campThumbs(spendLeakers.slice(0, 3)) }
+                ]
+              });
+            }
           }
           if (topPerf && (topMoves.length < 3)) {
             topMoves.push({
@@ -1060,7 +1110,18 @@ export default function CommandCentre(props) {
                         <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.55 }}>{m.impact}</div>
                       </div>
 
-                      {m.thumbs && m.thumbs.length > 0 && thumbStrip(m.thumbs)}
+                      {/* Labelled thumbnail groups (e.g. "Pause these" /
+                          "Give budget to these"). Falls back to a single
+                          unlabeled strip for moves that don't split. */}
+                      {m.thumbGroups && m.thumbGroups.length > 0 ? <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+                        {m.thumbGroups.map(function(g, gi) {
+                          if (!g || !g.items || g.items.length === 0) return null;
+                          return <div key={gi}>
+                            <div style={{ fontSize: 10, fontWeight: 800, color: g.color || P.label, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 6 }}>{g.label} · {g.items.length}</div>
+                            {thumbStrip(g.items)}
+                          </div>;
+                        })}
+                      </div> : (m.thumbs && m.thumbs.length > 0 && thumbStrip(m.thumbs))}
                     </div>
                   </div>; })}
                 </div>
