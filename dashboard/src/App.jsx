@@ -3547,8 +3547,52 @@ export default function MediaOnGas(){
   var ae=useState(""),authEmail=ae[0],setAuthEmail=ae[1];
   var an=useState(""),authName=an[0],setAuthName=an[1];
   var ts=useState("summary"),tab=ts[0],setTab=ts[1];
-  var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";var ds=useState(monthStart),df=ds[0],setDf=ds[1];
-  var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");var de=useState(monthEnd),dt=de[0],setDt=de[1];
+  // Date range with localStorage persistence. The senior media buyer
+  // who lives in "Last 30 days" no longer has to reset the picker on
+  // every session — initial value reads from localStorage if a saved
+  // range exists, otherwise defaults to month-to-date. Saved on every
+  // change via a useEffect below.
+  var nowD=new Date();var monthStart=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-01";
+  var lastDay=new Date(nowD.getFullYear(),nowD.getMonth()+1,0).getDate();var monthEnd=nowD.getFullYear()+"-"+String(nowD.getMonth()+1).padStart(2,"0")+"-"+String(lastDay).padStart(2,"0");
+  var loadSavedRange=function(){
+    try{
+      if(typeof window==="undefined"||!window.localStorage)return null;
+      var raw=window.localStorage.getItem("gas:dashboard:dateRange");
+      if(!raw)return null;
+      var p=JSON.parse(raw);
+      if(p&&/^\d{4}-\d{2}-\d{2}$/.test(p.from||"")&&/^\d{4}-\d{2}-\d{2}$/.test(p.to||""))return p;
+    }catch(_){}
+    return null;
+  };
+  var savedRange=loadSavedRange();
+  var ds=useState(savedRange?savedRange.from:monthStart),df=ds[0],setDf=ds[1];
+  var de=useState(savedRange?savedRange.to:monthEnd),dt=de[0],setDt=de[1];
+  useEffect(function(){
+    try{
+      if(typeof window!=="undefined"&&window.localStorage)
+        window.localStorage.setItem("gas:dashboard:dateRange",JSON.stringify({from:df,to:dt}));
+    }catch(_){}
+  },[df,dt]);
+  // Date range presets. Replaces the "free-form calendar only" UX with
+  // five common ranges the team actually picks 95% of the time:
+  // Today / Last 7 Days / MTD / Last 30 Days / Last Month. The FROM/TO
+  // inputs stay visible for the rare custom range (and so the operator
+  // can see exactly what window any preset resolves to).
+  var ymdLocal=function(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+  var presetRange=function(key){
+    var now=new Date();var today=ymdLocal(now);
+    if(key==="today")return{from:today,to:today};
+    if(key==="7d"){var d7=new Date(now);d7.setDate(d7.getDate()-6);return{from:ymdLocal(d7),to:today};}
+    if(key==="mtd")return{from:ymdLocal(new Date(now.getFullYear(),now.getMonth(),1)),to:today};
+    if(key==="30d"){var d30=new Date(now);d30.setDate(d30.getDate()-29);return{from:ymdLocal(d30),to:today};}
+    if(key==="lm"){var s=new Date(now.getFullYear(),now.getMonth()-1,1);var e=new Date(now.getFullYear(),now.getMonth(),0);return{from:ymdLocal(s),to:ymdLocal(e)};}
+    return null;
+  };
+  var matchPreset=function(){
+    var keys=["today","7d","mtd","30d","lm"];
+    for(var i=0;i<keys.length;i++){var r=presetRange(keys[i]);if(r&&r.from===df&&r.to===dt)return keys[i];}
+    return "custom";
+  };
   // Summary-only comparison toggle: "off" | "wow" | "mom". When enabled,
   // the Summary tab's KPI tiles render a delta chip next to the value
   // showing vs the equivalent prior period. Other tabs are not affected.
@@ -5463,6 +5507,14 @@ export default function MediaOnGas(){
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,14)} {selected.length} Campaigns</button>}
+            {/* Date presets — 5 quick chips covering ~95% of operator
+                lens choices. Active preset highlighted ember; clicking
+                any preset updates df/dt (which persists to localStorage
+                via the useEffect above). FROM/TO inputs stay visible
+                for custom ranges and for confirming the resolved window. */}
+            {(function(){var activePreset=matchPreset();var opts=[{k:"today",l:"TODAY"},{k:"7d",l:"7 DAYS"},{k:"mtd",l:"MTD"},{k:"30d",l:"30 DAYS"},{k:"lm",l:"LAST MONTH"}];return <div title="Quick date range" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
+              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
+            </div>;})()}
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
             {/* Summary-only compare toggle. Other tabs show the selected
                 range without period-over-period deltas. */}

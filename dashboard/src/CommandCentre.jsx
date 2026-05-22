@@ -467,7 +467,7 @@ export default function CommandCentre(props) {
         var compareSub = cmp && prevWin ? "vs " + prevWin.from + " → " + prevWin.to : "";
         return <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
           {card("CAMPAIGNS", N(sum.campaigns), P.cyan, compareSub || label, dCamp)}
-          {card("LIVE NOW", N(sum.live), P.mint, compareSub, dLive)}
+          {card("LIVE TODAY", N(sum.live), P.mint, compareSub, dLive)}
           {card("NEEDS ATTENTION", N(sum.needsAttention), sum.needsAttention > 0 ? (P.critical || "#ef4444") : P.mint, compareSub || (N(sum.alerts) + " alerts"), dAttn)}
           {card("SPEND TODAY", R(sum.spendToday), P.solar, compareSub, dSpT)}
           {card("SPEND MTD", R(sum.spendPeriod), P.ember, compareSub, dSpP)}
