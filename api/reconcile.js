@@ -167,7 +167,17 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
         var rawMetaObjStrict = pageLikeOpt[row.campaign_id] === true || String(objMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
         var pageLikesRaw = Math.max(actions["page_like"] || 0, actions["onsite_conversion.page_like"] || 0);
         if (rawMetaObjStrict) pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
-        var follows = actions["follow"] || actions["onsite_conversion.follow"] || actions["onsite_conversion.ig_follow"] || 0;
+        // 'follow' / onsite_conversion.follow / onsite_conversion.ig_follow
+        // dropped from the Meta SoT side. The dashboard's c.pageLikes is
+        // the entire follower signal on Meta — c.follows is a TikTok-only
+        // field. Counting these here over-stated SoT and produced false
+        // -100% drift on OUTCOME_ENGAGEMENT campaigns named Like&Follow
+        // but optimised for profile visits (6.6K phantom on the
+        // MTN-MoMo Like&Follow campaign while the dashboard correctly
+        // showed 0). For genuine PAGE_LIKES-optimised campaigns the
+        // per-ad page-follow event lands under actions["like"] which is
+        // already folded above when rawMetaObjStrict. See
+        // project_meta_like_action.
         var appInstalls = Math.max(actions["app_install"] || 0, actions["mobile_app_install"] || 0, actions["omni_app_install"] || 0);
         out.push({
           platform: "Meta",
@@ -179,7 +189,7 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
           clicks: parseInt(row.clicks || 0),
           reach: parseInt(row.reach || 0),
           leads: leads,
-          followersCombined: pageLikesRaw + follows,
+          followersCombined: pageLikesRaw,
           appInstalls: appInstalls
         });
       });
