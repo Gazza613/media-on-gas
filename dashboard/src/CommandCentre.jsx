@@ -292,6 +292,60 @@ export default function CommandCentre(props) {
     return function() { if (ctl) { try { ctl.abort(); } catch (_) {} } };
   }, [session, dateFrom, dateTo, apiBase]);
 
+  // Background pre-warm of the five preset ranges (Today / 7D / MTD /
+  // 30D / Last Month) and their comparison windows. Fires once per
+  // mount, 1.5s after paint so the visible fetch grabs the TCP slot
+  // first. Each pre-warm call short-circuits if the cache key is
+  // already populated, so duplicate work is free. Silent on failure
+  // — a missed pre-warm just means that preset pays a normal cold
+  // fetch on toggle. Net effect: by the time the operator finishes
+  // reading the initial view, every preset is sitting in the in-
+  // memory cache and toggling between them is instant.
+  useEffect(function() {
+    if (!session) return;
+    var ymd = function(d) {
+      return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+    };
+    var presetRanges = function() {
+      var now = new Date();
+      var today = ymd(now);
+      var d7 = new Date(now); d7.setUTCDate(d7.getUTCDate() - 6);
+      var d30 = new Date(now); d30.setUTCDate(d30.getUTCDate() - 29);
+      var mStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      var lmStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+      var lmEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+      return [
+        { from: today, to: today },
+        { from: ymd(d7), to: today },
+        { from: ymd(mStart), to: today },
+        { from: ymd(d30), to: today },
+        { from: ymd(lmStart), to: ymd(lmEnd) }
+      ];
+    };
+    var prewarmOne = function(from, to, cache) {
+      var key = ccCacheKey(from, to);
+      if (cache[key]) return;
+      fetch(apiBase + "/api/command-centre?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to), {
+        headers: { "x-session-token": session || "" }
+      }).then(function(r) {
+        return r.text().then(function(t) {
+          try { return t ? JSON.parse(t) : null; } catch (_) { return null; }
+        });
+      }).then(function(d) {
+        if (d && d.ok) cache[key] = d;
+      }).catch(function() { /* silent */ });
+    };
+    var timer = setTimeout(function() {
+      var ranges = presetRanges();
+      ranges.forEach(function(r) { prewarmOne(r.from, r.to, ccPersistedCache); });
+      ranges.forEach(function(r) {
+        var prev = previousPeriodWindow(r.from, r.to);
+        if (prev) prewarmOne(prev.from, prev.to, ccCompareCache);
+      });
+    }, 1500);
+    return function() { clearTimeout(timer); };
+  }, [session, apiBase]);
+
   var sevColor = function(sev) {
     return sev === "high" ? (P.critical || "#ef4444")
       : sev === "medium" ? (P.warning || "#fbbf24")
