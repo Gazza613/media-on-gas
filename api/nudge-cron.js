@@ -287,6 +287,11 @@ export default async function handler(req, res) {
   }
 
   var dryRun = req.query.dryRun === "1" || req.query.dry === "1";
+  // verbose=1 returns every tracked client (not just overdue), with
+  // last-sent + days-since + isOverdue + whether the baseline was
+  // applied. Lets the dashboard SLA panel show 'why isn't X being
+  // nudged?' without guessing.
+  var verbose = req.query.verbose === "1";
 
   // ?reset=1[&baseline=YYYY-MM-DD], set a baseline date in Redis. All
   // clients are treated as if they last sent on this date, so the SLA
@@ -371,6 +376,26 @@ export default async function handler(req, res) {
     });
   }
 
+  // Snapshot every tracked client BEFORE the overdue filter so the
+  // verbose diagnostic can report 'on track' clients with their
+  // exact days-since. Captures whether the baseline was applied so
+  // the team can see when a client's counter was bumped forward.
+  var trackedSnapshot = identities.map(function(id) {
+    var c = byClient[id];
+    var origMs = c.lastSentTs; // already potentially baseline-bumped at this point
+    return {
+      identity: c.identity,
+      clientName: displayNameFromIdentity(c.identity, c.lastSlug),
+      lastSlug: c.lastSlug || "",
+      lastSenderEmail: c.lastSenderEmail || "",
+      lastSentIso: c.lastSentIso,
+      effectiveLastSentIso: new Date(origMs).toISOString(),
+      baselineApplied: !!(baselineTs > 0 && Date.parse(c.lastSentIso) < baselineTs),
+      daysSince: Math.floor((now - origMs) / (24 * 60 * 60 * 1000)),
+      isOverdue: (now - origMs) > slaMs
+    };
+  }).sort(function(a, b) { return b.daysSince - a.daysSince; });
+
   var overdue = identities.map(function(id) { return byClient[id]; })
     .filter(function(c) { return (now - c.lastSentTs) > slaMs; });
 
@@ -453,15 +478,18 @@ export default async function handler(req, res) {
     }
   }
 
-  res.status(200).json({
+  var payload = {
     ok: true,
     mode: isCron ? "cron" : "manual",
     dryRun: dryRun,
     slaDays: SLA_DAYS,
+    bufferHours: BUFFER_HOURS,
     baseline: baselineTs ? new Date(baselineTs).toISOString() : null,
     clientsTracked: identities.length,
     overdueCount: overdue.length,
     nudges: results,
     checkedAt: new Date().toISOString()
-  });
+  };
+  if (verbose) payload.tracked = trackedSnapshot;
+  res.status(200).json(payload);
 }

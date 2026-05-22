@@ -2020,6 +2020,24 @@ function CampaignAuditModal(props){
   };
   useEffect(function(){ if(slaPanelOpen[0]&&props.isSuperadmin){loadSlaLog();} },[slaPanelOpen[0]]);
 
+  // Diagnostic state for the nudge cron — calls /api/nudge-cron with
+  // dryRun=1&verbose=1 so the team can see exactly which clients the
+  // SLA watcher considers overdue and which aren't, with the reason
+  // (baseline applied, last-sent-too-recent, etc.) instead of guessing
+  // why nudges aren't firing.
+  var slaDiag=useState({loading:false,data:null,error:""});
+  var runSlaDiag=function(){
+    if(slaDiag[0].loading)return;
+    slaDiag[1]({loading:true,data:null,error:""});
+    fetch(props.apiBase+"/api/nudge-cron?dryRun=1&verbose=1",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        if(r.status===200&&r.data&&r.data.ok){slaDiag[1]({loading:false,data:r.data,error:""});}
+        else{slaDiag[1]({loading:false,data:null,error:(r.data&&r.data.error)||"Diagnostic failed"});}
+      })
+      .catch(function(){slaDiag[1]({loading:false,data:null,error:"Connection error"});});
+  };
+
   // Usage state
   var usageEvents=useState([]);
   var usageLoading=useState(false);
@@ -2302,6 +2320,7 @@ function CampaignAuditModal(props){
           <label style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Baseline date</label>
           <input type="date" value={slaBaseline[0]} onChange={function(e){slaBaseline[1](e.target.value);}} disabled={slaBusy[0]} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:8,padding:"7px 10px",color:P.txt,fontSize:12,fontFamily:fm,outline:"none",colorScheme:"dark"}}/>
           <button onClick={resetSlaBaseline} disabled={slaBusy[0]||!slaBaseline[0]} style={{background:slaBusy[0]||!slaBaseline[0]?"#555":"linear-gradient(135deg,#FF3D00,#FF6B00)",border:"none",borderRadius:8,padding:"7px 16px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:slaBusy[0]?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{slaBusy[0]?"Resetting...":"Apply Reset"}</button>
+          <button onClick={runSlaDiag} disabled={slaDiag[0].loading} title="Dry-run the SLA watcher and see which clients it considers overdue, which it skips, and why" style={{background:slaDiag[0].loading?"#555":"transparent",border:"1px solid "+P.solar+"60",borderRadius:8,padding:"7px 14px",color:slaDiag[0].loading?P.dim:P.solar,fontSize:11,fontWeight:800,fontFamily:fm,cursor:slaDiag[0].loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{slaDiag[0].loading?"Checking…":"Diagnose Nudges"}</button>
         </div>
         {slaErr[0]&&<div style={{fontSize:11,color:P.critical,fontFamily:fm,marginTop:8}}>{slaErr[0]}</div>}
         {slaResult[0]&&<div style={{marginTop:10,padding:"10px 12px",background:P.mint+"10",border:"1px solid "+P.mint+"40",borderRadius:8,fontSize:11,color:P.txt,fontFamily:fm,lineHeight:1.7}}>
@@ -2309,6 +2328,52 @@ function CampaignAuditModal(props){
           <div>Anchor: <strong>{slaResult[0].baseline}</strong></div>
           <div>Earliest possible nudge: <strong>{slaResult[0].nextNudgeAfter}</strong></div>
         </div>}
+        {slaDiag[0].error&&<div style={{marginTop:10,fontSize:11,color:P.critical,fontFamily:fm}}>{slaDiag[0].error}</div>}
+        {slaDiag[0].data&&(function(){
+          var d=slaDiag[0].data;
+          var fmtIso=function(s){if(!s)return"—";var dt=new Date(s);return isNaN(dt.getTime())?String(s):dt.toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"2-digit"});};
+          var nudgesByIdentity={};(d.nudges||[]).forEach(function(n){nudgesByIdentity[n.identity]=n;});
+          var tracked=Array.isArray(d.tracked)?d.tracked:[];
+          var rowHd={padding:"6px 10px",fontSize:9,fontWeight:800,color:P.solar,letterSpacing:1,fontFamily:fm,textTransform:"uppercase",textAlign:"left",background:P.solar+"12",borderBottom:"1px solid "+P.solar+"30"};
+          var cell={padding:"6px 10px",fontSize:11,color:P.txt,fontFamily:fm,borderBottom:"1px solid "+P.rule,verticalAlign:"top"};
+          return <div style={{marginTop:14,padding:"12px 14px",background:"rgba(0,0,0,0.30)",border:"1px solid "+P.solar+"30",borderRadius:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,fontWeight:900,color:P.solar,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase"}}>Nudge cron diagnostic</span>
+              <span style={{fontSize:10,color:P.caption,fontFamily:fm}}>{d.clientsTracked} tracked · {d.overdueCount} overdue · SLA {d.slaDays}d + {d.bufferHours}h buffer{d.baseline?(" · baseline "+fmtIso(d.baseline)):" · no baseline set"}</span>
+            </div>
+            {tracked.length===0&&<div style={{fontSize:11,color:P.label,fontFamily:fm}}>No tracked clients in the email log window.</div>}
+            {tracked.length>0&&<div style={{overflowX:"auto",maxHeight:"40vh",overflowY:"auto",border:"1px solid "+P.rule,borderRadius:6,overscrollBehavior:"contain"}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead style={{position:"sticky",top:0,zIndex:1,background:"#0a0418"}}><tr><th style={rowHd}>Client</th><th style={rowHd}>Last sent</th><th style={rowHd}>Days</th><th style={rowHd}>Cron status</th><th style={rowHd}>Why</th></tr></thead>
+                <tbody>{tracked.map(function(t,i){
+                  var nudgeRec=nudgesByIdentity[t.identity];
+                  var statusColor=t.isOverdue?(nudgeRec&&nudgeRec.status==="sent"?P.mint:nudgeRec&&nudgeRec.status==="already_nudged_today"?P.label:P.solar):P.mint;
+                  var statusLabel=t.isOverdue
+                    ?(nudgeRec&&nudgeRec.status==="sent"?"SENT TODAY":nudgeRec&&nudgeRec.status==="already_nudged_today"?"ALREADY NUDGED TODAY":nudgeRec&&nudgeRec.status==="dry_run"?"WOULD NUDGE":nudgeRec&&nudgeRec.status==="mailer_not_configured"?"MAILER NOT CONFIGURED":"PENDING")
+                    :"ON TRACK";
+                  var why="";
+                  if(!t.isOverdue){
+                    if(t.baselineApplied){why="Baseline bumped to "+fmtIso(t.effectiveLastSentIso)+" — counter restarts there.";}
+                    else{why=t.daysSince+" days since last send, SLA window is "+d.slaDays+"d.";}
+                  } else {
+                    if(nudgeRec&&nudgeRec.status==="already_nudged_today"){why="Dedup key in Redis — nudge already sent today, won't send again until tomorrow.";}
+                    else if(nudgeRec&&nudgeRec.status==="dry_run"){why="Dry-run mode — would notify "+(nudgeRec.wouldNotify&&nudgeRec.wouldNotify.to?nudgeRec.wouldNotify.to.join(", "):"leadership list")+".";}
+                    else if(nudgeRec&&nudgeRec.status==="mailer_not_configured"){why="GMAIL credentials missing on the server — set GMAIL_USER + GMAIL_APP_PASSWORD env vars.";}
+                    else{why="Past SLA — nudge scheduled at next cron run (08:30 SAST daily).";}
+                  }
+                  return <tr key={i}>
+                    <td style={cell}>{t.clientName}{t.baselineApplied?<span style={{fontSize:8,color:P.solar,letterSpacing:1,marginLeft:6,textTransform:"uppercase"}}>baseline applied</span>:null}</td>
+                    <td style={Object.assign({},cell,{whiteSpace:"nowrap"})}>{fmtIso(t.lastSentIso)}{t.baselineApplied?<div style={{fontSize:9,color:P.caption,fontFamily:fm,fontStyle:"italic"}}>effective: {fmtIso(t.effectiveLastSentIso)}</div>:null}</td>
+                    <td style={Object.assign({},cell,{fontWeight:800,color:t.isOverdue?P.critical:P.mint})}>{t.daysSince}</td>
+                    <td style={cell}><span style={{background:statusColor+"22",border:"1px solid "+statusColor+"55",color:statusColor,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,padding:"2px 7px",borderRadius:4,textTransform:"uppercase",whiteSpace:"nowrap"}}>{statusLabel}</span></td>
+                    <td style={Object.assign({},cell,{fontSize:10,color:P.label,lineHeight:1.55})}>{why}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>}
+            <div style={{marginTop:8,fontSize:9.5,color:P.caption,fontFamily:fm,fontStyle:"italic",lineHeight:1.6}}>Dry-run dump from the SLA watcher. 'Days' is from the EFFECTIVE last-sent (baseline-bumped where applicable). Cron actually fires daily at 08:30 SAST — overdue clients past today's dedup key will receive a nudge then.</div>
+          </div>;
+        })()}
         {(function(){
           var L=slaLog[0];
           var rowHd={padding:"7px 10px",fontSize:9,fontWeight:800,color:P.solar,letterSpacing:1,fontFamily:fm,textTransform:"uppercase",textAlign:"left",background:P.solar+"12",borderBottom:"1px solid "+P.solar+"30"};
