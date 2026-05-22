@@ -5,6 +5,15 @@ import React, { useState, useEffect, useRef } from "react";
 // independently admin-gated). Reads /api/command-centre: live delivery
 // + pacing + "what needs a human now", grouped by client.
 
+// Module-scoped cache so the Optimisation page does NOT re-fetch every
+// time the operator navigates back to the tab. Once loaded for a given
+// dateFrom/dateTo window, the payload stays in memory for the rest of
+// the session — only Refresh (manual) or a date-range change triggers
+// a new fetch. Without this the page was paying a full upstream pull
+// every tab switch, which felt heavy when bouncing between Summary
+// and Optimise during triage.
+var ccPersistedCache = { data: null, dateFrom: "", dateTo: "" };
+
 export default function CommandCentre(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, Glass = props.Glass, SH = props.SH;
   var apiBase = props.apiBase, session = props.session;
@@ -14,7 +23,15 @@ export default function CommandCentre(props) {
   // findings. Optional, defaults to [] when not passed.
   var adsList = props.adsList || [];
 
-  var st = useState({ loading: true, error: "", data: null }), s = st[0], setS = st[1];
+  // Lazy initial state — hydrate from the module-level cache if the
+  // current dateFrom/dateTo matches what's already loaded. This is what
+  // makes "navigate away and come back" instant on the second visit:
+  // no loading flash, no upstream pull. Date change or Refresh button
+  // re-fetches as before (see the useEffect / load() below).
+  var initialState = (ccPersistedCache.data && ccPersistedCache.dateFrom === dateFrom && ccPersistedCache.dateTo === dateTo)
+    ? { loading: false, error: "", data: ccPersistedCache.data }
+    : { loading: true, error: "", data: null };
+  var st = useState(initialState), s = st[0], setS = st[1];
   // Filter mode: "all" shows every in-flight campaign for situational
   // load/delivery awareness; "attention" collapses to only the rows
   // that have one or more alerts, so end-of-day triage is fast. Default
@@ -114,10 +131,18 @@ export default function CommandCentre(props) {
       return err && (err.name === "AbortError" || /aborted|abort/i.test(String(err.message || "")));
     };
 
+    // Wrap setS so every success path also persists the payload to the
+    // module-level cache. Subsequent mounts (tab switches) hydrate from
+    // here instead of paying another upstream pull.
+    var cacheAndSet = function(myGen, payload) {
+      ccPersistedCache = { data: payload, dateFrom: dateFrom, dateTo: dateTo };
+      safeSet(myGen, { loading: false, error: "", data: payload });
+    };
+
     fetchOnce(signal, opts)
       .then(function(x) {
         // Success on first try.
-        if (x.ok && x.d && x.d.ok) { safeSet(myGen, { loading: false, error: "", data: x.d }); return; }
+        if (x.ok && x.d && x.d.ok) { cacheAndSet(myGen, x.d); return; }
         // Treat 5xx / parse failures as transient and retry once. Cold
         // upstream pulls (Meta+TikTok+Google) sometimes need a second
         // pass after a function timeout to land on a warm cache.
@@ -135,7 +160,7 @@ export default function CommandCentre(props) {
           if (myGen !== genRef.current) return;
           fetchOnce(signal)
             .then(function(y) {
-              if (y.ok && y.d && y.d.ok) { safeSet(myGen, { loading: false, error: "", data: y.d }); return; }
+              if (y.ok && y.d && y.d.ok) { cacheAndSet(myGen, y.d); return; }
               var em2 = (y.d && y.d.error)
                 || (y.status === 504 ? "Upstream is taking longer than usual (3 minute timeout). Try Refresh again in a moment, the cache should have warmed by then." : ("Failed (HTTP " + y.status + ")"));
               safeSet(myGen, { loading: false, error: em2, data: null });
@@ -153,12 +178,21 @@ export default function CommandCentre(props) {
   };
 
   // Re-pull when the dashboard period changes so the command centre
-  // always matches the dates the operator has selected. Cleanup aborts
-  // any in-flight fetch / pending retry on unmount so a fast tab-switch
-  // never leaves a half-finished load to clobber the next visit.
+  // always matches the dates the operator has selected. On a normal
+  // tab re-mount with the SAME dateFrom/dateTo, we skip the fetch
+  // entirely — initial state already hydrated from the module cache,
+  // so the page paints instantly. Cleanup aborts any in-flight fetch /
+  // pending retry on unmount so a fast tab-switch never leaves a half-
+  // finished load to clobber the next visit. Also always scroll to
+  // the top of the page on mount so the operator lands on the header
+  // (the previous scroll position from the last visit was disorienting).
   useEffect(function() {
     aliveRef.current = true;
-    load();
+    if (typeof window !== "undefined" && window.scrollTo) {
+      try { window.scrollTo({ top: 0, behavior: "auto" }); } catch (_) { window.scrollTo(0, 0); }
+    }
+    var cacheHit = ccPersistedCache.data && ccPersistedCache.dateFrom === dateFrom && ccPersistedCache.dateTo === dateTo;
+    if (!cacheHit) load();
     return function() {
       aliveRef.current = false;
       if (abortRef.current) { try { abortRef.current.abort(); } catch (_) {} }
