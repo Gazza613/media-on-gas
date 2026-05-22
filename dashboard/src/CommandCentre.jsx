@@ -304,12 +304,16 @@ export default function CommandCentre(props) {
           var hasAlert = c.alerts.length > 0;
           var amUrl = c.adsManagerUrl || "";
           var gradA = (P.cyan || "#22D3EE"), gradB = (P.ember || "#F96203");
+          // Layered thumbnail with platform-glyph fallback. Meta CDN
+          // thumbnail URLs are signed + time-limited, so cards that
+          // were generated against a fresh cache can fail to load
+          // hours later. onError hides the <img>, the glyph div
+          // beneath shows through.
           var thumb = <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer"
               title={amUrl ? "Open this campaign in Ads Manager" : "Ads Manager link unavailable"}
-              style={{ flexShrink: 0, width: 88, height: 88, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "#0c0716", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none", opacity: dimmed ? 0.75 : 1 }}>
-            {c.thumbnail
-              ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
-              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>}
+              style={{ flexShrink: 0, width: 88, height: 88, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none", opacity: dimmed ? 0.75 : 1 }}>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
+            {c.thumbnail && <img src={c.thumbnail} alt="" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
             {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
           </a>;
           return <Glass key={c.campaignId} accent={hasAlert && !dimmed ? sevColor(c.alerts[0].severity) : P.rule} st={{ padding: 16, marginBottom: 10, opacity: dimmed ? 0.82 : 1 }}>
@@ -1459,10 +1463,18 @@ export default function CommandCentre(props) {
         platformDefs.forEach(function(d) { platformBuckets[d.key] = { issues: [], scale: [], paused: [], all: [] }; });
         s.data.clients.forEach(function(grp) {
           grp.campaigns.forEach(function(c) {
-            if (!passFilter(c)) return;
             var key = canonPlatform(c.platform);
             if (!platformBuckets[key]) return; // skip "Other"
             var k = classify(c);
+            // Attention filter applies to active priorities only
+            // (issues / scale-ready). PAUSED THIS PERIOD is
+            // informational ("what state is in flight on this
+            // platform today?") so it surfaces regardless of filter
+            // — earlier behaviour was hiding paused rows without
+            // alerts when filter == attention, which dropped 3 of
+            // the 4 MTN MoMo Pay paused rows from view (only the
+            // Google one had a pacing alert).
+            if (k !== "paused" && k !== "ended" && !passFilter(c)) return;
             var entry = { client: grp.client, c: c };
             platformBuckets[key].all.push(entry);
             if (k === "attention" || k === "watch") platformBuckets[key].issues.push(Object.assign({ sev: k }, entry));
@@ -1507,6 +1519,19 @@ export default function CommandCentre(props) {
           return null;
         }
 
+        // Layered thumbnail: platform-glyph div always rendered, signed
+        // CDN image overlaid on top. Meta thumbnail URLs are time-
+        // limited (signed CDN), so a card that's a few hours old can
+        // get a 403 / expired URL — onError hides the image, exposing
+        // the glyph beneath. Used by Issue / Scale / Paused cards.
+        var thumbBox = function(c, size) {
+          var sz = size || 72;
+          return <div style={{ flexShrink: 0, width: sz, height: sz, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + (P.cyan || "#22D3EE") + "22," + (P.ember || "#F96203") + "15)", position: "relative" }}>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: Math.max(10, sz / 6), fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
+            {c.thumbnail && <img src={c.thumbnail} alt="" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
+          </div>;
+        };
+
         // Issue card: thumbnail + client + campaign name + alert + one-line context.
         var renderIssueCard = function(entry, idx) {
           var c = entry.c;
@@ -1515,11 +1540,7 @@ export default function CommandCentre(props) {
           var col = sev === "attention" ? (P.critical || "#ef4444") : (P.warning || "#fbbf24");
           var amUrl = c.adsManagerUrl || "";
           return <div key={c.campaignId + "-issue-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "55", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
-            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ flexShrink: 0, width: 72, height: 72, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "#0c0716", display: "block" }}>
-              {c.thumbnail
-                ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
-                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{platShort(c.platform)}</div>}
-            </a>
+            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 72)}</a>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>#{idx + 1} · {sev === "attention" ? "Urgent" : "Watch"}</span>
@@ -1561,11 +1582,7 @@ export default function CommandCentre(props) {
           var amUrl = c.adsManagerUrl || "";
           var col = P.mint || "#34D399";
           return <div key={c.campaignId + "-scale-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "44", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
-            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ flexShrink: 0, width: 72, height: 72, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "#0c0716", display: "block" }}>
-              {c.thumbnail
-                ? <img src={c.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
-                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 900, fontFamily: fm }}>{platShort(c.platform)}</div>}
-            </a>
+            <a href={amUrl || undefined} target={amUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 72)}</a>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span style={{ background: col + "26", color: col, padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Scale candidate</span>
