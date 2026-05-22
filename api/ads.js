@@ -849,7 +849,12 @@ export default async function handler(req, res) {
         // results land in the unambiguous page_like key (captured above).
         // See project_meta_like_action.
         var metaObjStrictPageLikes = campPageLikeOpt[ins.campaign_id] === true || String(campObjMap[ins.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
-        if (metaObjStrictPageLikes && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+        // isFbPlacement gate removed: a strict PAGE_LIKES campaign on IG
+        // also reports the page-follow under actions["like"] on its
+        // IG-placement row (Meta groups FB page likes + IG follows under
+        // one 'Follows or likes' result). Must match api/campaigns.js +
+        // api/reconcile.js.
+        if (metaObjStrictPageLikes && reactionLikes > pageLikes) pageLikes = reactionLikes;
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;

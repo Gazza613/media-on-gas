@@ -635,7 +635,16 @@ export default async function handler(req, res) {
           // the unambiguous page_like / onsite_conversion.page_like key.
           // Must match api/ads.js + api/reconcile.js. See
           // project_meta_like_action.
-          if ((pageLikeOpt[c.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && isFbPlacement && reactionLikes > pageLikes) pageLikes = reactionLikes;
+          //
+          // isFbPlacement gate removed here: a strict PAGE_LIKES campaign
+          // running on IG returns the page-follow under actions["like"]
+          // on the IG-placement row too (Meta groups FB page likes + IG
+          // follows under one "Follows or likes" result). Requiring FB
+          // placement caused /api/reconcile to flag SoT 6.6K vs Dashboard 0
+          // on Like&Follow campaigns where the per-ad attribution lived
+          // mostly on the IG split. Strict-PAGE_LIKES gate still prevents
+          // OUTCOME_ENGAGEMENT campaigns from inflating via post reactions.
+          if ((pageLikeOpt[c.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && reactionLikes > pageLikes) pageLikes = reactionLikes;
 
           if (!rowMap[uniqueId]) {
             rowMap[uniqueId] = {
@@ -778,8 +787,11 @@ export default async function handler(req, res) {
           var pageLikes = a.pageLikes;
           // Strict PAGE_LIKES-only "like" fold — must match the per-campaign
           // path above + api/ads.js + api/reconcile.js. See
-          // project_meta_like_action.
-          if ((pageLikeOpt[a.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && isFbPlacement && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
+          // project_meta_like_action. isFbPlacement gate removed (same
+          // reasoning as the per-campaign path above): a PAGE_LIKES
+          // campaign on IG returns the page-follow under actions["like"]
+          // on the IG-placement row too.
+          if ((pageLikeOpt[a.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
           seenIds[a.campaign_id] = true;
           rowMap[k] = {
             platform: a.platform,
