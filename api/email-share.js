@@ -466,32 +466,61 @@ function renderSummaryBlock(summary, profile, eco) {
     '</td></tr>' : '');
 }
 
-// Generate 2-3 paragraphs of plain-English commentary from aggregate metrics.
-function renderCommentaryBlock(summary) {
+// Generate 2-3 paragraphs of plain-English commentary that LEAD with
+// the client's primary objective. Was previously fixed-order
+// (awareness → engagement → outcomes) and presented clicks/CTR as a
+// headline finding even on clients whose primary KPI is reach — the
+// user flagged this on the Psycho Bunny report (primary objective is
+// reach, but the commentary spoke about clicks to the website as if
+// they were the win condition).
+//
+// Detection: the client KPI profile carries primaryKpis and a
+// benchmarkBand ("awareness" | "direct_response" | "default"). We
+// route the paragraph order from there.
+function renderCommentaryBlock(summary, profile) {
   if (!summary) return "";
   var g = summary.grand;
-  var paras = [];
+  var prof = profile || {};
+  var band = String(prof.benchmarkBand || "").toLowerCase();
+  var primaryKpis = Array.isArray(prof.primaryKpis) ? prof.primaryKpis : [];
 
-  // Awareness paragraph
+  // Buckets the dashboard / KPI-profile UI uses today. If primaryKpis
+  // are EXCLUSIVELY in the awareness bucket OR the band is "awareness",
+  // the report is an awareness-led report. If they sit in the response
+  // bucket OR band is "direct_response", lead with outcomes.
+  var awarenessKpis = ["unique_reach", "reach", "impressions", "ads_served", "cpm", "frequency", "saturation"];
+  var responseKpis = ["leads", "conversions", "sales", "purchases", "app_installs", "app_store_clicks", "newsletter_signups", "page_likes", "followers", "follows", "engagement", "cost_per_lead", "cost_per_acquisition", "cost_per_follow", "cost_per_install", "roas", "revenue"];
+  var primaryIsAwarenessOnly = primaryKpis.length > 0 && primaryKpis.every(function(k) { return awarenessKpis.indexOf(String(k).toLowerCase()) >= 0; });
+  var primaryHasResponse = primaryKpis.some(function(k) { return responseKpis.indexOf(String(k).toLowerCase()) >= 0; });
+  var isAwareness = band === "awareness" || (primaryIsAwarenessOnly && !primaryHasResponse);
+  var isResponse  = band === "direct_response" || (primaryHasResponse && !primaryIsAwarenessOnly);
+
+  // Shared sentence builders so the ordering decision is the only
+  // thing that changes between modes.
   var cpmQuality = g.cpm > 0 && g.cpm <= 12 ? "exceptional value" : g.cpm <= 18 ? "excellent value" : g.cpm <= 25 ? "healthy value" : "solid reach delivery";
-  var awarenessText = "Your campaigns delivered <strong>" + fmtNum(g.impressions) + "</strong> ads served to <strong>" + fmtNum(g.reach) + "</strong> unique people";
-  if (g.frequency > 0) awarenessText += ", with each person seeing the message an average of <strong>" + g.frequency.toFixed(2) + " times</strong>";
-  awarenessText += ". At " + fmtR(g.cpm) + " per 1,000 ads served, this reflects " + cpmQuality + " against the paid social benchmark";
-  if (summary.platforms.length > 1) {
-    var bestCpm = summary.platforms.slice().filter(function(p) { return p.impressions > 0; }).sort(function(a, b) { return (a.spend / a.impressions) - (b.spend / b.impressions); })[0];
-    if (bestCpm) awarenessText += ", with <strong>" + escapeHtml(bestCpm.platform) + "</strong> emerging as the most cost-efficient reach channel";
-  }
-  awarenessText += ".";
-  paras.push(awarenessText);
+  var awarenessSentence = function(asPrimary) {
+    var t = (asPrimary ? "<strong>This was a reach-led campaign.</strong> Your campaigns delivered " : "Your campaigns delivered ") +
+      "<strong>" + fmtNum(g.impressions) + "</strong> ads served to <strong>" + fmtNum(g.reach) + "</strong> unique people";
+    if (g.frequency > 0) t += ", with each person seeing the message an average of <strong>" + g.frequency.toFixed(2) + " times</strong>";
+    t += ". At " + fmtR(g.cpm) + " per 1,000 ads served, this reflects " + cpmQuality + " against the paid social benchmark";
+    if (summary.platforms.length > 1) {
+      var bestCpm = summary.platforms.slice().filter(function(p) { return p.impressions > 0; }).sort(function(a, b) { return (a.spend / a.impressions) - (b.spend / b.impressions); })[0];
+      if (bestCpm) t += ", with <strong>" + escapeHtml(bestCpm.platform) + "</strong> emerging as the most cost-efficient reach channel";
+    }
+    return t + ".";
+  };
 
-  // Engagement paragraph
+  // Engagement sentence varies by whether clicks are PRIMARY or just
+  // a supporting indicator. On awareness reports clicks are a useful
+  // 'creative resonance' signal but not the win condition, so the
+  // sentence reframes around that instead of treating CTR as the
+  // headline.
   var ctrQuality = g.ctr >= 2.0 ? "exceptionally strong, well above" : g.ctr >= 1.4 ? "outstanding, clearly above" : g.ctr >= 0.9 ? "healthy and within" : "steady and close to";
-  var engagementText = "The audience responded actively with <strong>" + fmtNum(g.clicks) + "</strong> clicks, converting " + fmtPct(g.ctr) + " of ads served into genuine engagement. That click-through rate is " + ctrQuality + " the industry benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through. A blended cost per click of <strong>" + fmtR(g.cpc) + "</strong> demonstrates efficient value for every user action.";
-  paras.push(engagementText);
+  var engagementSentencePrimary = "The audience responded actively with <strong>" + fmtNum(g.clicks) + "</strong> clicks, converting " + fmtPct(g.ctr) + " of ads served into genuine engagement. That click-through rate is " + ctrQuality + " the industry benchmark of 0.9 to 1.4 percent, a clear signal the creative is cutting through. A blended cost per click of <strong>" + fmtR(g.cpc) + "</strong> demonstrates efficient value for every user action.";
+  var engagementSentenceSupporting = "Beyond reach, the creative drew <strong>" + fmtNum(g.clicks) + "</strong> clicks at " + fmtPct(g.ctr) + " click-through — a useful secondary signal that the creative resonated, though clicks are not the primary objective for this brief.";
 
-  // Outcomes paragraph (only if results exist). Must mirror the tile logic
-  // exactly, fallback to clicks on objective-matched campaigns when action
-  // counts are missing so commentary and KPI tiles never disagree.
+  // Outcomes sentence (only when there are real outcomes). Mirrors the
+  // KPI-tile logic exactly so commentary and tiles always agree.
   var totalFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
   var appStoreValue = parseFloat(g.appStoreClicks || 0);
   var lpClicksValue = parseFloat(g.landingPageClicks || 0);
@@ -500,8 +529,29 @@ function renderCommentaryBlock(summary) {
   if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.costPerFollower) + " per follower");
   if (appStoreValue > 0) outcomeParts.push("<strong>" + fmtNum(appStoreValue) + " clicks to app store</strong> at " + fmtR(g.costPerAppStoreClick) + " per click");
   if (lpClicksValue > 0) outcomeParts.push("<strong>" + fmtNum(lpClicksValue) + " clicks to landing page</strong> at " + fmtR(g.costPerLandingPageClick) + " per click");
-  if (outcomeParts.length > 0) {
-    paras.push("Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action.");
+  var outcomeSentencePrimary = outcomeParts.length > 0
+    ? "<strong>This was a results-led campaign.</strong> Objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action."
+    : "";
+  var outcomeSentenceSecondary = outcomeParts.length > 0
+    ? "Campaign objectives delivered " + outcomeParts.join(", ") + ". These outcomes confirm the creative strategy and audience targeting are working together to move the audience from awareness through to measurable action."
+    : "";
+
+  // Order paragraphs by intent.
+  var paras = [];
+  if (isAwareness) {
+    paras.push(awarenessSentence(true));
+    paras.push(engagementSentenceSupporting);
+    if (outcomeSentenceSecondary) paras.push(outcomeSentenceSecondary);
+  } else if (isResponse) {
+    if (outcomeSentencePrimary) paras.push(outcomeSentencePrimary);
+    paras.push(engagementSentencePrimary);
+    paras.push(awarenessSentence(false));
+  } else {
+    // Default / mixed-KPI: keep the historical order so existing
+    // mixed-objective clients don't regress.
+    paras.push(awarenessSentence(false));
+    paras.push(engagementSentencePrimary);
+    if (outcomeSentenceSecondary) paras.push(outcomeSentenceSecondary);
   }
 
   var paraHtml = paras.map(function(p) {
@@ -653,7 +703,7 @@ function buildEmailHtml(opts) {
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
   var summaryBlock = renderSummaryBlock(opts.summary, opts.profile, opts.ecommerce);
-  var commentaryBlock = renderCommentaryBlock(opts.summary);
+  var commentaryBlock = renderCommentaryBlock(opts.summary, opts.profile);
   // Share token (already URL-encoded inside shareUrl) lets the email's
   // <img> proxy calls authenticate as the client view on open.
   var shareTok = String(opts.shareUrl || "").split("token=")[1] || "";
