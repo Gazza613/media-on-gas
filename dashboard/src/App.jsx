@@ -2285,7 +2285,7 @@ function CampaignAuditModal(props){
 
   if(!props.open)return null;
   return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(8px)",padding:"24px 16px"}} onClick={function(e){if(e.target===e.currentTarget)props.onClose();}}>
-    <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 26px",width:1100,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
+    <div style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:"22px 26px",width:1100,maxWidth:"96vw",maxHeight:"calc(100vh - 48px)",display:"flex",flexDirection:"column",boxShadow:"0 24px 80px rgba(0,0,0,0.6)",overflowY:"auto",overflowX:"hidden",overscrollBehavior:"contain"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,background:"rgba(0,0,0,0.35)",border:"1px solid "+P.rule,borderRadius:12,padding:4}}>
           <button onClick={function(){view[1]("audit");}} style={{background:view[0]==="audit"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="audit"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="audit"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Objective Audit</button>
