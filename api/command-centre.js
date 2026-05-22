@@ -30,9 +30,11 @@ var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
 // Detect campaign names that belong to a "POS" sub-division. POS is a
 // separate book of business (lead-gen only) that lives INSIDE the
 // parent ad account on Meta — so accountName alone groups it with the
-// parent. Match POS as a word boundary so we don't trip on words like
-// 'compose'.
-var POS_TAG = /(^|[_\s\-])POS([_\s\-]|$)/i;
+// parent. Boundary on either side is ANY non-letter so we catch
+// "_POS_", " POS ", "-POS-", "|POS", "POS." etc. without tripping on
+// words like 'compose', 'position', 'pose'. Mirrors the patterns
+// detectObjective() in api/ads.js already treats as lead-gen.
+var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
 function clientOf(c) {
   var raw = String(c.accountName || "").trim();
   var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
@@ -139,12 +141,18 @@ function resolveObjective(c) {
     family: fam, result: result, resultLabel: resultLabel,
     costLabel: costLabel, costPer: costPer,
     platform: isFB ? "facebook" : isIG ? "instagram" : isTT ? "tiktok" : "other",
-    // Count this campaign's result in the client-header rollup. True for
-    // any objective with a meaningful per-campaign result (leads, all
-    // followers families incl. FB page likes + IG profile visits).
-    // Awareness has no discrete result, click-KPI families keep their
-    // existing rollup exclusion to avoid double-counting clicks.
-    countsAsResult: fam === "leads" || fam === "followers",
+    // Count this campaign's result in the client-header rollup. The
+    // rollup is now the SUM of each campaign's own headline KPI across
+    // every non-awareness family: leads (lead-gen), page likes / profile
+    // visits / TikTok follows (followers), app store clicks (appinstall),
+    // landing page clicks (traffic). Awareness stays out because its
+    // result is impressions which would dominate the headline by orders
+    // of magnitude. Previously the rollup only counted leads + followers
+    // so MTN MoMo (mixed: app-store clicks + landing-page clicks +
+    // follower/likes) under-reported its total client outcome by an
+    // order of magnitude (e.g. 13.5K shown vs ~240K of real objective
+    // outcomes for the period).
+    countsAsResult: fam !== "awareness",
     // Gate for the "spent + clicked, zero results" alert. Only LEADS and
     // TikTok FOLLOWERS have per-ad attribution reliable enough to flag:
     //   - FB followers: zero per-ad page likes is often a tooling artefact
@@ -237,14 +245,13 @@ export default async function handler(req, res) {
 
   var periodData, todayData;
   try {
-    // Reuse the dashboard /api/campaigns 5-min response cache instead of
-    // forcing fresh=1: the command centre is consulted continuously and
-    // does not need bleeding-edge numbers. fresh=1 was timing the
-    // function out (two ~30s upstream pulls back-to-back exceeded
-    // Vercel's 60s ceiling), surfacing as "Network error" on the
-    // dashboard. Cache lag is at most 5 min, which is fine here.
-    var jobs = [ fetchCampaigns(periodFrom, periodTo, dashKey, { fresh: false }) ];
-    if (todayInWindow) jobs.push(fetchCampaigns(todayStr, todayStr, dashKey, { fresh: false }));
+    // Reuse the dashboard /api/campaigns 5-min response cache by default
+    // so background loads stay snappy. When the operator hits Refresh
+    // (?fresh=1), bypass the upstream cache too — otherwise Refresh just
+    // re-aggregated the same stale numbers and felt like a no-op. The
+    // 180s function ceiling above absorbs the cold pull.
+    var jobs = [ fetchCampaigns(periodFrom, periodTo, dashKey, { fresh: bypassCache }) ];
+    if (todayInWindow) jobs.push(fetchCampaigns(todayStr, todayStr, dashKey, { fresh: bypassCache }));
     var pair = await Promise.all(jobs);
     periodData = pair[0];
     todayData = todayInWindow ? pair[1] : { campaigns: [] };
@@ -292,13 +299,18 @@ export default async function handler(req, res) {
     var ended = endedInPast(c);
 
     var impressions = num(c.impressions), clicks = num(c.clicks), leads = num(c.leads);
-    // The command centre is "what is actually in flight this period".
-    // Require SOME delivery in the selected window (spend, today spend,
-    // or impressions). A campaign left ENABLED on the platform but with
-    // no delivery in the window (e.g. a Feb/Mar/Apr TikTok campaign
-    // never switched off) is NOT in flight now and must not appear or
-    // be flagged "live but zero spend". This is the dormant-noise fix.
-    if (periodSpend === 0 && todaySpend === 0 && impressions === 0) continue;
+    // Dormant-noise filter, narrowed: only exclude a row that has no
+    // delivery in the selected window IF it is also NOT platform-active.
+    // Previously this excluded every zero-delivery row regardless of
+    // status — so a campaign Ads Manager calls ACTIVE / ENABLED that
+    // simply hasn't spent yet in the window (just launched, or paused
+    // mid-window then resumed today) disappeared from view AND from
+    // the LIVE NOW count. Operator-reported gap: MTN MoMo Ads Manager
+    // shows 16 live but Command Centre shows 12. Keeping the filter for
+    // PAUSED zero-delivery rows still suppresses the old stale-leftover
+    // noise (e.g. a Feb/Mar/Apr campaign left enabled and never touched
+    // since), because those land in "paused"/"ended" not "active".
+    if (periodSpend === 0 && todaySpend === 0 && impressions === 0 && !statusActive) continue;
 
     var ctr = num(c.ctr), cpm = num(c.cpm), cpc = num(c.cpc), frequency = num(c.frequency);
     var live = statusActive && !ended;

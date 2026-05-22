@@ -256,17 +256,27 @@ export default function CommandCentre(props) {
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {/* All / Needs attention toggle so the operator can collapse
-            healthy rows when triaging. Healthy = zero alerts. */}
-        <div style={{ display: "inline-flex", border: "1px solid " + P.rule, borderRadius: 8, overflow: "hidden" }}>
-          {[["all","All"], ["attention","Needs attention"]].map(function(opt) {
-            var on = filterMode === opt[0];
-            return <button key={opt[0]} onClick={function(){ setFilterMode(opt[0]); }}
-              style={{ background: on ? P.solar + "22" : "transparent", border: "none", padding: "7px 12px", color: on ? P.solar : P.label, fontSize: 10, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>
-              {opt[1]}
-            </button>;
-          })}
-        </div>
-        <button onClick={function(){ load({ fresh: true }); }} disabled={s.loading} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "7px 14px", color: s.loading ? P.dim : P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: s.loading ? "wait" : "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.loading ? "Loading…" : "Refresh"}</button>
+            healthy rows when triaging. Each pill carries a live count so
+            the click is visibly doing something even when the underlying
+            list is mostly identical (e.g. when every client has at least
+            one alert, switching modes still shows the same client list,
+            and without a count badge the buttons looked inert). */}
+        {(function() {
+          var totalCount = (s.data && s.data.summary && s.data.summary.campaigns) || 0;
+          var attentionCount = (s.data && s.data.summary && s.data.summary.needsAttention) || 0;
+          return <div style={{ display: "inline-flex", border: "1px solid " + P.rule, borderRadius: 8, overflow: "hidden" }}>
+            {[["all", "All", totalCount], ["attention", "Needs attention", attentionCount]].map(function(opt) {
+              var on = filterMode === opt[0];
+              var col = opt[0] === "attention" && opt[2] > 0 ? (P.critical || "#ef4444") : P.solar;
+              return <button key={opt[0]} onClick={function(){ setFilterMode(opt[0]); }}
+                style={{ background: on ? col + "22" : "transparent", border: "none", borderBottom: on ? "2px solid " + col : "2px solid transparent", padding: "7px 14px", color: on ? col : P.label, fontSize: 10, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1.5, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 8 }}>
+                <span>{opt[1]}</span>
+                <span style={{ background: on ? col + "33" : "rgba(255,255,255,0.08)", color: on ? col : P.label, padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 900 }}>{opt[2]}</span>
+              </button>;
+            })}
+          </div>;
+        })()}
+        <button onClick={function(){ load({ fresh: true }); }} disabled={s.loading} style={{ background: s.loading ? "rgba(255,255,255,0.05)" : "transparent", border: "1px solid " + (s.loading ? P.solar + "55" : P.rule), borderRadius: 8, padding: "7px 14px", color: s.loading ? P.solar : P.solar, fontSize: 11, fontWeight: 800, fontFamily: fm, cursor: s.loading ? "wait" : "pointer", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.loading ? "Refreshing…" : "Refresh"}</button>
       </div>
     </div>
 
@@ -371,13 +381,17 @@ export default function CommandCentre(props) {
           return (d.result > 0) && (d.ctr >= 1.5) && (d.frequency < freqLimit) && paceOK;
         };
         var classify = function(c) {
+          // High-severity alerts always float to ATTENTION so a stalled
+          // / blown-budget campaign is never hidden in PAUSED.
           if (hasSev(c, "high")) return "attention";
-          if (hasSev(c, "medium")) return "watch";
-          // Split out ended (end date passed) from paused (operator
-          // turned it off but end date still in future) — the team
-          // wants those reading separately at the bottom.
+          // Ended / paused outrank medium alerts (pacing_behind on a
+          // paused campaign is tautological — it's behind BECAUSE it's
+          // paused, so it belongs in PAUSED THIS PERIOD where the
+          // operator can decide to reactivate or extend, not in WATCH
+          // LIST mixed with live campaigns that need triage).
           if (c.ended) return "ended";
           if (!c.live) return "paused";
+          if (hasSev(c, "medium")) return "watch";
           if (isScaleCandidate(c)) return "scale";
           return "healthy";
         };
@@ -981,21 +995,14 @@ export default function CommandCentre(props) {
                   <div style={{ fontSize: 12, fontWeight: 700, color: P.txt, fontFamily: ff, marginTop: 4, letterSpacing: 1 }}>Head Data Analyst memo for <span style={{ color: P.ember || "#F96203" }}>{grp.client}</span></div>
                 </div>
               </div>
-              <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic", marginBottom: 18, letterSpacing: 1 }}>Top-1% global benchmark · {camps.length} campaign{camps.length === 1 ? "" : "s"} · {clientAds.length} ad{clientAds.length === 1 ? "" : "s"} · {dateFrom} to {dateTo}</div>
+              <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, fontStyle: "italic", marginBottom: 22, letterSpacing: 1 }}>Top-1% global benchmark · {camps.length} campaign{camps.length === 1 ? "" : "s"} · {clientAds.length} ad{clientAds.length === 1 ? "" : "s"} · {dateFrom} to {dateTo}</div>
 
-              {/* Mini stats strip for this client. */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 22 }}>
-                {[
-                  ["SPEND", fR2(totalSpend), P.ember],
-                  ["BLENDED CTR", fmtPct(blCtr), P.mint],
-                  ["BLENDED CPC", fR2(blCpc), P.blaze],
-                  ["PLATFORMS", platforms.length, P.orchid],
-                  ["OBJECTIVES", objectives.length, P.solar]
-                ].map(function(x, i) { return <div key={i} style={{ padding: "12px 14px", background: "rgba(0,0,0,0.4)", border: "1px solid " + P.rule, borderRadius: 10, textAlign: "center" }}>
-                  <div style={{ fontSize: 9, color: P.label, fontFamily: fm, letterSpacing: 1.5, marginBottom: 5 }}>{x[0]}</div>
-                  <div style={{ fontSize: 15, fontWeight: 900, color: x[2], fontFamily: fm }}>{x[1]}</div>
-                </div>; })}
-              </div>
+              {/* Mini stats strip removed: the same numbers live in the
+                  client-header strip above (LIVE / PERIOD / TODAY /
+                  RESULTS / ALERTS) and re-stating them here under the
+                  Growth Plan title just added vertical chrome before
+                  the TL;DR moves. Going straight into the plan keeps
+                  the memo punchy. */}
 
               {/* TL;DR · Top moves this week — unpacked for a junior
                   account manager. Each card has four labelled blocks:
@@ -1322,15 +1329,23 @@ export default function CommandCentre(props) {
               </div>
 
               {/* Per-client priority buckets. Same sectionDefs as before,
-                  scoped to this client. Empty buckets render nothing. */}
+                  scoped to this client. Empty buckets render nothing.
+                  Section header is the visual anchor for status (WATCH
+                  LIST / SCALE READY / PAUSED / ENDED) so it carries
+                  more weight than the metric chips above — larger
+                  font, thicker border, count badge sized to read at
+                  the same scale-down ratio. */}
               {sectionDefs.map(function(def) {
                 var rows = buckets[def.key];
                 if (!rows || rows.length === 0) return null;
                 return <div key={def.key} style={{ marginBottom: 22 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom: 8, borderBottom: (def.dimmed ? "1px dashed " : "1px solid ") + def.color + "55" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <span style={{ background: def.color + "22", border: "1px solid " + def.color + "66", color: def.color, fontSize: 9, fontWeight: 900, fontFamily: fm, letterSpacing: 1.5, padding: "4px 10px", borderRadius: 5, textTransform: "uppercase" }}>{def.label} · {rows.length}</span>
-                      <span style={{ fontSize: 11, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{def.sub}</span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingBottom: 10, borderBottom: (def.dimmed ? "1px dashed " : "2px solid ") + def.color + (def.dimmed ? "55" : "88") }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <span style={{ background: def.color + "26", border: "2px solid " + def.color + "88", color: def.color, fontSize: 14, fontWeight: 900, fontFamily: fm, letterSpacing: 2, padding: "8px 16px", borderRadius: 8, textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 10 }}>
+                        <span>{def.label}</span>
+                        <span style={{ background: def.color + "44", color: def.color, padding: "2px 9px", borderRadius: 12, fontSize: 13, fontWeight: 900, letterSpacing: 0.5 }}>{rows.length}</span>
+                      </span>
+                      <span style={{ fontSize: 12, color: P.label, fontFamily: fm, fontStyle: "italic" }}>{def.sub}</span>
                     </div>
                   </div>
                   {rows.map(function(r) { return renderCampaignRow(r.c, def.dimmed); })}
