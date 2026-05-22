@@ -4360,7 +4360,7 @@ export default function MediaOnGas(){
     // was the only unique value the tab carried isn't used by the team.
     // genFlags() stays alive because Pulse + Command Centre still
     // consume parts of it; only the surface route is removed.
-    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"command",label:"Command",icon:Ic.flag(P.solar,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"command",label:"Optimise",icon:Ic.flag(P.solar,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
     // Ecommerce tab is ALWAYS visible to the GAS team (even when the
     // selected client has no GA4 connection — the panel itself renders a
     // "no ecommerce connection yet" empty state). Clients still only see
