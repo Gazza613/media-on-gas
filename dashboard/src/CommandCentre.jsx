@@ -1024,8 +1024,8 @@ export default function CommandCentre(props) {
                   THIS line on its own is enough at a glance. */}
               <div style={{ marginBottom: 22, padding: "18px 20px", background: "linear-gradient(135deg," + (P.warning || "#fbbf24") + "18," + (P.warning || "#fbbf24") + "04)", border: "1px solid " + (P.warning || "#fbbf24") + "55", borderRadius: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <span style={{ background: P.warning || "#fbbf24", color: "#2a1605", padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>TL;DR</span>
-                  <span style={{ fontSize: 13, color: P.warning || "#fbbf24", fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>Top {topMoves.length} move{topMoves.length === 1 ? "" : "s"} this week</span>
+                  <span style={{ background: P.warning || "#fbbf24", color: "#2a1605", padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 900, fontFamily: fm, letterSpacing: 2 }}>TOP MOVES</span>
+                  <span style={{ fontSize: 13, color: P.warning || "#fbbf24", fontFamily: fm, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase" }}>{topMoves.length} priorit{topMoves.length === 1 ? "y" : "ies"} this week</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {topMoves.map(function(m, i) { return <div key={i} style={{ display: "flex", gap: 14, padding: "16px 18px", background: "rgba(0,0,0,0.3)", border: "1px solid " + (P.warning || "#fbbf24") + "30", borderRadius: 10 }}>
@@ -1242,7 +1242,7 @@ export default function CommandCentre(props) {
                   monthly auto-refresh cron. */}
               <div style={{ marginTop: 16, padding: "12px 14px", background: "rgba(0,0,0,0.3)", border: "1px solid " + P.rule, borderLeft: "3px solid " + P.label, borderRadius: "0 10px 10px 0", fontSize: 10, color: P.label, fontFamily: fm, lineHeight: 1.7, letterSpacing: 0.5 }}>
                 <div style={{ fontWeight: 800, color: P.txt, marginBottom: 4, letterSpacing: 1, textTransform: "uppercase" }}>How to read this memo</div>
-                <div>The Diagnosis findings above are 100% data-driven from this client's live campaigns in your selected window. The Audience / Creative / Objective playbooks reflect current Meta Advantage+, TikTok Smart+, and Google PMax best practices, auto-refreshed monthly from a top-1% agency benchmark. They're high-confidence direction, not absolute rules — every account has nuance. Use the TL;DR for the week, then drill into the section that matches what you're working on. Click any ad thumbnail to open the full-size creative on the platform's CDN in a new tab.{bp && bp.asOf ? " · Playbook refreshed " + bp.asOf : ""}</div>
+                <div>The Diagnosis findings above are 100% data-driven from this client's live campaigns in your selected window. The Audience / Creative / Objective playbooks reflect current Meta Advantage+, TikTok Smart+, and Google PMax best practices, auto-refreshed monthly from a top-1% agency benchmark. They're high-confidence direction, not absolute rules — every account has nuance. Use the Top Moves for the week, then drill into the section that matches what you're working on. Click any ad thumbnail to open the full-size creative on the platform's CDN in a new tab.{bp && bp.asOf ? " · Playbook refreshed " + bp.asOf : ""}</div>
               </div>
             </div>
           </div>;
