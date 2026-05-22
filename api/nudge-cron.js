@@ -293,6 +293,25 @@ export default async function handler(req, res) {
   // nudged?' without guessing.
   var verbose = req.query.verbose === "1";
 
+  // baselineOnly=1: lightweight read of the current baseline. Used
+  // by the dashboard SLA panel to filter the Reports Sent table to
+  // entries after the last Apply Reset so the team doesn't have to
+  // scroll past pre-reset history.
+  if (req.query.baselineOnly === "1") {
+    var btsOnly = 0;
+    try {
+      var bResOnly = await redisCmd(["GET", "nudge:baseline"]);
+      if (bResOnly && bResOnly.result) btsOnly = Date.parse(bResOnly.result) || 0;
+    } catch (_) {}
+    res.status(200).json({
+      ok: true,
+      baseline: btsOnly ? new Date(btsOnly).toISOString() : null,
+      slaDays: SLA_DAYS,
+      bufferHours: BUFFER_HOURS
+    });
+    return;
+  }
+
   // ?reset=1[&baseline=YYYY-MM-DD], set a baseline date in Redis. All
   // clients are treated as if they last sent on this date, so the SLA
   // counter restarts from there. The first nudges will fire SLA_DAYS +

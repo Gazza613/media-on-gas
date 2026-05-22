@@ -1998,7 +1998,13 @@ function CampaignAuditModal(props){
       .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
       .then(function(r){
         slaBusy[1](false);
-        if(r.status===200&&r.data&&r.data.ok){slaResult[1](r.data);}
+        if(r.status===200&&r.data&&r.data.ok){
+          slaResult[1](r.data);
+          // Persist the new baseline locally so the report-history
+          // tables filter to entries AFTER this date immediately,
+          // without waiting for the next refresh.
+          if(r.data.baseline)slaBaselineCurrent[1](r.data.baseline);
+        }
         else{slaErr[1]((r.data&&r.data.error)||"Reset failed");}
       })
       .catch(function(){slaBusy[1](false);slaErr[1]("Connection error");});
@@ -2018,7 +2024,21 @@ function CampaignAuditModal(props){
       })
       .catch(function(){slaLog[1]({loading:false,entries:[],error:"Connection error"});});
   };
-  useEffect(function(){ if(slaPanelOpen[0]&&props.isSuperadmin){loadSlaLog();} },[slaPanelOpen[0]]);
+  // Current SLA baseline (read from /api/nudge-cron?baselineOnly=1).
+  // Filters the report-history tables so the team only sees activity
+  // AFTER the last Apply Reset. Without this the panel was cluttered
+  // with pre-reset audit rows that are no longer relevant for the
+  // 7-day SLA window.
+  var slaBaselineCurrent=useState(null);
+  var loadSlaBaseline=function(){
+    fetch(props.apiBase+"/api/nudge-cron?baselineOnly=1",{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(r){
+        if(r.status===200&&r.data&&r.data.ok){slaBaselineCurrent[1](r.data.baseline||null);}
+      })
+      .catch(function(){});
+  };
+  useEffect(function(){ if(slaPanelOpen[0]&&props.isSuperadmin){loadSlaLog();loadSlaBaseline();} },[slaPanelOpen[0]]);
 
   // Diagnostic state for the nudge cron — calls /api/nudge-cron with
   // dryRun=1&verbose=1 so the team can see exactly which clients the
@@ -2388,7 +2408,16 @@ function CampaignAuditModal(props){
             {L.loading&&L.entries.length===0&&<div style={{fontSize:11,color:P.label,fontFamily:fm}}>Loading report history…</div>}
             {!L.loading&&!L.error&&L.entries.length===0&&<div style={{fontSize:11,color:P.caption,fontFamily:ff}}>No reports have been sent yet. Sends made via Share appear here.</div>}
             {L.entries.length>0&&(function(){
-              var sorted=L.entries.slice().filter(function(e){return e&&e.sentAt;}).sort(function(a,b){return new Date(b.sentAt)-new Date(a.sentAt);});
+              // Filter to sends AT OR AFTER the current baseline so the
+              // tables aren't cluttered with pre-reset history. The
+              // baseline lives in Redis (read via /api/nudge-cron
+              // ?baselineOnly=1 on panel open). When no baseline is
+              // set (or the load failed), all entries show.
+              var baselineTs=slaBaselineCurrent[0]?Date.parse(slaBaselineCurrent[0]):0;
+              var afterBaseline=function(e){return !baselineTs||new Date(e.sentAt).getTime()>=baselineTs;};
+              var allWithDate=L.entries.slice().filter(function(e){return e&&e.sentAt;}).sort(function(a,b){return new Date(b.sentAt)-new Date(a.sentAt);});
+              var sorted=allWithDate.filter(afterBaseline);
+              var hidden=allWithDate.length-sorted.length;
               var now=Date.now();var DAY=86400000;
               var groups={};
               sorted.forEach(function(e){
@@ -2397,7 +2426,11 @@ function CampaignAuditModal(props){
                 if(!groups[key]||ts>groups[key].ts){groups[key]={ts:ts,name:e.clientName||e.clientSlug||"Unknown",sentAt:e.sentAt};}
               });
               var standing=Object.keys(groups).map(function(k){var g=groups[k];var days=Math.floor((now-g.ts)/DAY);return{name:g.name,sentAt:g.sentAt,days:days,overdue:days>7};}).sort(function(a,b){return (b.overdue-a.overdue)||(b.days-a.days);});
+              var baselineLabel=baselineTs?new Date(baselineTs).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"2-digit"}):"";
               return <div>
+                {baselineTs>0&&<div style={{marginBottom:10,padding:"7px 12px",background:P.solar+"12",border:"1px solid "+P.solar+"40",borderLeft:"3px solid "+P.solar,borderRadius:"0 8px 8px 0",fontSize:10,color:P.txt,fontFamily:fm,lineHeight:1.6}}>
+                  <strong style={{color:P.solar}}>Filtered to reports sent on or after {baselineLabel}</strong> (last Apply Reset baseline){hidden>0?". "+hidden+" earlier report"+(hidden===1?"":"s")+" hidden from this view.":"."} Apply Reset with a new baseline to change.
+                </div>}
                 <div style={{fontSize:9,fontWeight:800,color:P.label,letterSpacing:1.5,fontFamily:fm,textTransform:"uppercase",margin:"4px 0 6px"}}>Per-client standing ({standing.length})</div>
                 <div style={{overflowX:"auto",marginBottom:14}}>
                   <table style={{width:"100%",borderCollapse:"collapse"}}>
