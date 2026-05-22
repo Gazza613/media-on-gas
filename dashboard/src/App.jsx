@@ -421,7 +421,15 @@ cart:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" f
 person:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke={c} strokeWidth="1.5" fill={c+"15"}/><path d="M4 21v-1.5a8 8 0 0116 0V21" stroke={c} strokeWidth="1.5" strokeLinecap="round"/></svg>;}
 };
 
-function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=props.hv;var s=useState(false);return(<div onMouseEnter={function(){s[1](true);}} onMouseLeave={function(){s[1](false);}} style={Object.assign({background:P.glass,border:"1px solid "+(s[0]&&hv?a+"50":P.rule),borderRadius:16,position:"relative",overflow:"hidden",transition:"all 0.3s ease",transform:s[0]&&hv?"translateY(-2px)":"none",boxShadow:s[0]&&hv?"0 12px 40px "+a+"15":"0 4px 20px rgba(0,0,0,0.25)"},st)}><div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:s[0]&&hv?1:0.4}}/>{props.children}</div>);}
+// Scroll-perf fix: only attach mouse handlers + the 0.3s "all"
+// transition when the caller actually opted in to the hover effect
+// (hv={true}). Earlier behaviour was wiring onMouseEnter/Leave on
+// every Glass — including the ~30+ campaign-row Glasses on the
+// Optimisation Centre that never visualise hover — so every mouse
+// move during scroll triggered a setState + re-render, making the
+// page feel laggy. useState stays at top level so hook order is
+// stable across renders.
+function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=!!props.hv;var s=useState(false);var on=hv&&s[0];return(<div onMouseEnter={hv?function(){s[1](true);}:undefined} onMouseLeave={hv?function(){s[1](false);}:undefined} style={Object.assign({background:P.glass,border:"1px solid "+(on?a+"50":P.rule),borderRadius:16,position:"relative",overflow:"hidden",transition:hv?"all 0.3s ease":"none",transform:on?"translateY(-2px)":"none",boxShadow:on?"0 12px 40px "+a+"15":"0 4px 20px rgba(0,0,0,0.25)"},st)}><div style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:on?1:0.4}}/>{props.children}</div>);}
 // Reveal: scroll-triggered fade + slide-up wrapper. Children only mount the
 // first time the wrapper enters the viewport, so recharts plays its own
 // mount animation in sync with the fade-in. Reserves vertical space via

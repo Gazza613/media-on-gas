@@ -349,7 +349,7 @@ export default function CommandCentre(props) {
               title={amUrl ? "Open this campaign in Ads Manager" : "Ads Manager link unavailable"}
               style={{ flexShrink: 0, width: 88, height: 88, borderRadius: 12, overflow: "hidden", display: "block", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", position: "relative", cursor: amUrl ? "pointer" : "default", textDecoration: "none", opacity: dimmed ? 0.75 : 1 }}>
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
-            {c.thumbnail && <img src={c.thumbnail} alt="" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
+            {c.thumbnail && <img src={c.thumbnail} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
             {amUrl && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7.5, fontWeight: 800, fontFamily: fm, letterSpacing: 0.5, textAlign: "center", padding: "3px 0", textTransform: "uppercase" }}>Ads Manager ↗</span>}
           </a>;
           return <Glass key={c.campaignId} accent={hasAlert && !dimmed ? sevColor(c.alerts[0].severity) : P.rule} st={{ padding: 16, marginBottom: 10, opacity: dimmed ? 0.82 : 1 }}>
@@ -1599,7 +1599,7 @@ export default function CommandCentre(props) {
           var sz = size || 72;
           return <div style={{ flexShrink: 0, width: sz, height: sz, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + (P.cyan || "#22D3EE") + "22," + (P.ember || "#F96203") + "15)", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: Math.max(10, sz / 6), fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
-            {c.thumbnail && <img src={c.thumbnail} alt="" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
+            {c.thumbnail && <img src={c.thumbnail} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
           </div>;
         };
 
