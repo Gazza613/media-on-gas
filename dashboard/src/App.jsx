@@ -507,6 +507,26 @@ person:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24"
 // visual lift with zero React re-renders. The accent colour comes
 // through as inline CSS custom properties (--glass-accent-* set per
 // instance) so each card keeps its own hover tint.
+// Small isolated component for the "Updated Xm ago" chip in the nav.
+// Owns its own 30s tick so the App tree doesn't re-render just to
+// refresh this one chip — that periodic top-level re-render was
+// causing scroll jitter. Only this component re-renders every 30s.
+function FreshnessChip(props){
+  var P=props.P,fm=props.fm,ts=props.ts;
+  var t0=useState(0),setTick=t0[1];
+  useEffect(function(){
+    var iv=setInterval(function(){setTick(function(x){return x+1;});},30000);
+    return function(){clearInterval(iv);};
+  },[]);
+  var ageMs=Date.now()-ts;
+  var mins=Math.floor(ageMs/60000);
+  var col=mins>=10?(P.critical||"#ef4444"):mins>=5?(P.warning||"#fbbf24"):(P.mint||"#34D399");
+  var label=mins<1?"just now":mins===1?"1 min ago":mins+" min ago";
+  return <div title={"Last successful refresh: "+new Date(ts).toLocaleTimeString()+". Auto-refreshes every 5 minutes while the tab is active."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 9px",borderRadius:9,background:col+"12",border:"1px solid "+col+"44",fontFamily:fm}}>
+    <span style={{width:6,height:6,borderRadius:"50%",background:col}}/>
+    <span style={{fontSize:8.5,fontWeight:800,color:col,letterSpacing:1,textTransform:"uppercase"}}>Updated {label}</span>
+  </div>;
+}
 function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=!!props.hv;var hexA=function(hex,al){if(!hex||hex[0]!=="#"||hex.length!==7)return hex;var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return"rgba("+r+","+g+","+b+","+al+")";};var base={background:P.glass,border:"1px solid "+P.rule,borderRadius:16,position:"relative",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.25)"};if(hv){base["--glass-accent"]=a;base["--glass-accent-border"]=hexA(a,0.32);base["--glass-accent-shadow"]=hexA(a,0.085);}return(<div className={hv?"gas-hover-card":undefined} style={Object.assign(base,st)}><div className={hv?"gas-hover-card-line":undefined} style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:0.4,transition:hv?"opacity 0.3s ease":"none"}}/>{props.children}</div>);}
 // Reveal: scroll-triggered fade + slide-up wrapper. Children only mount the
 // first time the wrapper enters the viewport, so recharts plays its own
@@ -4152,10 +4172,11 @@ export default function MediaOnGas(){
   // Last successful fetch timestamp, used for the "Updated Xm ago"
   // freshness indicator + the 5-min auto-refresh timer. Stored as
   // epoch ms (Number). Bumped to Date.now() inside applyCampaignsResponse.
+  // The 30s-tick re-render that drives the relative-time chip lives
+  // inside the FreshnessChip component below so it doesn't re-render
+  // the entire App tree every 30 seconds (which was causing visible
+  // scroll jitter).
   var lft0=useState(0),lastFetchTs=lft0[0],setLastFetchTs=lft0[1];
-  // Tick state so the freshness chip re-renders every 30 seconds with
-  // the new minutes-ago count even when no other state changes.
-  var nt0=useState(0),nowTick=nt0[0],setNowTick=nt0[1];
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
@@ -4314,12 +4335,8 @@ export default function MediaOnGas(){
     // a portfolio-wide aggregate.
   };
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
-  // Tick once per 30s so the "Updated Xm ago" chip stays current
-  // without depending on other state changes.
-  useEffect(function(){
-    var iv=setInterval(function(){setNowTick(function(x){return x+1;});},30000);
-    return function(){clearInterval(iv);};
-  },[]);
+  // (30s tick for the freshness chip moved into FreshnessChip below
+  //  to avoid re-rendering the entire App every 30 seconds.)
   // 5-minute auto-refresh of the visible range. Fires silently in the
   // background (uses bgRefreshing chip, not the full loader), keeping
   // the dashboard's numbers within ~5 min of platform reality without
@@ -5798,23 +5815,11 @@ export default function MediaOnGas(){
             {(function(){var activePreset=matchPreset();var opts=[{k:"7d",l:"7D"},{k:"30d",l:"30D"},{k:"mtd",l:"MTD"},{k:"lm",l:"LM"}];return <div title="Quick date range — 7 Days / 30 Days / MTD / Last Month" style={{display:"flex",alignItems:"center",gap:2,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:2}}>
               {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);setCompareMode((opt.k==="mtd"||opt.k==="lm")?"mom":"wow");}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:6,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
             </div>;})()}
-            {/* Freshness indicator — "Updated Xm ago" so the team always
-                knows how live the numbers are. Goes amber at >5 min,
-                red at >10 min, paired with the silent 5-min auto-refresh
-                so it should normally stay green. nowTick (re-renders
-                every 30s) drives the live count without other state
-                changes. Hidden while a refresh is in flight (the
-                Refreshing chip below takes over the slot). */}
-            {!bgRefreshing&&lastFetchTs>0&&(function(){
-              var ageMs=Date.now()-lastFetchTs;var nowTickRead=nowTick; // referenced so eslint doesn't strip
-              var mins=Math.floor(ageMs/60000);
-              var col=mins>=10?(P.critical||"#ef4444"):mins>=5?(P.warning||"#fbbf24"):(P.mint||"#34D399");
-              var label=mins<1?"just now":mins===1?"1 min ago":mins+" min ago";
-              return <div title={"Last successful refresh: "+new Date(lastFetchTs).toLocaleTimeString()+". Auto-refreshes every 5 minutes while the tab is active."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 9px",borderRadius:9,background:col+"12",border:"1px solid "+col+"44",fontFamily:fm}}>
-                <span style={{width:6,height:6,borderRadius:"50%",background:col}}/>
-                <span style={{fontSize:8.5,fontWeight:800,color:col,letterSpacing:1,textTransform:"uppercase"}}>Updated {label}</span>
-              </div>;
-            })()}
+            {/* Freshness indicator — "Updated Xm ago" with its own
+                internal 30s tick so the App tree doesn't re-render
+                periodically just to refresh this one chip (which
+                was causing visible scroll jitter on Summary). */}
+            {!bgRefreshing&&lastFetchTs>0&&<FreshnessChip ts={lastFetchTs} P={P} fm={fm}/>}
             {/* Background-refresh chip — only visible while a fetch is
                 in flight after the initial load. */}
             {bgRefreshing&&<div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 9px",borderRadius:9,background:"rgba(249,98,3,0.10)",border:"1px solid rgba(249,98,3,0.32)",fontFamily:fm}} title="Refreshing the dashboard for the new date range">
