@@ -20,6 +20,27 @@ function isLive(c) {
   return String(c && c.status || "").toLowerCase() === "active";
 }
 
+var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
+var GAS_PREFIX_CLIENT = /(?:^|\|\s*)GAS\s*\|\s*([^|]+?)\s*\|/i;
+
+function snapshotClientName(c) {
+  var accountRaw = String(c && c.accountName || "").trim();
+  var base = accountRaw
+    .replace(PLATFORM_SUFFIX, "")
+    .replace(PLATFORM_SUFFIX, "")
+    .trim() || "Unknown";
+  var campaignName = String(c && c.campaignName || "");
+  var routed = "";
+  var gm = campaignName.match(GAS_PREFIX_CLIENT);
+  if (gm && gm[1]) {
+    routed = String(gm[1] || "").replace(/\s*\([^)]*\)\s*$/g, "").replace(/\s+/g, " ").trim();
+  }
+  var name = routed || base;
+  if (POS_TAG.test(campaignName) && !POS_TAG.test(name)) return name + " POS";
+  return name;
+}
+
 // Daily Anomalies, anomaly-only watchlist for the GAS media team. Fires
 // every morning at 08:15 SAST (06:15 UTC) via Vercel cron. Compares the
 // prior day's per-campaign metrics against the campaign's own rolling
@@ -103,7 +124,7 @@ function buildHtml(opts) {
       '</div>';
     }).join("");
     return '<tr><td style="padding:18px 36px 0;">' +
-      '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">Yesterday by client</div>' +
+      '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">What we see from yesterday</div>' +
       '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:6px;">Each client led with their primary KPI status, then adjacent metrics (reach, impressions, frequency, CPM, CTR, CPC, results, CPR) for the full picture. Deltas are yesterday vs the trailing 7-day daily average.</div>' +
       clientBlocks +
       '</td></tr>';
@@ -316,14 +337,14 @@ function buildHtml(opts) {
 
       '<tr><td style="padding:24px 36px 8px;" align="center">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
-      '<tr><td align="center" style="background:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border-radius:12px;">' +
-      '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
+      '<tr><td align="center" bgcolor="#F96203" style="background-color:#F96203;border-radius:12px;border:1px solid #FF6B00;mso-padding-alt:14px 38px;">' +
+      '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;background-color:#F96203;border-radius:12px;">Open Dashboard</a>' +
       '</td></tr></table></td></tr>' +
 
       '<tr><td style="padding:28px 36px 4px;">' +
-      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
-      '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
-      '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
+      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">SAMI</div>' +
+      '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI EXPERT AGENT</div>' +
+      '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS MEDIA DEPARTMENT</div>' +
       '</td></tr>' +
 
       '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
@@ -469,7 +490,7 @@ export default async function handler(req, res) {
     // metrics (impressions, reach, frequency, CPM, CTR, CPC, results,
     // CPR). Awareness campaigns roll into the 'awareness' family;
     // result-objective campaigns roll into their result family.
-    var clientName = String(c.accountName || "Unknown").replace(/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i, "").replace(/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i, "").trim() || "Unknown";
+    var clientName = snapshotClientName(c);
     var awareness = isAwarenessObjective(c);
     var family = awareness ? "awareness" : (rm.kind || "Other");
     if (!perClientSnap[clientName]) perClientSnap[clientName] = {};

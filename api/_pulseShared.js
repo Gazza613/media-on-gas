@@ -168,11 +168,15 @@ export function worse(a, b) { return COLOR_RANK[a] >= COLOR_RANK[b] ? a : b; }
 export function resultMetricFor(c) {
   var obj = String(c.objective || "").toLowerCase();
   var name = String(c.campaignName || "").toLowerCase();
+  var isLanding = obj === "landingpage" || obj === "landing_page" || obj === "outcome_traffic" || obj.indexOf("traffic") >= 0 || name.indexOf("landing") >= 0;
   if (obj.indexOf("appinstall") >= 0 || obj.indexOf("app_install") >= 0 || obj.indexOf("app_promotion") >= 0 || name.indexOf("appinstal") >= 0) {
     return { kind: "Clicks to App Store", value: parseInt(c.clicks || 0), costLabel: "CPC" };
   }
   if (obj === "lead_generation" || obj === "outcome_leads" || obj.indexOf("lead") >= 0) {
     return { kind: "Leads", value: parseInt(c.leads || 0), costLabel: "CPL" };
+  }
+  if (isLanding) {
+    return { kind: "Clicks to Landing Page", value: parseInt(c.clicks || 0), costLabel: "CPC" };
   }
   if (obj.indexOf("page_likes") >= 0 || obj.indexOf("post_engagement") >= 0 || obj.indexOf("outcome_engagement") >= 0 || obj.indexOf("follower") >= 0 || name.indexOf("like") >= 0 || name.indexOf("follow") >= 0) {
     // Follower result = page likes + follows ONLY. c.pageLikes is
