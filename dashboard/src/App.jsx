@@ -4087,6 +4087,13 @@ export default function MediaOnGas(){
   // full blank loader, so date-picker changes feel instant: existing
   // numbers stay on screen while the new range fetches.
   var bgr0=useState(false),bgRefreshing=bgr0[0],setBgRefreshing=bgr0[1];
+  // Last successful fetch timestamp, used for the "Updated Xm ago"
+  // freshness indicator + the 5-min auto-refresh timer. Stored as
+  // epoch ms (Number). Bumped to Date.now() inside applyCampaignsResponse.
+  var lft0=useState(0),lastFetchTs=lft0[0],setLastFetchTs=lft0[1];
+  // Tick state so the freshness chip re-renders every 30 seconds with
+  // the new minutes-ago count even when no other state changes.
+  var nt0=useState(0),nowTick=nt0[0],setNowTick=nt0[1];
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
@@ -4149,6 +4156,7 @@ export default function MediaOnGas(){
       if(d.pages){setPages(d.pages);}
       if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}
       setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);
+      setLastFetchTs(Date.now());
   };
   var fetchData=function(){
     var h=authHeaders();
@@ -4221,6 +4229,33 @@ export default function MediaOnGas(){
     // a portfolio-wide aggregate.
   };
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
+  // Tick once per 30s so the "Updated Xm ago" chip stays current
+  // without depending on other state changes.
+  useEffect(function(){
+    var iv=setInterval(function(){setNowTick(function(x){return x+1;});},30000);
+    return function(){clearInterval(iv);};
+  },[]);
+  // 5-minute auto-refresh of the visible range. Fires silently in the
+  // background (uses bgRefreshing chip, not the full loader), keeping
+  // the dashboard's numbers within ~5 min of platform reality without
+  // requiring a manual REFRESH click. Skips when the tab is hidden so
+  // we don't burn API quota on backgrounded dashboards. Cache key is
+  // evicted before the fetchData call so it's forced to do a fresh
+  // backend pull (which itself hits the 5-min Redis cache on the
+  // server, so cross-team auto-refreshes coalesce to one upstream pull).
+  useEffect(function(){
+    if(!isAuthed())return;
+    var iv=setInterval(function(){
+      if(typeof document!=="undefined"&&document.hidden)return;
+      var key=summaryCacheKey(df,dt);
+      delete summaryCache.campaigns[key];
+      delete summaryCache.adsets[key];
+      delete summaryCache.ads[key];
+      fetchData();
+    },5*60*1000);
+    return function(){clearInterval(iv);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[df,dt,session,viewToken]);
   // Background pre-warm of the other preset ranges (7 DAYS, 30 DAYS,
   // MTD, LAST MONTH minus the current one) 1.5s after first paint so
   // the visible fetch grabs the TCP slot first. Populates summaryCache
@@ -5675,6 +5710,23 @@ export default function MediaOnGas(){
             {(function(){var activePreset=matchPreset();var opts=[{k:"7d",l:"7D"},{k:"30d",l:"30D"},{k:"mtd",l:"MTD"},{k:"lm",l:"LM"}];return <div title="Quick date range — 7 Days / 30 Days / MTD / Last Month" style={{display:"flex",alignItems:"center",gap:2,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:2}}>
               {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);setCompareMode((opt.k==="mtd"||opt.k==="lm")?"mom":"wow");}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:6,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
             </div>;})()}
+            {/* Freshness indicator — "Updated Xm ago" so the team always
+                knows how live the numbers are. Goes amber at >5 min,
+                red at >10 min, paired with the silent 5-min auto-refresh
+                so it should normally stay green. nowTick (re-renders
+                every 30s) drives the live count without other state
+                changes. Hidden while a refresh is in flight (the
+                Refreshing chip below takes over the slot). */}
+            {!bgRefreshing&&lastFetchTs>0&&(function(){
+              var ageMs=Date.now()-lastFetchTs;var nowTickRead=nowTick; // referenced so eslint doesn't strip
+              var mins=Math.floor(ageMs/60000);
+              var col=mins>=10?(P.critical||"#ef4444"):mins>=5?(P.warning||"#fbbf24"):(P.mint||"#34D399");
+              var label=mins<1?"just now":mins===1?"1 min ago":mins+" min ago";
+              return <div title={"Last successful refresh: "+new Date(lastFetchTs).toLocaleTimeString()+". Auto-refreshes every 5 minutes while the tab is active."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 9px",borderRadius:9,background:col+"12",border:"1px solid "+col+"44",fontFamily:fm}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:col}}/>
+                <span style={{fontSize:8.5,fontWeight:800,color:col,letterSpacing:1,textTransform:"uppercase"}}>Updated {label}</span>
+              </div>;
+            })()}
             {/* Background-refresh chip — only visible while a fetch is
                 in flight after the initial load. */}
             {bgRefreshing&&<div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 9px",borderRadius:9,background:"rgba(249,98,3,0.10)",border:"1px solid rgba(249,98,3,0.32)",fontFamily:fm}} title="Refreshing the dashboard for the new date range">
