@@ -4075,6 +4075,12 @@ export default function MediaOnGas(){
   };
 
 
+  // Sequence guard for /api/campaigns + /api/adsets + /api/ads. See
+  // fetchData() below for details — fixes a race where a slow earlier
+  // response could clobber a newer cache-hit's state after the operator
+  // toggled presets or edited FROM/TO rapidly.
+  var fetchGenRef=useRef(0);
+  var fetchKeyRef=useRef("");
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
@@ -4141,28 +4147,42 @@ export default function MediaOnGas(){
   var fetchData=function(){
     var h=authHeaders();
     var key=summaryCacheKey(df,dt);
+    // Generation counter to guard against stale in-flight fetches
+    // overwriting newer state. Without this, rapidly toggling presets
+    // or typing in FROM then TO created a race: an earlier slow fetch
+    // would return AFTER a later cache hit had set state, overwriting
+    // the page with stale numbers. Every fetchData() call bumps the
+    // counter; in-flight handlers compare their captured generation
+    // against the latest value and bail if they've been superseded.
+    var myGen=++fetchGenRef.current;
+    fetchKeyRef.current=key;
     var campKey=summaryCache.campaigns[key];
     var adsetKey=summaryCache.adsets[key];
     var adsKey=summaryCache.ads[key];
     // Cache-hit path for the main campaigns endpoint: hydrate instantly
     // and skip setLoading entirely so the page doesn't flash to a blank
-    // loader on preset toggle. Background-refresh the cache (silent) so
-    // a stale entry doesn't sit forever.
+    // loader on preset toggle.
     if(campKey){
       applyCampaignsResponse(campKey);
+      setLoading(false);
     } else {
       setLoading(true);
       fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){
         summaryCache.campaigns[key]=d;
+        if(myGen!==fetchGenRef.current)return; // superseded by a newer fetchData call
         applyCampaignsResponse(d);
         setLoading(false);
-      }).catch(function(err){console.error("API Error:",err);setLoading(false);});
+      }).catch(function(err){
+        if(myGen!==fetchGenRef.current)return;
+        console.error("API Error:",err);setLoading(false);
+      });
     }
     if(adsetKey){
       if(adsetKey.adsets){setAdsets(adsetKey.adsets);}
     } else {
       fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){
         summaryCache.adsets[key]=d2;
+        if(myGen!==fetchGenRef.current)return;
         if(d2.adsets){setAdsets(d2.adsets);}
       }).catch(function(){});
     }
@@ -4171,8 +4191,12 @@ export default function MediaOnGas(){
     } else {
       fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){
         summaryCache.ads[key]=d3;
+        if(myGen!==fetchGenRef.current)return;
         if(d3.ads){setAdsList(d3.ads);}
-      }).catch(function(err){console.error("Ads API error:",err);});
+      }).catch(function(err){
+        if(myGen!==fetchGenRef.current)return;
+        console.error("Ads API error:",err);
+      });
     }
     // Timeseries fetch lives in its own useEffect below so it can scope
     // by the selected campaignIds. Removed the unscoped duplicate that
