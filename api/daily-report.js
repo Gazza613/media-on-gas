@@ -7,6 +7,7 @@ import {
   P, DISP_COLORS,
   resultMetricFor, isAwarenessObjective,
   adsManagerUrl,
+  parseCampaignEndMs,
   ANOMALY_DEFS, detectAnomalies,
   fetchCampaigns, fetchAdsByCampaign
 } from "./_pulseShared.js";
@@ -430,7 +431,7 @@ export default async function handler(req, res) {
     // any list. User explicitly flagged 2024/2025 rows showing up.
     var endRaw = c && c.endDate ? String(c.endDate) : "";
     if (endRaw) {
-      var emEnd = Date.parse(endRaw);
+      var emEnd = parseCampaignEndMs(endRaw);
       if (isFinite(emEnd) && emEnd < Date.now()) return;
     }
 

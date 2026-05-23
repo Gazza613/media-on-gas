@@ -53,6 +53,17 @@ export function fmtShortDate(d) {
   return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// Parse campaign end date consistently across automation flows.
+// Bare YYYY-MM-DD means the campaign is active through that full day.
+export function parseCampaignEndMs(raw) {
+  var s = String(raw || "").trim();
+  if (!s) return 0;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return Date.parse(s + "T23:59:59.999Z") || 0;
+  }
+  return Date.parse(s) || 0;
+}
+
 // SAST = UTC+2. Shifts a date by +2 hours before formatting so the
 // reported "today" / "yesterday" aligns with the team's calendar even
 // though the cron itself fires in UTC.
@@ -394,7 +405,7 @@ export function detectAnomalies(yesterday, baseline, rmY, opts) {
   // There is nothing actionable about a finished campaign, so skip it.
   var _endRaw = yesterday && yesterday.endDate ? String(yesterday.endDate) : "";
   if (_endRaw) {
-    var _endMs = Date.parse(_endRaw);
+    var _endMs = parseCampaignEndMs(_endRaw);
     if (isFinite(_endMs) && _endMs < Date.now()) return [];
   }
   var out = [];
@@ -456,7 +467,7 @@ export function detectAnomalies(yesterday, baseline, rmY, opts) {
     var endRaw = yesterday.endDate || "";
     if (budgetMode === "lifetime" && startRaw && endRaw) {
       var startMs = Date.parse(startRaw);
-      var endMs = Date.parse(endRaw);
+      var endMs = parseCampaignEndMs(endRaw);
       var nowMs = Date.now();
       if (isFinite(startMs) && isFinite(endMs) && endMs > startMs) {
         var totalMs = endMs - startMs;

@@ -21,6 +21,7 @@ var SUPERADMIN_EMAIL = "gary@gasmarketing.co.za";
 var TEAM_DOMAIN = "gasmarketing.co.za";
 var SLA_DAYS = 7;
 var BUFFER_HOURS = 2; // hit right after SLA, not in the middle of day 7
+var ORIGIN = "https://media-on-gas.vercel.app";
 
 // Fixed leadership distribution. Every overdue-client nudge ships to this
 // list as TO recipients so all five leaders see every SLA breach. The list
@@ -45,6 +46,103 @@ function isTeamEmail(addr) {
 }
 function filterTeamOnly(list) {
   return (list || []).filter(isTeamEmail);
+}
+
+function isActiveStatus(s) {
+  s = String(s || "").toLowerCase();
+  return s === "active" || s === "enable" || s === "enabled";
+}
+
+function parseCampaignEndMs(raw) {
+  var s = String(raw || "").trim();
+  if (!s) return 0;
+  // Bare YYYY-MM-DD should mean "through end of that day" in UTC.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return Date.parse(s + "T23:59:59.999Z") || 0;
+  }
+  return Date.parse(s) || 0;
+}
+
+function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+function ymdUtc(ms) {
+  var d = new Date(ms);
+  return d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
+}
+function ymdSast(ms) {
+  // SAST is UTC+2, no DST.
+  return ymdUtc(ms + 2 * 60 * 60 * 1000);
+}
+function addDaysYmd(isoDay, days) {
+  var t = Date.parse(String(isoDay || "") + "T00:00:00.000Z");
+  if (!isFinite(t)) return "";
+  return ymdUtc(t + (days || 0) * 24 * 60 * 60 * 1000);
+}
+
+var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
+var GAS_PREFIX_CLIENT = /(?:^|\|\s*)GAS\s*\|\s*([^|]+?)\s*\|/i;
+
+function routedClientLabel(accountName, campaignName) {
+  var raw = String(accountName || "").trim();
+  var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
+  var base = clean || raw || "";
+  var nm = String(campaignName || "");
+  var m = nm.match(GAS_PREFIX_CLIENT);
+  if (m && m[1]) {
+    var routed = String(m[1] || "").replace(/\s*\([^)]*\)\s*$/g, "").replace(/\s+/g, " ").trim();
+    if (!routed) return base;
+    if (POS_TAG.test(nm) && !POS_TAG.test(routed)) return routed + " POS";
+    return routed;
+  }
+  if (POS_TAG.test(nm) && !POS_TAG.test(base)) return base + " POS";
+  return base;
+}
+
+function campaignClientSlug(row) {
+  var label = routedClientLabel(row && row.accountName, row && row.campaignName);
+  return canonicalClientSlug(label);
+}
+
+function deriveCampaignLifecycle(campaignRows) {
+  var now = Date.now();
+  var bySlug = {};
+  (campaignRows || []).forEach(function(c) {
+    var slug = campaignClientSlug(c);
+    if (!slug) return;
+    if (!bySlug[slug]) {
+      bySlug[slug] = {
+        slug: slug,
+        liveCount: 0,
+        latestEndedMs: 0
+      };
+    }
+    var rec = bySlug[slug];
+    var endMs = parseCampaignEndMs(c && c.endDate);
+    var active = isActiveStatus(c && c.status);
+    var ended = !!(endMs && endMs < now);
+    var live = active && !ended;
+    if (live) rec.liveCount += 1;
+    if (ended && endMs > rec.latestEndedMs) rec.latestEndedMs = endMs;
+  });
+  Object.keys(bySlug).forEach(function(slug) {
+    var rec = bySlug[slug];
+    rec.hasLive = rec.liveCount > 0;
+    rec.latestEndedYmd = rec.latestEndedMs ? ymdSast(rec.latestEndedMs) : "";
+    rec.finalReminderYmd = rec.latestEndedYmd ? addDaysYmd(rec.latestEndedYmd, 1) : "";
+  });
+  return { bySlug: bySlug, checkedAt: new Date().toISOString() };
+}
+
+async function fetchCampaignRowsForLifecycle(apiKey, origin) {
+  if (!apiKey) return [];
+  var todaySastMs = Date.now() + 2 * 60 * 60 * 1000;
+  var from = ymdUtc(todaySastMs - 120 * 24 * 60 * 60 * 1000);
+  var to = ymdUtc(todaySastMs);
+  var u = String(origin || ORIGIN) + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+  var r = await fetch(u, { headers: { "x-api-key": apiKey } });
+  if (!r.ok) throw new Error("campaign lifecycle fetch failed " + r.status);
+  var j = await r.json();
+  return (j && j.campaigns) || [];
 }
 
 function getCreds() {
@@ -77,12 +175,20 @@ function buildNudgeHtml(opts) {
   var daysOverdue = opts.daysOverdue;
   var dashboardUrl = opts.dashboardUrl;
   var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var reminderType = opts.reminderType || "sla_overdue";
+  var campaignEndedDisplay = escapeHtml(opts.campaignEndedDisplay || "");
   // Nudge body intentionally does not name the internal GAS sender,
   // matching is on the client recipient domain (so the same client is
   // tracked across any AM change) and the body addresses the team
   // collectively rather than calling out a single person.
+  var headline = clientName + ' has not had their report in ' + daysOverdue + ' days.';
   var sentByLine = 'The last report for <strong style="color:#F96203;">' + clientName + '</strong> was sent on <strong style="color:#F96203;">' + lastSentDisplay + '</strong>. That is now <strong style="color:#F96203;">' + daysOverdue + ' days ago</strong>, past the line.';
   var actionLine = 'Please pull the latest and send when you have a couple of minutes. Two minutes to pull, two minutes to send.';
+  if (reminderType === "final_cycle") {
+    headline = clientName + ' campaign ended and final cycle report is due.';
+    sentByLine = 'The latest campaign for <strong style="color:#F96203;">' + clientName + '</strong> ended on <strong style="color:#F96203;">' + campaignEndedDisplay + '</strong>. Please send the final cycle report today.';
+    actionLine = 'This is the post-campaign close-out reminder. Once sent, regular SLA nudges stay off until a new campaign goes live.';
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -105,7 +211,7 @@ function buildNudgeHtml(opts) {
 
       <tr><td style="padding:36px 40px 12px;">
         <div style="font-size:11px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Reporting SLA check</div>
-        <div style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">${clientName} has not had their report in ${daysOverdue} days.</div>
+        <div style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">${headline}</div>
         <div style="font-size:15px;color:#FFFBF8;line-height:1.7;">Hi team,</div>
         <div style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
           Our client-facing SLA is one report every 7 days. ${sentByLine}
@@ -385,6 +491,7 @@ export default async function handler(req, res) {
   var identities = Object.keys(byClient);
   var now = Date.now();
   var slaMs = SLA_DAYS * 24 * 60 * 60 * 1000 + BUFFER_HOURS * 60 * 60 * 1000;
+  var todaySast = ymdSast(now);
 
   // Apply baseline: if a client's last send is before the baseline,
   // bump their effective last-sent timestamp to the baseline date.
@@ -418,6 +525,60 @@ export default async function handler(req, res) {
   var overdue = identities.map(function(id) { return byClient[id]; })
     .filter(function(c) { return (now - c.lastSentTs) > slaMs; });
 
+  // Campaign lifecycle gate:
+  //   1) Live campaigns use normal SLA nudges.
+  //   2) Ended campaigns get ONE final-cycle reminder the next SAST day.
+  //   3) After that day, suppress reminders until a new live campaign exists.
+  var lifecycle = null;
+  var lifecycleError = "";
+  try {
+    var dashKey = process.env.DASHBOARD_API_KEY || "";
+    if (dashKey) {
+      var campaignRows = await fetchCampaignRowsForLifecycle(dashKey, ORIGIN);
+      lifecycle = deriveCampaignLifecycle(campaignRows);
+    }
+  } catch (err) {
+    lifecycleError = String(err && err.message || err || "");
+    console.error("Nudge lifecycle fetch failed", lifecycleError);
+  }
+
+  var queueByIdentity = {};
+  overdue.forEach(function(c) {
+    queueByIdentity[c.identity] = { client: c, reminderType: "sla_overdue", campaignEndedYmd: "" };
+  });
+
+  var suppressedEndedCount = 0;
+  var finalCycleCount = 0;
+  if (lifecycle && lifecycle.bySlug) {
+    identities.forEach(function(id) {
+      var c = byClient[id];
+      var slug = normalizeSlug(c.lastSlug || "") || canonicalClientSlug(displayNameFromIdentity(c.identity, c.lastSlug));
+      if (!slug) return;
+      var state = lifecycle.bySlug[slug];
+      if (!state) return;
+      if (state.hasLive) return;
+
+      // No live campaign for this client right now.
+      if (state.finalReminderYmd && state.finalReminderYmd === todaySast) {
+        queueByIdentity[id] = {
+          client: c,
+          reminderType: "final_cycle",
+          campaignEndedYmd: state.latestEndedYmd || ""
+        };
+        finalCycleCount += 1;
+        return;
+      }
+
+      // Past the one-day final reminder window, suppress any SLA nudges.
+      if (queueByIdentity[id]) {
+        delete queueByIdentity[id];
+        suppressedEndedCount += 1;
+      }
+    });
+  }
+
+  var reminderQueue = Object.keys(queueByIdentity).map(function(id) { return queueByIdentity[id]; });
+
   var results = [];
   var gmailUser = process.env.GMAIL_USER;
   var gmailPass = process.env.GMAIL_APP_PASSWORD;
@@ -427,7 +588,6 @@ export default async function handler(req, res) {
     auth: { user: gmailUser, pass: gmailPass }
   }) : null;
 
-  var origin = "https://media-on-gas.vercel.app";
   var todayKey = new Date().toISOString().slice(0, 10);
 
   // Leadership distribution list, filtered through the team-domain
@@ -436,8 +596,10 @@ export default async function handler(req, res) {
   var leadershipList = filterTeamOnly(NUDGE_RECIPIENTS);
   if (leadershipList.length === 0) leadershipList = [SUPERADMIN_EMAIL];
 
-  for (var i = 0; i < overdue.length; i++) {
-    var c = overdue[i];
+  for (var i = 0; i < reminderQueue.length; i++) {
+    var q = reminderQueue[i];
+    var c = q.client;
+    var reminderType = q.reminderType || "sla_overdue";
     // Resolve the responsible account manager from the recorded last
     // sender. Only used for body accountability text, not routing, every
     // nudge goes to the full leadership list regardless.
@@ -446,14 +608,19 @@ export default async function handler(req, res) {
     var daysOverdue = Math.floor((now - c.lastSentTs) / (24 * 60 * 60 * 1000));
     var clientName = displayNameFromIdentity(c.identity, c.lastSlug);
     var lastSentDisplay = new Date(c.lastSentTs).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
+    var campaignEndedDisplay = q.campaignEndedYmd ? new Date(q.campaignEndedYmd + "T00:00:00.000Z").toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" }) : "";
 
-    // Dedup: only nudge once per calendar day per client, so a long-
-    // overdue client doesn't get a daily blast if the cron re-fires.
-    var dedupKey = "nudge:sent:" + c.identity + ":" + todayKey;
+    // Dedup:
+    //   - SLA nudges: once per day/client.
+    //   - Final-cycle reminder: once per ended-cycle/client.
+    var dedupKey = reminderType === "final_cycle"
+      ? ("nudge:final:" + c.identity + ":" + (q.campaignEndedYmd || "unknown"))
+      : ("nudge:sent:" + c.identity + ":" + todayKey);
+    var dedupTtlSeconds = reminderType === "final_cycle" ? (120 * 24 * 60 * 60) : 172800;
     if (!dryRun && canSend) {
-      var seen = await redisCmd(["SET", dedupKey, "1", "EX", "172800", "NX"]);
+      var seen = await redisCmd(["SET", dedupKey, "1", "EX", String(dedupTtlSeconds), "NX"]);
       if (!seen || seen.result !== "OK") {
-        results.push({ identity: c.identity, clientName: clientName, status: "already_nudged_today" });
+        results.push({ identity: c.identity, clientName: clientName, reminderType: reminderType, status: reminderType === "final_cycle" ? "final_already_sent" : "already_nudged_today" });
         continue;
       }
     }
@@ -462,18 +629,26 @@ export default async function handler(req, res) {
       clientName: clientName,
       lastSentDisplay: lastSentDisplay,
       daysOverdue: daysOverdue,
-      dashboardUrl: origin,
-      origin: origin
+      dashboardUrl: ORIGIN,
+      origin: ORIGIN,
+      reminderType: reminderType,
+      campaignEndedDisplay: campaignEndedDisplay
     });
-    var text = clientName + " has not had a report in " + daysOverdue + " days.\n\n" +
-      "Last sent on " + lastSentDisplay + ".\n\n" +
-      "Open the dashboard and send: " + origin + "\n\n" +
-      "GAS Marketing Automation";
+    var text = reminderType === "final_cycle"
+      ? (clientName + " campaign ended on " + campaignEndedDisplay + ". Final cycle report is due now.\n\n" +
+        "Open the dashboard and send: " + ORIGIN + "\n\n" +
+        "GAS Marketing Automation")
+      : (clientName + " has not had a report in " + daysOverdue + " days.\n\n" +
+        "Last sent on " + lastSentDisplay + ".\n\n" +
+        "Open the dashboard and send: " + ORIGIN + "\n\n" +
+        "GAS Marketing Automation");
 
     if (dryRun || !canSend) {
       results.push({
         identity: c.identity, clientName: clientName, am: amEmail,
         lastSent: c.lastSentIso, daysOverdue: daysOverdue,
+        reminderType: reminderType,
+        campaignEndedOn: q.campaignEndedYmd || "",
         wouldNotify: { to: leadershipList },
         lastSenderRaw: c.lastSenderEmail || "",
         senderWasInternal: isTeamEmail(c.lastSenderEmail),
@@ -486,14 +661,16 @@ export default async function handler(req, res) {
       await transporter.sendMail({
         from: "GAS Marketing Automation <" + gmailUser + ">",
         to: leadershipList.join(", "),
-        subject: clientName + " is " + daysOverdue + " days overdue for a report",
+        subject: reminderType === "final_cycle"
+          ? (clientName + " final cycle report due (campaign ended " + campaignEndedDisplay + ")")
+          : (clientName + " is " + daysOverdue + " days overdue for a report"),
         text: text,
         html: html
       });
-      results.push({ identity: c.identity, clientName: clientName, to: leadershipList, daysOverdue: daysOverdue, status: "sent" });
+      results.push({ identity: c.identity, clientName: clientName, to: leadershipList, daysOverdue: daysOverdue, reminderType: reminderType, campaignEndedOn: q.campaignEndedYmd || "", status: "sent" });
     } catch (err) {
       console.error("Nudge send failed", c.identity, err);
-      results.push({ identity: c.identity, clientName: clientName, to: leadershipList, status: "error: " + String(err && err.message || err) });
+      results.push({ identity: c.identity, clientName: clientName, to: leadershipList, reminderType: reminderType, status: "error: " + String(err && err.message || err) });
     }
   }
 
@@ -506,6 +683,11 @@ export default async function handler(req, res) {
     baseline: baselineTs ? new Date(baselineTs).toISOString() : null,
     clientsTracked: identities.length,
     overdueCount: overdue.length,
+    reminderCount: reminderQueue.length,
+    finalCycleCount: finalCycleCount,
+    suppressedEndedCount: suppressedEndedCount,
+    lifecycleLoaded: !!lifecycle,
+    lifecycleError: lifecycleError || null,
     nudges: results,
     checkedAt: new Date().toISOString()
   };

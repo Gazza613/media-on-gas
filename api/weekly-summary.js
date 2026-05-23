@@ -17,6 +17,96 @@ import { timingSafeStrEqual } from "./_createAuth.js";
 var TO_EMAIL = "gary@gasmarketing.co.za, sam@gasmarketing.co.za";
 var SLA_DAYS = 7;
 var TEAM_DOMAIN = "gasmarketing.co.za";
+var ORIGIN = "https://media-on-gas.vercel.app";
+
+function isActiveStatus(s) {
+  s = String(s || "").toLowerCase();
+  return s === "active" || s === "enable" || s === "enabled";
+}
+
+function parseCampaignEndMs(raw) {
+  var s = String(raw || "").trim();
+  if (!s) return 0;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return Date.parse(s + "T23:59:59.999Z") || 0;
+  }
+  return Date.parse(s) || 0;
+}
+
+function ymdUtc(ms) {
+  var d = new Date(ms);
+  var p2 = function(n) { return n < 10 ? "0" + n : "" + n; };
+  return d.getUTCFullYear() + "-" + p2(d.getUTCMonth() + 1) + "-" + p2(d.getUTCDate());
+}
+function ymdSast(ms) {
+  return ymdUtc(ms + 2 * 60 * 60 * 1000);
+}
+function addDaysYmd(isoDay, days) {
+  var t = Date.parse(String(isoDay || "") + "T00:00:00.000Z");
+  if (!isFinite(t)) return "";
+  return ymdUtc(t + (days || 0) * 24 * 60 * 60 * 1000);
+}
+
+var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
+var GAS_PREFIX_CLIENT = /(?:^|\|\s*)GAS\s*\|\s*([^|]+?)\s*\|/i;
+
+function routedClientLabel(accountName, campaignName) {
+  var raw = String(accountName || "").trim();
+  var clean = raw.replace(PLATFORM_SUFFIX, "").replace(PLATFORM_SUFFIX, "").trim();
+  var base = clean || raw || "";
+  var nm = String(campaignName || "");
+  var m = nm.match(GAS_PREFIX_CLIENT);
+  if (m && m[1]) {
+    var routed = String(m[1] || "").replace(/\s*\([^)]*\)\s*$/g, "").replace(/\s+/g, " ").trim();
+    if (!routed) return base;
+    if (POS_TAG.test(nm) && !POS_TAG.test(routed)) return routed + " POS";
+    return routed;
+  }
+  if (POS_TAG.test(nm) && !POS_TAG.test(base)) return base + " POS";
+  return base;
+}
+
+function campaignClientSlug(row) {
+  var label = routedClientLabel(row && row.accountName, row && row.campaignName);
+  return canonicalClientSlug(label);
+}
+
+function deriveCampaignLifecycle(campaignRows) {
+  var now = Date.now();
+  var bySlug = {};
+  (campaignRows || []).forEach(function(c) {
+    var slug = campaignClientSlug(c);
+    if (!slug) return;
+    if (!bySlug[slug]) bySlug[slug] = { liveCount: 0, latestEndedMs: 0 };
+    var rec = bySlug[slug];
+    var endMs = parseCampaignEndMs(c && c.endDate);
+    var active = isActiveStatus(c && c.status);
+    var ended = !!(endMs && endMs < now);
+    var live = active && !ended;
+    if (live) rec.liveCount += 1;
+    if (ended && endMs > rec.latestEndedMs) rec.latestEndedMs = endMs;
+  });
+  Object.keys(bySlug).forEach(function(slug) {
+    var rec = bySlug[slug];
+    rec.hasLive = rec.liveCount > 0;
+    rec.latestEndedYmd = rec.latestEndedMs ? ymdSast(rec.latestEndedMs) : "";
+    rec.finalReminderYmd = rec.latestEndedYmd ? addDaysYmd(rec.latestEndedYmd, 1) : "";
+  });
+  return bySlug;
+}
+
+async function fetchCampaignRowsForLifecycle(apiKey) {
+  if (!apiKey) return [];
+  var todaySastMs = Date.now() + 2 * 60 * 60 * 1000;
+  var from = ymdUtc(todaySastMs - 120 * 24 * 60 * 60 * 1000);
+  var to = ymdUtc(todaySastMs);
+  var u = ORIGIN + "/api/campaigns?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+  var r = await fetch(u, { headers: { "x-api-key": apiKey } });
+  if (!r.ok) throw new Error("campaign lifecycle fetch failed " + r.status);
+  var j = await r.json();
+  return (j && j.campaigns) || [];
+}
 
 function escapeHtml(s) {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -293,7 +383,7 @@ export default async function handler(req, res) {
   }
 
   var dryRun = req.query.dryRun === "1" || req.query.dry === "1";
-  var origin = "https://media-on-gas.vercel.app";
+  var origin = ORIGIN;
 
   // Date window: previous 7 days
   var now = new Date();
@@ -445,8 +535,31 @@ export default async function handler(req, res) {
     });
   }
 
+  // Match daily nudge lifecycle gate: ended/no-live clients are excluded
+  // from ongoing overdue counts after the one-day final reminder window.
+  var lifecycleBySlug = null;
+  try {
+    var dashKey = process.env.DASHBOARD_API_KEY || "";
+    if (dashKey) {
+      var campaignRows = await fetchCampaignRowsForLifecycle(dashKey);
+      lifecycleBySlug = deriveCampaignLifecycle(campaignRows);
+    }
+  } catch (_) {
+    lifecycleBySlug = null; // fail-open to avoid dropping weekly summary
+  }
+  var todaySast = ymdSast(now.getTime());
+
   var overdueRows = Object.keys(byIdentity).map(function(id) { return byIdentity[id]; })
-    .filter(function(c) { return (now.getTime() - c.lastSentTs) > slaMs; })
+    .filter(function(c) {
+      if ((now.getTime() - c.lastSentTs) <= slaMs) return false;
+      if (!lifecycleBySlug) return true;
+      var slug = canonicalClientSlug(c.lastSlug || "") || canonicalClientSlug(displayNameFromIdentity(c.identity, c.lastSlug));
+      if (!slug) return true;
+      var state = lifecycleBySlug[slug];
+      if (!state) return true;
+      if (state.hasLive) return true;
+      return !!(state.finalReminderYmd && state.finalReminderYmd === todaySast);
+    })
     .map(function(c) {
       return {
         clientName: displayNameFromIdentity(c.identity, c.lastSlug),
