@@ -158,8 +158,67 @@ var API=window.location.origin;
 // loading state and back. fetchData() writes here on every successful
 // pull; a background pre-warm useEffect populates non-active presets
 // 1.5s after the initial paint so the first toggle is also instant.
-var summaryCache = { campaigns: {}, adsets: {}, ads: {} };
+var summaryCache = { campaigns: {}, adsets: {}, ads: {}, daily: {} };
 function summaryCacheKey(from, to) { return from + ".." + to; }
+// Find the smallest cached range whose [from..to] contains [df, dt],
+// so we can slice the daily breakdown client-side instead of fetching.
+// Returns the cache key (or null) — caller looks up campaigns + daily.
+function findContainingCacheKey(df, dt) {
+  var keys = Object.keys(summaryCache.daily || {});
+  var match = null, matchLen = Infinity;
+  for (var i = 0; i < keys.length; i++) {
+    var parts = keys[i].split("..");
+    var cFrom = parts[0], cTo = parts[1];
+    if (cFrom <= df && cTo >= dt) {
+      var len = Date.parse(cTo) - Date.parse(cFrom);
+      if (len < matchLen) { match = keys[i]; matchLen = len; }
+    }
+  }
+  return match;
+}
+// Sum a campaign's daily entries inside [from, to] and produce a new
+// row matching the /api/campaigns shape. Numeric metrics are summed
+// directly; blended metrics (CTR, CPM, CPC, frequency, cost-per-lead /
+// install) are DERIVED from the sums so blended values stay accurate
+// over the sub-range. Reach is summed across days which is an upper
+// bound (overlapping audiences across days), accepted trade-off for
+// the instant sub-range UX.
+function sliceCampaignsByDaily(baseCampaigns, dailyByCampaignId, from, to) {
+  return baseCampaigns.map(function(c) {
+    var entry = dailyByCampaignId && dailyByCampaignId[c.campaignId];
+    var daily = entry && entry.daily;
+    if (!daily || !daily.length) return c;
+    var s = { spend: 0, impressions: 0, reach: 0, clicks: 0, leads: 0, appInstalls: 0, pageLikes: 0, follows: 0, likes: 0 };
+    for (var i = 0; i < daily.length; i++) {
+      var d = daily[i];
+      if (d.date < from || d.date > to) continue;
+      s.spend += d.spend; s.impressions += d.impressions; s.reach += d.reach;
+      s.clicks += d.clicks; s.leads += d.leads; s.appInstalls += d.appInstalls;
+      s.pageLikes += d.pageLikes; s.follows += d.follows; s.likes += d.likes;
+    }
+    var ctr = s.impressions > 0 ? (s.clicks / s.impressions * 100) : 0;
+    var cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : 0;
+    var cpc = s.clicks > 0 ? (s.spend / s.clicks) : 0;
+    var frequency = s.reach > 0 ? (s.impressions / s.reach) : 0;
+    return Object.assign({}, c, {
+      spend: s.spend.toFixed(2),
+      impressions: String(Math.round(s.impressions)),
+      reach: String(Math.round(s.reach)),
+      clicks: String(Math.round(s.clicks)),
+      leads: String(Math.round(s.leads)),
+      appInstalls: String(Math.round(s.appInstalls)),
+      pageLikes: String(Math.round(s.pageLikes)),
+      follows: String(Math.round(s.follows)),
+      likes: String(Math.round(s.likes)),
+      ctr: ctr.toFixed(2),
+      cpm: cpm.toFixed(2),
+      cpc: cpc.toFixed(2),
+      frequency: frequency.toFixed(2),
+      costPerLead: s.leads > 0 ? (s.spend / s.leads).toFixed(2) : "0",
+      costPerInstall: s.appInstalls > 0 ? (s.spend / s.appInstalls).toFixed(2) : "0"
+    });
+  });
+}
 // Feature flags for the audience-insight build. Flip any one to false to
 // hide that section in production without deleting the code, so we can see
 // each new block live then turn it off cleanly if the client doesn't want
@@ -4170,17 +4229,29 @@ export default function MediaOnGas(){
     // against the latest value and bail if they've been superseded.
     var myGen=++fetchGenRef.current;
     fetchKeyRef.current=key;
-    var campKey=summaryCache.campaigns[key];
     var adsetKey=summaryCache.adsets[key];
     var adsKey=summaryCache.ads[key];
-    // Cache-hit path: hydrate instantly. Cache-miss path: keep the
-    // existing data on screen and fire a background fetch. Only the
-    // FIRST-EVER load (no campaigns in state yet) flips the global
-    // `loading` flag — every subsequent date / preset / FROM-TO change
-    // is treated as a background refresh, so the page no longer flashes
-    // to a blank loader when the operator nudges the date picker.
-    if(campKey){
-      applyCampaignsResponse(campKey);
+    // Decide where the campaigns data comes from for this render:
+    //   A. Exact cache hit — instant.
+    //   B. Sub-range slice — sliced client-side from a wider cached
+    //      window that includes daily breakdowns. Also instant.
+    //   C. Cache miss — background fetch, keep existing data visible.
+    var campaignsSource=null;
+    if(summaryCache.campaigns[key]){
+      campaignsSource=summaryCache.campaigns[key];
+    } else {
+      var containerKey=findContainingCacheKey(df,dt);
+      if(containerKey&&summaryCache.campaigns[containerKey]&&summaryCache.daily[containerKey]){
+        var baseResp=summaryCache.campaigns[containerKey];
+        var sliced=sliceCampaignsByDaily(baseResp.campaigns||[],summaryCache.daily[containerKey],df,dt);
+        campaignsSource=Object.assign({},baseResp,{campaigns:sliced});
+        // Cache the synthesized response under the exact sub-range key
+        // so subsequent returns to this sub-range are also instant.
+        summaryCache.campaigns[key]=campaignsSource;
+      }
+    }
+    if(campaignsSource){
+      applyCampaignsResponse(campaignsSource);
       setLoading(false);
       setBgRefreshing(false);
     } else {
@@ -4200,6 +4271,17 @@ export default function MediaOnGas(){
         if(myGen!==fetchGenRef.current)return;
         console.error("API Error:",err);setLoading(false);setBgRefreshing(false);
       });
+      // Parallel fetch of the daily breakdown. Fires alongside the main
+      // campaigns request and writes to summaryCache.daily so any
+      // FUTURE sub-range toggle of this window is instant via the
+      // sliceCampaignsByDaily path. We don't block the visible UI on
+      // this; if it fails, sub-range toggles just trigger a normal
+      // fetch as before.
+      if(!summaryCache.daily[key]){
+        fetch(API+"/api/campaigns-daily?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(dd){
+          if(dd&&dd.ok&&dd.campaigns){summaryCache.daily[key]=dd.campaigns;}
+        }).catch(function(){});
+      }
     }
     if(adsetKey){
       if(adsetKey.adsets){setAdsets(adsetKey.adsets);}
@@ -4283,6 +4365,9 @@ export default function MediaOnGas(){
         }
         if(!summaryCache.ads[k]){
           fetch(API+"/api/ads?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.ads[k]=d||{};}).catch(function(){});
+        }
+        if(!summaryCache.daily[k]){
+          fetch(API+"/api/campaigns-daily?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.ok&&d.campaigns){summaryCache.daily[k]=d.campaigns;}}).catch(function(){});
         }
       });
     },1500);
