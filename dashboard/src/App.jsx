@@ -4179,6 +4179,11 @@ export default function MediaOnGas(){
   // the entire App tree every 30 seconds (which was causing visible
   // scroll jitter).
   var lft0=useState(0),lastFetchTs=lft0[0],setLastFetchTs=lft0[1];
+  // Ref mirror for the visibilitychange handler so it reads the
+  // current lastFetchTs without forcing the listener to re-bind on
+  // every fetch (the dep array would otherwise have to include
+  // lastFetchTs, rebuilding the listener once per refresh).
+  var lastFetchTsRef=useRef(0);
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
@@ -4241,7 +4246,9 @@ export default function MediaOnGas(){
       if(d.pages){setPages(d.pages);}
       if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}
       setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);
-      setLastFetchTs(Date.now());
+      var ts=Date.now();
+      setLastFetchTs(ts);
+      lastFetchTsRef.current=ts;
   };
   var fetchData=function(){
     var h=authHeaders();
@@ -4356,25 +4363,31 @@ export default function MediaOnGas(){
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
   // (30s tick for the freshness chip moved into FreshnessChip below
   //  to avoid re-rendering the entire App every 30 seconds.)
-  // 5-minute auto-refresh of the visible range. Fires silently in the
-  // background (uses bgRefreshing chip, not the full loader), keeping
-  // the dashboard's numbers within ~5 min of platform reality without
-  // requiring a manual REFRESH click. Skips when the tab is hidden so
-  // we don't burn API quota on backgrounded dashboards. Cache key is
-  // evicted before the fetchData call so it's forced to do a fresh
-  // backend pull (which itself hits the 5-min Redis cache on the
-  // server, so cross-team auto-refreshes coalesce to one upstream pull).
+  // Refresh-on-tab-return — replaces the previous 5-min interval that
+  // fired DURING the user's session and could reset the campaign
+  // selection mid-scroll (operator-reported, client-facing risk).
+  // New behaviour: only refresh when the tab REGAINS focus AND the
+  // current data is >5 min stale. While the operator is actively
+  // using the page, nothing auto-refreshes — they can hit the REFRESH
+  // button explicitly if they want fresh data. Stale-but-visible is
+  // signalled by the freshness chip going amber/red.
   useEffect(function(){
     if(!isAuthed())return;
-    var iv=setInterval(function(){
-      if(typeof document!=="undefined"&&document.hidden)return;
+    if(typeof document==="undefined")return;
+    var onVis=function(){
+      if(document.hidden)return;
+      var ts=lastFetchTsRef.current||0;
+      if(!ts)return;
+      var ageMs=Date.now()-ts;
+      if(ageMs<5*60*1000)return;
       var key=summaryCacheKey(df,dt);
       delete summaryCache.campaigns[key];
       delete summaryCache.adsets[key];
       delete summaryCache.ads[key];
       fetchData();
-    },5*60*1000);
-    return function(){clearInterval(iv);};
+    };
+    document.addEventListener("visibilitychange",onVis);
+    return function(){document.removeEventListener("visibilitychange",onVis);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[df,dt,session,viewToken]);
   // Background pre-warm of the other preset ranges (7 DAYS, 30 DAYS,
