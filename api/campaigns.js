@@ -387,7 +387,19 @@ export default async function handler(req, res) {
       // still tries to fall back via insights, but downstream lookups
       // for budget / start / stop dates fail). PAUSED rarely runs into
       // the hundreds, the pagination loop below catches them all.
-      var listFilter = "&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\",\"PAUSED\"]}]";
+      // Status filter now includes ARCHIVED. Without this, a campaign
+      // that ran in (say) April and has since been archived as part
+      // of normal post-flight housekeeping was silently dropped from
+      // any historical query for April — Meta still has insights for
+      // it (April delivery exists), but the campaign metadata wasn't
+      // fetched here, so the insights rows had no matching campaign
+      // record and disappeared. Operator-reported symptom: clicking
+      // LM showed only ~5 campaigns when MoMo / POS / Willowbrook
+      // collectively had more in flight that month.
+      // Date-window scoping is handled implicitly: the insights query
+      // below joins by campaign_id on the time_range, so this list
+      // can stay broad without polluting the response.
+      var listFilter = "&filtering=[{\"field\":\"effective_status\",\"operator\":\"IN\",\"value\":[\"ACTIVE\",\"SCHEDULED\",\"PAUSED\",\"ARCHIVED\"]}]";
       var listBaseUrl = "https://graph.facebook.com/v25.0/" + account.id + "/campaigns?fields=name,id,objective,effective_status,created_time,start_time,stop_time,daily_budget,lifetime_budget,spend_cap,budget_remaining" + listFilter + "&limit=200&access_token=" + metaToken;
       // Follow paging.next so accounts with >200 campaigns matching the
       // filter (e.g. an agency account aggregating many clients) do not
@@ -1064,7 +1076,14 @@ export default async function handler(req, res) {
     // from campaign/get/. Budget mode still drives pacing logic —
     // ongoing vs lifetime — just without day counting.
     var ttCampFields = encodeURIComponent(JSON.stringify(["campaign_id","campaign_name","operation_status","objective_type","budget","budget_mode"]));
-    var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=500&fields=" + ttCampFields;
+    // primary_status=STATUS_NOT_DELETE includes ARCHIVED / DISABLE /
+    // ENABLE — everything except truly-deleted campaigns. TikTok's
+    // default behaviour on /campaign/get/ omits archived campaigns,
+    // which (mirroring the Meta fix above) was silently dropping
+    // historical campaigns that delivered in the queried window but
+    // have since been archived as post-flight housekeeping.
+    var ttFiltering = encodeURIComponent(JSON.stringify({primary_status:"STATUS_NOT_DELETE"}));
+    var ttListUrl = "https://business-api.tiktok.com/open_api/v1.3/campaign/get/?advertiser_id=" + ttAdvId + "&page_size=500&fields=" + ttCampFields + "&filtering=" + ttFiltering;
     var ttListRes = await fetch(ttListUrl, {headers: {"Access-Token": ttToken}});
     var ttListData = await ttListRes.json();
     if (ttListData && ttListData.code && ttListData.code !== 0) {
