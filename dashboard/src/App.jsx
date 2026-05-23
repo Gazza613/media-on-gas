@@ -5649,64 +5649,42 @@ export default function MediaOnGas(){
     {!loading&&<div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0}}><div style={{position:"absolute",inset:0,opacity:0.018,backgroundImage:"radial-gradient("+P.ember+" 0.5px,transparent 0.5px),radial-gradient("+P.orchid+" 0.5px,transparent 0.5px)",backgroundSize:"40px 40px",backgroundPosition:"0 0,20px 20px"}}/></div>}
 
     <header style={{position:"sticky",top:0,zIndex:100,background:"#070E16",borderBottom:"1px solid "+P.rule}}>
-      <div style={{maxWidth:1400,margin:"0 auto",padding:"10px 28px"}}>
-        {/* Two-row header:
-              Row 1: logo + LIVE chip  |  Campaigns picker + FROM/TO custom dates
-              Row 2: preset chips      |  Compare mode + REFRESH + Settings + Share + Logout
-            Keeps the most-used identity bits (logo, picker, custom dates) at the top
-            and the action / utility bits on a clean second row so Logout never wraps. */}
+      <div style={{maxWidth:1500,margin:"0 auto",padding:"10px 22px"}}>
+        {/* Single-row header — logo + LIVE chip on the left, every control
+            (Campaigns picker, FROM/TO, preset chips, REFRESH, Settings,
+            Share, Logout) right-aligned in one flex row. Tighter gaps,
+            compact paddings and shorter chip labels keep it all on one
+            line at a typical laptop width; flex-wrap is the graceful
+            fallback on narrower screens. */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            {/* Logo img has explicit width/height + fetchpriority high so
-                a remount after login (LoginScreen unmounting, dashboard
-                mounting) prioritises the asset; onError nudges the
-                browser to refetch instead of leaving a broken icon if a
-                cached entry from before logout went stale. */}
-            <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" width="42" height="42" fetchpriority="high" decoding="async" onError={function(e){var img=e.currentTarget;if(!img.dataset.retried){img.dataset.retried="1";img.src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png?r="+Date.now();}}} style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
-            <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
-            {/* LIVE indicator. Subtle breathing chip that signals to the
-                team the data on screen is current (refreshed on every page
-                load via the platform APIs, not a stale snapshot). */}
-            <div title="Live data, refreshed from Meta / TikTok / Google every time you load or refresh this page" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px 4px 8px",borderRadius:999,border:"1px solid rgba(74,222,128,0.30)",background:"rgba(74,222,128,0.05)",fontFamily:fm,animation:"liveChipBreath 2.4s ease-in-out infinite"}}>
-              <span style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:8,height:8}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:"#4ade80",animation:"liveDotPulse 2.4s ease-in-out infinite, liveDotGlow 2.4s ease-in-out infinite"}}/>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:38,height:38,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite",flexShrink:0}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" width="38" height="38" fetchpriority="high" decoding="async" onError={function(e){var img=e.currentTarget;if(!img.dataset.retried){img.dataset.retried="1";img.src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png?r="+Date.now();}}} style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
+            <div><div style={{fontSize:15,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:8.5,color:P.label,letterSpacing:3.5,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
+            <div title="Live data, refreshed from Meta / TikTok / Google every time you load or refresh this page" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 7px",borderRadius:999,border:"1px solid rgba(74,222,128,0.30)",background:"rgba(74,222,128,0.05)",fontFamily:fm,animation:"liveChipBreath 2.4s ease-in-out infinite"}}>
+              <span style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:7,height:7}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",animation:"liveDotPulse 2.4s ease-in-out infinite, liveDotGlow 2.4s ease-in-out infinite"}}/>
               </span>
-              <span style={{fontSize:9.5,fontWeight:800,color:"#4ade80",letterSpacing:2.5,textTransform:"uppercase"}}>Live</span>
+              <span style={{fontSize:9,fontWeight:800,color:"#4ade80",letterSpacing:2,textTransform:"uppercase"}}>Live</span>
             </div>
           </div>
-          {/* Row 1 right cluster: Campaigns picker + FROM/TO custom dates */}
-          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,14)} {selected.length} Campaigns</button>}
-            <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
-            {/* Background-refresh chip — only shows when the operator
-                changes the date AFTER the initial load. Visible
-                signal that numbers are still updating without blanking
-                the whole page like a full loader would. */}
-            {bgRefreshing&&<div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:10,background:"rgba(249,98,3,0.10)",border:"1px solid rgba(249,98,3,0.32)",fontFamily:fm}} title="Refreshing the dashboard for the new date range">
-              <span style={{width:10,height:10,border:"1.5px solid rgba(249,98,3,0.35)",borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>
-              <span style={{fontSize:9,fontWeight:800,color:P.ember,letterSpacing:1.2,textTransform:"uppercase"}}>Refreshing</span>
-            </div>}
-          </div>
-        </div>
-        {/* Row 2: preset chips on the left, action / utility buttons on the right. */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginTop:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            {/* Date presets: clicking any one updates df/dt AND auto-picks the
-                right Summary compare mode (wow for 7d/30d, mom for MTD/Last
-                Month) so the delta chips light up without a second click. */}
-            {(function(){var activePreset=matchPreset();var opts=[{k:"7d",l:"7 DAYS"},{k:"30d",l:"30 DAYS"},{k:"mtd",l:"MTD"},{k:"lm",l:"LAST MONTH"}];return <div title="Quick date range" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
-              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);setCompareMode((opt.k==="mtd"||opt.k==="lm")?"mom":"wow");}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
+          <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+            {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:9,padding:"6px 11px",color:showCampaigns?P.ember:P.label,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,13)} {selected.length} Campaigns</button>}
+            <div style={{display:"flex",alignItems:"center",gap:4,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:"5px 9px"}}><span style={{fontSize:7.5,color:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:11,fontFamily:fm,outline:"none",width:96,fontWeight:500}}/><div style={{width:8,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:7.5,color:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:11,fontFamily:fm,outline:"none",width:96,fontWeight:500}}/></div>
+            {/* Preset chips with short labels (7D / 30D / MTD / LM) so the
+                whole row fits on one line on a typical 1440px laptop. */}
+            {(function(){var activePreset=matchPreset();var opts=[{k:"7d",l:"7D"},{k:"30d",l:"30D"},{k:"mtd",l:"MTD"},{k:"lm",l:"LM"}];return <div title="Quick date range — 7 Days / 30 Days / MTD / Last Month" style={{display:"flex",alignItems:"center",gap:2,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:2}}>
+              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);setCompareMode((opt.k==="mtd"||opt.k==="lm")?"mom":"wow");}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:6,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
             </div>;})()}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            {/* Compare mode toggle removed — preset clicks auto-set the
-                right mode (wow for 7d/30d, mom for MTD/LM) and custom
-                ranges default to wow so deltas always render. State
-                machinery kept so delta logic downstream is unchanged. */}
-            <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
-            {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Settings, Audit, Reconciliation, Usage, Team" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.solar,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,14)} Settings</button>}
-            {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
-            {!isClient&&<button onClick={handleLogout} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.rose,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.power(P.rose,14)} Logout</button>}
+            {/* Background-refresh chip — only visible while a fetch is
+                in flight after the initial load. */}
+            {bgRefreshing&&<div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 9px",borderRadius:9,background:"rgba(249,98,3,0.10)",border:"1px solid rgba(249,98,3,0.32)",fontFamily:fm}} title="Refreshing the dashboard for the new date range">
+              <span style={{width:9,height:9,border:"1.5px solid rgba(249,98,3,0.35)",borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>
+              <span style={{fontSize:8.5,fontWeight:800,color:P.ember,letterSpacing:1,textTransform:"uppercase"}}>Refreshing</span>
+            </div>}
+            <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:9,padding:"7px 14px",color:"#fff",fontSize:10.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.3}}>REFRESH</button>
+            {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Settings, Audit, Reconciliation, Usage, Team" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:"6px 10px",color:P.solar,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,13)} Settings</button>}
+            {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:"6px 10px",color:P.ember,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,13)} Share</button>}
+            {!isClient&&<button onClick={handleLogout} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:"6px 10px",color:P.rose,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.power(P.rose,13)} Logout</button>}
           </div>
         </div>
       </div>
