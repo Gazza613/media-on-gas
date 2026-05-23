@@ -498,6 +498,15 @@ export default async function handler(req, res) {
         pageGuard++;
         var pageRes = await fetch(nextUrl);
         var pageData = await pageRes.json();
+        // Defensive: Meta returns HTTP 200 with an `error` envelope on
+        // permission / scope failures, and HTTP 4xx with the same shape
+        // on token expiry. Without checking pageRes.ok AND pageData.error
+        // the loop reads `.data` (undefined), exits cleanly, and the
+        // caller sees zero rows with NO signal that the call failed.
+        if (!pageRes.ok || (pageData && pageData.error)) {
+          warnings.push({ platform: "Meta", stage: "insights", account: account.name, message: (pageData && pageData.error && (pageData.error.message || pageData.error.error_user_msg)) || ("HTTP " + pageRes.status) });
+          break;
+        }
         if (pageData.data) allMetaRows = allMetaRows.concat(pageData.data);
         nextUrl = pageData.paging && pageData.paging.next ? pageData.paging.next : null;
       }
@@ -1166,13 +1175,25 @@ export default async function handler(req, res) {
     var gDevToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     var gManagerId = process.env.GOOGLE_ADS_MANAGER_ID;
     var gCustomerId = "9587382256";
-    if (gClientId && gRefreshToken && gDevToken) {
+    // gManagerId added to the env-var precondition: Google rejects the
+    // request with INVALID_LOGIN_CUSTOMER_ID_FORMAT when the login-
+    // customer-id header is sent as an empty string. Without this guard
+    // the entire Google block silently returned zero data the moment
+    // the env var was unset / blank.
+    if (gClientId && gRefreshToken && gDevToken && gManagerId) {
       var gTokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: {"Content-Type": "application/x-www-form-urlencoded"},
         body: "client_id=" + gClientId + "&client_secret=" + gClientSecret + "&refresh_token=" + gRefreshToken + "&grant_type=refresh_token"
       });
       var gTokenData = await gTokenRes.json();
+      // Signal token failure to the dashboard via warnings so the
+      // operator knows Google is down vs. genuinely empty. Without
+      // this branch a revoked / rotated refresh token silently
+      // produced zero Google data with no alert.
+      if (!gTokenData.access_token) {
+        warnings.push({ platform: "Google", stage: "oauth", message: gTokenData.error_description || gTokenData.error || "Token exchange failed" });
+      }
       if (gTokenData.access_token) {
         // campaign_budget.* joins on the campaign through Google's automatic
         // relation. amount_micros -> ZAR via /1,000,000. period = DAILY / CUSTOM

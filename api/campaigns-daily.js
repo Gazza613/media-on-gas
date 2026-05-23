@@ -154,6 +154,13 @@ export default async function handler(req, res) {
       var ttRes = await fetch(ttUrl, { headers: { "Access-Token": ttToken } });
       if (ttRes.ok) {
         var ttData = await ttRes.json();
+        // TikTok returns HTTP 200 with code !== 0 on failure (token
+        // expiry, invalid advertiser_id, bad filter). Without this
+        // check the loop reads an empty .data.list and silently
+        // produces zero rows. ttData.code === 0 is success.
+        if (ttData && ttData.code && ttData.code !== 0) {
+          warnings.push({ platform: "TikTok", stage: "daily-report", message: ttData.message || ("code " + ttData.code) });
+        }
         var ttList = (ttData && ttData.data && ttData.data.list) || [];
         for (var j = 0; j < ttList.length; j++) {
           var row = ttList[j];
@@ -194,13 +201,17 @@ export default async function handler(req, res) {
     var gDevToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     var gManagerId = process.env.GOOGLE_ADS_MANAGER_ID;
     var gCustomerId = "9587382256";
-    if (gClientId && gRefreshToken && gDevToken) {
+    // gManagerId added to env-var precondition (see /api/campaigns).
+    if (gClientId && gRefreshToken && gDevToken && gManagerId) {
       var gTokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "client_id=" + gClientId + "&client_secret=" + gClientSecret + "&refresh_token=" + gRefreshToken + "&grant_type=refresh_token"
       });
       var gTokenData = await gTokenRes.json();
+      if (!gTokenData.access_token) {
+        warnings.push({ platform: "Google", stage: "oauth", message: gTokenData.error_description || gTokenData.error || "Token exchange failed" });
+      }
       if (gTokenData.access_token) {
         var gQuery = "SELECT campaign.id, segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
