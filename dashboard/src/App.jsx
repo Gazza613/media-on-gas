@@ -150,6 +150,16 @@ function viewAdLabel(platform) {
   return "VIEW AD";
 }
 var API=window.location.origin;
+// Module-scoped multi-range cache for Summary's three primary data
+// sources. Keyed on "from..to". The Optimisation Centre uses the same
+// pattern (ccPersistedCache); here it serves a different purpose:
+// when the operator toggles between presets (7d ↔ 30d ↔ MTD ↔ Last
+// Month) we hydrate from this cache so the page doesn't flash to
+// loading state and back. fetchData() writes here on every successful
+// pull; a background pre-warm useEffect populates non-active presets
+// 1.5s after the initial paint so the first toggle is also instant.
+var summaryCache = { campaigns: {}, adsets: {}, ads: {} };
+function summaryCacheKey(from, to) { return from + ".." + to; }
 // Feature flags for the audience-insight build. Flip any one to false to
 // hide that section in production without deleting the code, so we can see
 // each new block live then turn it off cleanly if the client doesn't want
@@ -4065,10 +4075,10 @@ export default function MediaOnGas(){
   };
 
 
-  var fetchData=function(){
-    setLoading(true);
-    var h=authHeaders();
-    fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){
+  // Hydrate campaigns from a cached response. Extracted so both the
+  // cache-hit path and the fresh-fetch path can run the same selection-
+  // preservation logic, instead of duplicating it.
+  var applyCampaignsResponse=function(d){
       if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}
       if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}
       if(d.campaigns){
@@ -4127,10 +4137,43 @@ export default function MediaOnGas(){
       if(d.pages){setPages(d.pages);}
       if(d.ttCumulativeFollows!==undefined){setTtCumFollows(d.ttCumulativeFollows);}
       setDataWarnings(Array.isArray(d.warnings)?d.warnings:[]);
-      setLoading(false);
-    }).catch(function(err){console.error("API Error:",err);setLoading(false);});
-    fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){if(d2.adsets){setAdsets(d2.adsets);}}).catch(function(){});
-    fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){if(d3.ads){setAdsList(d3.ads);}}).catch(function(err){console.error("Ads API error:",err);});
+  };
+  var fetchData=function(){
+    var h=authHeaders();
+    var key=summaryCacheKey(df,dt);
+    var campKey=summaryCache.campaigns[key];
+    var adsetKey=summaryCache.adsets[key];
+    var adsKey=summaryCache.ads[key];
+    // Cache-hit path for the main campaigns endpoint: hydrate instantly
+    // and skip setLoading entirely so the page doesn't flash to a blank
+    // loader on preset toggle. Background-refresh the cache (silent) so
+    // a stale entry doesn't sit forever.
+    if(campKey){
+      applyCampaignsResponse(campKey);
+    } else {
+      setLoading(true);
+      fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){
+        summaryCache.campaigns[key]=d;
+        applyCampaignsResponse(d);
+        setLoading(false);
+      }).catch(function(err){console.error("API Error:",err);setLoading(false);});
+    }
+    if(adsetKey){
+      if(adsetKey.adsets){setAdsets(adsetKey.adsets);}
+    } else {
+      fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){
+        summaryCache.adsets[key]=d2;
+        if(d2.adsets){setAdsets(d2.adsets);}
+      }).catch(function(){});
+    }
+    if(adsKey){
+      if(adsKey.ads){setAdsList(adsKey.ads);}
+    } else {
+      fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){
+        summaryCache.ads[key]=d3;
+        if(d3.ads){setAdsList(d3.ads);}
+      }).catch(function(err){console.error("Ads API error:",err);});
+    }
     // Timeseries fetch lives in its own useEffect below so it can scope
     // by the selected campaignIds. Removed the unscoped duplicate that
     // used to fire here on every fetchData() because it raced with the
@@ -4138,6 +4181,39 @@ export default function MediaOnGas(){
     // a portfolio-wide aggregate.
   };
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
+  // Background pre-warm of the other preset ranges (7 DAYS, 30 DAYS,
+  // MTD, LAST MONTH minus the current one) 1.5s after first paint so
+  // the visible fetch grabs the TCP slot first. Populates summaryCache
+  // silently so the operator's first preset toggle is instant. Each
+  // call short-circuits on cache hit so repeated mounts are free.
+  // Silent on failure — a missed pre-warm just means that preset pays
+  // a normal fetch on first toggle.
+  useEffect(function(){
+    if(!isAuthed())return;
+    var timer=setTimeout(function(){
+      var ranges=[
+        presetRange("7d"),
+        presetRange("30d"),
+        presetRange("mtd"),
+        presetRange("lm")
+      ].filter(Boolean);
+      var h=authHeaders();
+      ranges.forEach(function(r){
+        var k=summaryCacheKey(r.from,r.to);
+        if(!summaryCache.campaigns[k]){
+          fetch(API+"/api/campaigns?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns){summaryCache.campaigns[k]=d;}}).catch(function(){});
+        }
+        if(!summaryCache.adsets[k]){
+          fetch(API+"/api/adsets?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.adsets[k]=d||{};}).catch(function(){});
+        }
+        if(!summaryCache.ads[k]){
+          fetch(API+"/api/ads?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.ads[k]=d||{};}).catch(function(){});
+        }
+      });
+    },1500);
+    return function(){clearTimeout(timer);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[session,viewToken]);
   // Comparison data fetch. Only runs when compareMode is on. Reuses the
   // same /api/campaigns endpoint for the prior date range so the existing
   // 5-minute response cache makes the second toggle of the same period
