@@ -5642,7 +5642,12 @@ export default function MediaOnGas(){
             and the action / utility bits on a clean second row so Logout never wraps. */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
+            {/* Logo img has explicit width/height + fetchpriority high so
+                a remount after login (LoginScreen unmounting, dashboard
+                mounting) prioritises the asset; onError nudges the
+                browser to refetch instead of leaving a broken icon if a
+                cached entry from before logout went stale. */}
+            <div style={{width:42,height:42,borderRadius:"50%",overflow:"hidden",animation:"pulse-glow 3s ease-in-out infinite"}}><img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" width="42" height="42" fetchpriority="high" decoding="async" onError={function(e){var img=e.currentTarget;if(!img.dataset.retried){img.dataset.retried="1";img.src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png?r="+Date.now();}}} style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
             <div><div style={{fontSize:16,fontWeight:900,letterSpacing:4,fontFamily:fm,lineHeight:1}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{background:gFire,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>GAS</span></div><div style={{fontSize:9,color:P.label,letterSpacing:4,textTransform:"uppercase",fontFamily:fm,marginTop:3,fontWeight:600}}>{isClient?"Client Dashboard":"Metrics That Matter"}</div></div>
             {/* LIVE indicator. Subtle breathing chip that signals to the
                 team the data on screen is current (refreshed on every page
