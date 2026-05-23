@@ -5557,7 +5557,7 @@ export default function MediaOnGas(){
                 any preset updates df/dt (which persists to localStorage
                 via the useEffect above). FROM/TO inputs stay visible
                 for custom ranges and for confirming the resolved window. */}
-            {(function(){var activePreset=matchPreset();var opts=[{k:"today",l:"TODAY"},{k:"7d",l:"7 DAYS"},{k:"mtd",l:"MTD"},{k:"30d",l:"30 DAYS"},{k:"lm",l:"LAST MONTH"}];return <div title="Quick date range" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
+            {(function(){var activePreset=matchPreset();var opts=[{k:"7d",l:"7 DAYS"},{k:"30d",l:"30 DAYS"},{k:"mtd",l:"MTD"},{k:"lm",l:"LAST MONTH"}];return <div title="Quick date range" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
               {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);
                 // Auto-pick the right Summary compare mode for this preset
                 // so the up/down delta chips light up without a second click.

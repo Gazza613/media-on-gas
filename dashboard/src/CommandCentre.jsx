@@ -315,10 +315,9 @@ export default function CommandCentre(props) {
       var lmStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
       var lmEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
       return [
-        { from: today, to: today },
         { from: ymd(d7), to: today },
-        { from: ymd(mStart), to: today },
         { from: ymd(d30), to: today },
+        { from: ymd(mStart), to: today },
         { from: ymd(lmStart), to: ymd(lmEnd) }
       ];
     };
