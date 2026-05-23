@@ -3646,11 +3646,12 @@ export default function MediaOnGas(){
   // showing vs the equivalent prior period. Other tabs are not affected.
   // Initial compare mode follows the active preset so Summary deltas
   // light up automatically on first load. MTD / Last Month use "mom"
-  // (calendar-month aware), Today / 7d / 30d use "wow" (same-length
-  // immediately before). Custom ranges default to off — operator
-  // can still flip to WoW or MoM via the toggle.
+  // (calendar-month aware), 7d / 30d use "wow" (same-length immediately
+  // before). Custom ranges (no preset match) default to "wow" so
+  // deltas still render — there's no longer a visible toggle to opt
+  // out, by design (the toggle was leftover from before auto-picking).
   var initialPresetForCompare=matchPreset();
-  var initialCompareMode=initialPresetForCompare==="custom"?"off":(initialPresetForCompare==="mtd"||initialPresetForCompare==="lm")?"mom":"wow";
+  var initialCompareMode=(initialPresetForCompare==="mtd"||initialPresetForCompare==="lm")?"mom":"wow";
   var cmo=useState(initialCompareMode),compareMode=cmo[0],setCompareMode=cmo[1];
   var cmp=useState([]),compareCampaigns=cmp[0],setCompareCampaigns=cmp[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
@@ -5670,11 +5671,10 @@ export default function MediaOnGas(){
             </div>;})()}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            {/* Summary-only compare toggle. Other tabs show the selected
-                range without period-over-period deltas. */}
-            <div title="Summary-tab compare mode: show deltas vs the prior period" style={{display:"flex",alignItems:"center",gap:3,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:3}}>
-              {[{k:"off",l:"OFF"},{k:"wow",l:"WoW"},{k:"mom",l:"MoM"}].map(function(opt){var active=compareMode===opt.k;return <button key={opt.k} onClick={function(){setCompareMode(opt.k);}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:7,padding:"5px 10px",color:active?"#fff":P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2}}>{opt.l}</button>;})}
-            </div>
+            {/* Compare mode toggle removed — preset clicks auto-set the
+                right mode (wow for 7d/30d, mom for MTD/LM) and custom
+                ranges default to wow so deltas always render. State
+                machinery kept so delta logic downstream is unchanged. */}
             <button onClick={refreshData} style={{background:gEmber,border:"none",borderRadius:10,padding:"8px 18px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5}}>REFRESH</button>
             {!isClient&&<button onClick={function(){setShowAudit(true);}} title="Settings, Audit, Reconciliation, Usage, Team" style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.solar,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.flag(P.solar,14)} Settings</button>}
             {!isClient&&<button onClick={function(){setShowShare(true);}} style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"8px 12px",color:P.ember,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>{Ic.share(P.ember,14)} Share</button>}
