@@ -4471,21 +4471,34 @@ export default function MediaOnGas(){
       .then(function(d){if(d.series){setTimeseries(d);}})
       .catch(function(){});
   },[df,dt,session,viewToken,tsGran,selected]);
-  // Cache-busting hard reload, used by the header REFRESH button and the
-  // idle-nudge "Refresh Now" button. Strips any prior _r=, then cleans up
-  // the dangling separators that strip can leave behind (?_r=X&token → ?
-  // &token, &_r=X&token → &&token), then appends a fresh _r=timestamp so
-  // the browser refetches index.html and picks up the latest hashed JS
-  // bundle. Fresh platform data follows automatically from the new page
-  // load. Preserves the JWT view token + any other existing query params
-  // (campaigns, from, to, etc) so client share links survive the refresh.
+  // Cache-busting hard reload, kept around for the idle-nudge "Refresh
+  // Now" button which fires after a 15-min idle and explicitly WANTS a
+  // full clean slate (re-authenticates the session and re-pulls the
+  // latest JS bundle). The header REFRESH button uses softRefresh
+  // below instead so the operator doesn't lose their campaign
+  // selection / tab / date range on click.
   var hardRefresh=function(){
     var u=window.location.href.replace(/[?&]_r=\d+/g,"");
     u=u.replace(/\?&/g,"?").replace(/&&+/g,"&").replace(/[?&]$/,"");
     u+=(u.indexOf("?")>=0?"&":"?")+"_r="+Date.now();
     window.location.replace(u);
   };
-  var refreshData=hardRefresh;
+  // Soft refresh — bypasses every client + server cache for the
+  // currently-visible range and re-runs fetchData. applyCampaignsResponse
+  // then carry-forwards the previously-selected campaigns onto the
+  // fresh response so the operator stays exactly where they were:
+  // same tab, same date range, same campaign selection. Only the
+  // numbers update. If the user is on a tab that hasn't been
+  // authenticated yet we fall back to the hard reload.
+  var refreshData=function(){
+    if(!isAuthed()){hardRefresh();return;}
+    var key=summaryCacheKey(df,dt);
+    delete summaryCache.campaigns[key];
+    delete summaryCache.adsets[key];
+    delete summaryCache.ads[key];
+    delete summaryCache.daily[key];
+    fetchData();
+  };
   // Performance Trendlines block, shared between Summary and Optimisation
   // tabs so both render the same matrix without code duplication. Reads
   // the timeseries state, the granularity toggle, and the dashboard's
