@@ -3703,14 +3703,17 @@ export default function MediaOnGas(){
   // Summary-only comparison toggle: "off" | "wow" | "mom". When enabled,
   // the Summary tab's KPI tiles render a delta chip next to the value
   // showing vs the equivalent prior period. Other tabs are not affected.
-  // Initial compare mode follows the active preset so Summary deltas
-  // light up automatically on first load. MTD / Last Month use "mom"
-  // (calendar-month aware), 7d / 30d use "wow" (same-length immediately
-  // before). Custom ranges (no preset match) default to "wow" so
-  // deltas still render — there's no longer a visible toggle to opt
-  // out, by design (the toggle was leftover from before auto-picking).
+  // Initial compare mode is OFF when the range doesn't match any
+  // preset (e.g. the auto-set full month range on first load), so
+  // the Summary lands clean with no delta chips. Comparison deltas
+  // only light up after the operator picks a preset (7D / 30D / MTD
+  // / LM), which is the gesture that explicitly asks for comparison
+  // context. Preset clicks below set the right mode (wow / mom)
+  // synchronously with df/dt, so the chips appear without a second
+  // click. Picking a non-preset custom range keeps whatever mode is
+  // currently set.
   var initialPresetForCompare=matchPreset();
-  var initialCompareMode=(initialPresetForCompare==="mtd"||initialPresetForCompare==="lm")?"mom":"wow";
+  var initialCompareMode=initialPresetForCompare==="custom"?"off":(initialPresetForCompare==="mtd"||initialPresetForCompare==="lm")?"mom":"wow";
   var cmo=useState(initialCompareMode),compareMode=cmo[0],setCompareMode=cmo[1];
   var cmp=useState([]),compareCampaigns=cmp[0],setCompareCampaigns=cmp[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
