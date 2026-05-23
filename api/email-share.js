@@ -6,6 +6,8 @@ import { logEmailSend } from "./_audit.js";
 import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
+import { redisSetIfAbsent } from "./_pulseShared.js";
+import { createHash } from "crypto";
 
 // Admin-only endpoint. Issues a signed share token, fetches the campaign summary,
 // and emails a branded HTML report from grow@gasmarketing.co.za via Gmail SMTP.
@@ -1005,6 +1007,35 @@ export default async function handler(req, res) {
       });
       return;
     }
+
+    // Idempotency guard: hash the send parameters and SETNX in Redis
+    // with a 60s TTL. A double-click on the Share button (or a
+    // network retry that the operator can't see) would otherwise
+    // fire two distinct Gmail sends — same email twice in the
+    // recipient's inbox + two share tokens issued + two audit rows.
+    // The hash covers slug + recipients + dates + sender so two
+    // genuinely-distinct sends are not blocked, only true duplicates.
+    var idempotencyKey = "";
+    try {
+      var seed = JSON.stringify({
+        slug: String(body.clientSlug || ""),
+        to: (toList || []).slice().sort(),
+        cc: (ccList || []).slice().sort(),
+        from: from,
+        to_: to,
+        sender: String(body.senderName || "")
+      });
+      var hash = createHash("sha256").update(seed).digest("hex").slice(0, 16);
+      idempotencyKey = "email-share:idem:" + hash;
+      var firstWriter = await redisSetIfAbsent(idempotencyKey, 60);
+      if (firstWriter === false) {
+        // SETNX returned existing — a duplicate request fired within
+        // the last 60 seconds. Reject cleanly so the operator sees
+        // the duplicate-send chip in the UI without a 5xx.
+        res.status(429).json({ error: "Duplicate send detected — same email was just sent within the last 60 seconds. Wait a moment then try again." });
+        return;
+      }
+    } catch (_) { /* Redis down — fail open. Idempotency is defence-in-depth, not the primary guard (rate limit above already caps 10/min/user). */ }
 
     var transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",

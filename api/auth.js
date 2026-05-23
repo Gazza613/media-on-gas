@@ -91,7 +91,12 @@ export default async function handler(req, res) {
       return;
     }
     if (user.active === false) {
-      res.status(403).json({ error: "This account has been revoked. Contact gary@gasmarketing.co.za if this is unexpected." });
+      // Same generic error as the no-user-found branch, otherwise an
+      // attacker can enumerate which staff emails used to be valid
+      // (former employees) by observing the response wording. We log
+      // the actual reason server-side for the team's own audit trail.
+      console.warn("[auth] revoked account login attempt", { email: email });
+      res.status(401).json({ error: "Invalid email or password" });
       return;
     }
 

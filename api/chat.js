@@ -137,7 +137,17 @@ export default async function handler(req, res) {
 
   var body = req.body || {};
   var message = String(body.message || "").trim();
-  var history = Array.isArray(body.history) ? body.history.slice(-MAX_HISTORY_MESSAGES) : [];
+  // Per-message cap inside history. Without this a client could
+  // replay 12 messages of 100KB each, blowing up Anthropic input
+  // tokens (and cost) per request. 4000 chars is comfortably above
+  // realistic chat turns and well below the budget impact threshold.
+  var HISTORY_ITEM_CAP = 4000;
+  var history = Array.isArray(body.history) ? body.history.slice(-MAX_HISTORY_MESSAGES).map(function(h){
+    if (!h || typeof h !== "object") return h;
+    var content = String(h.content || "");
+    if (content.length > HISTORY_ITEM_CAP) content = content.slice(0, HISTORY_ITEM_CAP) + "…";
+    return Object.assign({}, h, { content: content });
+  }) : [];
   var from = String(body.from || "").trim();
   var to = String(body.to || "").trim();
 
@@ -321,6 +331,11 @@ export default async function handler(req, res) {
     var errMsg = err && err.message ? String(err.message) : "Chat failed";
     if (err instanceof Anthropic.RateLimitError) errMsg = "AI is rate-limited, try in a moment";
     else if (err instanceof Anthropic.AuthenticationError) errMsg = "Chat auth error on server";
+    // 529 is Anthropic's "overloaded" status. Catch the generic
+    // APIError shape and read .status so we don't depend on a
+    // specific error class import that may not exist in older SDK
+    // versions. Surfaces a friendlier message + suggests a retry.
+    else if (err && (err.status === 529 || (err.error && err.error.type === "overloaded_error"))) errMsg = "AI is overloaded right now, try again in 30s";
     writeEvent({ type: "error", error: errMsg });
     res.end();
   }
