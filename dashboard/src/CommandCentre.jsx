@@ -541,8 +541,20 @@ export default function CommandCentre(props) {
         // (compareData). Suppressed when a platform filter is active —
         // the comparison data is unscoped and showing a cross-platform
         // delta next to a single-platform total would be misleading.
+        // Also suppressed when the current window is shorter than 3
+        // days — on the 1st-3rd of a month, MTD is 1-3 days and the
+        // matching comparison window is the same tiny slice of the
+        // previous month, producing wildly misleading deltas (one
+        // off day = ±1000%). The chip returns once the period has
+        // enough days to be meaningful.
         var prevWin = previousPeriodWindow(dateFrom, dateTo);
-        var cmp = (compareData && compareData.summary && (!platformFilter || platformFilter === "all")) ? compareData.summary : null;
+        var winDays = (function() {
+          if (!dateFrom || !dateTo) return 0;
+          var a = Date.parse(dateFrom + "T00:00:00Z"), b = Date.parse(dateTo + "T00:00:00Z");
+          if (!isFinite(a) || !isFinite(b)) return 0;
+          return Math.round((b - a) / 86400000) + 1;
+        })();
+        var cmp = (compareData && compareData.summary && (!platformFilter || platformFilter === "all") && winDays >= 3) ? compareData.summary : null;
         var dCamp = cmp ? deltaChip(sum.campaigns, cmp.campaigns, false) : null;
         var dLive = cmp ? deltaChip(sum.live, cmp.live, false) : null;
         var dAttn = cmp ? deltaChip(sum.needsAttention, cmp.needsAttention, true) : null;

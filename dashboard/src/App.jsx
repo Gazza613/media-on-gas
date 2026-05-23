@@ -184,10 +184,24 @@ function findContainingCacheKey(df, dt) {
 // bound (overlapping audiences across days), accepted trade-off for
 // the instant sub-range UX.
 function sliceCampaignsByDaily(baseCampaigns, dailyByCampaignId, from, to) {
+  // Zeroed metric template returned when a campaign has NO daily
+  // breakdown loaded (Meta account 5xx'd, daily fetch raced and lost,
+  // or the campaign genuinely had no in-window delivery). Earlier
+  // behaviour was to return the wider-window base row — that
+  // silently mislabelled wider-window totals as the sub-range
+  // totals on slice, which is worse than honest zeros.
+  var zeroOut = function(c) {
+    return Object.assign({}, c, {
+      spend: "0.00", impressions: "0", reach: "0", clicks: "0",
+      leads: "0", appInstalls: "0", pageLikes: "0", follows: "0", likes: "0",
+      ctr: "0.00", cpm: "0.00", cpc: "0.00", frequency: "0.00",
+      costPerLead: "0", costPerInstall: "0"
+    });
+  };
   return baseCampaigns.map(function(c) {
     var entry = dailyByCampaignId && dailyByCampaignId[c.campaignId];
     var daily = entry && entry.daily;
-    if (!daily || !daily.length) return c;
+    if (!daily || !daily.length) return zeroOut(c);
     var s = { spend: 0, impressions: 0, reach: 0, clicks: 0, leads: 0, appInstalls: 0, pageLikes: 0, follows: 0, likes: 0 };
     for (var i = 0; i < daily.length; i++) {
       var d = daily[i];
@@ -3672,6 +3686,17 @@ export default function MediaOnGas(){
   // the tab-change effect below.
   var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var de=useState(monthEnd),dt=de[0],setDt=de[1];
+  // Defensive: if the operator typed FROM > TO (typo / accidental
+  // swap), normalise so downstream code never sees an inverted range
+  // (Meta returns empty data on inverted time_range, and the cache
+  // would otherwise store that empty result under the typo'd key).
+  // Only fires when both values are complete YYYY-MM-DD strings, so
+  // it doesn't kick in mid-type while the date picker is partial.
+  useEffect(function(){
+    if(df&&dt&&/^\d{4}-\d{2}-\d{2}$/.test(df)&&/^\d{4}-\d{2}-\d{2}$/.test(dt)&&df>dt){
+      var swap=df;setDf(dt);setDt(swap);
+    }
+  },[df,dt]);
   // Stash any previously-saved range so we can restore it when the
   // user navigates off Summary to another tab. Updated whenever the
   // range changes on a non-Summary tab.
