@@ -4082,6 +4082,11 @@ export default function MediaOnGas(){
   // toggled presets or edited FROM/TO rapidly.
   var fetchGenRef=useRef(0);
   var fetchKeyRef=useRef("");
+  // "Background refresh in progress" — fires when fetchData runs after
+  // the initial load. Drives a small chip in the header instead of the
+  // full blank loader, so date-picker changes feel instant: existing
+  // numbers stay on screen while the new range fetches.
+  var bgr0=useState(false),bgRefreshing=bgr0[0],setBgRefreshing=bgr0[1];
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
@@ -4160,22 +4165,32 @@ export default function MediaOnGas(){
     var campKey=summaryCache.campaigns[key];
     var adsetKey=summaryCache.adsets[key];
     var adsKey=summaryCache.ads[key];
-    // Cache-hit path for the main campaigns endpoint: hydrate instantly
-    // and skip setLoading entirely so the page doesn't flash to a blank
-    // loader on preset toggle.
+    // Cache-hit path: hydrate instantly. Cache-miss path: keep the
+    // existing data on screen and fire a background fetch. Only the
+    // FIRST-EVER load (no campaigns in state yet) flips the global
+    // `loading` flag — every subsequent date / preset / FROM-TO change
+    // is treated as a background refresh, so the page no longer flashes
+    // to a blank loader when the operator nudges the date picker.
     if(campKey){
       applyCampaignsResponse(campKey);
       setLoading(false);
+      setBgRefreshing(false);
     } else {
-      setLoading(true);
+      var hasInitialData=campaigns&&campaigns.length>0;
+      if(hasInitialData){
+        setBgRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){
         summaryCache.campaigns[key]=d;
         if(myGen!==fetchGenRef.current)return; // superseded by a newer fetchData call
         applyCampaignsResponse(d);
         setLoading(false);
+        setBgRefreshing(false);
       }).catch(function(err){
         if(myGen!==fetchGenRef.current)return;
-        console.error("API Error:",err);setLoading(false);
+        console.error("API Error:",err);setLoading(false);setBgRefreshing(false);
       });
     }
     if(adsetKey){
@@ -5663,6 +5678,14 @@ export default function MediaOnGas(){
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:10,padding:"8px 16px",color:showCampaigns?P.ember:P.label,fontSize:11,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,14)} {selected.length} Campaigns</button>}
             <div style={{display:"flex",alignItems:"center",gap:5,background:P.glass,border:"1px solid "+P.rule,borderRadius:10,padding:"6px 12px"}}><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/><div style={{width:12,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:2,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:12,fontFamily:fm,outline:"none",width:105,fontWeight:500}}/></div>
+            {/* Background-refresh chip — only shows when the operator
+                changes the date AFTER the initial load. Visible
+                signal that numbers are still updating without blanking
+                the whole page like a full loader would. */}
+            {bgRefreshing&&<div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:10,background:"rgba(249,98,3,0.10)",border:"1px solid rgba(249,98,3,0.32)",fontFamily:fm}} title="Refreshing the dashboard for the new date range">
+              <span style={{width:10,height:10,border:"1.5px solid rgba(249,98,3,0.35)",borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>
+              <span style={{fontSize:9,fontWeight:800,color:P.ember,letterSpacing:1.2,textTransform:"uppercase"}}>Refreshing</span>
+            </div>}
           </div>
         </div>
         {/* Row 2: preset chips on the left, action / utility buttons on the right. */}
