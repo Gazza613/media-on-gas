@@ -4285,10 +4285,19 @@ export default function MediaOnGas(){
       } else {
         setLoading(true);
       }
-      fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d){
-        summaryCache.campaigns[key]=d;
-        if(myGen!==fetchGenRef.current)return; // superseded by a newer fetchData call
-        applyCampaignsResponse(d);
+      // Cache write is gated on r.ok AND a valid response shape so
+      // transient backend errors don't poison the cache for the
+      // rest of the session. Without the gate, a single 502 / 400
+      // wrote the error JSON under summaryCache.campaigns[key] and
+      // every subsequent visit short-circuited to that cached error.
+      fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){
+        return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
+      }).then(function(x){
+        if(myGen!==fetchGenRef.current)return;
+        if(x.ok&&x.d&&x.d.campaigns){
+          summaryCache.campaigns[key]=x.d;
+          applyCampaignsResponse(x.d);
+        }
         setLoading(false);
         setBgRefreshing(false);
       }).catch(function(err){
@@ -4298,31 +4307,39 @@ export default function MediaOnGas(){
       // Parallel fetch of the daily breakdown. Fires alongside the main
       // campaigns request and writes to summaryCache.daily so any
       // FUTURE sub-range toggle of this window is instant via the
-      // sliceCampaignsByDaily path. We don't block the visible UI on
-      // this; if it fails, sub-range toggles just trigger a normal
-      // fetch as before.
+      // sliceCampaignsByDaily path.
       if(!summaryCache.daily[key]){
-        fetch(API+"/api/campaigns-daily?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(dd){
-          if(dd&&dd.ok&&dd.campaigns){summaryCache.daily[key]=dd.campaigns;}
+        fetch(API+"/api/campaigns-daily?from="+df+"&to="+dt,{headers:h}).then(function(r){
+          return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
+        }).then(function(x){
+          if(x.ok&&x.d&&x.d.ok&&x.d.campaigns){summaryCache.daily[key]=x.d.campaigns;}
         }).catch(function(){});
       }
     }
     if(adsetKey){
       if(adsetKey.adsets){setAdsets(adsetKey.adsets);}
     } else {
-      fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d2){
-        summaryCache.adsets[key]=d2;
+      fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){
+        return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
+      }).then(function(x){
         if(myGen!==fetchGenRef.current)return;
-        if(d2.adsets){setAdsets(d2.adsets);}
+        if(x.ok&&x.d&&x.d.adsets){
+          summaryCache.adsets[key]=x.d;
+          setAdsets(x.d.adsets);
+        }
       }).catch(function(){});
     }
     if(adsKey){
       if(adsKey.ads){setAdsList(adsKey.ads);}
     } else {
-      fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){return r.json();}).then(function(d3){
-        summaryCache.ads[key]=d3;
+      fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){
+        return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
+      }).then(function(x){
         if(myGen!==fetchGenRef.current)return;
-        if(d3.ads){setAdsList(d3.ads);}
+        if(x.ok&&x.d&&x.d.ads){
+          summaryCache.ads[key]=x.d;
+          setAdsList(x.d.ads);
+        }
       }).catch(function(err){
         if(myGen!==fetchGenRef.current)return;
         console.error("Ads API error:",err);

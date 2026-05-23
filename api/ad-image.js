@@ -222,7 +222,12 @@ export default async function handler(req, res) {
   if (!adId) { res.status(400).json({ error: "adId required" }); return; }
   if (platform !== "meta" && platform !== "tiktok") { res.status(400).json({ error: "platform must be meta or tiktok" }); return; }
 
-  // Client-scope guard matches /api/ad-video.
+  // Client-scope guard matches /api/ad-video. Two checks for clients:
+  //   1. The supplied campaignId must be in the principal's allowlist
+  //   2. The supplied adId must ACTUALLY belong to that campaign — without
+  //      this a client could pass an allowlisted campaignId plus an
+  //      arbitrary adId from another brand and the server would resolve
+  //      the foreign ad's CDN URL for them (cross-tenant asset leak).
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
     if (!campaignId) { res.status(400).json({ error: "campaignId required for client requests" }); return; }
@@ -230,6 +235,40 @@ export default async function handler(req, res) {
       res.status(403).json({ error: "Not allowed for this campaign" });
       return;
     }
+    // Ownership check: the principal's campaignId from /api/campaigns
+    // is "<rawid>_facebook" / "<rawid>_instagram" for Meta, raw id for
+    // TikTok. Strip placement suffix before comparing.
+    var rawAllowed = String(campaignId).replace(/_facebook$|_instagram$/i, "");
+    try {
+      if (platform === "meta") {
+        var ownTok = process.env.META_ACCESS_TOKEN;
+        if (ownTok) {
+          var oR = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=campaign_id&access_token=" + ownTok);
+          if (oR.ok) {
+            var oD = await oR.json();
+            if (oD && oD.campaign_id && String(oD.campaign_id) !== rawAllowed) {
+              res.status(403).json({ error: "Ad does not belong to this campaign" });
+              return;
+            }
+          }
+        }
+      } else if (platform === "tiktok") {
+        var ttTokOwn = process.env.TIKTOK_ACCESS_TOKEN;
+        var ttAdvOwn = process.env.TIKTOK_ADVERTISER_ID;
+        if (ttTokOwn && ttAdvOwn) {
+          var ttOwnUrl = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + ttAdvOwn + "&filtering=" + encodeURIComponent(JSON.stringify({ ad_ids: [adId] })) + "&fields=" + encodeURIComponent(JSON.stringify(["ad_id","campaign_id"]));
+          var ttOR = await fetch(ttOwnUrl, { headers: { "Access-Token": ttTokOwn } });
+          if (ttOR.ok) {
+            var ttOD = await ttOR.json();
+            var ttAd = ttOD && ttOD.data && ttOD.data.list && ttOD.data.list[0];
+            if (ttAd && ttAd.campaign_id && String(ttAd.campaign_id) !== rawAllowed) {
+              res.status(403).json({ error: "Ad does not belong to this campaign" });
+              return;
+            }
+          }
+        }
+      }
+    } catch (_) { /* upstream lookup failed — fail closed below by not blocking, since this is a defence-in-depth on top of campaignId allowlist */ }
   }
 
   // Winner mode gets its own cache slot so the winning-creative URL

@@ -178,13 +178,50 @@ export default async function handler(req, res) {
   if (!videoId) { res.status(400).json({ error: "id required" }); return; }
   if (platform !== "meta" && platform !== "tiktok") { res.status(400).json({ error: "platform must be meta or tiktok" }); return; }
 
-  // Client-scope guard: client tokens must prove this video's campaign is in their allowlist.
+  // Client-scope guard: campaignId must be in the allowlist AND the
+  // supplied adId (if any) must actually belong to that campaign.
+  // The 2nd check stops a client with a valid share link passing an
+  // allowlisted campaignId + an arbitrary adId from another brand
+  // and receiving the foreign video's CDN URL.
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
     if (!campaignId) { res.status(400).json({ error: "campaignId required for client requests" }); return; }
     if (!isCampaignAllowed(principal, campaignId, "")) {
       res.status(403).json({ error: "Not allowed for this campaign" });
       return;
+    }
+    if (adId) {
+      var rawAllowedVid = String(campaignId).replace(/_facebook$|_instagram$/i, "");
+      try {
+        if (platform === "meta") {
+          var ownTokV = process.env.META_ACCESS_TOKEN;
+          if (ownTokV) {
+            var oRV = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=campaign_id&access_token=" + ownTokV);
+            if (oRV.ok) {
+              var oDV = await oRV.json();
+              if (oDV && oDV.campaign_id && String(oDV.campaign_id) !== rawAllowedVid) {
+                res.status(403).json({ error: "Ad does not belong to this campaign" });
+                return;
+              }
+            }
+          }
+        } else if (platform === "tiktok") {
+          var ttTokV = process.env.TIKTOK_ACCESS_TOKEN;
+          var ttAdvV = process.env.TIKTOK_ADVERTISER_ID;
+          if (ttTokV && ttAdvV) {
+            var ttOwnUrlV = "https://business-api.tiktok.com/open_api/v1.3/ad/get/?advertiser_id=" + ttAdvV + "&filtering=" + encodeURIComponent(JSON.stringify({ ad_ids: [adId] })) + "&fields=" + encodeURIComponent(JSON.stringify(["ad_id","campaign_id"]));
+            var ttORV = await fetch(ttOwnUrlV, { headers: { "Access-Token": ttTokV } });
+            if (ttORV.ok) {
+              var ttODV = await ttORV.json();
+              var ttAdV = ttODV && ttODV.data && ttODV.data.list && ttODV.data.list[0];
+              if (ttAdV && ttAdV.campaign_id && String(ttAdV.campaign_id) !== rawAllowedVid) {
+                res.status(403).json({ error: "Ad does not belong to this campaign" });
+                return;
+              }
+            }
+          }
+        }
+      } catch (_) { /* upstream lookup failed — primary campaignId allowlist still gates the request */ }
     }
   }
 

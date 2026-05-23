@@ -374,7 +374,7 @@ export default async function handler(req, res) {
     // Either path is sufficient. Both rate-limit identically.
     var apiKey = req.headers["x-api-key"] || req.query.api_key || "";
     var expectedKey = process.env.DASHBOARD_API_KEY || "";
-    var keyOk = apiKey && expectedKey && apiKey === expectedKey;
+    var keyOk = apiKey && expectedKey && timingSafeStrEqual(String(apiKey), expectedKey);
     var sessionOk = false;
     if (!keyOk) {
       var sessionToken = req.headers["x-session-token"] || "";

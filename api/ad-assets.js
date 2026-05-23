@@ -288,6 +288,23 @@ export default async function handler(req, res) {
       res.status(403).json({ error: "Not allowed for this campaign" });
       return;
     }
+    // Cross-tenant ownership check: campaignId is allowlisted, but
+    // the adId must actually belong to it. Meta-only endpoint so
+    // no TikTok branch needed here.
+    var rawAllowedA = String(campaignId).replace(/_facebook$|_instagram$/i, "");
+    try {
+      var ownTokA = process.env.META_ACCESS_TOKEN;
+      if (ownTokA) {
+        var oRA = await fetch("https://graph.facebook.com/v25.0/" + encodeURIComponent(adId) + "?fields=campaign_id&access_token=" + ownTokA);
+        if (oRA.ok) {
+          var oDA = await oRA.json();
+          if (oDA && oDA.campaign_id && String(oDA.campaign_id) !== rawAllowedA) {
+            res.status(403).json({ error: "Ad does not belong to this campaign" });
+            return;
+          }
+        }
+      }
+    } catch (_) { /* upstream lookup failed — primary campaignId allowlist still gates the request */ }
   }
 
   var payload = await computeAssetBreakdown(adId, from, to);

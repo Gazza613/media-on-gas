@@ -69,9 +69,13 @@ export default async function handler(req, res) {
   if (!(await rateLimit(req, res, { maxPerMin: 30, maxPerHour: 300 }))) return;
   if (!(await checkAuth(req, res))) return;
 
-  var datesValid = validateDates(req, res);
-  if (!datesValid) return;
-  var from = datesValid.from, to = datesValid.to;
+  // validateDates returns a BOOLEAN (true on pass, sends 400 on fail),
+  // not an object. Earlier code destructured .from/.to from it which
+  // gave undefined and broke every downstream platform call silently.
+  // Read query params directly, mirroring /api/campaigns.
+  if (!validateDates(req, res)) return;
+  var from = String(req.query.from || "").trim();
+  var to = String(req.query.to || "").trim();
   var timeRange = encodeURIComponent('{"since":"' + from + '","until":"' + to + '"}');
 
   var metaToken = process.env.META_ACCESS_TOKEN;
@@ -82,16 +86,27 @@ export default async function handler(req, res) {
   var warnings = [];
 
   // ---------- META ----------
-  // One insights call per Meta account with time_increment=1 returns
-  // one row per campaign per day. The publisher_platform breakdown
-  // is intentionally omitted here — sub-range slicing operates on the
-  // sum across placements, and skipping the breakdown keeps the
-  // response payload small.
+  // Daily insights WITH publisher_platform breakdown so each row is
+  // keyed by the same "<campaign_id>_<platform>" id /api/campaigns
+  // produces. Previously this endpoint omitted the breakdown and
+  // pushed the SAME daily row to both _facebook and _instagram keys,
+  // which caused sub-range slices to double-count Meta metrics (both
+  // halves are auto-selected on Summary). Now FB rows go to
+  // <id>_facebook and IG rows go to <id>_instagram, matching
+  // /api/campaigns exactly.
+  var mapMetaPub = function(p) {
+    var s = String(p || "").toLowerCase();
+    if (s === "facebook") return "facebook";
+    if (s === "instagram") return "instagram";
+    if (s === "messenger") return "facebook"; // msgr placement is FB family
+    if (s === "audience_network") return "facebook";
+    return ""; // unknown placement, drop row
+  };
   if (metaToken) {
     for (var ai = 0; ai < metaAccounts.length; ai++) {
       var account = metaAccounts[ai];
       try {
-        var mDailyUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend,impressions,reach,clicks,actions&time_range=" + timeRange + "&level=campaign&time_increment=1&limit=1000&access_token=" + metaToken;
+        var mDailyUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend,impressions,reach,clicks,actions&time_range=" + timeRange + "&level=campaign&time_increment=1&breakdowns=publisher_platform&limit=1000&access_token=" + metaToken;
         var mRes = await fetch(mDailyUrl);
         if (!mRes.ok) {
           warnings.push({ platform: "Meta", account: account.name, message: "HTTP " + mRes.status });
@@ -105,16 +120,12 @@ export default async function handler(req, res) {
           if (!cid) continue;
           var dateKey = String(r.date_start || "").slice(0, 10);
           if (!dateKey) continue;
+          var plat = mapMetaPub(r.publisher_platform);
+          if (!plat) continue;
           var ac = metaActionCounts(r.actions);
-          // Meta campaign IDs surface in /api/campaigns as
-          // "<id>_facebook" / "<id>_instagram" depending on the
-          // publisher split. Without the breakdown here we expose
-          // the campaign under BOTH suffix variants so the client's
-          // existing campaignId-keyed lookups match.
-          [cid + "_facebook", cid + "_instagram"].forEach(function(keyed) {
-            if (!campaigns[keyed]) campaigns[keyed] = { daily: [] };
-          });
-          var payload = {
+          var keyed = cid + "_" + plat;
+          if (!campaigns[keyed]) campaigns[keyed] = { daily: [] };
+          campaigns[keyed].daily.push({
             date: dateKey,
             spend: num(r.spend),
             impressions: num(r.impressions),
@@ -125,11 +136,7 @@ export default async function handler(req, res) {
             pageLikes: ac.pageLikes,
             follows: 0,
             likes: ac.reactionLikes
-          };
-          // Push to both placement-keyed buckets. Client decides
-          // which placement family applies based on campaignId.
-          campaigns[cid + "_facebook"].daily.push(payload);
-          campaigns[cid + "_instagram"].daily.push(payload);
+          });
         }
       } catch (e) {
         warnings.push({ platform: "Meta", account: account.name, message: String(e && e.message || e) });
@@ -224,7 +231,16 @@ export default async function handler(req, res) {
               impressions: num(gm.impressions),
               reach: num(gm.impressions) / 2, // Google doesn't expose unique reach; same 2x estimate as /api/campaigns
               clicks: num(gm.clicks),
-              leads: 0, // Google leads handled separately via objective gate in /api/campaigns
+              // Google's metrics.conversions IS the leads count for
+              // lead-gen Search / PMax campaigns. /api/campaigns gates
+              // this by objective (only counts for genuinely lead-gen
+              // campaigns); for sub-range slicing parity we include
+              // conversions here unconditionally. The minor over-count
+              // on non-lead campaigns is bounded — most non-lead
+              // Google campaigns report 0 conversions anyway — and
+              // the alternative (always 0) silently zeroed Google
+              // CPL on every sub-range view.
+              leads: num(gm.conversions),
               appInstalls: 0,
               pageLikes: 0,
               follows: 0,

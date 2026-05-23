@@ -372,7 +372,7 @@ export default async function handler(req, res) {
     if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
     var apiKey = req.headers["x-api-key"] || req.query.api_key || "";
     var expectedKey = process.env.DASHBOARD_API_KEY || "";
-    if (!apiKey || !expectedKey || apiKey !== expectedKey) {
+    if (!apiKey || !expectedKey || !timingSafeStrEqual(String(apiKey), expectedKey)) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
