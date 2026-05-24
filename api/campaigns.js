@@ -2,6 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, filterPagesForPrincipal, isAdminOrSuperadmin } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
+import { redisGetJson, redisSetJson } from "./_pulseShared.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
 // Settings → Objectives Audit) ahead of name + API logic. Returns the
@@ -1207,35 +1208,54 @@ export default async function handler(req, res) {
         // relation. amount_micros -> ZAR via /1,000,000. period = DAILY / CUSTOM
         // (CUSTOM with an end_date acts like a lifetime cap).
         var gQuery = "SELECT campaign.name, campaign.id, campaign.status, campaign.start_date, campaign.end_date, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, campaign_budget.amount_micros, campaign_budget.period, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
-        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
-          method: "POST",
-          headers: {
-            "Authorization": "Bearer " + gTokenData.access_token,
-            "developer-token": gDevToken,
-            "login-customer-id": gManagerId,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({query: gQuery})
-        });
-        // Non-200 from Google Ads (401 token issue, 403 manager id /
-        // dev token mismatch, 429 quota, 5xx outage) was silently
-        // dropping the Google block from the response — no campaigns,
-        // no warning, platform count quietly went 4 -> 3 and the
-        // operator had no signal it wasn't their data. Surface a
-        // warning so the dashboard banner explains the missing block.
-        if (gRes.status !== 200) {
-          var gErrTxt = "";
-          try { gErrTxt = await gRes.text(); } catch (_) {}
-          var gErrMsg = "HTTP " + gRes.status;
-          try {
-            var gParsed = JSON.parse(gErrTxt || "{}");
-            if (gParsed && gParsed.error && gParsed.error.message) gErrMsg = gParsed.error.message + " (HTTP " + gRes.status + ")";
-          } catch (_) {}
-          warnings.push({ platform: "Google", stage: "ads", message: gErrMsg });
+        // Redis-backed Google Ads cache. The dashboard's pre-warm fires
+        // /api/campaigns for ~13 different date ranges on mount (5
+        // preset windows + 4 comparison windows + 5 Optimise tab
+        // windows). Each one was independently hitting Google Ads and
+        // burning developer-token quota — operator hit 429 "Resource
+        // has been exhausted" with the platform silently dropping out
+        // of the dashboard. Caching the raw query response per
+        // (customer, from, to) for 30min coalesces those parallel
+        // pre-warms onto a single Google call per range, and serves
+        // every follow-up within TTL from Redis. Bypass with
+        // ?fresh=1 (operator-initiated REFRESH path).
+        var gCacheKey = "googleads:v1:" + gCustomerId + ":" + from + ":" + to;
+        var gCached = req.query.fresh === "1" ? null : await redisGetJson(gCacheKey);
+        var gResults = null;
+        if (gCached && Array.isArray(gCached.results)) {
+          gResults = gCached.results;
+        } else {
+          var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+            method: "POST",
+            headers: {
+              "Authorization": "Bearer " + gTokenData.access_token,
+              "developer-token": gDevToken,
+              "login-customer-id": gManagerId,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({query: gQuery})
+          });
+          // Non-200 from Google Ads (401 token issue, 403 manager id /
+          // dev token mismatch, 429 quota, 5xx outage) was silently
+          // dropping the Google block from the response. Surface a
+          // warning so the dashboard banner explains the missing block.
+          if (gRes.status !== 200) {
+            var gErrTxt = "";
+            try { gErrTxt = await gRes.text(); } catch (_) {}
+            var gErrMsg = "HTTP " + gRes.status;
+            try {
+              var gParsed = JSON.parse(gErrTxt || "{}");
+              if (gParsed && gParsed.error && gParsed.error.message) gErrMsg = gParsed.error.message + " (HTTP " + gRes.status + ")";
+            } catch (_) {}
+            warnings.push({ platform: "Google", stage: "ads", message: gErrMsg });
+          } else {
+            var gData = await gRes.json();
+            gResults = gData.results || [];
+            // Fire and forget — never block the response on a slow Redis write.
+            try { redisSetJson(gCacheKey, { results: gResults }, 30 * 60); } catch (_) {}
+          }
         }
-        if (gRes.status === 200) {
-          var gData = await gRes.json();
-          var gResults = gData.results || [];
+        if (gResults) {
           for (var g = 0; g < gResults.length; g++) {
             var gr = gResults[g];
             var gc = gr.campaign;
