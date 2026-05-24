@@ -1217,6 +1217,22 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({query: gQuery})
         });
+        // Non-200 from Google Ads (401 token issue, 403 manager id /
+        // dev token mismatch, 429 quota, 5xx outage) was silently
+        // dropping the Google block from the response — no campaigns,
+        // no warning, platform count quietly went 4 -> 3 and the
+        // operator had no signal it wasn't their data. Surface a
+        // warning so the dashboard banner explains the missing block.
+        if (gRes.status !== 200) {
+          var gErrTxt = "";
+          try { gErrTxt = await gRes.text(); } catch (_) {}
+          var gErrMsg = "HTTP " + gRes.status;
+          try {
+            var gParsed = JSON.parse(gErrTxt || "{}");
+            if (gParsed && gParsed.error && gParsed.error.message) gErrMsg = gParsed.error.message + " (HTTP " + gRes.status + ")";
+          } catch (_) {}
+          warnings.push({ platform: "Google", stage: "ads", message: gErrMsg });
+        }
         if (gRes.status === 200) {
           var gData = await gRes.json();
           var gResults = gData.results || [];
