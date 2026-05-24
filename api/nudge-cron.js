@@ -222,11 +222,15 @@ function buildNudgeHtml(opts) {
       </td></tr>
 
       <tr><td style="padding:28px 40px 8px;" align="center">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-          <tr><td align="center" style="background:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:12px;">
-            <a href="${dashboardUrl}" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Open Dashboard</a>
-          </td></tr>
-        </table>
+        <!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${dashboardUrl}" style="height:50px;v-text-anchor:middle;width:240px;" arcsize="24%" stroke="f" fillcolor="#FF5A1F">
+          <w:anchorlock/>
+          <center style="color:#ffffff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">OPEN DASHBOARD</center>
+        </v:roundrect>
+        <![endif]-->
+        <!--[if !mso]><!-->
+        <a href="${dashboardUrl}" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:12px;color:#ffffff;display:inline-block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;font-weight:900;letter-spacing:3px;padding:16px 42px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>
+        <!--<![endif]-->
         <div style="margin-top:14px;font-size:10px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:600;">Pull the latest, click Share, pick ${clientName}, send</div>
       </td></tr>
 
