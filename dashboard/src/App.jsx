@@ -4448,12 +4448,8 @@ export default function MediaOnGas(){
   useEffect(function(){
     if(!isAuthed())return;
     var timer=setTimeout(function(){
-      var ranges=[
-        presetRange("7d"),
-        presetRange("30d"),
-        presetRange("mtd"),
-        presetRange("lm")
-      ].filter(Boolean);
+      var presetKeys=["7d","30d","mtd","lm"];
+      var ranges=presetKeys.map(function(k){return presetRange(k);}).filter(Boolean);
       var h=authHeaders();
       ranges.forEach(function(r){
         var k=summaryCacheKey(r.from,r.to);
@@ -4468,6 +4464,28 @@ export default function MediaOnGas(){
         }
         if(!summaryCache.daily[k]){
           fetch(API+"/api/campaigns-daily?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.ok&&d.campaigns){summaryCache.daily[k]=d.campaigns;}}).catch(function(){});
+        }
+      });
+      // Also pre-warm the COMPARISON window for each preset (prior 7 /
+      // prior 30 / same days last month / full last month). The
+      // comparison effect below fetches /api/campaigns?from=...&to=...
+      // for these ranges the moment the operator clicks a preset; without
+      // pre-warm, that fetch is cold every time and the WoW/MoM chip
+      // appears as a dashed placeholder for 20-40s while Meta + TikTok +
+      // Google get pulled fresh. The pre-warm hits the SAME url so the
+      // server-side 5-min response cache on /api/campaigns serves the
+      // comparison fetch instantly. Each compare range is also keyed in
+      // summaryCache.campaigns under its own from..to, which means a
+      // subsequent SECOND click of the same preset is also instant.
+      presetKeys.forEach(function(presetKey){
+        var presetR=presetRange(presetKey);
+        if(!presetR)return;
+        var compareMode=presetKey==="mtd"||presetKey==="lm"?"mom":"wow";
+        var cmpR=computeComparisonRange(presetR.from,presetR.to,compareMode);
+        if(!cmpR)return;
+        var cmpKey=summaryCacheKey(cmpR.from,cmpR.to);
+        if(!summaryCache.campaigns[cmpKey]){
+          fetch(API+"/api/campaigns?from="+cmpR.from+"&to="+cmpR.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns){summaryCache.campaigns[cmpKey]=d;}}).catch(function(){});
         }
       });
     },1500);
@@ -4487,12 +4505,36 @@ export default function MediaOnGas(){
     if(compareMode==="off"){setCompareCampaigns([]);return;}
     var range=computeComparisonRange(df,dt,compareMode);
     if(!range)return;
+    // Cache-first: the pre-warm useEffect above primes summaryCache
+    // with /api/campaigns responses for every preset's comparison
+    // window the moment the dashboard mounts. If that already
+    // landed (which it usually has by the time the operator clicks a
+    // preset, since pre-warm fires 1.5s after mount and the
+    // operator's first preset click is usually seconds later), serve
+    // the chip data synchronously and skip the network round-trip.
+    // This is the difference between "WoW chip appears in 100ms" and
+    // "WoW chip dashes for 20s while Meta/TikTok/Google get pulled".
+    var cmpKey=summaryCacheKey(range.from,range.to);
+    var cached=summaryCache.campaigns[cmpKey];
+    if(cached&&cached.campaigns){
+      setCompareCampaigns(cached.campaigns);
+      return;
+    }
     setCompareCampaigns([]);
     var cancelled=false;
     var h=authHeaders();
     fetch(API+"/api/campaigns?from="+range.from+"&to="+range.to,{headers:h})
       .then(function(r){return r.ok?r.json():null;})
-      .then(function(d){if(!cancelled&&d&&d.campaigns)setCompareCampaigns(d.campaigns);})
+      .then(function(d){
+        if(cancelled)return;
+        if(d&&d.campaigns){
+          // Cache the comparison response under its own key so the
+          // operator's NEXT toggle into the same comparison is also
+          // instant, not just the one the pre-warm covered.
+          summaryCache.campaigns[cmpKey]=d;
+          setCompareCampaigns(d.campaigns);
+        }
+      })
       .catch(function(){});
     return function(){cancelled=true;};
   },[df,dt,compareMode,session,viewToken]);
