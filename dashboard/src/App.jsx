@@ -4240,15 +4240,37 @@ export default function MediaOnGas(){
           // so a date change refines the SAME view instead of resetting
           // it to the whole portfolio. Only auto-select everything if
           // nothing carried over (e.g. an entirely different period).
+          //
+          // Importantly, do NOT require activeMap[c.id] here. The
+          // earlier filter silently un-ticked any previously-selected
+          // campaign that had zero delivery in the NEW window. The
+          // operator reported the visible symptom: 22 May campaigns
+          // selected on MTD, click 7D, count drops to 7 because only
+          // 7 of the 22 delivered in the last 7 days. The other 15
+          // got auto-deselected even though the operator wanted to see
+          // 7-day data scoped to the same 22 campaigns. The selection
+          // is the operator's intent; the metrics layer is responsible
+          // for showing zeros where a campaign didn't deliver, not
+          // for editing the operator's selection on their behalf.
           var prevSel={};campaigns.forEach(function(c){if(selected.indexOf(c.campaignId)>=0)prevSel[c.campaignId]=c;});
           var prevRaw={},prevTmpl={};
           Object.keys(prevSel).forEach(function(id){var c=prevSel[id];if(c.rawCampaignId)prevRaw[String(c.rawCampaignId)]=true;prevTmpl[tmplKey(c)]=true;});
           var carried=d.campaigns.filter(function(c){
-            if(!(activeMap[c.campaignId])) return false;
             if(prevSel[c.campaignId]) return true;
             if(c.rawCampaignId&&prevRaw[String(c.rawCampaignId)]) return true;
             return !!prevTmpl[tmplKey(c)];
           }).map(function(c){return c.campaignId;});
+          // Also preserve previously-selected ids that aren't in the
+          // new response at all (e.g. a Meta campaign with no insights
+          // row for the new window because it didn't deliver). Stays
+          // as an "orphan" in selection state, doesn't render in the
+          // picker (which only lists current-response rows), but
+          // re-appears already ticked when the operator navigates back
+          // to a window where the campaign does have delivery. This is
+          // what makes the 22-on-MTD → still-22-on-7D behaviour stick.
+          var newIdSet={};d.campaigns.forEach(function(c){newIdSet[c.campaignId]=true;});
+          var orphans=selected.filter(function(id){return !newIdSet[id];});
+          carried=carried.concat(orphans);
           setSelected(carried.length>0?carried:activeIds);
         } else {
           setSelected(activeIds);
