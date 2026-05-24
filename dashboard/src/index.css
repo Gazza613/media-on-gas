@@ -56,25 +56,30 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
 
+/* pulse-glow used to animate box-shadow, which cannot be GPU-composited and
+   forced a paint every frame on every metric-tile dot and the header logo,
+   competing with scroll for paint budget on a long page. Animating opacity
+   instead keeps the breathing effect but runs entirely on the compositor.
+   Each callsite now carries a static box-shadow inline so the halo itself
+   stays visible, opacity just modulates its intensity. */
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(249,98,3,0.4); }
-  50% { box-shadow: 0 0 40px rgba(249,98,3,0.7), 0 0 60px rgba(249,98,3,0.3); }
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
 }
 
-/* LIVE indicator next to the dashboard logo. Two layered animations so
-   the dot reads as "alive" rather than blinking:
-     - liveDotPulse: dot scales gently 1.0 -> 1.15 -> 1.0
-     - liveDotGlow:  outer halo expands and fades, returning each cycle
-   Cycle is 2.4s so it's noticeable without being distracting. The pill
-   border / background nudges in opacity over the same beat to give the
-   whole chip a subtle breath. */
+/* LIVE indicator next to the dashboard logo. liveDotGlow used to animate a
+   bloom via box-shadow, same paint-cost problem as pulse-glow. Switched to
+   opacity (GPU-composited) so the dot still breathes without a per-frame
+   repaint. The dot itself carries a static box-shadow inline so the green
+   halo remains; opacity just brightens/dims it. liveChipBreath stays as-is,
+   it only fires on the single chip element. */
 @keyframes liveDotPulse {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.15); }
 }
 @keyframes liveDotGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.55), 0 0 8px 0 rgba(74,222,128,0.5); }
-  50%      { box-shadow: 0 0 0 6px rgba(74,222,128,0), 0 0 14px 0 rgba(74,222,128,0.85); }
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
 }
 @keyframes liveChipBreath {
   0%, 100% { border-color: rgba(74,222,128,0.30); background: rgba(74,222,128,0.05); }
