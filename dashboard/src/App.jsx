@@ -4277,26 +4277,52 @@ export default function MediaOnGas(){
           var validUrl=urlSelected.filter(function(id){return activeMap[id]===true;});
           setSelected(validUrl.length>0?validUrl:activeIds);
         } else {
-          // Date-change selection model, confirmed with operator:
-          //   Every campaign that delivered ANY data in the new window
-          //   is auto-ticked. Manual unticks do NOT persist across
-          //   date changes. This matches what most BI tools do (Looker,
-          //   Tableau, GA4 explore) and matches the operator's intent
-          //   that the dashboard always reflect "everything that ran
-          //   in this window" until they explicitly filter it down.
+          // Selection model on date change:
           //
-          // Replaces a previous carry-forward + template-match + orphan
-          // preservation block. That block was solving a different
-          // problem (a 7D toggle that was silently un-ticking 15 of 22
-          // May campaigns because they had no 7D delivery) but
-          // implemented the wrong policy: it preserved the user's
-          // intent verbatim, which meant new APR26 campaigns appearing
-          // when the window expanded to 30D never got auto-ticked,
-          // and the totals quietly under-counted whole months. Resetting
-          // to activeIds on every date change fixes BOTH symptoms in
-          // one move because activeIds is recomputed against the new
-          // window and includes every delivering campaign.
-          setSelected(activeIds);
+          //   - If the operator HASN'T narrowed (selection equals the
+          //     full delivering set, or there's no previous selection
+          //     yet), auto-tick every campaign delivering in the new
+          //     window. This is the default "show me everything that
+          //     ran in this period" behaviour.
+          //
+          //   - If the operator HAS narrowed (e.g. filtered the picker
+          //     to MTN MoMo via the group checkbox), preserve that
+          //     narrow scope across date toggles. Carry the previously-
+          //     selected campaigns forward via exact id / raw id /
+          //     template-match (handles monthly-replicated campaign
+          //     names like "Jan 2026" -> "Feb 2026" that get a new
+          //     id each month). Without this gate the operator's
+          //     client filter was being silently dropped every time
+          //     they clicked 7D / 30D / MTD / LM.
+          var prevActiveCount=0;
+          if(campaigns&&campaigns.length>0){
+            campaigns.forEach(function(c){
+              if(parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)prevActiveCount++;
+            });
+          }
+          var wasNarrowed=selected&&selected.length>0&&prevActiveCount>0&&selected.length<prevActiveCount;
+          if(wasNarrowed){
+            var tmplKey=function(c){
+              var s=String(c.campaignName||"").toLowerCase();
+              s=s.replace(/\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\s*\d{0,4}\b/g,"");
+              s=s.replace(/\b20\d{2}\b/g,"").replace(/[|_\-\s]+/g," ").trim();
+              var fam=String(c.platform||"").toLowerCase();
+              fam=fam.indexOf("face")>=0||fam.indexOf("insta")>=0||fam.indexOf("meta")>=0?"meta":fam.indexOf("tiktok")>=0?"tiktok":fam.indexOf("google")>=0||fam.indexOf("youtube")>=0?"google":fam;
+              return fam+"::"+s;
+            };
+            var prevSel={};
+            campaigns.forEach(function(c){if(selected.indexOf(c.campaignId)>=0)prevSel[c.campaignId]=c;});
+            var prevRaw={},prevTmpl={};
+            Object.keys(prevSel).forEach(function(id){var c=prevSel[id];if(c.rawCampaignId)prevRaw[String(c.rawCampaignId)]=true;prevTmpl[tmplKey(c)]=true;});
+            var carried=d.campaigns.filter(function(c){
+              if(prevSel[c.campaignId])return true;
+              if(c.rawCampaignId&&prevRaw[String(c.rawCampaignId)])return true;
+              return !!prevTmpl[tmplKey(c)];
+            }).map(function(c){return c.campaignId;});
+            setSelected(carried.length>0?carried:activeIds);
+          } else {
+            setSelected(activeIds);
+          }
         }
       }
       if(d.pages){setPages(d.pages);}
