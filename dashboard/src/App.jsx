@@ -3410,10 +3410,10 @@ function ChatPanel(props){
         AI
       </button>
     </div>
-    {/* Hover-only slide-out label, CSS sibling-selector driven. */}
-    <div className="gas-fab-label" style={{background:"rgba(6,2,14,0.95)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",border:"1px solid "+P.rule,borderRadius:14,padding:"10px 16px",boxShadow:"0 10px 30px rgba(0,0,0,0.5)",whiteSpace:"nowrap"}}>
-      <div style={{fontSize:9,color:P.ember,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:2}}>GAS Media Expert</div>
-      <div style={{fontSize:11,color:P.txt,fontFamily:ff,fontWeight:600}}>Ask me anything</div>
+    {/* Hover-only slide-out label, single line. Sibling-selector driven
+        via .gas-fab-target:hover + .gas-fab-label so React never re-renders. */}
+    <div className="gas-fab-label" style={{background:"rgba(6,2,14,0.95)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",border:"1px solid "+P.rule,borderRadius:12,padding:"8px 14px",boxShadow:"0 10px 30px rgba(0,0,0,0.5)",whiteSpace:"nowrap",fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600}}>
+      Ask me anything
     </div>
   </div>}
   {isOpen&&<div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
