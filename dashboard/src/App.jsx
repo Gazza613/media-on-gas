@@ -577,14 +577,20 @@ function Reveal(props){
   return(
     <div ref={ref} style={Object.assign({
       minHeight:minH||undefined,
-      // Skip rendering when scrolled off-screen so the browser doesn't
-      // pay layout/paint/composite cost for sections the operator can't
-      // see. Major scroll-perf win on the long Summary tab (many heavy
-      // chart blocks below the fold). contain-intrinsic-size keeps the
-      // measured height after first paint, so scrolling back into view
-      // doesn't cause a layout jump.
-      contentVisibility:"auto",
-      containIntrinsicSize:minH?"auto "+minH+"px":"auto 600px"
+      // CSS containment scopes layout/style/paint to this section so a
+      // change inside (e.g. chart resize, tooltip render, table sort)
+      // can't trigger reflow or repaint of siblings or ancestors. With
+      // 20+ sections on the Summary tab this is a real win — the
+      // browser also gets a green light to skip painting the section
+      // entirely when scrolled off-screen.
+      //
+      // Earlier I tried content-visibility:auto for the same goal, but
+      // its just-in-time render-when-entering-viewport caused its own
+      // scroll jank on this layout (sections have very variable
+      // heights, so the intrinsic-size estimate is wrong and the page
+      // re-measures aggressively during scroll). contain:paint gives
+      // most of the benefit with none of that downside.
+      contain:"layout style paint"
     },props.style||{})}>
       {shown?props.children:null}
     </div>
