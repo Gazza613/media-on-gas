@@ -3759,10 +3759,15 @@ export default function MediaOnGas(){
     if(key==="mtd")return{from:ymdLocal(new Date(now.getFullYear(),now.getMonth(),1)),to:today};
     if(key==="30d"){var d30=new Date(now);d30.setDate(d30.getDate()-29);return{from:ymdLocal(d30),to:today};}
     if(key==="lm"){var s=new Date(now.getFullYear(),now.getMonth()-1,1);var e=new Date(now.getFullYear(),now.getMonth(),0);return{from:ymdLocal(s),to:ymdLocal(e)};}
+    // OFF preset = the default lens: full current calendar month
+    // (1st → last day), no comparison. Matches what the dashboard
+    // lands on after login. Click OFF to reset out of a 7D/30D
+    // comparison view back to the steady-state monthly read.
+    if(key==="off"){var ofs=new Date(now.getFullYear(),now.getMonth(),1);var ofe=new Date(now.getFullYear(),now.getMonth()+1,0);return{from:ymdLocal(ofs),to:ymdLocal(ofe)};}
     return null;
   };
   var matchPreset=function(){
-    var keys=["today","7d","mtd","30d","lm"];
+    var keys=["off","today","7d","mtd","30d","lm"];
     for(var i=0;i<keys.length;i++){var r=presetRange(keys[i]);if(r&&r.from===df&&r.to===dt)return keys[i];}
     return "custom";
   };
@@ -5890,8 +5895,8 @@ export default function MediaOnGas(){
             <div style={{display:"flex",alignItems:"center",gap:4,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:"5px 9px"}}><span style={{fontSize:7.5,color:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:11,fontFamily:fm,outline:"none",width:96,fontWeight:500}}/><div style={{width:8,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:7.5,color:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:11,fontFamily:fm,outline:"none",width:96,fontWeight:500}}/></div>
             {/* Preset chips with short labels (7D / 30D / MTD / LM) so the
                 whole row fits on one line on a typical 1440px laptop. */}
-            {(function(){var activePreset=matchPreset();var opts=[{k:"7d",l:"7D"},{k:"30d",l:"30D"},{k:"mtd",l:"MTD"},{k:"lm",l:"LM"}];return <div title="Quick date range — 7 Days / 30 Days / MTD / Last Month" style={{display:"flex",alignItems:"center",gap:2,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:2}}>
-              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);setCompareMode((opt.k==="mtd"||opt.k==="lm")?"mom":"wow");}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:6,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
+            {(function(){var activePreset=matchPreset();var opts=[{k:"off",l:"OFF"},{k:"7d",l:"7D"},{k:"30d",l:"30D"},{k:"mtd",l:"MTD"},{k:"lm",l:"LM"}];return <div title="Quick date range — OFF (full current month, no comparison) / 7 Days / 30 Days / MTD / Last Month" style={{display:"flex",alignItems:"center",gap:2,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:2}}>
+              {opts.map(function(opt){var active=activePreset===opt.k;return <button key={opt.k} onClick={function(){var r=presetRange(opt.k);if(r){setDf(r.from);setDt(r.to);setCompareMode(opt.k==="off"?"off":(opt.k==="mtd"||opt.k==="lm")?"mom":"wow");}}} style={{background:active?gEmber:"transparent",border:"none",borderRadius:6,padding:"5px 9px",color:active?"#fff":P.label,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,whiteSpace:"nowrap"}}>{opt.l}</button>;})}
             </div>;})()}
             {/* Freshness indicator — "Updated Xm ago" with its own
                 internal 30s tick so the App tree doesn't re-render
