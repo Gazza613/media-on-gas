@@ -4246,19 +4246,6 @@ export default function MediaOnGas(){
         var activeMap={};
         d.campaigns.forEach(function(x){if(parseFloat(x.impressions||0)>0||parseFloat(x.spend||0)>0)activeMap[x.campaignId]=true;});
         var activeIds=Object.keys(activeMap);
-        // Normalised template key: campaign name minus month/year tags +
-        // platform family. Monthly-replicated campaigns get a fresh id
-        // each month, so a raw-id match alone would drop the user's
-        // selection every time they change month. Matching on the
-        // template keeps "the same campaign, other month" selected.
-        var tmplKey=function(c){
-          var s=String(c.campaignName||"").toLowerCase();
-          s=s.replace(/\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t|tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\s*\d{0,4}\b/g,"");
-          s=s.replace(/\b20\d{2}\b/g,"").replace(/[|_\-\s]+/g," ").trim();
-          var fam=String(c.platform||"").toLowerCase();
-          fam=fam.indexOf("face")>=0||fam.indexOf("insta")>=0||fam.indexOf("meta")>=0?"meta":fam.indexOf("tiktok")>=0?"tiktok":fam.indexOf("google")>=0||fam.indexOf("youtube")>=0?"google":fam;
-          return fam+"::"+s;
-        };
         // Share-link views: respect the URL-specified selection but only
         // its intersection with active-in-window so a stale share link
         // can't show zero-data campaigns. If the intersection is empty,
@@ -4266,46 +4253,26 @@ export default function MediaOnGas(){
         if(urlSelected&&urlSelected.length>0){
           var validUrl=urlSelected.filter(function(id){return activeMap[id]===true;});
           setSelected(validUrl.length>0?validUrl:activeIds);
-        } else if(selected&&selected.length>0&&campaigns&&campaigns.length>0){
-          // The user already had a selection and is changing the date.
-          // Preserve it by remapping the previously-selected campaigns
-          // onto the new window (exact id, then raw id, then template),
-          // so a date change refines the SAME view instead of resetting
-          // it to the whole portfolio. Only auto-select everything if
-          // nothing carried over (e.g. an entirely different period).
-          //
-          // Importantly, do NOT require activeMap[c.id] here. The
-          // earlier filter silently un-ticked any previously-selected
-          // campaign that had zero delivery in the NEW window. The
-          // operator reported the visible symptom: 22 May campaigns
-          // selected on MTD, click 7D, count drops to 7 because only
-          // 7 of the 22 delivered in the last 7 days. The other 15
-          // got auto-deselected even though the operator wanted to see
-          // 7-day data scoped to the same 22 campaigns. The selection
-          // is the operator's intent; the metrics layer is responsible
-          // for showing zeros where a campaign didn't deliver, not
-          // for editing the operator's selection on their behalf.
-          var prevSel={};campaigns.forEach(function(c){if(selected.indexOf(c.campaignId)>=0)prevSel[c.campaignId]=c;});
-          var prevRaw={},prevTmpl={};
-          Object.keys(prevSel).forEach(function(id){var c=prevSel[id];if(c.rawCampaignId)prevRaw[String(c.rawCampaignId)]=true;prevTmpl[tmplKey(c)]=true;});
-          var carried=d.campaigns.filter(function(c){
-            if(prevSel[c.campaignId]) return true;
-            if(c.rawCampaignId&&prevRaw[String(c.rawCampaignId)]) return true;
-            return !!prevTmpl[tmplKey(c)];
-          }).map(function(c){return c.campaignId;});
-          // Also preserve previously-selected ids that aren't in the
-          // new response at all (e.g. a Meta campaign with no insights
-          // row for the new window because it didn't deliver). Stays
-          // as an "orphan" in selection state, doesn't render in the
-          // picker (which only lists current-response rows), but
-          // re-appears already ticked when the operator navigates back
-          // to a window where the campaign does have delivery. This is
-          // what makes the 22-on-MTD → still-22-on-7D behaviour stick.
-          var newIdSet={};d.campaigns.forEach(function(c){newIdSet[c.campaignId]=true;});
-          var orphans=selected.filter(function(id){return !newIdSet[id];});
-          carried=carried.concat(orphans);
-          setSelected(carried.length>0?carried:activeIds);
         } else {
+          // Date-change selection model, confirmed with operator:
+          //   Every campaign that delivered ANY data in the new window
+          //   is auto-ticked. Manual unticks do NOT persist across
+          //   date changes. This matches what most BI tools do (Looker,
+          //   Tableau, GA4 explore) and matches the operator's intent
+          //   that the dashboard always reflect "everything that ran
+          //   in this window" until they explicitly filter it down.
+          //
+          // Replaces a previous carry-forward + template-match + orphan
+          // preservation block. That block was solving a different
+          // problem (a 7D toggle that was silently un-ticking 15 of 22
+          // May campaigns because they had no 7D delivery) but
+          // implemented the wrong policy: it preserved the user's
+          // intent verbatim, which meant new APR26 campaigns appearing
+          // when the window expanded to 30D never got auto-ticked,
+          // and the totals quietly under-counted whole months. Resetting
+          // to activeIds on every date change fixes BOTH symptoms in
+          // one move because activeIds is recomputed against the new
+          // window and includes every delivering campaign.
           setSelected(activeIds);
         }
       }
