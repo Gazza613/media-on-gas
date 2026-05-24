@@ -404,7 +404,7 @@ function LoginScreen(props){
     }).catch(function(){setBusy(false);setLoginErr("Connection error");});
   };
   return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse at 50% 20%,#1a0b2e 0%,#0d0618 45%,#06020e 100%)",fontFamily:ff,position:"relative",overflow:"hidden"}}>
-    <style>{".gas-hover-card{transition:transform 0.25s ease,border-color 0.25s ease,box-shadow 0.25s ease}.gas-hover-card:hover{transform:translateY(-2px);border-color:var(--glass-accent-border)!important;box-shadow:0 12px 40px var(--glass-accent-shadow)!important}.gas-hover-card-line{transition:opacity 0.25s ease}.gas-hover-card:hover .gas-hover-card-line{opacity:1!important}.gas-glow-card{transition:transform 0.4s ease,border-color 0.4s ease,box-shadow 0.4s ease}.gas-glow-card:hover{transform:translateY(-3px);border-color:var(--card-accent-border)!important;box-shadow:var(--card-accent-shadow)!important}@keyframes gasFloat{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(0,-12px,0) scale(1.02)}}@keyframes gasDrift{0%{transform:translate3d(0,0,0)}100%{transform:translate3d(-120px,40px,0)}}@keyframes gasPulse{0%,100%{opacity:0.35;transform:scale(1)}50%{opacity:0.6;transform:scale(1.08)}}@keyframes gasOrbit{0%{transform:rotate(0deg) translateX(200px) rotate(0deg)}100%{transform:rotate(360deg) translateX(200px) rotate(-360deg)}}@keyframes gasShimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes gasEnter{0%{opacity:0;transform:translate3d(0,20px,0)}100%{opacity:1;transform:translate3d(0,0,0)}}@keyframes gasBorderGlow{0%,100%{box-shadow:0 0 0 1px rgba(249,98,3,0.1),0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(249,98,3,0.08)}50%{box-shadow:0 0 0 1px rgba(249,98,3,0.25),0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(249,98,3,0.2)}}@keyframes gasLogoGlow{0%,100%{box-shadow:0 0 30px rgba(249,98,3,0.3),0 0 60px rgba(249,98,3,0.15)}50%{box-shadow:0 0 45px rgba(249,98,3,0.5),0 0 90px rgba(249,98,3,0.25),0 0 120px rgba(168,85,247,0.15)}}@keyframes gasScan{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}@keyframes gasSheen{0%{left:-50%}45%{left:120%}100%{left:120%}}@keyframes gasLockPulse{0%,100%{opacity:0.85;transform:scale(1)}50%{opacity:1;transform:scale(1.08);filter:drop-shadow(0 0 6px rgba(249,98,3,0.5))}}@keyframes gasSpark{0%{opacity:0;transform:translate3d(0,0,0) scale(0.4)}15%{opacity:0.9;transform:translate3d(-8px,-6px,0) scale(1)}85%{opacity:0.35}100%{opacity:0;transform:translate3d(-20px,-60px,0) scale(0.5)}}@keyframes gasAurora{0%{transform:translate3d(-30%,0,0) rotate(-4deg);opacity:0.45}50%{transform:translate3d(20%,-5%,0) rotate(-2deg);opacity:0.7}100%{transform:translate3d(-30%,0,0) rotate(-4deg);opacity:0.45}}@keyframes gasHueShift{0%,100%{filter:hue-rotate(0deg)}50%{filter:hue-rotate(18deg)}}@keyframes gasButtonHalo{0%,100%{box-shadow:0 4px 14px rgba(249,98,3,0.2),0 0 0 rgba(249,98,3,0)}50%{box-shadow:0 6px 24px rgba(249,98,3,0.42),0 0 26px rgba(249,98,3,0.32),0 0 52px rgba(168,85,247,0.18)}}@keyframes gasRingSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes gasCardBreath{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-2px,0)}}@keyframes gasCardBreather{0%,100%{border-color:rgba(249,98,3,0.22);box-shadow:0 0 0 1px rgba(249,98,3,0.08),0 18px 50px rgba(0,0,0,0.5),0 0 0 rgba(249,98,3,0)}50%{border-color:rgba(249,98,3,0.7);box-shadow:0 0 0 1px rgba(249,98,3,0.35),0 18px 50px rgba(0,0,0,0.55),0 0 40px rgba(249,98,3,0.28),0 0 80px rgba(168,85,247,0.14)}}@keyframes gasBtnAura{0%,100%{box-shadow:0 6px 20px rgba(249,98,3,0.3),0 0 22px rgba(249,98,3,0.22),inset 0 0 0 1px rgba(255,255,255,0.12)}50%{box-shadow:0 10px 32px rgba(249,98,3,0.55),0 0 44px rgba(249,98,3,0.42),0 0 78px rgba(168,85,247,0.22),inset 0 0 0 1px rgba(255,255,255,0.22)}}@keyframes gasBtnSheenFast{0%{transform:translateX(-140%) skewX(-18deg);opacity:0}12%{opacity:0}22%{opacity:1}45%{opacity:1}55%{opacity:0;transform:translateX(240%) skewX(-18deg)}100%{transform:translateX(240%) skewX(-18deg);opacity:0}}@keyframes fabBreathe{0%,100%{opacity:0.3;transform:scale(0.92)}50%{opacity:0.8;transform:scale(1.08)}}.gas-fab-btn{pointer-events:auto;animation:fabFloat 4s ease-in-out infinite, fabShimmer 5s ease-in-out infinite alternate}.gas-fab-btn::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(249,98,3,0.75);opacity:0.45;animation:fabBreathe 2.6s ease-in-out infinite;pointer-events:none;z-index:-1}.gas-fab-btn::after{content:'';position:absolute;inset:-12px;border-radius:50%;border:1px solid rgba(168,85,247,0.55);opacity:0.3;animation:fabBreathe 2.6s ease-in-out infinite 1.3s;pointer-events:none;z-index:-1}.gas-fab-btn:hover{transform:scale(1.07)!important;box-shadow:0 16px 38px rgba(255,61,0,0.6),inset 0 0 0 2px rgba(255,255,255,0.16),0 0 56px rgba(168,85,247,0.45)!important}.gas-fab-label{opacity:0;transform:translateX(12px);transition:opacity 0.22s ease,transform 0.22s ease;pointer-events:none}.gas-fab-btn:hover ~ .gas-fab-label{opacity:1;transform:translateX(0)}"}</style>
+    <style>{".gas-hover-card{transition:transform 0.25s ease,border-color 0.25s ease,box-shadow 0.25s ease}.gas-hover-card:hover{transform:translateY(-2px);border-color:var(--glass-accent-border)!important;box-shadow:0 12px 40px var(--glass-accent-shadow)!important}.gas-hover-card-line{transition:opacity 0.25s ease}.gas-hover-card:hover .gas-hover-card-line{opacity:1!important}.gas-glow-card{transition:transform 0.4s ease,border-color 0.4s ease,box-shadow 0.4s ease}.gas-glow-card:hover{transform:translateY(-3px);border-color:var(--card-accent-border)!important;box-shadow:var(--card-accent-shadow)!important}@keyframes gasFloat{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(0,-12px,0) scale(1.02)}}@keyframes gasDrift{0%{transform:translate3d(0,0,0)}100%{transform:translate3d(-120px,40px,0)}}@keyframes gasPulse{0%,100%{opacity:0.35;transform:scale(1)}50%{opacity:0.6;transform:scale(1.08)}}@keyframes gasOrbit{0%{transform:rotate(0deg) translateX(200px) rotate(0deg)}100%{transform:rotate(360deg) translateX(200px) rotate(-360deg)}}@keyframes gasShimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes gasEnter{0%{opacity:0;transform:translate3d(0,20px,0)}100%{opacity:1;transform:translate3d(0,0,0)}}@keyframes gasBorderGlow{0%,100%{box-shadow:0 0 0 1px rgba(249,98,3,0.1),0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(249,98,3,0.08)}50%{box-shadow:0 0 0 1px rgba(249,98,3,0.25),0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(249,98,3,0.2)}}@keyframes gasLogoGlow{0%,100%{box-shadow:0 0 30px rgba(249,98,3,0.3),0 0 60px rgba(249,98,3,0.15)}50%{box-shadow:0 0 45px rgba(249,98,3,0.5),0 0 90px rgba(249,98,3,0.25),0 0 120px rgba(168,85,247,0.15)}}@keyframes gasScan{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}@keyframes gasSheen{0%{left:-50%}45%{left:120%}100%{left:120%}}@keyframes gasLockPulse{0%,100%{opacity:0.85;transform:scale(1)}50%{opacity:1;transform:scale(1.08);filter:drop-shadow(0 0 6px rgba(249,98,3,0.5))}}@keyframes gasSpark{0%{opacity:0;transform:translate3d(0,0,0) scale(0.4)}15%{opacity:0.9;transform:translate3d(-8px,-6px,0) scale(1)}85%{opacity:0.35}100%{opacity:0;transform:translate3d(-20px,-60px,0) scale(0.5)}}@keyframes gasAurora{0%{transform:translate3d(-30%,0,0) rotate(-4deg);opacity:0.45}50%{transform:translate3d(20%,-5%,0) rotate(-2deg);opacity:0.7}100%{transform:translate3d(-30%,0,0) rotate(-4deg);opacity:0.45}}@keyframes gasHueShift{0%,100%{filter:hue-rotate(0deg)}50%{filter:hue-rotate(18deg)}}@keyframes gasButtonHalo{0%,100%{box-shadow:0 4px 14px rgba(249,98,3,0.2),0 0 0 rgba(249,98,3,0)}50%{box-shadow:0 6px 24px rgba(249,98,3,0.42),0 0 26px rgba(249,98,3,0.32),0 0 52px rgba(168,85,247,0.18)}}@keyframes gasRingSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes gasCardBreath{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-2px,0)}}@keyframes gasCardBreather{0%,100%{border-color:rgba(249,98,3,0.22);box-shadow:0 0 0 1px rgba(249,98,3,0.08),0 18px 50px rgba(0,0,0,0.5),0 0 0 rgba(249,98,3,0)}50%{border-color:rgba(249,98,3,0.7);box-shadow:0 0 0 1px rgba(249,98,3,0.35),0 18px 50px rgba(0,0,0,0.55),0 0 40px rgba(249,98,3,0.28),0 0 80px rgba(168,85,247,0.14)}}@keyframes gasBtnAura{0%,100%{box-shadow:0 6px 20px rgba(249,98,3,0.3),0 0 22px rgba(249,98,3,0.22),inset 0 0 0 1px rgba(255,255,255,0.12)}50%{box-shadow:0 10px 32px rgba(249,98,3,0.55),0 0 44px rgba(249,98,3,0.42),0 0 78px rgba(168,85,247,0.22),inset 0 0 0 1px rgba(255,255,255,0.22)}}@keyframes gasBtnSheenFast{0%{transform:translateX(-140%) skewX(-18deg);opacity:0}12%{opacity:0}22%{opacity:1}45%{opacity:1}55%{opacity:0;transform:translateX(240%) skewX(-18deg)}100%{transform:translateX(240%) skewX(-18deg);opacity:0}}.gas-fab-target:hover .gas-fab-btn{transform:scale(1.08)!important;box-shadow:0 14px 34px rgba(255,61,0,0.55),0 0 0 2px rgba(255,255,255,0.12) inset,0 0 48px rgba(168,85,247,0.35)!important}.gas-fab-label{opacity:0;transform:translateX(12px);transition:opacity 0.22s ease,transform 0.22s ease;pointer-events:none}.gas-fab-target:hover + .gas-fab-label{opacity:1;transform:translateX(0)}"}</style>
 
     {/* Ambient flare 1: ember top-left */}
     <div style={{position:"absolute",top:"-10%",left:"-10%",width:"60vw",height:"60vw",background:"radial-gradient(circle,rgba(249,98,3,0.18) 0%,transparent 55%)",filter:"blur(40px)",animation:"gasFloat 9s ease-in-out infinite",pointerEvents:"none"}}/>
@@ -3400,53 +3400,44 @@ function ChatPanel(props){
     "Where should we shift budget next?"
   ];
 
-  return (<><style>{"@keyframes fabEntrance{0%{transform:translateY(40px) scale(0.6);opacity:0}60%{transform:translateY(-4px) scale(1.06);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}@keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}@keyframes fabShimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}"}</style>
+  return (<><style>{"@keyframes fabRipple{0%{transform:scale(0.9);opacity:0.55}100%{transform:scale(1.8);opacity:0}}@keyframes fabEntrance{0%{transform:translateY(40px) scale(0.6);opacity:0}60%{transform:translateY(-4px) scale(1.06);opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}@keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}@keyframes fabShimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}@keyframes sparkleOrbit{0%{transform:rotate(0deg) translateX(24px) rotate(0deg)}100%{transform:rotate(360deg) translateX(24px) rotate(-360deg)}}"}</style>
   {!isOpen&&<div style={{position:"fixed",right:22,bottom:22,zIndex:2147483600,display:"flex",alignItems:"center",gap:10,flexDirection:"row-reverse",pointerEvents:"none",animation:"fabEntrance 0.8s cubic-bezier(0.34,1.56,0.64,1) both"}}>
-    {/* AI Expert launcher. No wrapper div: pseudo-element breathing
-        rings live on the button itself (z-index:-1 so they sit behind
-        it without ever stealing clicks). Every visual style stays
-        inline so the circle can never lose its shape/colour through a
-        CSS-load race. The button has its own pointer-events:auto, so
-        the surrounding fixed container's pointer-events:none never
-        blocks the click. Outer container z-index is bumped above any
-        plausible site overlay so nothing can sit in front of it. */}
-    <button className="gas-fab-btn" onClick={openPanel} aria-label="Chat with GAS Media Expert" style={{
-      position:"relative",
-      boxSizing:"border-box",
-      width:64,
-      height:64,
-      minWidth:64,
-      minHeight:64,
-      maxWidth:64,
-      maxHeight:64,
-      flex:"0 0 64px",
-      padding:0,
-      margin:0,
-      border:"none",
-      borderRadius:"50%",
-      cursor:"pointer",
-      outline:"none",
-      color:"#fff",
-      background:"linear-gradient(135deg,#FF3D00 0%,#FF6B00 40%,#F96203 70%,#A855F7 130%)",
-      backgroundSize:"200% 200%",
-      boxShadow:"0 10px 28px rgba(255,61,0,0.48), inset 0 0 0 1px rgba(255,255,255,0.12), 0 0 36px rgba(249,98,3,0.32)",
-      display:"flex",
-      flexDirection:"column",
-      alignItems:"center",
-      justifyContent:"center",
-      gap:1,
-      fontFamily:fm,
-      textTransform:"uppercase",
-      transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s",
-      zIndex:1
-    }}>
-      <span style={{fontSize:16,fontWeight:900,letterSpacing:1.5,lineHeight:1,color:"#fff"}}>AI</span>
-      <span style={{fontSize:7,fontWeight:800,letterSpacing:1.5,lineHeight:1,marginTop:1,color:"#fff",opacity:0.95}}>Expert</span>
-    </button>
-    {/* Hover-only slide-out label. Sibling-selector ~ catches the
-        button as its preceding sibling. */}
-    <div className="gas-fab-label" style={{background:"rgba(6,2,14,0.95)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",border:"1px solid "+P.rule,borderRadius:12,padding:"8px 14px",boxShadow:"0 10px 30px rgba(0,0,0,0.5)",whiteSpace:"nowrap",fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600}}>
-      Ask me anything
+    {/* May 13 creative restored verbatim: 49px gradient circle with two
+        staggered ripple rings, an orbiting amber sparkle, the AI-forward
+        sparkle SVG inside, an AI corner badge, and the slide-out hover
+        label. The earlier May-13 build wired the hover lift via React
+        useState which thrashed paint during scroll; here the same visual
+        is driven entirely by CSS hover (.gas-fab-target:hover .gas-fab-btn
+        and .gas-fab-target:hover + .gas-fab-label), so the look matches
+        and the click handler stays on the bare <button>. All decorative
+        layers have pointer-events:none so nothing covers the button. */}
+    <div className="gas-fab-target" style={{position:"relative",width:49,height:49,pointerEvents:"auto",animation:"fabFloat 4s ease-in-out infinite"}}>
+      {/* Outer rippling rings, staggered so a wave is always emitting */}
+      <div style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid rgba(249,98,3,0.55)",animation:"fabRipple 2.4s ease-out infinite",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid rgba(168,85,247,0.45)",animation:"fabRipple 2.4s ease-out infinite 1.2s",pointerEvents:"none"}}/>
+      {/* Orbiting amber sparkle */}
+      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+        <div style={{position:"absolute",top:"50%",left:"50%",width:5,height:5,marginLeft:-2.5,marginTop:-2.5,borderRadius:"50%",background:"#FFAA00",boxShadow:"0 0 8px #FFAA00, 0 0 16px #F96203",animation:"sparkleOrbit 6s linear infinite"}}/>
+      </div>
+      {/* Actual button. All decorative elements above carry
+          pointer-events:none so this is the only element the user can
+          actually click. */}
+      <button className="gas-fab-btn" onClick={openPanel} aria-label="Chat with GAS Media Expert" style={{position:"relative",width:"100%",height:"100%",padding:0,borderRadius:"50%",border:"none",cursor:"pointer",background:"linear-gradient(135deg,#FF3D00 0%,#FF6B00 40%,#F96203 70%,#A855F7 130%)",backgroundSize:"200% 200%",animation:"fabShimmer 5s ease-in-out infinite alternate",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 24px rgba(255,61,0,0.42), 0 0 0 1px rgba(255,255,255,0.08) inset",transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s",outline:"none"}}>
+        {/* Sparkle icon, AI-forward with a small chat affordance */}
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{pointerEvents:"none"}}>
+          <path d="M12 2l1.6 4.8L18 8l-4.4 1.2L12 14l-1.6-4.8L6 8l4.4-1.2L12 2z" fill="#fff" stroke="#fff" strokeWidth="0.5" strokeLinejoin="round"/>
+          <circle cx="18" cy="17" r="2" fill="rgba(255,255,255,0.95)"/>
+          <circle cx="6" cy="17" r="1.5" fill="rgba(255,255,255,0.7)"/>
+        </svg>
+        {/* AI corner badge */}
+        <div style={{position:"absolute",top:-3,right:-3,minWidth:20,height:16,borderRadius:8,background:"#0d0618",border:"1.5px solid #FFAA00",color:"#FFAA00",fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",boxShadow:"0 2px 6px rgba(255,170,0,0.45)",pointerEvents:"none"}}>AI</div>
+      </button>
+    </div>
+    {/* Hover-only slide-out label, CSS sibling-selector driven via
+        .gas-fab-target:hover + .gas-fab-label so React never re-renders. */}
+    <div className="gas-fab-label" style={{background:"rgba(6,2,14,0.95)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",border:"1px solid "+P.rule,borderRadius:14,padding:"10px 16px",boxShadow:"0 10px 30px rgba(0,0,0,0.5)",whiteSpace:"nowrap"}}>
+      <div style={{fontSize:9,color:P.ember,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:800,marginBottom:2}}>GAS Media Expert</div>
+      <div style={{fontSize:11,color:P.txt,fontFamily:ff,fontWeight:600}}>Ask anything about your campaigns</div>
     </div>
   </div>}
   {isOpen&&<div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}>
