@@ -6042,7 +6042,7 @@ export default function MediaOnGas(){
           {/* Client dashboard keeps GAS branding (unchanged). The
               per-client logo is used ONLY in the personalised report
               email, not here. */}
-          <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={df+" to "+dt} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={(function(){var base=df+" to "+dt;if(compareMode==="off")return base;var cmp=computeComparisonRange(df,dt,compareMode);if(!cmp)return base;return base+" vs "+cmp.from+" to "+cmp.to;})()} accent={P.ember}/>
           {/* The per-client KPI objectives used to render here at the top.
               They now live in the Objectives section lower down (rendered
               in place of the legacy OBJECTIVE KEY METRICS block for
