@@ -308,7 +308,11 @@ export default async function handler(req, res) {
   // Cache key includes the date range and a static version so we can
   // bust the cache by bumping the version when the response shape
   // changes. Bypass=1 query forces a recompute.
-  var bypassCache = String(req.query.fresh || "").trim() === "1";
+  // ?debug=1 also bypasses the cache so the per-campaign breakdown reflects
+  // the live upstream pull, not a payload that was cached before debug mode
+  // was requested (and therefore has no _debug field to inspect).
+  var bypassCache = String(req.query.fresh || "").trim() === "1"
+    || String(req.query.debug || "").trim() === "1";
   // Cache key bumped to v7 to add delivery.family on every entry
   // (objective-aware scale thresholds + empty-bucket diagnostics on
   // the dashboard depend on this field being present).
@@ -370,6 +374,11 @@ export default async function handler(req, res) {
   var clients = {};
   var adsetTargets = [];
   var summary = { campaigns: 0, live: 0, needsAttention: 0, spendToday: 0, spendPeriod: 0, alerts: 0 };
+  // Diagnostic counters so the operator can sanity-check the campaign
+  // count tile against expectation (e.g. "I see 7 campaigns in the picker
+  // for April, why does the CC tile say 5?"). Exposed under summary._diag
+  // on every response; the dropped list is only attached when ?debug=1.
+  var diagDropped = [];
 
   for (var i = 0; i < rows.length; i++) {
     var c = rows[i];
@@ -393,7 +402,15 @@ export default async function handler(req, res) {
     // whose GAQL row is filtered upstream because they had no delivery
     // in the window; the right fix lives in /api/campaigns (a separate
     // enumeration query), not in widening the dormant gate here.
-    if (periodSpend === 0 && todaySpend === 0 && impressions === 0) continue;
+    if (periodSpend === 0 && todaySpend === 0 && impressions === 0) {
+      diagDropped.push({
+        name: String(c.campaignName || ""),
+        platform: String(c.platform || ""),
+        status: String(c.status || ""),
+        reason: "no_delivery_in_window"
+      });
+      continue;
+    }
 
     var ctr = num(c.ctr), cpm = num(c.cpm), cpc = num(c.cpc), frequency = num(c.frequency);
     var live = statusActive && !ended;
@@ -664,7 +681,21 @@ export default async function handler(req, res) {
 
   summary.spendToday = parseFloat(summary.spendToday.toFixed(2));
   summary.spendPeriod = parseFloat(summary.spendPeriod.toFixed(2));
+  // Always-on diagnostic so any divergence between the picker count and
+  // the CAMPAIGNS tile is debuggable from the response. counted should
+  // equal summary.campaigns. droppedNoDelivery covers rows that arrived
+  // from /api/campaigns but had zero spend AND zero impressions for the
+  // selected window (intentional, see the loop above). When the operator
+  // reports a discrepancy, hitting ?debug=1 returns the dropped-row
+  // names so it's instantly clear whether the row was dropped here or
+  // never made it out of /api/campaigns in the first place.
+  summary._diag = {
+    rowsReceived: rows.length,
+    counted: summary.campaigns,
+    droppedNoDelivery: diagDropped.length
+  };
 
+  var debugMode = String(req.query.debug || "").trim() === "1";
   var payload = {
     ok: true,
     generatedAt: new Date().toISOString(),
@@ -672,6 +703,20 @@ export default async function handler(req, res) {
     summary: summary,
     clients: clientList
   };
+  if (debugMode) {
+    payload._debug = {
+      droppedCampaigns: diagDropped,
+      countedCampaigns: clientList.reduce(function(acc, grp) {
+        grp.campaigns.forEach(function(c) {
+          acc.push({
+            name: c.campaignName, platform: c.platform, status: c.status,
+            live: c.live, impressions: c.delivery.impressions, spend: c.delivery.spendPeriod
+          });
+        });
+        return acc;
+      }, [])
+    };
+  }
 
   // Best-effort response cache so subsequent loads in this window don't
   // pay the 20-40s upstream cost. Fire-and-forget — never block the

@@ -45,7 +45,15 @@ function previousPeriodWindow(from, to) {
     if (pm < 0) { pm = 11; py -= 1; }
     var prevFrom = new Date(Date.UTC(py, pm, 1));
     var daysInPrev = new Date(Date.UTC(py, pm + 1, 0)).getUTCDate();
-    var prevToDay = Math.min(toD.getUTCDate(), daysInPrev);
+    // If the current window IS the whole calendar month (1st through the
+    // last day), compare to the WHOLE previous month, not just the same
+    // day-count. Apr 1-30 was clamping to Mar 1-30 instead of Mar 1-31,
+    // dropping a day of comparable spend / delivery and skewing the
+    // delta. MTD windows still clamp (May 1-24 vs Apr 1-24) since the
+    // operator is reading "month so far".
+    var daysInCur = new Date(Date.UTC(fromD.getUTCFullYear(), fromD.getUTCMonth() + 1, 0)).getUTCDate();
+    var curIsFullMonth = toD.getUTCDate() === daysInCur;
+    var prevToDay = curIsFullMonth ? daysInPrev : Math.min(toD.getUTCDate(), daysInPrev);
     var prevTo = new Date(Date.UTC(py, pm, prevToDay));
     return { from: iso(prevFrom), to: iso(prevTo) };
   }
