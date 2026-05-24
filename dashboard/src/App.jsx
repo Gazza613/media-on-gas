@@ -4528,6 +4528,22 @@ export default function MediaOnGas(){
           pushTask(function(){return fetch(API+"/api/campaigns?from="+cmpR.from+"&to="+cmpR.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns)summaryCache.campaigns[cmpKey]=d;}).catch(function(){});});
         }
       });
+      // Pre-warm /api/command-centre for the same preset windows.
+      // CC's Redis cache (3min TTL) is keyed by from..to; firing the
+      // endpoint here populates it well before the operator clicks
+      // Optimise. Without this the first Optimise click pays the full
+      // cold pull (campaigns x2 + ads + adset-pacing for ABO + perf
+      // snapshots = 20-40s). Admin only; client-token viewers don't
+      // have access to /api/command-centre. Same OFF/7D/30D/MTD/LM
+      // set as the campaigns pre-warm so the windows line up.
+      if(!isClient){
+        var ccKeys=["off","7d","30d","mtd","lm"];
+        ccKeys.forEach(function(k){
+          var r=presetRange(k);
+          if(!r)return;
+          pushTask(function(){return fetch(API+"/api/command-centre?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).catch(function(){});});
+        });
+      }
       // Queue runner: max 2 in flight at a time. As each completes, the
       // next one starts. Keeps total wall-clock close to the parallel
       // version while ensuring no more than 2 JSON.parses run in the
