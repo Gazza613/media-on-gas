@@ -3730,6 +3730,10 @@ export default function MediaOnGas(){
     if(tab==="summary"){
       if(df!==monthStart)setDf(monthStart);
       if(dt!==monthEnd)setDt(monthEnd);
+      // Summary lands clean: full current month, no comparison chips.
+      // Operator clicks a preset (7D / 30D / MTD / LM) to opt in to a
+      // comparison; OFF / leaving and returning to Summary resets it.
+      setCompareMode("off");
     }else if(lastSavedRangeRef.current){
       var saved=lastSavedRangeRef.current;
       if(df!==saved.from)setDf(saved.from);
