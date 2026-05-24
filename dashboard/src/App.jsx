@@ -4871,18 +4871,21 @@ export default function MediaOnGas(){
   // checkAuth branch, so clients send "self".
   useEffect(function(){
     if(!isAuthed())return;
-    if(!isClient&&!ecoClientName){setEcoProfile(null);try{console.log("[GAS profile] resolve skipped — ecoClientName empty");}catch(_){}return;}
+    // When ecoClientName is empty (no campaigns selected, or briefly
+    // between Clear All and the operator's next group click) we used
+    // to call setEcoProfile(null) here. That flipped Summary from the
+    // profiled-KPI block to the legacy OBJECTIVE KEY METRICS block
+    // for the moment the new fetch was in flight. Operator saw a flash
+    // of "Landing Page Clicks" between narrows. Now we just skip the
+    // fetch and leave the previous ecoProfile in place; the next valid
+    // ecoClientName triggers a fresh fetch that overwrites it. Session
+    // / viewToken changes invalidate via their own deps below.
+    if(!isClient&&!ecoClientName)return;
     var name=isClient?(ecoClientName||"self"):ecoClientName;
-    var url=API+"/api/client-kpi-profiles?resolve="+encodeURIComponent(name||"self")+(kpiRev>0?"&fresh=1":"");
-    try{console.log("[GAS profile] resolve fetch",{ecoClientName:name,kpiRev:kpiRev,url:url});}catch(_){}
-    fetch(url,{headers:authHeaders()})
+    fetch(API+"/api/client-kpi-profiles?resolve="+encodeURIComponent(name||"self")+(kpiRev>0?"&fresh=1":""),{headers:authHeaders()})
       .then(function(r){return r.json();})
-      .then(function(d){
-        var prof=(d&&d.profile)||null;
-        try{console.log("[GAS profile] resolve response",{resolved:!!prof,primaryKpis:prof&&prof.primaryKpis,secondaryKpis:prof&&prof.secondaryKpis,tertiaryKpis:prof&&prof.tertiaryKpis,ecommerceEnabled:prof&&prof.ecommerce&&prof.ecommerce.enabled});}catch(_){}
-        setEcoProfile(prof);
-      })
-      .catch(function(e){try{console.log("[GAS profile] resolve error",e&&e.message);}catch(_){}setEcoProfile(null);});
+      .then(function(d){setEcoProfile((d&&d.profile)||null);})
+      .catch(function(){setEcoProfile(null);});
   },[ecoClientName,isClient,session,viewToken,kpiRev]);
 
   // Map of all KPI profile slugs that have ecommerce enabled. Loaded
