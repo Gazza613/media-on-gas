@@ -4857,7 +4857,67 @@ export default function MediaOnGas(){
       .catch(function(){setEcoProfile(null);});
   },[ecoClientName,isClient,session,viewToken,kpiRev]);
 
-  var ecoOn=!!(ecoProfile&&ecoProfile.ecommerce&&ecoProfile.ecommerce.enabled);
+  // Map of all KPI profile slugs that have ecommerce enabled. Loaded
+  // once per admin session so we can identify whether any selected
+  // client is eco-capable without firing a separate /api/client-kpi-
+  // profiles?resolve= for every distinct client name in the selection.
+  // Client-token viewers don't need this (they only ever see their
+  // own profile via ecoClientName/resolve).
+  var ecoEnabledRef=useState({}),ecoEnabledByClient=ecoEnabledRef[0],setEcoEnabledByClient=ecoEnabledRef[1];
+  useEffect(function(){
+    if(!isAuthed()||isClient)return;
+    fetch(API+"/api/client-kpi-profiles",{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        var map={};
+        if(d&&d.profiles){
+          Object.keys(d.profiles).forEach(function(slug){
+            var p=d.profiles[slug];
+            if(p&&p.ecommerce&&p.ecommerce.enabled)map[slug.toLowerCase()]=true;
+          });
+        }
+        setEcoEnabledByClient(map);
+      })
+      .catch(function(){});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[session,kpiRev,isClient]);
+
+  // Eco-enabled client in the current selection. Independent of
+  // ecoClientName (which is most-frequent and drives Summary's
+  // profiled-KPI layout). Lets the Ecommerce tab auto-appear and
+  // auto-fetch Psycho Bunny's data when the operator is on the
+  // default "all campaigns" view at login, without flipping the
+  // Summary tab to Psycho Bunny's profiled layout (which would be
+  // wrong, since the Summary numbers cover every selected client).
+  var selectedEcoClient=useMemo(function(){
+    if(isClient)return"";
+    var PS=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+    var norm=function(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");};
+    var enabledNorm={};
+    Object.keys(ecoEnabledByClient||{}).forEach(function(slug){enabledNorm[norm(slug)]=slug;});
+    var counts={};
+    (computed.allSelected||[]).forEach(function(c){
+      var clean=String(c.accountName||"").trim().replace(PS,"").replace(PS,"").trim();
+      if(!clean)return;
+      var n=norm(clean);
+      var match=false;
+      Object.keys(enabledNorm).forEach(function(en){
+        if(!en)return;
+        if(en===n||n.indexOf(en)>=0||en.indexOf(n)>=0)match=true;
+      });
+      if(match)counts[clean]=(counts[clean]||0)+1;
+    });
+    var best="",bn=0;
+    Object.keys(counts).forEach(function(k){if(counts[k]>bn){bn=counts[k];best=k;}});
+    return best;
+  },[computed,ecoEnabledByClient,isClient]);
+
+  // ecoOn now reflects EITHER Summary's resolved profile (when narrowed
+  // to an eco-enabled client) OR the presence of any eco-enabled client
+  // in a multi-client selection. The Ecommerce tab appears in both
+  // cases; Summary's profiled-KPI layout still only kicks in when
+  // ecoProfile itself is eco-enabled (single-client narrowing).
+  var ecoOn=!!(ecoProfile&&ecoProfile.ecommerce&&ecoProfile.ecommerce.enabled)||!!selectedEcoClient;
   // A client only counts as "profiled" for the Summary layout when its
   // profile actually carries KPI content or ecommerce. A profile that
   // exists only to hold a logoUrl (e.g. MTN MoMo's email logo) must NOT
@@ -4879,12 +4939,19 @@ export default function MediaOnGas(){
     if(!ecoOn||!isAuthed()){setEcoData(null);return;}
     if(tab!=="ecommerce"&&tab!=="summary")return;
     setEcoLoading(true);setEcoErr("");
-    var cq=isClient?"":("&client="+encodeURIComponent(ecoClientName||""));
+    // For admin views: prefer selectedEcoClient (the eco-enabled client
+    // in the selection, e.g. Psycho Bunny even when MoMo dominates) so
+    // the Ecommerce tab loads the right client's GA4 data on default
+    // login. Falls back to ecoClientName (most-frequent) when narrowed
+    // to a single eco-enabled client. Client-token viewers ignore this
+    // and let the server force their own slug.
+    var ecoFetchClient=selectedEcoClient||ecoClientName||"";
+    var cq=isClient?"":("&client="+encodeURIComponent(ecoFetchClient));
     fetch(API+"/api/ga4-ecommerce?from="+df+"&to="+dt+cq,{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){setEcoLoading(false);if(d&&d.ok){setEcoData(d);}else{setEcoData(null);setEcoErr((d&&(d.reason||d.message||d.error))||"Ecommerce data unavailable");}})
       .catch(function(){setEcoLoading(false);setEcoData(null);setEcoErr("Ecommerce request failed");});
-  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,kpiRev]);
+  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,selectedEcoClient,kpiRev]);
 
   var benchmarks={
     meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
