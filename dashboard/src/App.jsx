@@ -4451,45 +4451,68 @@ export default function MediaOnGas(){
       var presetKeys=["7d","30d","mtd","lm"];
       var ranges=presetKeys.map(function(k){return presetRange(k);}).filter(Boolean);
       var h=authHeaders();
+      // Build a flat task list of every pre-warm fetch we want to do.
+      // Each task is a thunk (no-arg function returning a promise) so the
+      // queue runner below can fire them one or two at a time. Previously
+      // all ~20 fetches went out in parallel; on cache hit they ALL
+      // resolved within a tight window and ~20 JSON.parse calls competed
+      // for the main thread, producing 400-800ms scroll jank during the
+      // first few seconds after mount. Sequential pacing eliminates that
+      // spike — each parse runs in its own task, with breathing room
+      // between them.
+      var tasks=[];
+      var pushTask=function(thunk){tasks.push(thunk);};
       ranges.forEach(function(r){
         var k=summaryCacheKey(r.from,r.to);
         if(!summaryCache.campaigns[k]){
-          fetch(API+"/api/campaigns?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns){summaryCache.campaigns[k]=d;}}).catch(function(){});
+          pushTask(function(){return fetch(API+"/api/campaigns?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns)summaryCache.campaigns[k]=d;}).catch(function(){});});
         }
         if(!summaryCache.adsets[k]){
-          fetch(API+"/api/adsets?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.adsets[k]=d||{};}).catch(function(){});
+          pushTask(function(){return fetch(API+"/api/adsets?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.adsets[k]=d||{};}).catch(function(){});});
         }
         if(!summaryCache.ads[k]){
-          fetch(API+"/api/ads?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.ads[k]=d||{};}).catch(function(){});
+          pushTask(function(){return fetch(API+"/api/ads?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){summaryCache.ads[k]=d||{};}).catch(function(){});});
         }
         if(!summaryCache.daily[k]){
-          fetch(API+"/api/campaigns-daily?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.ok&&d.campaigns){summaryCache.daily[k]=d.campaigns;}}).catch(function(){});
+          pushTask(function(){return fetch(API+"/api/campaigns-daily?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.ok&&d.campaigns)summaryCache.daily[k]=d.campaigns;}).catch(function(){});});
         }
       });
-      // Also pre-warm the COMPARISON window for each preset (prior 7 /
-      // prior 30 / same days last month / full last month). The
-      // comparison effect below fetches /api/campaigns?from=...&to=...
-      // for these ranges the moment the operator clicks a preset; without
-      // pre-warm, that fetch is cold every time and the WoW/MoM chip
-      // appears as a dashed placeholder for 20-40s while Meta + TikTok +
-      // Google get pulled fresh. The pre-warm hits the SAME url so the
-      // server-side 5-min response cache on /api/campaigns serves the
-      // comparison fetch instantly. Each compare range is also keyed in
-      // summaryCache.campaigns under its own from..to, which means a
-      // subsequent SECOND click of the same preset is also instant.
+      // Comparison window per preset (prior 7 / prior 30 / same days
+      // last month / full last month) — same URL as the in-effect
+      // comparison fetch, so the server-side 5-min response cache primes
+      // and the chip lights up in 100ms on the first click. summaryCache
+      // is keyed by from..to so the chip's cache-first effect also reads
+      // straight from this entry.
       presetKeys.forEach(function(presetKey){
         var presetR=presetRange(presetKey);
         if(!presetR)return;
-        var compareMode=presetKey==="mtd"||presetKey==="lm"?"mom":"wow";
-        var cmpR=computeComparisonRange(presetR.from,presetR.to,compareMode);
+        var cMode=presetKey==="mtd"||presetKey==="lm"?"mom":"wow";
+        var cmpR=computeComparisonRange(presetR.from,presetR.to,cMode);
         if(!cmpR)return;
         var cmpKey=summaryCacheKey(cmpR.from,cmpR.to);
         if(!summaryCache.campaigns[cmpKey]){
-          fetch(API+"/api/campaigns?from="+cmpR.from+"&to="+cmpR.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns){summaryCache.campaigns[cmpKey]=d;}}).catch(function(){});
+          pushTask(function(){return fetch(API+"/api/campaigns?from="+cmpR.from+"&to="+cmpR.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns)summaryCache.campaigns[cmpKey]=d;}).catch(function(){});});
         }
       });
+      // Queue runner: max 2 in flight at a time. As each completes, the
+      // next one starts. Keeps total wall-clock close to the parallel
+      // version while ensuring no more than 2 JSON.parses run in the
+      // same frame.
+      var cancelled=false;
+      var inFlight=0;
+      var nextIdx=0;
+      var runMore=function(){
+        if(cancelled)return;
+        while(inFlight<2&&nextIdx<tasks.length){
+          var task=tasks[nextIdx++];
+          inFlight++;
+          task().then(function(){inFlight--;runMore();},function(){inFlight--;runMore();});
+        }
+      };
+      runMore();
+      timer=function(){cancelled=true;};
     },1500);
-    return function(){clearTimeout(timer);};
+    return function(){if(typeof timer==="function")timer();else clearTimeout(timer);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[session,viewToken]);
   // Comparison data fetch. Only runs when compareMode is on. Reuses the
