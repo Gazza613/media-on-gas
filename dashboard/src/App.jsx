@@ -3784,7 +3784,22 @@ export default function MediaOnGas(){
   // click. Picking a non-preset custom range keeps whatever mode is
   // currently set.
   var initialPresetForCompare=matchPreset();
-  var initialCompareMode=initialPresetForCompare==="custom"?"off":(initialPresetForCompare==="mtd"||initialPresetForCompare==="lm")?"mom":"wow";
+  // Comparison mode is tied to the preset the operator picked:
+  //   7D / 30D  -> WoW (week-over-week)
+  //   MTD / LM  -> MoM (month-over-month)
+  //   OFF / today / custom -> OFF (no delta chips)
+  // The default landing range (full current month) now matches the
+  // OFF preset, so it correctly lands with comparisons hidden.
+  // Previously this fell through to "wow" for any preset that wasn't
+  // mtd/lm/custom, which turned chips on by default the moment the
+  // OFF preset existed.
+  var initialCompareMode=(
+    initialPresetForCompare==="mtd"||initialPresetForCompare==="lm"
+      ? "mom"
+      : initialPresetForCompare==="7d"||initialPresetForCompare==="30d"
+        ? "wow"
+        : "off"
+  );
   var cmo=useState(initialCompareMode),compareMode=cmo[0],setCompareMode=cmo[1];
   var cmp=useState([]),compareCampaigns=cmp[0],setCompareCampaigns=cmp[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
