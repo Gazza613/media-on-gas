@@ -576,7 +576,15 @@ function Reveal(props){
   // from jumping when the chart mounts.
   return(
     <div ref={ref} style={Object.assign({
-      minHeight:minH||undefined
+      minHeight:minH||undefined,
+      // Skip rendering when scrolled off-screen so the browser doesn't
+      // pay layout/paint/composite cost for sections the operator can't
+      // see. Major scroll-perf win on the long Summary tab (many heavy
+      // chart blocks below the fold). contain-intrinsic-size keeps the
+      // measured height after first paint, so scrolling back into view
+      // doesn't cause a layout jump.
+      contentVisibility:"auto",
+      containIntrinsicSize:minH?"auto "+minH+"px":"auto 600px"
     },props.style||{})}>
       {shown?props.children:null}
     </div>
