@@ -6314,7 +6314,34 @@ export default function MediaOnGas(){
             // when the daily snapshot spans the window, else the per-ad
             // page-like result so FB is never silently dropped from the
             // Earned chart. See project_followers_truth.
-            var fbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)fbPaidPL+=parseFloat(camp.pageLikes||0);});
+            var fbPaidPL=0;sel.forEach(function(camp){
+              if(camp.platform!=="Facebook")return;
+              var obj=String(camp.objective||"").toLowerCase();
+              var nm=String(camp.campaignName||"").toLowerCase();
+              var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;
+              if(!isFol)return;
+              var pl=parseFloat(camp.pageLikes||0);
+              // Name-strong intent fallback. The API gates action_type=like
+              // into pageLikes only when the ad-set optimization_goal is
+              // PAGE_LIKES (see project_meta_like_action), which correctly
+              // stops OUTCOME_ENGAGEMENT campaigns from inflating community
+              // growth via post reactions. But ODAX Like&Follow campaigns
+              // are often configured as OUTCOME_ENGAGEMENT with a
+              // LIKE_PAGE call-to-action, so the gate zeroes their
+              // attribution even though the operator's clear intent was
+              // page-likes. When the campaign name explicitly tags
+              // page-like intent AND the gated pageLikes is zero, fall
+              // back to the raw "like" action so Community Growth
+              // reflects spend put behind a deliberate page-like
+              // campaign.
+              if(pl===0&&camp.actions&&camp.actions.length){
+                for(var ai=0;ai<camp.actions.length;ai++){
+                  var a=camp.actions[ai];
+                  if(a&&a.action_type==="like"){pl=parseFloat(a.value||0);break;}
+                }
+              }
+              fbPaidPL+=pl;
+            });
             var fbEarnedResolved=(fbGrowthKnown&&fbGrowth>0)?fbGrowth:fbPaidPL;
             var earnedTotal=fbEarnedResolved+igGrowth+ttE2;
             // Ground-truth override so Objective Highlights matches Community Growth.
@@ -9454,7 +9481,34 @@ export default function MediaOnGas(){
               // (same fbPaidPL the FB Page-Like panel shows), so the
               // Community tab no longer reads "—/building" while
               // Summary shows the 5.6K.
-              var fbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)fbPaidPL+=parseFloat(camp.pageLikes||0);});
+              var fbPaidPL=0;sel.forEach(function(camp){
+              if(camp.platform!=="Facebook")return;
+              var obj=String(camp.objective||"").toLowerCase();
+              var nm=String(camp.campaignName||"").toLowerCase();
+              var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;
+              if(!isFol)return;
+              var pl=parseFloat(camp.pageLikes||0);
+              // Name-strong intent fallback. The API gates action_type=like
+              // into pageLikes only when the ad-set optimization_goal is
+              // PAGE_LIKES (see project_meta_like_action), which correctly
+              // stops OUTCOME_ENGAGEMENT campaigns from inflating community
+              // growth via post reactions. But ODAX Like&Follow campaigns
+              // are often configured as OUTCOME_ENGAGEMENT with a
+              // LIKE_PAGE call-to-action, so the gate zeroes their
+              // attribution even though the operator's clear intent was
+              // page-likes. When the campaign name explicitly tags
+              // page-like intent AND the gated pageLikes is zero, fall
+              // back to the raw "like" action so Community Growth
+              // reflects spend put behind a deliberate page-like
+              // campaign.
+              if(pl===0&&camp.actions&&camp.actions.length){
+                for(var ai=0;ai<camp.actions.length;ai++){
+                  var a=camp.actions[ai];
+                  if(a&&a.action_type==="like"){pl=parseFloat(a.value||0);break;}
+                }
+              }
+              fbPaidPL+=pl;
+            });
               var fbSnapKnown=fbGrowthKnown&&fbEarned>0;
               var fbEarnedResolved=fbSnapKnown?fbEarned:fbPaidPL;
               var fbIsPaid=!fbSnapKnown&&fbPaidPL>0;
