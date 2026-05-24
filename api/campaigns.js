@@ -55,7 +55,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v13-supplement-diag";
+var CAMPAIGNS_CACHE_VERSION = "v14-pagelike-gate-sync";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -467,7 +467,15 @@ export default async function handler(req, res) {
           // current configuration clients are paying against.
           if (status === "DELETED" || status === "ARCHIVED") return;
           var og = String(a.optimization_goal || "").toUpperCase();
-          if (og === "PAGE_LIKES" || og === "LIKE_PAGE") pageLikeOpt[cid] = true;
+          // Match _pageLikeOpt.js exactly — Meta has shipped ad-sets with
+          // optimization_goal=LIKES (no underscore) and other PAGE_LIKE*
+          // variants over the years. Previously only "PAGE_LIKES" and
+          // "LIKE_PAGE" were recognised here, while reconcile.js (via
+          // _pageLikeOpt.js) accepted the wider set. That mismatch made
+          // /api/reconcile fold action_type=like into followers (SoT
+          // 7.6K) while /api/campaigns kept pageLikes=0 — Ground Truth
+          // audit fired red -100% on legitimate Like&Follow campaigns.
+          if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") pageLikeOpt[cid] = true;
           var pubs = a.targeting && a.targeting.publisher_platforms;
           // A null publisher_platforms means Meta chooses automatically
           // across every available placement, which includes both FB and
