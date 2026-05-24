@@ -4579,7 +4579,16 @@ export default function MediaOnGas(){
     });
     var allIds=ids.concat(extra);
     var idsQs=allIds.length>0?("&campaignIds="+encodeURIComponent(allIds.join(","))):"";
-    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+tsGran+idsQs,{headers:authHeaders()})
+    // Effective granularity: weekly buckets need at least ~14 days to
+    // produce 2+ points (the minimum a sparkline needs to render a
+    // line). Anything shorter (e.g. the 7D preset) silently fell back
+    // to single-point cells and the trendline grid rendered empty.
+    // Auto-switch to daily granularity for short windows so the
+    // sparklines always have shape. Monthly always honoured as
+    // requested (operator opted into it via the toggle).
+    var rangeDays=(function(){try{var a=Date.parse(df+"T00:00:00Z"),b=Date.parse(dt+"T00:00:00Z");if(!isFinite(a)||!isFinite(b))return 30;return Math.round((b-a)/86400000)+1;}catch(_){return 30;}})();
+    var effGran=tsGran==="month"?"month":(rangeDays<14?"day":"week");
+    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+effGran+idsQs,{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){if(d.series){setTimeseries(d);}})
       .catch(function(){});
@@ -4670,13 +4679,15 @@ export default function MediaOnGas(){
           {["week","month"].map(function(g){return <button key={g} onClick={function(){setTsGran(g);}} style={{background:tsGran===g?P.cyan+"25":"transparent",border:"1px solid "+(tsGran===g?P.cyan+"60":P.rule),borderRadius:6,padding:"5px 12px",color:tsGran===g?P.cyan:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{g==="week"?"Weekly":"Monthly"}</button>;})}
         </div>
       </div>
-      {!hasData?<div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:6}}>Loading trendlines…</div><div>Fetching {tsGran==="week"?"weekly":"monthly"} performance from Meta, TikTok and Google.</div></div>:<div>
+      {!hasData?<div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12,lineHeight:1.8}}><div style={{fontSize:14,color:P.label,marginBottom:6}}>Loading trendlines…</div><div>Fetching {tsGran==="month"?"monthly":"daily/weekly"} performance from Meta, TikTok and Google.</div></div>:<div>
         {/* Scope line — dates + selected count, so it's obvious the
             cells aggregate exactly the campaigns currently ticked over
             the date range chosen at the top of the dashboard, nothing
             wider. Granularity (Weekly / Monthly) controls only how the
-            sparkline is bucketed inside that window. */}
-        <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{tsGran==="week"?"Weekly":"Monthly"} aggregation, scoped to your selected period ({df} to {dt}) &middot; {selected.length} campaign{selected.length===1?"":"s"} selected</div>
+            sparkline is bucketed inside that window. For windows
+            shorter than 14 days the data is auto-bucketed daily so the
+            sparklines have shape, even if the toggle reads Weekly. */}
+        {(function(){var _rd=(function(){try{var a=Date.parse(df+"T00:00:00Z"),b=Date.parse(dt+"T00:00:00Z");if(!isFinite(a)||!isFinite(b))return 30;return Math.round((b-a)/86400000)+1;}catch(_){return 30;}})();var _label=tsGran==="month"?"Monthly":(_rd<14?"Daily":"Weekly");return <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1.5,marginBottom:10,textTransform:"uppercase"}}>{_label} aggregation, scoped to your selected period ({df} to {dt}) &middot; {selected.length} campaign{selected.length===1?"":"s"} selected</div>;})()}
         <div style={{display:"grid",gridTemplateColumns:"140px repeat(4,1fr)",gap:8,marginBottom:6}}>
           <div/>
           {platCols.map(function(p){return <div key={p.key} style={{textAlign:"center",fontSize:11,fontWeight:900,color:p.accent,fontFamily:fm,letterSpacing:1.5,padding:"8px 4px",borderBottom:"1px solid "+p.accent+"35"}}>{p.label}</div>;})}

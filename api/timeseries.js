@@ -50,7 +50,11 @@ function weekStart(ymd) {
   return d.toISOString().split("T")[0];
 }
 function monthStart(ymd) { return ymd.substring(0, 7) + "-01"; }
-function bucketKey(ymd, gran) { return gran === "month" ? monthStart(ymd) : weekStart(ymd); }
+function bucketKey(ymd, gran) {
+  if (gran === "month") return monthStart(ymd);
+  if (gran === "day") return ymd; // daily buckets keep the date as-is
+  return weekStart(ymd);
+}
 
 function addTo(seriesMap, platform, objective, bucket, metrics) {
   var key = platform + "||" + objective;
@@ -71,7 +75,7 @@ export default async function handler(req, res) {
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-30";
   var granularity = (req.query.granularity || "week").toLowerCase();
-  if (granularity !== "week" && granularity !== "month") granularity = "week";
+  if (granularity !== "week" && granularity !== "month" && granularity !== "day") granularity = "week";
 
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
@@ -159,7 +163,7 @@ export default async function handler(req, res) {
           return null;
         };
         var timeRange = encodeURIComponent(JSON.stringify({ since: from, until: to }));
-        var incr = granularity === "month" ? "monthly" : "7";
+        var incr = granularity === "month" ? "monthly" : (granularity === "day" ? "1" : "7");
         var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,actions&level=campaign&breakdowns=publisher_platform&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Follow pagination for big date ranges / many campaigns.
         var metaAllRows = [];
@@ -366,7 +370,10 @@ export default async function handler(req, res) {
   // Also seed from date range so empty platforms still appear
   var start = new Date(from + "T00:00:00Z");
   var end = new Date(to + "T00:00:00Z");
-  if (granularity === "week") {
+  if (granularity === "day") {
+    var dcur = new Date(from + "T00:00:00Z");
+    while (dcur <= end) { allBuckets[dcur.toISOString().split("T")[0]] = true; dcur.setUTCDate(dcur.getUTCDate() + 1); }
+  } else if (granularity === "week") {
     var s = weekStart(from);
     var cur = new Date(s + "T00:00:00Z");
     while (cur <= end) { allBuckets[cur.toISOString().split("T")[0]] = true; cur.setUTCDate(cur.getUTCDate() + 7); }
