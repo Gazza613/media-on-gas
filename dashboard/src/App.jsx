@@ -4517,39 +4517,31 @@ export default function MediaOnGas(){
           pushTask(function(){return fetch(API+"/api/campaigns-daily?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.ok&&d.campaigns)summaryCache.daily[k]=d.campaigns;}).catch(function(){});});
         }
       });
-      // Comparison window per preset (prior 7 / prior 30 / same days
-      // last month / full last month) — same URL as the in-effect
-      // comparison fetch, so the server-side 5-min response cache primes
-      // and the chip lights up in 100ms on the first click. summaryCache
-      // is keyed by from..to so the chip's cache-first effect also reads
-      // straight from this entry.
-      presetKeys.forEach(function(presetKey){
-        var presetR=presetRange(presetKey);
-        if(!presetR)return;
-        var cMode=presetKey==="mtd"||presetKey==="lm"?"mom":"wow";
-        var cmpR=computeComparisonRange(presetR.from,presetR.to,cMode);
-        if(!cmpR)return;
-        var cmpKey=summaryCacheKey(cmpR.from,cmpR.to);
-        if(!summaryCache.campaigns[cmpKey]){
-          pushTask(function(){return fetch(API+"/api/campaigns?from="+cmpR.from+"&to="+cmpR.to,{headers:h}).then(function(res){return res.json();}).then(function(d){if(d&&d.campaigns)summaryCache.campaigns[cmpKey]=d;}).catch(function(){});});
-        }
-      });
-      // Pre-warm /api/command-centre for the same preset windows.
-      // CC's Redis cache (3min TTL) is keyed by from..to; firing the
-      // endpoint here populates it well before the operator clicks
-      // Optimise. Without this the first Optimise click pays the full
-      // cold pull (campaigns x2 + ads + adset-pacing for ABO + perf
-      // snapshots = 20-40s). Admin only; client-token viewers don't
-      // have access to /api/command-centre. Same OFF/7D/30D/MTD/LM
-      // set as the campaigns pre-warm so the windows line up.
-      if(!isClient){
-        var ccKeys=["off","7d","30d","mtd","lm"];
-        ccKeys.forEach(function(k){
-          var r=presetRange(k);
-          if(!r)return;
-          pushTask(function(){return fetch(API+"/api/command-centre?from="+r.from+"&to="+r.to,{headers:h}).then(function(res){return res.json();}).catch(function(){});});
-        });
-      }
+      // NOTE: Comparison-window pre-warm and /api/command-centre pre-warm
+      // were both removed after the Google Ads developer-token quota
+      // (15k ops/day on Basic Access) got burned through by the
+      // combined load. Each pre-warm call to /api/campaigns triggers an
+      // independent Google Ads query (different segments.date range),
+      // and stacking 4 comparison ranges + 5 CC ranges on top of the
+      // 4 current-period ranges meant a single page load was spending
+      // ~13 Google operations. A handful of dashboard reloads through
+      // the day exhausted the quota and Google silently dropped out
+      // of the dashboard.
+      //
+      // Trade-off after this trim:
+      //   - First click of a comparison preset (7D / 30D / MTD / LM)
+      //     pays the cold /api/campaigns fetch for the prior window.
+      //   - First navigation to the Optimise tab pays the cold
+      //     /api/command-centre assembly (campaigns x2 + ads + ABO
+      //     pacing + perf snapshots).
+      //   - Both fetches are still cached in summaryCache + Redis after
+      //     they complete, so the SECOND click of the same window is
+      //     instant.
+      //
+      // The Redis-backed Google Ads query cache (api/campaigns.js, 30min
+      // TTL keyed by from..to) ensures the remaining current-period
+      // pre-warm of 4 ranges costs at most 4 Google operations per
+      // 30min window, regardless of how many dashboard sessions are open.
       // Queue runner: max 2 in flight at a time. As each completes, the
       // next one starts. Keeps total wall-clock close to the parallel
       // version while ensuring no more than 2 JSON.parses run in the
