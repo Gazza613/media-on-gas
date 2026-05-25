@@ -22,20 +22,10 @@ var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
 var DEMO_CACHE_VERSION = "v10-meta-ig-proportional-inference";
 
-// Last-known-good Google demographics cache, persisted in Upstash Redis
-// so it survives Vercel function instance recycles (a module-level Map
-// is reset every cold start, defeating the point on a busy day). The
-// /api/demographics response cache lives for 5 minutes, but the upstream
-// Google Ads API intermittently rate-limits or 5xx's a request — when
-// that happens fetchGoogleDemo returns empty arrays (errors swallowed
-// in googleSearch's catch) and the 5-min cache locks that empty result
-// in. Net effect for the operator: the Top Brand percentage swings
-// between the correct ~77% (Google in denominator) and an inflated
-// ~97% (Google missing) every cache rotation.
-// Solution: every successful Google fetch writes to Redis; every empty
-// fetch falls back to the cached payload if it's < 6h old. Real
-// no-delivery days eventually clear naturally.
-var GOOGLE_LASTGOOD_TTL_SEC = 6 * 60 * 60;
+// Google demographics caching strategy: see fetchGoogleDemo() below.
+// Short version: Redis-first read, fresh fetch only if stale or empty,
+// fallback to stale-but-present Redis when fresh fetch is rate-limited.
+// Prevents the upstream Google 429s from inflating the Top Brand %.
 
 function extractResults(actions, pageLikeOpt) {
   var map = {};
@@ -525,7 +515,38 @@ async function fetchTikTokDemo(token, advId, from, to) {
   return { ageGender: ageGender, region: region, device: device };
 }
 
+// Google demographics with Redis-first read. The Google Ads API rate-
+// limits our token aggressively (429s observed on /api/ads bursts),
+// and there is no way to scope down the 4 queries per request below
+// (age + gender + device + location). Fetching them fresh on every
+// /api/demographics request burned the daily quota and left the
+// response with zero Google rows half the time, which silently
+// dropped the Top Brand denominator and inflated the Android share.
+//
+// New behaviour:
+//   - Read Redis first. If it has data <1h old, serve it. NO Google call.
+//   - If Redis is empty OR >1h old, hit Google. On success, write back.
+//     On failure (rate limit etc), serve whatever Redis still has, even
+//     if it's up to 6h old. Only return truly empty when Redis is also
+//     empty AND we just failed Google.
+//
+// Net effect: the Top Brand % stays stable, Google quota is preserved,
+// and the 5-min response cache layered above this still tracks Meta
+// + TikTok freshness independently.
+var GOOGLE_DEMO_REDIS_KEY_PREFIX = "demo:google:v1:";
+var GOOGLE_DEMO_FRESH_MS = 60 * 60 * 1000; // 1h — Google data doesn't change minute-to-minute
+
 async function fetchGoogleDemo(from, to) {
+  var redisKey = GOOGLE_DEMO_REDIS_KEY_PREFIX + from + "|" + to;
+  // Redis-first: if cached payload is fresh, return it immediately.
+  try {
+    var cached = await redisGetJson(redisKey + ":meta");
+    if (cached && cached.ts && (Date.now() - cached.ts < GOOGLE_DEMO_FRESH_MS)) {
+      var payload = await redisGetJson(redisKey);
+      if (payload && (payload.ageGender || payload.device)) return payload;
+    }
+  } catch (_) {}
+
   var out = { ageGender: [], region: [], device: [], city: [] };
   try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
@@ -779,6 +800,28 @@ async function fetchGoogleDemo(from, to) {
   } catch (e) {
     console.error("Google demo fetch error", e && e.message);
   }
+
+  // Persist whatever Google returned. Even an empty result is cached
+  // briefly so we don't hammer the rate-limited API; but if we have
+  // older Redis data with REAL rows, prefer that over the empty fresh.
+  var hasFreshData = (out.device && out.device.length > 0) || (out.ageGender && out.ageGender.length > 0);
+  try {
+    if (hasFreshData) {
+      // Cache for 6h. The meta record (just ts) decides freshness.
+      await redisSetJson(redisKey, out, 6 * 60 * 60);
+      await redisSetJson(redisKey + ":meta", { ts: Date.now() }, 6 * 60 * 60);
+    } else {
+      // Fresh fetch came back empty (likely 429). Try to recover the
+      // last good payload from Redis (even if stale) so the response
+      // still has Google data and the Top Brand denominator stays
+      // honest.
+      var stale = await redisGetJson(redisKey);
+      if (stale && ((stale.device && stale.device.length > 0) || (stale.ageGender && stale.ageGender.length > 0))) {
+        out = stale;
+      }
+    }
+  } catch (_) {}
+
   return out;
 }
 
@@ -821,24 +864,10 @@ export default async function handler(req, res) {
       fetchGoogleDemo(from, to)
     ]);
     var meta = pulls[0], tt = pulls[1], google = pulls[2];
-
-    // Google fallback: if fresh fetch returned no rows but Redis holds
-    // a recent last-known-good response, use it. Persisted in Redis so
-    // it survives Vercel function recycles (a module-level Map empties
-    // on every cold start).
-    var googleKey = "demo:google:lastgood:" + from + "|" + to;
-    var googleHasData = (google.device && google.device.length > 0) || (google.ageGender && google.ageGender.length > 0);
-    if (googleHasData) {
-      // Fire-and-forget write so a Redis hiccup doesn't slow the response.
-      redisSetJson(googleKey, google, GOOGLE_LASTGOOD_TTL_SEC).catch(function() {});
-    } else {
-      try {
-        var lg = await redisGetJson(googleKey);
-        if (lg && ((lg.device && lg.device.length > 0) || (lg.ageGender && lg.ageGender.length > 0))) {
-          google = lg;
-        }
-      } catch (_) {}
-    }
+    // Google fallback now lives inside fetchGoogleDemo via Redis (see
+    // GOOGLE_DEMO_REDIS_KEY_PREFIX). It reads fresh-then-fallback so
+    // by the time we get here, `google` already reflects last-known-
+    // good data when Google is rate-limited.
 
     // Client-scoped: strip rows for campaigns outside the allowlist.
     // Tokens carry the dashboard's suffixed form (e.g. `123_facebook`,
