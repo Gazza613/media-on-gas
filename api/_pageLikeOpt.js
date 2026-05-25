@@ -48,9 +48,13 @@ export async function getPageLikeMaps(accountId, token) {
 
   var objMap = {};
   var plOpt = {};
+  // Raw map: campaignId → array of {adsetId, name, optimization_goal}.
+  // Lets the optgoalprobe diagnostic surface what Meta actually returned
+  // without making a second round-trip (rate-limit friendly).
+  var rawOptGoals = {};
   // Lightweight campaigns objective (id,objective only — small payload).
   try {
-    var cNext = "https://graph.facebook.com/v25.0/" + accountId + "/campaigns?fields=id,objective&limit=500&access_token=" + token;
+    var cNext = "https://graph.facebook.com/v25.0/" + accountId + "/campaigns?fields=id,name,objective&limit=500&access_token=" + token;
     var cg = 0;
     while (cNext && cg < 15) {
       cg++;
@@ -64,9 +68,9 @@ export async function getPageLikeMaps(accountId, token) {
       cNext = cd.paging && cd.paging.next ? cd.paging.next : null;
     }
   } catch (_) {}
-  // Bounded adsets optimization_goal (campaign_id,optimization_goal only).
+  // Bounded adsets optimization_goal (now also captured raw for diagnostics).
   try {
-    var aNext = "https://graph.facebook.com/v25.0/" + accountId + "/adsets?fields=campaign_id,optimization_goal,effective_status&limit=500&access_token=" + token;
+    var aNext = "https://graph.facebook.com/v25.0/" + accountId + "/adsets?fields=id,name,campaign_id,optimization_goal,effective_status&limit=500&access_token=" + token;
     var ag = 0;
     while (aNext && ag < 12) {
       ag++;
@@ -78,12 +82,19 @@ export async function getPageLikeMaps(accountId, token) {
         if (st === "DELETED" || st === "ARCHIVED") return;
         var og = String(s.optimization_goal || "").toUpperCase();
         if (og === "PAGE_LIKES" || og === "LIKE_PAGE" || og.indexOf("PAGE_LIKE") >= 0 || og === "LIKES") plOpt[s.campaign_id] = true;
+        if (!rawOptGoals[s.campaign_id]) rawOptGoals[s.campaign_id] = [];
+        rawOptGoals[s.campaign_id].push({
+          adsetId: s.id,
+          adsetName: s.name || "",
+          optimization_goal: s.optimization_goal || "(null)",
+          effective_status: s.effective_status || ""
+        });
       });
       aNext = ad.paging && ad.paging.next ? ad.paging.next : null;
     }
   } catch (_) {}
 
-  var out = { objMap: objMap, plOpt: plOpt };
+  var out = { objMap: objMap, plOpt: plOpt, rawOptGoals: rawOptGoals };
   // Only cache a non-empty result so a transient Graph failure does not
   // poison the cache with an empty map for 6 hours.
   if (Object.keys(objMap).length > 0 || Object.keys(plOpt).length > 0) {

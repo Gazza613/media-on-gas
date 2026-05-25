@@ -3,6 +3,7 @@ import { checkAuth, filterPagesForPrincipal, isAdminOrSuperadmin } from "./_auth
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { redisGetJson, redisSetJson } from "./_pulseShared.js";
+import { getPageLikeMaps } from "./_pageLikeOpt.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
 // Settings → Objectives Audit) ahead of name + API logic. Returns the
@@ -342,59 +343,55 @@ export default async function handler(req, res) {
     var filter = String(req.query.campaignFilter || "").toLowerCase();
     var onlyTag = String(req.query.account || "").toLowerCase();
     var probe = [];
-    // Per-account probe with minimal fields to stay under Meta rate limits.
-    // `account=momo` (or any substring) narrows to one account; omitted hits all.
+    // Read from the _pageLikeOpt cache (populated by /api/ads on its
+    // regular run, TTL 6h). No new Meta calls, so rate-limit-safe.
     var accountsToProbe = onlyTag
       ? metaAccounts.filter(function(a) { return a.name.toLowerCase().indexOf(onlyTag) >= 0; })
       : metaAccounts;
     for (var ai = 0; ai < accountsToProbe.length; ai++) {
       var acc = accountsToProbe[ai];
-      var accOut = { account: acc.name, accountId: acc.id, adSets: [], errors: [] };
+      var accOut = { account: acc.name, accountId: acc.id, adSets: [], errors: [], source: "cache" };
       try {
-        // Two-step: first list active campaigns matching the name filter (small payload),
-        // then for those campaigns fetch their ad sets' optimization_goal. Avoids pulling
-        // every ad set across the account.
-        var cUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,name,objective,effective_status&limit=200&access_token=" + metaToken;
-        var cr = await fetch(cUrl);
-        var cd = await cr.json();
-        if (cd && cd.error) { accOut.errors.push("campaigns: " + (cd.error.message || cd.error.type)); probe.push(accOut); continue; }
-        var matching = (cd.data || []).filter(function(c) {
-          var nm = (c.name || "").toLowerCase();
-          var st = String(c.effective_status || "").toUpperCase();
-          if (st === "DELETED" || st === "ARCHIVED") return false;
-          return !filter || nm.indexOf(filter) >= 0;
-        });
-        accOut.campaignsMatched = matching.length;
-        // For each matching campaign, fetch its ad sets via the campaign edge
-        for (var ci = 0; ci < matching.length; ci++) {
-          var c = matching[ci];
-          var asUrl = "https://graph.facebook.com/v25.0/" + c.id + "/adsets?fields=id,name,optimization_goal,effective_status,billing_event,bid_strategy&limit=50&access_token=" + metaToken;
-          var ar = await fetch(asUrl);
-          var ad = await ar.json();
-          if (ad && ad.error) {
-            accOut.errors.push("adsets for " + c.name + ": " + (ad.error.message || ad.error.type));
-            continue;
-          }
-          (ad.data || []).forEach(function(s) {
-            var st2 = String(s.effective_status || "").toUpperCase();
-            if (st2 === "DELETED" || st2 === "ARCHIVED") return;
-            accOut.adSets.push({
-              campaignName: c.name,
-              campaignId: c.id,
-              campaignObjective: c.objective || "",
-              adsetName: s.name,
-              adsetId: s.id,
-              optimization_goal: s.optimization_goal || "(null)",
-              billing_event: s.billing_event || "",
-              bid_strategy: s.bid_strategy || "",
-              effective_status: s.effective_status || ""
-            });
-          });
+        var maps = await getPageLikeMaps(acc.id, metaToken);
+        var objMap = (maps && maps.objMap) || {};
+        var rawOpt = (maps && maps.rawOptGoals) || {};
+        if (Object.keys(rawOpt).length === 0) {
+          accOut.errors.push("no cached optimization_goal data for this account (cache populated by /api/ads on first call after deploy; if this persists, the upstream Meta call failed)");
         }
+        var matched = 0;
+        Object.keys(rawOpt).forEach(function(campaignId) {
+          // Look up campaign name from /api/campaigns cache? We don't have
+          // it cheaply. Instead, the probe relies on the name filter matching
+          // an ad set or campaign name; if the caller passes a name filter
+          // we have to skip campaigns we can't name-resolve. Mitigation:
+          // include all results when no filter is passed, and emit
+          // adset-name in each row so the operator can grep it.
+          var anyMatch = !filter; // if no filter, include everything
+          var rows = (rawOpt[campaignId] || []).map(function(s) {
+            return {
+              campaignId: campaignId,
+              campaignObjective: objMap[campaignId] || "",
+              isPageLikeOptimised: (maps.plOpt && maps.plOpt[campaignId] === true),
+              adsetName: s.adsetName,
+              adsetId: s.adsetId,
+              optimization_goal: s.optimization_goal,
+              effective_status: s.effective_status
+            };
+          });
+          if (filter) {
+            rows = rows.filter(function(r) { return (r.adsetName || "").toLowerCase().indexOf(filter) >= 0; });
+            if (rows.length > 0) anyMatch = true;
+          }
+          if (anyMatch) {
+            matched++;
+            rows.forEach(function(r) { accOut.adSets.push(r); });
+          }
+        });
+        accOut.campaignsMatched = matched;
       } catch (e) { accOut.errors.push(String(e && e.message || e)); }
       probe.push(accOut);
     }
-    res.status(200).json({ optgoalprobe: true, filter: filter, accountOnly: onlyTag, accounts: probe });
+    res.status(200).json({ optgoalprobe: true, filter: filter, accountOnly: onlyTag, note: "Reads from _pageLikeOpt 6h cache (no fresh Meta calls). Cache populates on first /api/ads call after a deploy. To force refresh: have an admin reload the dashboard once, then run this probe.", accounts: probe });
     return;
   }
 
