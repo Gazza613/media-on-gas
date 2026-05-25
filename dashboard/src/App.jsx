@@ -3736,17 +3736,18 @@ export default function MediaOnGas(){
         window.localStorage.setItem("gas:dashboard:dateRange",JSON.stringify({from:df,to:dt}));
     }catch(_){}
   },[df,dt,tab]);
-  // When the operator navigates TO Summary, reset to current month.
-  // When they navigate AWAY from Summary, restore the saved range so
-  // Optimise / Deep Dive / etc. pick up the user's persisted lens.
-  // Picker tweaks while on Summary stick until the next tab switch.
+  // Tab-change behaviour:
+  //   - Returning TO Summary: only reset the comparison chip to off so
+  //     the Summary lands clean. Do NOT force df/dt back to the full
+  //     current month — that previously fired a fresh fetch every time
+  //     the operator navigated away and back, even within the cache
+  //     TTL. First-mount default of monthStart/monthEnd already comes
+  //     from the useState initial values above.
+  //   - Going AWAY from Summary: restore whatever range was last in
+  //     use on a non-Summary tab via lastSavedRangeRef (Optimise et al
+  //     persist their own picked range).
   useEffect(function(){
     if(tab==="summary"){
-      if(df!==monthStart)setDf(monthStart);
-      if(dt!==monthEnd)setDt(monthEnd);
-      // Summary lands clean: full current month, no comparison chips.
-      // Operator clicks a preset (7D / 30D / MTD / LM) to opt in to a
-      // comparison; OFF / leaving and returning to Summary resets it.
       setCompareMode("off");
     }else if(lastSavedRangeRef.current){
       var saved=lastSavedRangeRef.current;
