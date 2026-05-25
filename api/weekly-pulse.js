@@ -29,7 +29,7 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
   var sample7d = rmB ? rmB.value : 0;
 
   var ZERO_RESULT_FLOOR = 700; // ~R100/day for a 7-day window
-  var isResultObjective = rmY.kind === "Clicks to App Store" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes";
+  var isResultObjective = rmY.kind === "Clicks to App Store" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes" || rmY.kind === "Profile Visits";
   if (isResultObjective && rmY.value === 0 && spendY >= ZERO_RESULT_FLOOR) {
     return {
       color: "red", tag: "ACTION",
@@ -87,7 +87,14 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
   var cpcY = clicksY > 0 ? spendY / clicksY : null;
   var clicksB = parseInt(lastWeek.clicks || 0);
   var cpcB = clicksB > 0 ? parseFloat(lastWeek.spend || 0) / clicksB : null;
-  if (cpcY !== null && cpcB !== null && cpcB > 0) {
+  // When the campaign's result KPI is itself a click-based metric
+  // (App Install, Landing Page, Click) the CPR check above already
+  // pushed "CPC R0.68 up 13% ..." into flags. Running the dedicated
+  // CPC check too would push the same string a second time and the
+  // operator saw duplicated lines under the campaign. Skip the
+  // dedicated CPC check when costLabel is already CPC.
+  var cpcAlreadyFlagged = rmY.costLabel === "CPC";
+  if (!cpcAlreadyFlagged && cpcY !== null && cpcB !== null && cpcB > 0) {
     var pd = (cpcY - cpcB) / cpcB * 100;
     if (pd >= 50) { color = worse(color, "red"); flags.push("CPC " + fmtR(cpcY) + " up " + pd.toFixed(0) + "% vs last week"); }
     else if (pd >= 25) { color = worse(color, "orange"); flags.push("CPC " + fmtR(cpcY) + " up " + pd.toFixed(0) + "% vs last week"); }
@@ -125,7 +132,9 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
   var cpcY = clicksY > 0 ? spendY / clicksY : null;
   var cpmY = impsY > 0 ? (spendY / impsY * 1000) : null;
   var resY = rmY.value;
-  var isResultObj = rmY.kind === "Leads" || rmY.kind === "Clicks to App Store" || rmY.kind === "Follows + Likes";
+  var isResultObj = rmY.kind === "Leads" || rmY.kind === "Clicks to App Store" || rmY.kind === "Follows + Likes" || rmY.kind === "Profile Visits";
+  var platformLower = String(thisWeek.platform || "").toLowerCase();
+  var isTikTokFollowers = rmY.kind === "Follows + Likes" && platformLower.indexOf("tiktok") >= 0;
   var isAwareness = isAwarenessObjective(thisWeek);
   var cprY = resY > 0 ? spendY / resY : null;
 
@@ -194,7 +203,15 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
   if (isResultObj && resY > 0 && cprY !== null) {
     var resWord = rmY.kind.replace(/s$/, "").toLowerCase();
     var lead = fmtNum(resY) + " " + rmY.kind.toLowerCase() + fmtDelta(resDelta, "results") + " at " + fmtR(cprY) + " " + rmY.costLabel.toLowerCase() + fmtDelta(cprDelta !== null ? -cprDelta : null, "efficiency");
-    var supp = " driven by " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR and " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + " · frequency " + freqY.toFixed(2) + "x.";
+    // TikTok follower campaigns: clicks aren't the KPI and TikTok
+    // rarely surfaces meaningful click data on a follow-objective
+    // ad, so "driven by 0 clicks at 0.00% CTR and n/a CPC" reads as
+    // noise. Drop the clicks/CTR/CPC clause for that case; keep it
+    // for Instagram (clicks = profile visits, useful) and FB / Leads
+    // / App Installs (clicks ARE the proxy for the action).
+    var supp = isTikTokFollowers
+      ? " Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + " · frequency " + freqY.toFixed(2) + "x."
+      : " driven by " + fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR and " + (cpcY !== null ? fmtR(cpcY) : "n/a") + " CPC. Reach " + fmtNum(reachY) + " · " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + " · frequency " + freqY.toFixed(2) + "x.";
     var verdict = "";
     if (cprDelta !== null && cprDelta <= -15 && resDelta !== null && resDelta >= 15) verdict = " Scale signal: efficiency improving AND volume up. Lift budget 15-20% next week.";
     else if (cprDelta !== null && cprDelta >= 25) verdict = " " + rmY.costLabel + " climbing materially — fatigue check on the creative is the first lever before another week's spend.";
@@ -231,10 +248,18 @@ function buildCampaignRows(thisWeekCampaigns, lastWeekCampaigns, adsByCampaign) 
     if (k) baseByKey[k] = c;
   });
 
+  // Spend floor for the Weekly Pulse. Campaigns under R500 across the
+  // 7-day window were skewing the HEALTHY count — a campaign that
+  // barely delivered (R50 / 2K impressions) shows "all signals within
+  // band" because every metric is effectively noise. Excluding them
+  // here makes the disposition mix actually mean something. The
+  // operator's mental model: focus on ads that have meaningful reach
+  // and impressions; sub-R500 weekly spend isn't a meaningful read.
+  var MIN_WEEKLY_SPEND = 500;
   var rows = [];
   thisWeekCampaigns.forEach(function(c) {
     var spend = parseFloat(c.spend || 0);
-    if (spend <= 0) return;
+    if (spend < MIN_WEEKLY_SPEND) return;
 
     var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
     var b = baseByKey[k] || null;
@@ -246,6 +271,13 @@ function buildCampaignRows(thisWeekCampaigns, lastWeekCampaigns, adsByCampaign) 
 
     var clicksY = parseInt(c.clicks || 0);
     var cpcY = clicksY > 0 ? spend / clicksY : null;
+    // Awareness result: cost-per-result reads as CPM (spend per 1000
+    // impressions). For every other objective the existing
+    // spend/result formula is correct.
+    var imps = parseInt(c.impressions || 0);
+    var cprComputed = rm.awareness
+      ? (imps > 0 ? spend / imps * 1000 : null)
+      : (rm.value > 0 ? spend / rm.value : null);
 
     rows.push({
       campaignName: c.campaignName,
@@ -255,7 +287,7 @@ function buildCampaignRows(thisWeekCampaigns, lastWeekCampaigns, adsByCampaign) 
       results: rm.value,
       resultsKind: rm.kind,
       cprLabel: rm.costLabel,
-      cpr: rm.value > 0 ? spend / rm.value : null,
+      cpr: cprComputed,
       frequency: parseFloat(c.frequency || 0),
       ctr: parseFloat(c.ctr || 0),
       cpc: cpcY,
@@ -342,7 +374,7 @@ function buildHtml(opts) {
         : '<div style="width:64px;height:64px;display:block;border-radius:10px;background:linear-gradient(135deg,' + P.ember + '40,' + P.lava + '40);border:1px solid ' + P.rule + ';"></div>';
 
       var analystHtml = r.analystNote ?
-        '<div style="margin-top:8px;padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
+        '<div class="pulse-analyst" style="margin-top:8px;padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
         escapeHtml(r.analystNote) + '</div>' : '';
 
       var flagsHtml = flags.length === 0 ? "" :
@@ -369,8 +401,8 @@ function buildHtml(opts) {
         : '';
 
       return '<tr>' +
-        '<td style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' + thumbHtml + '</td>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
+        '<td class="pulse-row-thumb" style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' + thumbHtml + '</td>' +
+        '<td class="pulse-row-name" style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
           '<div style="margin-bottom:4px;line-height:1.6;">' +
             dispChip(r.disposition) +
             '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
@@ -378,19 +410,19 @@ function buildHtml(opts) {
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.35;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
           analystHtml + flagsHtml + winsHtml + contextHtml + noSignalHtml + amLink +
         '</td>' +
-        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+        '<td class="pulse-row-metric" style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
           '<div style="font-size:13px;color:' + P.ember + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">spend</div>' +
         '</td>' +
-        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+        '<td class="pulse-row-metric" style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
           '<div style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + ctrTxt + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CTR</div>' +
         '</td>' +
-        '<td style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+        '<td class="pulse-row-metric" style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
           '<div style="font-size:13px;color:' + P.amber + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + cpcTxt + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CPC</div>' +
         '</td>' +
-        '<td style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
+        '<td class="pulse-row-metric" style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
           '<div style="font-size:13px;color:' + P.cyan + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtNum(r.results)) + '</div>' +
           '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">' + escapeHtml(r.resultsKind) + '</div>' +
           cprStack +
@@ -417,11 +449,11 @@ function buildHtml(opts) {
   var clientBlocks = clients.map(clientBlock).join("");
 
   var totalsStrip =
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+    '<table role="presentation" class="pulse-totals" width="100%" cellpadding="0" cellspacing="0" border="0">' +
     '<tr>' +
       '<td width="25%" style="padding:0 4px 0 0;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Spend this week</div>' +
+        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Total Media Spend</div>' +
         '<div style="font-size:22px;font-weight:900;color:' + P.ember + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(totals.spend)) + '</div></div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
@@ -451,11 +483,34 @@ function buildHtml(opts) {
 
   var glowStyles =
     '<style>' +
+    // Resets to keep Gmail / iOS Mail / Outlook from inheriting host page styles
+    'body,table,td,p,a,div{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}' +
+    'table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}' +
+    'img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;}' +
+    'a{text-decoration:none;}' +
     '@keyframes gasGlow {' +
       '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
       '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
     '}' +
     '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
+    // Mobile responsive — applies in Apple Mail, iOS Mail, Gmail mobile,
+    // Outlook iOS. Outlook desktop ignores media queries and uses its
+    // fixed-width MSO table at 720px, which is fine at desktop sizes.
+    '@media only screen and (max-width:600px) {' +
+      '.pulse-container { width:100% !important; max-width:100% !important; border-radius:14px !important; }' +
+      '.pulse-pad { padding-left:18px !important; padding-right:18px !important; }' +
+      '.pulse-headline { font-size:22px !important; letter-spacing:3px !important; }' +
+      '.pulse-eyebrow { letter-spacing:3px !important; }' +
+      '.pulse-totals td { display:block !important; width:100% !important; padding:0 0 8px 0 !important; }' +
+      '.pulse-row-thumb { width:56px !important; padding:10px 0 10px 10px !important; }' +
+      '.pulse-row-thumb img, .pulse-row-thumb > div { width:48px !important; height:48px !important; }' +
+      '.pulse-row-name { padding:10px 12px !important; }' +
+      '.pulse-row-metric { padding:6px 12px !important; text-align:left !important; white-space:normal !important; display:inline-block !important; width:auto !important; }' +
+      '.pulse-analyst { font-size:11px !important; line-height:1.6 !important; }' +
+      '.cta-btn { display:block !important; padding:14px 28px !important; }' +
+      '.pulse-footer-row { display:block !important; width:100% !important; padding:0 0 10px 0 !important; text-align:center !important; }' +
+      '.pulse-footer-row img { margin:0 auto !important; }' +
+    '}' +
     '</style>';
 
   var logoBlock =
@@ -463,18 +518,25 @@ function buildHtml(opts) {
       '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>' +
     '</div>';
 
+  var preheader = "Weekly Pulse for " + weekLabel + ", " + totalAction + " action / " + totalHealthy + " healthy across the agency.";
   return '<!DOCTYPE html>' +
-    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Weekly Pulse</title>' +
+    '<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">' +
+    '<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="X-UA-Compatible" content="IE=edge">' +
+    '<meta name="color-scheme" content="dark light"><meta name="supported-color-schemes" content="dark light">' +
+    '<title>Weekly Pulse</title>' +
+    '<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->' +
     glowStyles + '</head>' +
-    '<body style="margin:0;padding:0;background:' + P.bg + ';font-family:Manrope,\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' + P.bg + ';padding:36px 14px;">' +
+    '<body style="margin:0;padding:0;background:' + P.bg + ';font-family:Manrope,\'Helvetica Neue\',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">' +
+    '<div style="display:none;font-size:1px;color:' + P.bg + ';line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">' + escapeHtml(preheader) + '</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' + P.bg + ';padding:32px 12px;">' +
     '<tr><td align="center">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
+    '<!--[if mso]><table role="presentation" align="center" width="720" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->' +
+    '<table role="presentation" class="pulse-container" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background-color:' + P.panel + ';background-image:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
 
-      '<tr><td style="padding:32px 36px 24px;text-align:center;">' +
+      '<tr><td class="pulse-pad" style="padding:32px 36px 24px;text-align:center;">' +
       logoBlock +
-      '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">GAS Weekly Pulse</div>' +
-      '<div style="font-size:26px;font-weight:900;letter-spacing:4px;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
+      '<div class="pulse-eyebrow" style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">GAS Weekly Pulse</div>' +
+      '<div class="pulse-headline" style="font-size:26px;font-weight:900;letter-spacing:4px;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
         '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
       '<div style="font-size:11px;color:' + P.caption + ';letter-spacing:3px;margin-top:8px;text-transform:uppercase;font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(weekLabel) + '</div>' +
       '</td></tr>' +
@@ -490,30 +552,45 @@ function buildHtml(opts) {
       '</div></td></tr>' +
 
       '<tr><td style="padding:24px 36px 8px;" align="center">' +
-      '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
-      '<tr><td align="center" style="background:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border-radius:12px;">' +
-      '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
-      '</td></tr></table></td></tr>' +
-
-      '<tr><td style="padding:28px 36px 4px;">' +
-      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
-      '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
-      '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>' +
+      // Outlook bulletproof button (VML) — Outlook strips
+      // background:linear-gradient and border-radius from TDs, so the
+      // old gradient-TD pattern rendered as plain white text on the
+      // dark email. VML <v:roundrect> with conditional comments gives
+      // Outlook a solid orange button with proper rounded corners.
+      // Modern clients (Gmail, Apple Mail, mobile) get the gradient
+      // <a>. Same pattern as the nudge / share emails.
+      '<!--[if mso]>' +
+      '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="' + ORIGIN + '" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="25%" stroke="f" fillcolor="#FF5A1F">' +
+      '<w:anchorlock/>' +
+      '<center style="color:#ffffff;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">OPEN DASHBOARD</center>' +
+      '</v:roundrect>' +
+      '<![endif]-->' +
+      '<!--[if !mso]><!-->' +
+      '<a href="' + ORIGIN + '" class="cta-btn" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border-radius:12px;color:#ffffff;display:inline-block;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:3px;padding:14px 38px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>' +
+      '<!--<![endif]-->' +
       '</td></tr>' +
 
-      '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
+      '<tr><td style="padding:28px 36px 4px;">' +
+      '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;">SAMI</div>' +
+      '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">AI EXPERT AGENT</div>' +
+      '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">GAS MEDIA DEPARTMENT</div>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';line-height:1px;font-size:1px;">&nbsp;</div></td></tr>' +
       '<tr><td style="padding:18px 36px 30px;">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">' +
-      '<tr><td valign="middle" style="width:54px;padding-right:14px;">' +
+      '<tr><td class="pulse-footer-row" valign="middle" style="width:54px;padding-right:14px;">' +
       '<img src="' + logoUrl + '" alt="GAS Marketing" width="46" height="46" border="0" style="width:46px;height:46px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
-      '</td><td valign="middle">' +
+      '</td><td class="pulse-footer-row" valign="middle">' +
       '<div style="font-size:12px;color:' + P.txt + ';font-weight:800;letter-spacing:3px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
       '<div style="font-size:10px;color:' + P.caption + ';letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;font-family:Manrope,Helvetica,Arial,sans-serif;">Weekly Pulse, Monday 08:00 SAST</div>' +
       '<div style="font-size:11px;color:' + P.caption + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<a href="mailto:grow@gasmarketing.co.za" style="color:' + P.caption + ';text-decoration:none;">grow@gasmarketing.co.za</a></div>' +
       '</td></tr></table></td></tr>' +
-    '</table></td></tr></table></body></html>';
+    '</table>' +
+    '<!--[if mso]></td></tr></table><![endif]-->' +
+    '</td></tr></table></body></html>';
 }
 
 export default async function handler(req, res) {

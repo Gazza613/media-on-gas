@@ -168,6 +168,15 @@ export function worse(a, b) { return COLOR_RANK[a] >= COLOR_RANK[b] ? a : b; }
 export function resultMetricFor(c) {
   var obj = String(c.objective || "").toLowerCase();
   var name = String(c.campaignName || "").toLowerCase();
+  var platform = String(c.platform || "").toLowerCase();
+  // Awareness / reach-led campaigns (Psycho Bunny store-opening, brand
+  // awareness, anything tagged _Awareness_ / _Reach_ / brand) read on
+  // Reach + CPM, not on click metrics. Detected via objective field or
+  // name regex (matches isAwarenessObjective). The pulse cost label is
+  // CPM, computed against impressions in buildCampaignRows below.
+  if (isAwarenessObjective(c)) {
+    return { kind: "Reach", value: parseInt(c.reach || 0), costLabel: "CPM", awareness: true };
+  }
   var isLanding = obj === "landingpage" || obj === "landing_page" || obj === "outcome_traffic" || obj.indexOf("traffic") >= 0 || name.indexOf("landing") >= 0;
   if (obj.indexOf("appinstall") >= 0 || obj.indexOf("app_install") >= 0 || obj.indexOf("app_promotion") >= 0 || name.indexOf("appinstal") >= 0) {
     return { kind: "Clicks to App Store", value: parseInt(c.clicks || 0), costLabel: "CPC" };
@@ -179,6 +188,14 @@ export function resultMetricFor(c) {
     return { kind: "Clicks to Landing Page", value: parseInt(c.clicks || 0), costLabel: "CPC" };
   }
   if (obj.indexOf("page_likes") >= 0 || obj.indexOf("post_engagement") >= 0 || obj.indexOf("outcome_engagement") >= 0 || obj.indexOf("follower") >= 0 || name.indexOf("like") >= 0 || name.indexOf("follow") >= 0) {
+    // Instagram follower campaigns: Meta does not attribute the
+    // follow action to individual ads, so reading "Follows + Likes"
+    // gives 0 and the email shows a thin-baseline warning every time.
+    // Profile visits (clicks) is the dashboard's canonical IG-follow
+    // proxy and what the team actually watches. See project_followers_truth.
+    if (platform.indexOf("instagram") >= 0) {
+      return { kind: "Profile Visits", value: parseInt(c.clicks || 0), costLabel: "Cost / Profile Visit" };
+    }
     // Follower result = page likes + follows ONLY. c.pageLikes is
     // already the optimization_goal-gated page-follow result from
     // /api/campaigns (folds "like" only for PAGE_LIKES-optimised
