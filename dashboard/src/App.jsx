@@ -5089,7 +5089,7 @@ export default function MediaOnGas(){
   // Populate shared demoBlocks / demoFallback once per render so Summary and
   // Demographics tabs can read individual stage blocks. Runs regardless of
   // active tab because it lives at the component body, not inside tab JSX.
-  try{if(typeof window!=="undefined"&&!window.__gasRenderDiagLogged){window.__gasRenderDiagLogged=true;console.log("[GAS render gate]",{demoData:!!demoData,demoErr:demoErr,demoLoading:demoLoading,tab:tab,viewToken:!!viewToken,campaigns:campaigns.length,selected:selected.length});}}catch(_){}
+  try{if(typeof window!=="undefined"){window.__gasRenderCount=(window.__gasRenderCount||0)+1;if(window.__gasRenderCount<=8){console.log("[GAS render #"+window.__gasRenderCount+"]",{demoData:!!demoData,demoErr:demoErr,demoLoading:demoLoading,tab:tab,viewToken:!!viewToken,viewTokenLen:String(viewToken||"").length,campaigns:campaigns.length,selected:selected.length,df:df,dt:dt,session:!!session});}}}catch(_){}
   if(demoData&&!demoErr&&!demoLoading)(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
