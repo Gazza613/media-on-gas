@@ -145,20 +145,22 @@ export default async function handler(req, res) {
     var pCached = req.authPrincipal || { role: "admin" };
     if (pCached.role === "client") {
       var cIds = (pCached.allowedCampaignIds || []).map(String);
-      // Strict ID-only match. The campaignName fallback used to accept any
-      // ad whose name matched a name in the token's allowedCampaignNames list,
-      // which could cross-match same-named campaigns across different clients'
-      // ad accounts. Tokens carry the full suffixed + raw-variant expansion so
-      // an ID-only match is lossless for legitimate access.
+      // Strict ID-only match. Tokens carry the dashboard's suffixed form
+      // (e.g. `120247_facebook`, `google_12345`) but the ad rows in the
+      // cache carry the raw Meta / TikTok / Google numeric id, so the
+      // filter must strip both _facebook/_instagram and google_ on both
+      // sides of the comparison. Without the google_ strip every Google
+      // ad was filtered out on cache-hit responses (the fresh-fetch path
+      // at the bottom of this file already does this — they must match).
       var allowed = {};
       cIds.forEach(function(x) {
         var s = String(x);
         allowed[s] = true;
-        allowed[s.replace(/_(facebook|instagram)$/, "")] = true;
+        allowed[s.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "")] = true;
       });
       var cFiltered = (cached.data.ads || []).filter(function(a) {
         var cid = String(a.campaignId || "");
-        var rawCid = cid.replace(/_(facebook|instagram)$/, "");
+        var rawCid = cid.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
         return allowed[cid] === true || allowed[rawCid] === true;
       });
       res.status(200).json({ ads: cFiltered, total: cFiltered.length });
