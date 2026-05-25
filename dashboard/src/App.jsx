@@ -3814,6 +3814,13 @@ export default function MediaOnGas(){
   var cmp=useState([]),compareCampaigns=cmp[0],setCompareCampaigns=cmp[1];
   var cs=useState([]),campaigns=cs[0],setCampaigns=cs[1];
   var ss=useState([]),selected=ss[0],setSelected=ss[1];
+  // Mirror campaigns + selected into refs declared later in the file so
+  // the closure-stale-state bug on tab-return doesn't silently re-tick
+  // every campaign. The refs themselves are declared near
+  // applyCampaignsResponse (couples the lookup to its use site); these
+  // assignments are repeated on every render so the refs see the latest
+  // committed state regardless of when applyCampaignsResponse was
+  // captured into a closure.
   var us=useState(null),urlSelected=us[0],setUrlSelected=us[1];
   var rs=useState(""),search=rs[0],setSearch=rs[1];
   var ls=useState(true),loading=ls[0],setLoading=ls[1];
@@ -4293,12 +4300,34 @@ export default function MediaOnGas(){
   // every fetch (the dep array would otherwise have to include
   // lastFetchTs, rebuilding the listener once per refresh).
   var lastFetchTsRef=useRef(0);
+  // Ref mirrors for campaigns + selected. The applyCampaignsResponse
+  // function reads them to detect the "wasNarrowed" carry-forward state
+  // and they must always be the latest values, NOT the closure value
+  // from the render where applyCampaignsResponse was created. Without
+  // these refs, the visibilitychange handler (registered with a
+  // [df,dt,session,viewToken] dep set, intentionally not [campaigns,
+  // selected] to avoid rebinding on every tick) called applyCampaigns
+  // Response with stale empty closures, the wasNarrowed check failed,
+  // and the picker silently re-ticked all campaigns on every tab return.
+  var campaignsRef=useRef([]);
+  var selectedRef=useRef([]);
+  // Update on every render so applyCampaignsResponse (and any other
+  // captured-closure consumer) always reads the LATEST committed state.
+  campaignsRef.current=campaigns;
+  selectedRef.current=selected;
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
   var applyCampaignsResponse=function(d){
       if(d.objectiveDiagnostic){try{console.log("[GAS] Objective classification by platform:\n"+JSON.stringify(d.objectiveDiagnostic,null,2));}catch(e){}}
       if(d.metaSupplementDiag){try{console.log("[GAS] Meta ad-level publisher_platform supplement:\n"+JSON.stringify(d.metaSupplementDiag,null,2));}catch(e){}}
+      // Read the LATEST campaigns + selected from refs, not the
+      // closure-captured values. Fixes a stale-closure bug where the
+      // visibilitychange listener invoked this with empty-array closures
+      // from the initial render and wasNarrowed always evaluated false,
+      // silently re-ticking every delivering campaign on tab return.
+      var prevCampaigns=campaignsRef.current||[];
+      var prevSelected=selectedRef.current||[];
       if(d.campaigns){
         setCampaigns(d.campaigns);
         // /api/campaigns returns ACTIVE+SCHEDULED campaigns regardless of
@@ -4337,12 +4366,12 @@ export default function MediaOnGas(){
           //     client filter was being silently dropped every time
           //     they clicked 7D / 30D / MTD / LM.
           var prevActiveCount=0;
-          if(campaigns&&campaigns.length>0){
-            campaigns.forEach(function(c){
+          if(prevCampaigns&&prevCampaigns.length>0){
+            prevCampaigns.forEach(function(c){
               if(parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0)prevActiveCount++;
             });
           }
-          var wasNarrowed=selected&&selected.length>0&&prevActiveCount>0&&selected.length<prevActiveCount;
+          var wasNarrowed=prevSelected&&prevSelected.length>0&&prevActiveCount>0&&prevSelected.length<prevActiveCount;
           if(wasNarrowed){
             var tmplKey=function(c){
               var s=String(c.campaignName||"").toLowerCase();
@@ -4353,7 +4382,7 @@ export default function MediaOnGas(){
               return fam+"::"+s;
             };
             var prevSel={};
-            campaigns.forEach(function(c){if(selected.indexOf(c.campaignId)>=0)prevSel[c.campaignId]=c;});
+            prevCampaigns.forEach(function(c){if(prevSelected.indexOf(c.campaignId)>=0)prevSel[c.campaignId]=c;});
             var prevRaw={},prevTmpl={};
             Object.keys(prevSel).forEach(function(id){var c=prevSel[id];if(c.rawCampaignId)prevRaw[String(c.rawCampaignId)]=true;prevTmpl[tmplKey(c)]=true;});
             var carried=d.campaigns.filter(function(c){
@@ -4363,7 +4392,16 @@ export default function MediaOnGas(){
             }).map(function(c){return c.campaignId;});
             setSelected(carried.length>0?carried:activeIds);
           } else {
-            setSelected(activeIds);
+            // First-load (no prior selection yet) — auto-tick all delivering.
+            // On a tab return where the user had explicitly narrowed AND the
+            // refs already hold that narrow set, wasNarrowed evaluates true
+            // above so this branch never runs. Only the genuine empty-state
+            // case falls through here.
+            if(prevSelected.length===0)setSelected(activeIds);
+            // else: prevSelected.length === prevActiveCount (operator had
+            // EVERYTHING ticked). Carry that "all" intent forward by
+            // setting the new full delivering set.
+            else setSelected(activeIds);
           }
         }
       }
