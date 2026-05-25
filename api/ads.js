@@ -390,6 +390,9 @@ export default async function handler(req, res) {
             // project_meta_like_action.
             var isStrictPageLikes = campPageLikeOpt[row.campaign_id] === true || String(campObjMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
             var pageLikeFinal = isStrictPageLikes ? Math.max(totals.page_like, totals.reactionLikes) : totals.page_like;
+            // Stash the raw signals so the per-placement loop below can
+            // apply the name-strong page-like fallback using the campaign
+            // name (only available on per-placement rows, not here).
             adTrueTotals[row.ad_id] = {
               pageLikes: pageLikeFinal,
               follows: totals.fbFollow + totals.igFollow,  // kept for backward compat
@@ -855,6 +858,36 @@ export default async function handler(req, res) {
         // one 'Follows or likes' result). Must match api/campaigns.js +
         // api/reconcile.js.
         if (metaObjStrictPageLikes && reactionLikes > pageLikes) pageLikes = reactionLikes;
+        // Name-strong page-like fallback (mirror dashboard Community Growth,
+        // see project_fb_page_like_fallback). ODAX Like&Follow campaigns
+        // commonly run as OUTCOME_ENGAGEMENT with a LIKE_PAGE CTA, so the
+        // optimization_goal gate zeroes their per-ad attribution despite the
+        // operator's clear page-like intent. When the campaign NAME tags
+        // page-like intent AND the gated pageLikes is still zero, fall back
+        // to the raw "like" action so the Followers Top Ads tile shows the
+        // real spend-attributed result instead of a misleading zero. Also
+        // back-fill ins.trueTotals.followsFb so followsTrue picks it up.
+        if (!metaObjStrictPageLikes && pageLikes === 0 && reactionLikes > 0) {
+          var cn = String(ins.campaign_name || "").toLowerCase();
+          var nameStrongPageLike = (
+            cn.indexOf("like&follow") >= 0 ||
+            cn.indexOf("like_follow") >= 0 ||
+            cn.indexOf("like+follow") >= 0 ||
+            cn.indexOf("_like_") >= 0 ||
+            cn.indexOf("_like ") >= 0 ||
+            cn.indexOf("paidsocial_like") >= 0 ||
+            cn.indexOf("like_facebook") >= 0 ||
+            cn.indexOf("like_instagram") >= 0
+          );
+          if (nameStrongPageLike) {
+            pageLikes = reactionLikes;
+            if (ins.trueTotals && (ins.trueTotals.followsFb || 0) === 0) {
+              ins.trueTotals.followsFb = reactionLikes;
+              if ((ins.trueTotals.pageLikes || 0) === 0) ins.trueTotals.pageLikes = reactionLikes;
+              ins.trueTotals.followersCombined = (ins.trueTotals.followersCombined || 0) + reactionLikes;
+            }
+          }
+        }
         var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
         var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
