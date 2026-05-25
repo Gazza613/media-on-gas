@@ -190,41 +190,87 @@ function buildNudgeHtml(opts) {
     actionLine = 'This is the post-campaign close-out reminder. Once sent, regular SLA nudges stay off until a new campaign goes live.';
   }
 
+  // Preheader text — what shows in the inbox preview line alongside the
+  // subject. Hidden visually but read by Gmail / iOS Mail / Outlook.
+  var preheader = clientName + " is due a report, here is a gentle reminder.";
   return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gentle reminder, ${clientName} is due a report</title></head>
-<body style="margin:0;padding:0;background:#070E16;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#070E16;padding:40px 16px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">
-      <tr><td style="padding:40px 40px 28px;text-align:center;">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="dark light">
+<meta name="supported-color-schemes" content="dark light">
+<title>Gentle reminder, ${clientName} is due a report</title>
+<!--[if mso]>
+<xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml>
+<style>table,td,div,p,a{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif!important;}</style>
+<![endif]-->
+<style>
+  /* Resets — keep clients from inheriting host page styles */
+  body, table, td, p, a, div { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+  img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+  a { text-decoration: none; }
+  /* Mobile responsiveness, applied by every client that respects <style>
+     (Apple Mail, iOS Mail, Gmail iOS/Android, Outlook iOS, web Gmail in
+     some viewports). Outlook desktop ignores media queries but its
+     fixed-width body is fine on desktop anyway. */
+  @media only screen and (max-width: 600px) {
+    .container { width: 100% !important; max-width: 100% !important; border-radius: 14px !important; }
+    .pad-x { padding-left: 22px !important; padding-right: 22px !important; }
+    .pad-top { padding-top: 28px !important; }
+    .pad-bottom { padding-bottom: 22px !important; }
+    .headline { font-size: 22px !important; line-height: 1.3 !important; }
+    .body-text { font-size: 14px !important; line-height: 1.7 !important; }
+    .small-text { font-size: 13px !important; }
+    .eyebrow { letter-spacing: 2px !important; }
+    .brand-mark { font-size: 22px !important; letter-spacing: 3px !important; }
+    .logo-top { width: 72px !important; height: 72px !important; }
+    .footer-row { display: block !important; width: 100% !important; padding: 0 !important; text-align: center !important; }
+    .footer-row-img { padding: 0 0 12px 0 !important; width: 100% !important; }
+    .footer-row img { margin: 0 auto !important; }
+    .cta-btn { display: block !important; padding: 13px 28px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#070E16;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<!-- Preheader: hidden inbox-preview text -->
+<div style="display:none;font-size:1px;color:#070E16;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${preheader}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#070E16;">
+  <tr><td align="center" style="padding:32px 12px;">
+    <!--[if mso]>
+    <table role="presentation" align="center" width="620" cellpadding="0" cellspacing="0" border="0"><tr><td>
+    <![endif]-->
+    <table role="presentation" class="container" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background:#0F1820;background-image:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">
+      <tr><td class="pad-x pad-top" style="padding:40px 40px 28px;text-align:center;">
         <div style="text-align:center;margin-bottom:18px;">
-          <img src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>
+          <img src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" class="logo-top" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>
         </div>
-        <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
-        <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
+        <div class="eyebrow" style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
+        <div class="brand-mark" style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
           <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
         </div>
         <div style="font-size:10px;color:#8B7FA3;letter-spacing:3px;margin-top:6px;text-transform:uppercase;font-weight:600;">A gentle nudge, not a telling off</div>
       </td></tr>
 
-      <tr><td style="padding:0 40px;">
-        <div style="height:1px;background:linear-gradient(90deg,transparent,#F96203,transparent);"></div>
+      <tr><td class="pad-x" style="padding:0 40px;">
+        <div style="height:1px;background:linear-gradient(90deg,transparent,#F96203,transparent);line-height:1px;font-size:1px;">&nbsp;</div>
       </td></tr>
 
-      <tr><td style="padding:36px 40px 12px;">
-        <div style="font-size:11px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Reporting check</div>
-        <div style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">${headline}</div>
-        <div style="font-size:15px;color:#FFFBF8;line-height:1.7;">Hi team,</div>
-        <div style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
+      <tr><td class="pad-x" style="padding:36px 40px 12px;">
+        <div class="eyebrow" style="font-size:11px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Reporting check</div>
+        <div class="headline" style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">${headline}</div>
+        <div class="body-text" style="font-size:15px;color:#FFFBF8;line-height:1.7;">Hi team,</div>
+        <div class="body-text" style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
           Our client-facing SLA is one report every 7 days. ${sentByLine}
         </div>
-        <div style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
+        <div class="body-text" style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
           ${actionLine}
         </div>
       </td></tr>
 
-      <tr><td style="padding:24px 40px 8px;" align="center">
+      <tr><td class="pad-x" style="padding:24px 40px 8px;" align="center">
         <!--[if mso]>
         <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${dashboardUrl}" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="28%" stroke="f" fillcolor="#FF5A1F">
           <w:anchorlock/>
@@ -232,27 +278,27 @@ function buildNudgeHtml(opts) {
         </v:roundrect>
         <![endif]-->
         <!--[if !mso]><!-->
-        <a href="${dashboardUrl}" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:10px;color:#ffffff;display:inline-block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;padding:11px 28px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>
+        <a href="${dashboardUrl}" class="cta-btn" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:10px;color:#ffffff;display:inline-block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;padding:11px 28px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>
         <!--<![endif]-->
       </td></tr>
 
-      <tr><td style="padding:28px 40px 4px;">
-        <div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;">SAMI</div>
+      <tr><td class="pad-x" style="padding:28px 40px 4px;">
+        <div class="small-text" style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;">SAMI</div>
         <div style="font-size:11px;color:#F96203;font-weight:700;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">AI EXPERT AGENT</div>
         <div style="font-size:10px;color:#8B7FA3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">GAS MEDIA DEPARTMENT</div>
       </td></tr>
 
-      <tr><td style="padding:28px 40px 8px;">
-        <div style="height:1px;background:rgba(168,85,247,0.16);"></div>
+      <tr><td class="pad-x" style="padding:28px 40px 8px;">
+        <div style="height:1px;background:rgba(168,85,247,0.16);line-height:1px;font-size:1px;">&nbsp;</div>
       </td></tr>
 
-      <tr><td style="padding:20px 40px 32px;">
+      <tr><td class="pad-x pad-bottom" style="padding:20px 40px 32px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
           <tr>
-            <td valign="middle" style="width:56px;padding-right:14px;">
+            <td class="footer-row footer-row-img" valign="middle" style="width:56px;padding-right:14px;">
               <img src="${logoUrl}" alt="GAS Marketing" width="48" height="48" border="0" style="width:48px;height:48px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>
             </td>
-            <td valign="middle">
+            <td class="footer-row" valign="middle">
               <div style="font-size:12px;color:#FFFBF8;font-weight:800;letter-spacing:3px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
                 <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
               </div>
@@ -265,6 +311,9 @@ function buildNudgeHtml(opts) {
       </td></tr>
 
     </table>
+    <!--[if mso]>
+    </td></tr></table>
+    <![endif]-->
   </td></tr>
 </table>
 </body>
