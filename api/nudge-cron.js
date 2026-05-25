@@ -198,6 +198,9 @@ function buildNudgeHtml(opts) {
   <tr><td align="center">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">
       <tr><td style="padding:40px 40px 28px;text-align:center;">
+        <div style="text-align:center;margin-bottom:18px;">
+          <img src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>
+        </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
           <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
@@ -210,7 +213,7 @@ function buildNudgeHtml(opts) {
       </td></tr>
 
       <tr><td style="padding:36px 40px 12px;">
-        <div style="font-size:11px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Reporting SLA check</div>
+        <div style="font-size:11px;color:#8B7FA3;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;">Reporting check</div>
         <div style="font-size:26px;font-weight:900;color:#FFFBF8;line-height:1.25;margin-bottom:14px;">${headline}</div>
         <div style="font-size:15px;color:#FFFBF8;line-height:1.7;">Hi team,</div>
         <div style="font-size:14px;color:rgba(255,251,248,0.82);line-height:1.75;margin-top:14px;">
@@ -221,23 +224,22 @@ function buildNudgeHtml(opts) {
         </div>
       </td></tr>
 
-      <tr><td style="padding:28px 40px 8px;" align="center">
+      <tr><td style="padding:24px 40px 8px;" align="center">
         <!--[if mso]>
-        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${dashboardUrl}" style="height:50px;v-text-anchor:middle;width:240px;" arcsize="24%" stroke="f" fillcolor="#FF5A1F">
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${dashboardUrl}" style="height:40px;v-text-anchor:middle;width:180px;" arcsize="28%" stroke="f" fillcolor="#FF5A1F">
           <w:anchorlock/>
-          <center style="color:#ffffff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">OPEN DASHBOARD</center>
+          <center style="color:#ffffff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;">OPEN DASHBOARD</center>
         </v:roundrect>
         <![endif]-->
         <!--[if !mso]><!-->
-        <a href="${dashboardUrl}" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:12px;color:#ffffff;display:inline-block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;font-weight:900;letter-spacing:3px;padding:16px 42px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>
+        <a href="${dashboardUrl}" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:10px;color:#ffffff;display:inline-block;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;padding:11px 28px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>
         <!--<![endif]-->
-        <div style="margin-top:14px;font-size:10px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:600;">Pull the latest, click Share, pick ${clientName}, send</div>
       </td></tr>
 
       <tr><td style="padding:28px 40px 4px;">
-        <div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>
-        <div style="font-size:11px;color:#F96203;font-weight:700;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>
-        <div style="font-size:10px;color:#8B7FA3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">GAS Media Department</div>
+        <div style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;">SAMI</div>
+        <div style="font-size:11px;color:#F96203;font-weight:700;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">AI EXPERT AGENT</div>
+        <div style="font-size:10px;color:#8B7FA3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">GAS MEDIA DEPARTMENT</div>
       </td></tr>
 
       <tr><td style="padding:28px 40px 8px;">
@@ -254,7 +256,6 @@ function buildNudgeHtml(opts) {
               <div style="font-size:12px;color:#FFFBF8;font-weight:800;letter-spacing:3px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
                 <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
               </div>
-              <div style="font-size:10px;color:#8B7FA3;letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;">Automated SLA watcher</div>
               <div style="font-size:11px;color:#8B7FA3;margin-top:6px;">
                 <a href="mailto:grow@gasmarketing.co.za" style="color:#8B7FA3;text-decoration:none;">grow@gasmarketing.co.za</a>
               </div>
