@@ -3923,8 +3923,9 @@ export default function MediaOnGas(){
     // Summary tab also renders per-stage demographic blocks under each
     // HIGHLIGHTS section, so fetch demoData whenever the user is on Summary
     // or Demographics. Other tabs skip to keep load time low.
-    if((tab!=="demographics"&&tab!=="summary")||!isAuthed())return;
-    if(demoData||demoLoading)return;
+    try{console.log("[GAS demo USEEFFECT fired]",{tab:tab,hasView:!!viewToken,hasSession:!!session,isAuthed:!!session||!!viewToken,demoData:!!demoData,demoLoading:demoLoading,df:df,dt:dt});}catch(_){}
+    if((tab!=="demographics"&&tab!=="summary")||!isAuthed()){try{console.log("[GAS demo USEEFFECT bail tab/auth]",{tab:tab,isAuthed:!!session||!!viewToken});}catch(_){}return;}
+    if(demoData||demoLoading){try{console.log("[GAS demo USEEFFECT bail dataLoad]",{demoData:!!demoData,demoLoading:demoLoading});}catch(_){}return;}
     setDemoLoading(true);setDemoErr("");
     var h=authHeaders();
     try{console.log("[GAS demo FETCH start]",{tab:tab,df:df,dt:dt,hasView:!!viewToken,hasSession:!!session});}catch(_){}
