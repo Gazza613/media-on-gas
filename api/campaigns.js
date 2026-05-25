@@ -340,29 +340,48 @@ export default async function handler(req, res) {
   // to specific campaigns (case-insensitive name match).
   if (req.query.optgoalprobe === "1" && isAdminOrSuperadmin(req.authPrincipal || {})) {
     var filter = String(req.query.campaignFilter || "").toLowerCase();
+    var onlyTag = String(req.query.account || "").toLowerCase();
     var probe = [];
-    for (var ai = 0; ai < metaAccounts.length; ai++) {
-      var acc = metaAccounts[ai];
+    // Per-account probe with minimal fields to stay under Meta rate limits.
+    // `account=momo` (or any substring) narrows to one account; omitted hits all.
+    var accountsToProbe = onlyTag
+      ? metaAccounts.filter(function(a) { return a.name.toLowerCase().indexOf(onlyTag) >= 0; })
+      : metaAccounts;
+    for (var ai = 0; ai < accountsToProbe.length; ai++) {
+      var acc = accountsToProbe[ai];
       var accOut = { account: acc.name, accountId: acc.id, adSets: [], errors: [] };
       try {
-        // Fetch all ad sets with their campaign name + optimization_goal +
-        // the parent campaign's objective. Single query, all relevant fields.
-        var next = "https://graph.facebook.com/v25.0/" + acc.id + "/adsets?fields=id,name,campaign_id,optimization_goal,effective_status,billing_event,bid_strategy,campaign{id,name,objective,buying_type,special_ad_categories}&limit=200&access_token=" + metaToken;
-        var pages = 0;
-        while (next && pages < 15) {
-          pages++;
-          var r = await fetch(next);
-          var d = await r.json();
-          if (d && d.error) { accOut.errors.push(d.error.message || d.error.type); break; }
-          (d.data || []).forEach(function(s) {
-            var cn = (s.campaign && s.campaign.name) || "";
-            if (filter && cn.toLowerCase().indexOf(filter) < 0) return;
-            var st = String(s.effective_status || "").toUpperCase();
-            if (st === "DELETED" || st === "ARCHIVED") return;
+        // Two-step: first list active campaigns matching the name filter (small payload),
+        // then for those campaigns fetch their ad sets' optimization_goal. Avoids pulling
+        // every ad set across the account.
+        var cUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/campaigns?fields=id,name,objective,effective_status&limit=200&access_token=" + metaToken;
+        var cr = await fetch(cUrl);
+        var cd = await cr.json();
+        if (cd && cd.error) { accOut.errors.push("campaigns: " + (cd.error.message || cd.error.type)); probe.push(accOut); continue; }
+        var matching = (cd.data || []).filter(function(c) {
+          var nm = (c.name || "").toLowerCase();
+          var st = String(c.effective_status || "").toUpperCase();
+          if (st === "DELETED" || st === "ARCHIVED") return false;
+          return !filter || nm.indexOf(filter) >= 0;
+        });
+        accOut.campaignsMatched = matching.length;
+        // For each matching campaign, fetch its ad sets via the campaign edge
+        for (var ci = 0; ci < matching.length; ci++) {
+          var c = matching[ci];
+          var asUrl = "https://graph.facebook.com/v25.0/" + c.id + "/adsets?fields=id,name,optimization_goal,effective_status,billing_event,bid_strategy&limit=50&access_token=" + metaToken;
+          var ar = await fetch(asUrl);
+          var ad = await ar.json();
+          if (ad && ad.error) {
+            accOut.errors.push("adsets for " + c.name + ": " + (ad.error.message || ad.error.type));
+            continue;
+          }
+          (ad.data || []).forEach(function(s) {
+            var st2 = String(s.effective_status || "").toUpperCase();
+            if (st2 === "DELETED" || st2 === "ARCHIVED") return;
             accOut.adSets.push({
-              campaignName: cn,
-              campaignId: s.campaign_id,
-              campaignObjective: (s.campaign && s.campaign.objective) || "",
+              campaignName: c.name,
+              campaignId: c.id,
+              campaignObjective: c.objective || "",
               adsetName: s.name,
               adsetId: s.id,
               optimization_goal: s.optimization_goal || "(null)",
@@ -371,12 +390,11 @@ export default async function handler(req, res) {
               effective_status: s.effective_status || ""
             });
           });
-          next = d.paging && d.paging.next ? d.paging.next : null;
         }
       } catch (e) { accOut.errors.push(String(e && e.message || e)); }
       probe.push(accOut);
     }
-    res.status(200).json({ optgoalprobe: true, filter: filter, accounts: probe });
+    res.status(200).json({ optgoalprobe: true, filter: filter, accountOnly: onlyTag, accounts: probe });
     return;
   }
 
