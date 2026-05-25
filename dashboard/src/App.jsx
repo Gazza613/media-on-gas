@@ -3922,20 +3922,16 @@ export default function MediaOnGas(){
   useEffect(function(){
     // Summary tab also renders per-stage demographic blocks under each
     // HIGHLIGHTS section, so fetch demoData whenever the user is on Summary
-    // or Demographics. Other tabs skip to keep load time low.
-    try{console.log("[GAS demo USEEFFECT fired]",{tab:tab,hasView:!!viewToken,hasSession:!!session,isAuthed:!!session||!!viewToken,demoData:!!demoData,demoLoading:demoLoading,df:df,dt:dt});}catch(_){}
-    if((tab!=="demographics"&&tab!=="summary")||!isAuthed()){try{console.log("[GAS demo USEEFFECT bail tab/auth]",{tab:tab,isAuthed:!!session||!!viewToken});}catch(_){}return;}
-    if(demoData||demoLoading){try{console.log("[GAS demo USEEFFECT bail dataLoad]",{demoData:!!demoData,demoLoading:demoLoading});}catch(_){}return;}
+    // or Demographics. Other tabs skip to keep load time low. Client share-link
+    // also gets a direct kick from the URL-parse handler so the data lands
+    // even if the dep-tracking on this effect mis-fires.
+    if((tab!=="demographics"&&tab!=="summary")||!isAuthed())return;
+    if(demoData||demoLoading)return;
     setDemoLoading(true);setDemoErr("");
     var h=authHeaders();
-    try{console.log("[GAS demo FETCH start]",{tab:tab,df:df,dt:dt,hasView:!!viewToken,hasSession:!!session});}catch(_){}
     fetch(API+"/api/demographics?from="+df+"&to="+dt,{headers:h})
       .then(function(r){return r.ok?r.json():{error:"HTTP "+r.status};})
-      .then(function(d){
-        setDemoLoading(false);
-        try{console.log("[GAS demo FETCH done]",{err:d&&d.error,ageGenderRows:d&&d.ageGender?d.ageGender.length:0,regionRows:d&&d.region?d.region.length:0,deviceRows:d&&d.device?d.device.length:0});}catch(_){}
-        if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}
-      })
+      .then(function(d){setDemoLoading(false);if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
       .catch(function(err){setDemoLoading(false);setDemoErr("Connection error");console.error("Demo API error",err);});
   },[tab,df,dt,session,viewToken,demoData,demoLoading]);
   useEffect(function(){
@@ -5122,29 +5118,10 @@ export default function MediaOnGas(){
   // Populate shared demoBlocks / demoFallback once per render so Summary and
   // Demographics tabs can read individual stage blocks. Runs regardless of
   // active tab because it lives at the component body, not inside tab JSX.
-  try{if(typeof window!=="undefined"){window.__gasRenderCount=(window.__gasRenderCount||0)+1;if(window.__gasRenderCount<=8){console.log("[GAS render #"+window.__gasRenderCount+"]",{demoData:!!demoData,demoErr:demoErr,demoLoading:demoLoading,tab:tab,viewToken:!!viewToken,viewTokenLen:String(viewToken||"").length,campaigns:campaigns.length,selected:selected.length,df:df,dt:dt,session:!!session});}}}catch(_){}
   if(demoData&&!demoErr&&!demoLoading)(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
             var inSel=function(r){return selSet[String(r.campaignId||"")]||selSet[String(r.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")];};
-            try{
-              var _agAll=(demoData.ageGender||[]).length;
-              var _agHit=(demoData.ageGender||[]).filter(inSel).length;
-              if(typeof window!=="undefined"&&!window.__gasDemoDiagLogged){
-                window.__gasDemoDiagLogged=true;
-                console.log("[GAS demo IIFE]",{
-                  campaigns:campaigns.length,
-                  selected:selected.length,
-                  selectedSample:selected.slice(0,3),
-                  sel:sel.length,
-                  selSetKeys:Object.keys(selSet).length,
-                  selSetSample:Object.keys(selSet).slice(0,6),
-                  agAll:_agAll,
-                  agHit:_agHit,
-                  agRowSample:(demoData.ageGender||[]).slice(0,2).map(function(r){return{cid:r.campaignId,plat:r.platform};})
-                });
-              }
-            }catch(e){}
             var agRowsRaw=(demoData.ageGender||[]).filter(inSel);
             var regRows=(demoData.region||[]).filter(inSel);
             var devRows=(demoData.device||[]).filter(inSel);

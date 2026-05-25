@@ -1514,15 +1514,18 @@ export default async function handler(req, res) {
   if (principal.role === "client") {
     var ids = (principal.allowedCampaignIds || []).map(String);
     // Strict ID-only match, no campaignName fallback, which used to cross-match
-    // same-named campaigns across different clients' ad accounts.
+    // same-named campaigns across different clients' ad accounts. ALSO strip
+    // the `google_` prefix: JWT camps use the dashboard form (`google_12345`)
+    // but Google ads come back from the API with the raw numeric campaignId,
+    // so the filter must accept both forms or every Google ad gets dropped.
     var allowedSet = {};
     ids.forEach(function(x) {
       allowedSet[x] = true;
-      allowedSet[x.replace(/_(facebook|instagram)$/, "")] = true;
+      allowedSet[x.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "")] = true;
     });
     var filtered = allAds.filter(function(a) {
       var cid = String(a.campaignId || "");
-      var rawCid = cid.replace(/_(facebook|instagram)$/, "");
+      var rawCid = cid.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
       return allowedSet[cid] === true || allowedSet[rawCid] === true;
     });
     res.status(200).json({ ads: filtered, total: filtered.length });
