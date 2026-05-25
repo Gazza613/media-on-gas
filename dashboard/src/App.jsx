@@ -3927,9 +3927,14 @@ export default function MediaOnGas(){
     if(demoData||demoLoading)return;
     setDemoLoading(true);setDemoErr("");
     var h=authHeaders();
+    try{console.log("[GAS demo FETCH start]",{tab:tab,df:df,dt:dt,hasView:!!viewToken,hasSession:!!session});}catch(_){}
     fetch(API+"/api/demographics?from="+df+"&to="+dt,{headers:h})
       .then(function(r){return r.ok?r.json():{error:"HTTP "+r.status};})
-      .then(function(d){setDemoLoading(false);if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
+      .then(function(d){
+        setDemoLoading(false);
+        try{console.log("[GAS demo FETCH done]",{err:d&&d.error,ageGenderRows:d&&d.ageGender?d.ageGender.length:0,regionRows:d&&d.region?d.region.length:0,deviceRows:d&&d.device?d.device.length:0});}catch(_){}
+        if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}
+      })
       .catch(function(err){setDemoLoading(false);setDemoErr("Connection error");console.error("Demo API error",err);});
   },[tab,df,dt,session,viewToken,demoData,demoLoading]);
   useEffect(function(){
@@ -5083,6 +5088,7 @@ export default function MediaOnGas(){
   // Populate shared demoBlocks / demoFallback once per render so Summary and
   // Demographics tabs can read individual stage blocks. Runs regardless of
   // active tab because it lives at the component body, not inside tab JSX.
+  try{if(typeof window!=="undefined"&&!window.__gasRenderDiagLogged){window.__gasRenderDiagLogged=true;console.log("[GAS render gate]",{demoData:!!demoData,demoErr:demoErr,demoLoading:demoLoading,tab:tab,viewToken:!!viewToken,campaigns:campaigns.length,selected:selected.length});}}catch(_){}
   if(demoData&&!demoErr&&!demoLoading)(function(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
