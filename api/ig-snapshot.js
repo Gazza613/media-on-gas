@@ -101,24 +101,51 @@ export default async function handler(req, res) {
     return;
   }
 
-  // GET — admin auth, return recent snapshots.
+  // GET — return recent snapshots. Admins see every IG business account;
+  // clients see only IG accounts whose username matches a token in their
+  // allowed-campaign-name list. Same shape as filterPagesForPrincipal.
   if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
   if (!(await checkAuth(req, res))) return;
-  // Admin-only: these snapshots span every IG business account across
-  // all clients. A client share-token authenticates via checkAuth but
-  // has no legitimate reason to read cross-client follower history.
   var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role !== "admin" && principal.role !== "superadmin") {
-    res.status(403).json({ error: "Admin-only endpoint" });
-    return;
-  }
+
+  var scopeSnapshot = function(snap) {
+    if (!snap || principal.role !== "client") return snap;
+    var names = principal.allowedCampaignNames || [];
+    if (names.length === 0) return { date: snap.date, accounts: {} };
+    var normalize = function(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " "); };
+    var stopWords = [
+      "campaign", "facebook", "instagram", "tiktok", "paid", "social",
+      "funnel", "cycle", "leads", "lead", "follower", "like", "appinstall",
+      "traffic", "cold", "warm", "display", "search", "promotion", "promo",
+      "april", "may", "june", "july", "august", "september", "october",
+      "november", "december", "january", "february", "march",
+      "2024", "2025", "2026"
+    ];
+    var significant = function(s) {
+      return normalize(s).split(/\s+/).filter(function(w) {
+        return w.length >= 4 && stopWords.indexOf(w) < 0;
+      });
+    };
+    var allowedTokens = {};
+    names.forEach(function(n) { significant(n).forEach(function(w) { allowedTokens[w] = true; }); });
+    if (Object.keys(allowedTokens).length === 0) return { date: snap.date, accounts: {} };
+    var out = {};
+    Object.keys(snap.accounts || {}).forEach(function(id) {
+      var a = snap.accounts[id] || {};
+      var pgTokens = significant(a.username || a.pageName || "");
+      for (var i = 0; i < pgTokens.length; i++) {
+        if (allowedTokens[pgTokens[i]]) { out[id] = a; return; }
+      }
+    });
+    return { date: snap.date, accounts: out };
+  };
 
   if (req.query.date) {
     var snap = await readSnapshot(String(req.query.date));
-    res.status(200).json({ snapshot: snap });
+    res.status(200).json({ snapshot: scopeSnapshot(snap) });
     return;
   }
   var days = req.query.days ? parseInt(req.query.days) : 7;
   var snaps = await readRecent(days);
-  res.status(200).json({ snapshots: snaps });
+  res.status(200).json({ snapshots: (snaps || []).map(scopeSnapshot) });
 }

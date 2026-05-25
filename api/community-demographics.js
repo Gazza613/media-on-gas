@@ -1,6 +1,36 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 
+// Token-match for scoping owned-community pages to a client share-link.
+// Mirrors filterPagesForPrincipal in _auth.js so the dashboard's page match
+// logic stays consistent across endpoints. Returns true when the page name
+// shares any 4+ char significant token with any allowed campaign name.
+function pageMatchesPrincipal(pageName, principal) {
+  if (!principal || principal.role !== "client") return true;
+  var names = principal.allowedCampaignNames || [];
+  if (names.length === 0) return false;
+  var normalize = function(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " "); };
+  var stopWords = [
+    "campaign", "facebook", "instagram", "tiktok", "paid", "social",
+    "funnel", "cycle", "leads", "lead", "follower", "like", "appinstall",
+    "traffic", "cold", "warm", "display", "search", "promotion", "promo",
+    "april", "may", "june", "july", "august", "september", "october",
+    "november", "december", "january", "february", "march",
+    "2024", "2025", "2026"
+  ];
+  var significant = function(s) {
+    return normalize(s).split(/\s+/).filter(function(w) {
+      return w.length >= 4 && stopWords.indexOf(w) < 0;
+    });
+  };
+  var allowedTokens = {};
+  names.forEach(function(n) { significant(n).forEach(function(w) { allowedTokens[w] = true; }); });
+  if (Object.keys(allowedTokens).length === 0) return false;
+  var pgTokens = significant(pageName);
+  for (var i = 0; i < pgTokens.length; i++) if (allowedTokens[pgTokens[i]]) return true;
+  return false;
+}
+
 // Community member (owned audience) demographics per platform.
 // Distinct from /api/demographics, which returns PAID audience demographics,
 // this endpoint pulls the follower / page-fan demographic composition so
@@ -207,47 +237,58 @@ function aggregateByPlatform(entries, platform) {
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
-  // Admin-only. The endpoint pulls owned-community demographics across every
-  // configured Meta ad account and IG business account, plus the TikTok
-  // advertiser, with no per-client scope filter, so a client JWT must not
-  // be allowed to read this cross-tenant view. The dashboard's UI only
-  // calls this from admin code paths anyway, so the gate doesn't change
-  // behaviour, just blocks the direct-URL bypass.
+  // Owned-community demographics. Admins see every configured Meta ad
+  // account + IG business account + the TikTok advertiser; clients see only
+  // the pages whose names match a campaign in their allowlist (same token
+  // match as filterPagesForPrincipal in _auth.js), so a share link cannot
+  // expose cross-tenant follower demographics.
   var principal = req.authPrincipal || { role: "admin" };
-  if (principal.role !== "admin" && principal.role !== "superadmin") {
-    res.status(403).json({ error: "Admin-only endpoint" });
-    return;
+
+  // Raw entries are cached once per process under a single key; the per-
+  // principal filter runs at response time, so a client and an admin share
+  // the upstream Meta/TikTok fetch cost without sharing visibility.
+  var rawCacheKey = "v2|raw";
+  var rawCached = demoCache[rawCacheKey];
+  var entries;
+  if (rawCached && Date.now() - rawCached.ts < DEMO_CACHE_TTL_MS) {
+    entries = rawCached.entries;
+  } else {
+    var metaToken = process.env.META_ACCESS_TOKEN;
+    var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
+    var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
+    try {
+      var fbPagesP = metaToken ? fetchFacebookCommunity(metaToken) : Promise.resolve([]);
+      var igPagesP = metaToken ? fetchInstagramCommunity(metaToken) : Promise.resolve([]);
+      var ttPagesP = ttToken && ttAdvId ? fetchTikTokCommunity(ttToken, ttAdvId) : Promise.resolve([]);
+      var results = await Promise.all([fbPagesP, igPagesP, ttPagesP]);
+      entries = [].concat(results[0], results[1], results[2]);
+      demoCache[rawCacheKey] = { entries: entries, ts: Date.now() };
+    } catch (err) {
+      console.error("community-demographics error", err && err.message);
+      res.status(200).json({ available: false, reason: "Community demographics fetch failed, " + (err && err.message || "unknown") });
+      return;
+    }
   }
 
-  // Cache key includes role so a future scope expansion doesn't bleed
-  // admin data to other roles via a shared cache slot.
-  var cacheKey = "v1|" + (principal.role || "admin");
-  var cached = demoCache[cacheKey];
-  if (cached && Date.now() - cached.ts < DEMO_CACHE_TTL_MS) {
-    return res.status(200).json(cached.data);
+  // Per-principal scope filter. Admin path is identity. TikTok currently has
+  // a single advertiser-wide row so we keep it visible when the client has
+  // ANY TikTok-campaign match in their allowlist (the TikTok community is
+  // the whole owned audience, not per-campaign anyway).
+  var scoped = entries;
+  if (principal.role === "client") {
+    var hasTtMatch = (principal.allowedCampaignNames || []).some(function(n) {
+      return /tiktok/i.test(String(n || ""));
+    });
+    scoped = entries.filter(function(e) {
+      if (e.platform === "TikTok") return hasTtMatch;
+      return pageMatchesPrincipal(e.pageName || "", principal);
+    });
   }
 
-  var metaToken = process.env.META_ACCESS_TOKEN;
-  var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
-  var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
-
-  try {
-    var fbPagesP = metaToken ? fetchFacebookCommunity(metaToken) : Promise.resolve([]);
-    var igPagesP = metaToken ? fetchInstagramCommunity(metaToken) : Promise.resolve([]);
-    var ttPagesP = ttToken && ttAdvId ? fetchTikTokCommunity(ttToken, ttAdvId) : Promise.resolve([]);
-    var results = await Promise.all([fbPagesP, igPagesP, ttPagesP]);
-    var all = [].concat(results[0], results[1], results[2]);
-
-    var payload = {
-      available: true,
-      facebook: aggregateByPlatform(all, "Facebook"),
-      instagram: aggregateByPlatform(all, "Instagram"),
-      tiktok: aggregateByPlatform(all, "TikTok")
-    };
-    demoCache[cacheKey] = { data: payload, ts: Date.now() };
-    res.status(200).json(payload);
-  } catch (err) {
-    console.error("community-demographics error", err && err.message);
-    res.status(200).json({ available: false, reason: "Community demographics fetch failed, " + (err && err.message || "unknown") });
-  }
+  res.status(200).json({
+    available: true,
+    facebook: aggregateByPlatform(scoped, "Facebook"),
+    instagram: aggregateByPlatform(scoped, "Instagram"),
+    tiktok: aggregateByPlatform(scoped, "TikTok")
+  });
 }

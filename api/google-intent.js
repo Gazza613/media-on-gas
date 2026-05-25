@@ -59,40 +59,46 @@ export default async function handler(req, res) {
   if (!from || !to) return res.status(400).json({ error: "from and to required" });
 
   var principal = req.authPrincipal || { role: "admin" };
-  // Clients only need aggregated intent data for campaigns in their allowlist.
-  // Rather than building a per-campaign GAQL filter (Google supports it but
-  // it complicates the search_term_view query), we gate the whole endpoint
-  // to admins for now. If a client-visible version is needed later, we filter
-  // at result time using segments.campaign_id in each query.
-  if (principal.role !== "admin" && principal.role !== "superadmin") {
-    return res.status(200).json({
-      available: false,
-      reason: "Google intent signals are admin-only for now. Client flows continue to use the aggregated Google row in /api/demographics."
-    });
-  }
 
   // Campaign scoping. The dashboard passes the current selection as
   // &campaignIds=... (suffixed forms like "google_123", plus stripped raw
-  // numeric variants). We accept anything, but only the Google campaign ids
-  // are relevant to GAQL filters. Extract them here, then build an
-  // "AND campaign.id IN (...)" clause used by every query below. If the
-  // caller passed a selection but none of them were Google campaigns, return
-  // available:false rather than quietly aggregating across the whole account,
-  // that was the bug (e.g. selecting Willowbrook showed MoMo's Google data
-  // because no filter was applied).
+  // numeric variants). Only Google ids are relevant to the GAQL filter.
   var rawIds = String(req.query.campaignIds || "").split(",").map(function(s){return s.trim();}).filter(Boolean);
   var hasSelection = rawIds.length > 0;
   var googleIds = [];
   rawIds.forEach(function(s){
     var m = /^google_(\d+)$/.exec(s);
     if (m) { if (googleIds.indexOf(m[1]) < 0) googleIds.push(m[1]); return; }
-    // Pure numeric in the selection list could be a Google id if the caller
-    // also stripped the prefix (as the dashboard does). We accept it only if
-    // we haven't already gathered prefixed ones, to avoid matching Meta
-    // numeric ids. In practice the dashboard always sends both forms, so the
-    // prefixed branch above will have populated googleIds first.
   });
-  if (hasSelection && googleIds.length === 0) {
+
+  // Client share-link: intersect with allowlist so a stale client token can't
+  // probe arbitrary Google campaigns by sending campaignIds the AM didn't authorize.
+  if (principal.role === "client") {
+    var allowGoogle = {};
+    (principal.allowedCampaignIds || []).forEach(function(id){
+      var s = String(id);
+      var m = /^google_(\d+)$/.exec(s);
+      if (m) { allowGoogle[m[1]] = true; return; }
+      if (/^\d+$/.test(s)) allowGoogle[s] = true;
+    });
+    if (Object.keys(allowGoogle).length === 0) {
+      return res.status(200).json({
+        available: false,
+        reason: "No Google Ads campaigns in this client's allowlist"
+      });
+    }
+    if (googleIds.length === 0) {
+      googleIds = Object.keys(allowGoogle);
+    } else {
+      googleIds = googleIds.filter(function(id){ return allowGoogle[id]; });
+    }
+    if (googleIds.length === 0) {
+      return res.status(200).json({
+        available: false,
+        reason: "Selected Google Ads campaigns are outside this client's allowlist"
+      });
+    }
+  } else if (hasSelection && googleIds.length === 0) {
     return res.status(200).json({
       available: false,
       reason: "No Google Ads campaigns in the current selection"
@@ -100,9 +106,10 @@ export default async function handler(req, res) {
   }
   var campaignFilter = googleIds.length > 0 ? " AND campaign.id IN (" + googleIds.join(",") + ")" : "";
 
-  // Cache key includes role + campaign filter so different selections do not
-  // share a slot. The role axis is defensive, the admin gate above already
-  // blocks non-admin callers but a future relaxation won't bleed data.
+  // Cache key includes role + campaign filter so different selections (and
+  // any future role-based shaping) do not share a slot. Clients hit the same
+  // underlying Google data but their campaign-id scope is intersected above,
+  // so the slot is keyed on the resulting id set.
   var cacheKey = "v2|" + (principal.role || "admin") + "|" + from + "|" + to + "|" + googleIds.slice().sort().join(",");
   var cached = intentCache[cacheKey];
   if (cached && Date.now() - cached.ts < INTENT_TTL_MS) {
