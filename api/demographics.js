@@ -803,13 +803,25 @@ export default async function handler(req, res) {
     var meta = pulls[0], tt = pulls[1], google = pulls[2];
 
     // Client-scoped: strip rows for campaigns outside the allowlist.
+    // Tokens carry the dashboard's suffixed form (e.g. `123_facebook`,
+    // `google_12345`) but the row campaignIds use the raw platform id
+    // (Meta: numeric, Google: numeric without prefix, TikTok: numeric),
+    // so the allowSet must include BOTH forms — without the google_
+    // strip every Google device/age/region/city row was silently dropped
+    // from the client view. That broke the Top Brand denominator
+    // (Android Phone showed ~97% on client vs ~77% on admin because
+    // Google's mobile/desktop/tablet rows were missing from the
+    // brandAllTotal denominator).
     if (principal.role === "client") {
       var allowed = {}; (principal.allowedCampaignIds || []).forEach(function(id) {
         var s = String(id);
         allowed[s] = true;
-        allowed[s.replace(/_facebook$/, "").replace(/_instagram$/, "")] = true;
+        allowed[s.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "")] = true;
       });
-      var scope = function(row) { return allowed[String(row.campaignId || "")]; };
+      var scope = function(row) {
+        var cid = String(row.campaignId || "");
+        return allowed[cid] === true || allowed[cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "")] === true;
+      };
       meta = { ageGender: meta.ageGender.filter(scope), region: meta.region.filter(scope), device: meta.device.filter(scope) };
       tt = { ageGender: tt.ageGender.filter(scope), region: tt.region.filter(scope), device: tt.device.filter(scope) };
       google = { ageGender: google.ageGender.filter(scope), region: google.region.filter(scope), device: google.device.filter(scope), city: google.city.filter(scope) };
