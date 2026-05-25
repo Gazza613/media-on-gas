@@ -331,6 +331,55 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Admin-only ad-set optimization_goal probe. Definitively answers
+  // "what does Meta actually return as optimization_goal for this
+  // campaign's ad sets?" without going through the cached _pageLikeOpt
+  // map. Returns the raw values per ad set so we can see whether MoMo's
+  // Like&Follow campaigns are configured as PAGE_LIKES, POST_ENGAGEMENT,
+  // or something else entirely. Pass &campaignFilter=substring to limit
+  // to specific campaigns (case-insensitive name match).
+  if (req.query.optgoalprobe === "1" && isAdminOrSuperadmin(req.authPrincipal || {})) {
+    var filter = String(req.query.campaignFilter || "").toLowerCase();
+    var probe = [];
+    for (var ai = 0; ai < metaAccounts.length; ai++) {
+      var acc = metaAccounts[ai];
+      var accOut = { account: acc.name, accountId: acc.id, adSets: [], errors: [] };
+      try {
+        // Fetch all ad sets with their campaign name + optimization_goal +
+        // the parent campaign's objective. Single query, all relevant fields.
+        var next = "https://graph.facebook.com/v25.0/" + acc.id + "/adsets?fields=id,name,campaign_id,optimization_goal,effective_status,billing_event,bid_strategy,campaign{id,name,objective,buying_type,special_ad_categories}&limit=200&access_token=" + metaToken;
+        var pages = 0;
+        while (next && pages < 15) {
+          pages++;
+          var r = await fetch(next);
+          var d = await r.json();
+          if (d && d.error) { accOut.errors.push(d.error.message || d.error.type); break; }
+          (d.data || []).forEach(function(s) {
+            var cn = (s.campaign && s.campaign.name) || "";
+            if (filter && cn.toLowerCase().indexOf(filter) < 0) return;
+            var st = String(s.effective_status || "").toUpperCase();
+            if (st === "DELETED" || st === "ARCHIVED") return;
+            accOut.adSets.push({
+              campaignName: cn,
+              campaignId: s.campaign_id,
+              campaignObjective: (s.campaign && s.campaign.objective) || "",
+              adsetName: s.name,
+              adsetId: s.id,
+              optimization_goal: s.optimization_goal || "(null)",
+              billing_event: s.billing_event || "",
+              bid_strategy: s.bid_strategy || "",
+              effective_status: s.effective_status || ""
+            });
+          });
+          next = d.paging && d.paging.next ? d.paging.next : null;
+        }
+      } catch (e) { accOut.errors.push(String(e && e.message || e)); }
+      probe.push(accOut);
+    }
+    res.status(200).json({ optgoalprobe: true, filter: filter, accounts: probe });
+    return;
+  }
+
   // Manual objective overrides (Settings → Audit). Loaded once per
   // request, used everywhere objectives are classified below. The hash
   // of the active overrides is folded into the response cache key so a
