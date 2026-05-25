@@ -4636,10 +4636,19 @@ export default function MediaOnGas(){
     // requested (operator opted into it via the toggle).
     var rangeDays=(function(){try{var a=Date.parse(df+"T00:00:00Z"),b=Date.parse(dt+"T00:00:00Z");if(!isFinite(a)||!isFinite(b))return 30;return Math.round((b-a)/86400000)+1;}catch(_){return 30;}})();
     var effGran=tsGran==="month"?"month":(rangeDays<14?"day":"week");
+    // Cancellation guard. Without this, narrowing the picker mid-fetch
+    // (e.g. all-22 selected -> click MTN MoMo group) leaves the
+    // original fetch in flight. When it resolves AFTER the new
+    // narrowed fetch, it overwrites the trendline state with the OLD
+    // selection's totals — operator saw 326 leads on the MoMo-only
+    // view because the POS / Willowbrook lead campaigns from the
+    // prior selection's response landed last and won the race.
+    var cancelled=false;
     fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+effGran+idsQs,{headers:authHeaders()})
       .then(function(r){return r.json();})
-      .then(function(d){if(d.series){setTimeseries(d);}})
+      .then(function(d){if(cancelled)return;if(d.series){setTimeseries(d);}})
       .catch(function(){});
+    return function(){cancelled=true;};
   },[df,dt,session,viewToken,tsGran,selected]);
   // Cache-busting hard reload, kept around for the idle-nudge "Refresh
   // Now" button which fires after a 15-min idle and explicitly WANTS a
