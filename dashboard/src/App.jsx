@@ -4035,6 +4035,7 @@ export default function MediaOnGas(){
       // Without this, the client landed on "Select campaigns to view
       // summary" because the URL only carries ?token= with no separate
       // campaigns / from / to params.
+      var jwtFrom=null,jwtTo=null;
       try{
         var parts=token.split(".");
         if(parts.length>=2){
@@ -4044,13 +4045,45 @@ export default function MediaOnGas(){
           if(Array.isArray(payload.camps)&&payload.camps.length>0){
             setUrlSelected(payload.camps.map(String));
           }
-          if(payload.from)setDf(payload.from);
-          if(payload.to)setDt(payload.to);
+          if(payload.from){setDf(payload.from);jwtFrom=payload.from;}
+          if(payload.to){setDt(payload.to);jwtTo=payload.to;}
         }
       }catch(_){/* malformed token — backend will reject it anyway */}
       setViewToken(token);
       setAuthRole("client");
       setAuthChecking(false);
+      // Direct kick-off of the demographics, google-intent and community
+      // fetches that the regular useEffects fail to re-fire when viewToken
+      // transitions from "" to a token (React dep tracking quirk under our
+      // current concurrent-render setup, see USEEFFECT diagnostic). Without
+      // this, client share-link views never load Awareness/Engagement/
+      // Objective demographic blocks, persona cards stay empty, and the
+      // owned-community block is blank.
+      var kickFrom=jwtFrom||df;
+      var kickTo=jwtTo||dt;
+      var kickH={"Authorization":"Bearer "+token};
+      fetch(API+"/api/demographics?from="+kickFrom+"&to="+kickTo,{headers:kickH})
+        .then(function(r){return r.ok?r.json():{error:"HTTP "+r.status};})
+        .then(function(d){if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
+        .catch(function(){});
+      fetch(API+"/api/community-demographics",{headers:kickH})
+        .then(function(r){return r.ok?r.json():{available:false};})
+        .then(function(d){setCommunityDemo(d||{available:false});})
+        .catch(function(){});
+      try{
+        var jwtCamps=(payload&&Array.isArray(payload.camps))?payload.camps:[];
+        var giIds=[];jwtCamps.forEach(function(s){
+          var ss=String(s||"");
+          if(/^google_\d+$/.test(ss)){if(giIds.indexOf(ss)<0)giIds.push(ss);}
+          var stripped=ss.replace(/_(facebook|instagram)$/,"").replace(/^google_/,"");
+          if(stripped&&giIds.indexOf(stripped)<0)giIds.push(stripped);
+        });
+        var giQs=giIds.length>0?("&campaignIds="+encodeURIComponent(giIds.join(","))):"";
+        fetch(API+"/api/google-intent?from="+kickFrom+"&to="+kickTo+giQs,{headers:kickH})
+          .then(function(r){return r.ok?r.json():{available:false};})
+          .then(function(d){setGoogleIntent(d||{available:false});})
+          .catch(function(){});
+      }catch(_){}
       return;
     }
     var saved=sessionStorage.getItem("gas_session");
