@@ -5087,6 +5087,24 @@ export default function MediaOnGas(){
             var sel=campaigns.filter(function(x){return selected.indexOf(x.campaignId)>=0;});
             var selSet={};sel.forEach(function(c){selSet[c.campaignId]=true;selSet[c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")]=true;});
             var inSel=function(r){return selSet[String(r.campaignId||"")]||selSet[String(r.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"")];};
+            try{
+              var _agAll=(demoData.ageGender||[]).length;
+              var _agHit=(demoData.ageGender||[]).filter(inSel).length;
+              if(typeof window!=="undefined"&&!window.__gasDemoDiagLogged){
+                window.__gasDemoDiagLogged=true;
+                console.log("[GAS demo IIFE]",{
+                  campaigns:campaigns.length,
+                  selected:selected.length,
+                  selectedSample:selected.slice(0,3),
+                  sel:sel.length,
+                  selSetKeys:Object.keys(selSet).length,
+                  selSetSample:Object.keys(selSet).slice(0,6),
+                  agAll:_agAll,
+                  agHit:_agHit,
+                  agRowSample:(demoData.ageGender||[]).slice(0,2).map(function(r){return{cid:r.campaignId,plat:r.platform};})
+                });
+              }
+            }catch(e){}
             var agRowsRaw=(demoData.ageGender||[]).filter(inSel);
             var regRows=(demoData.region||[]).filter(inSel);
             var devRows=(demoData.device||[]).filter(inSel);
