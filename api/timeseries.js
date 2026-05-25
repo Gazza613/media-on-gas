@@ -192,6 +192,8 @@ export default async function handler(req, res) {
           var imps = parseInt(row.impressions || 0);
           var clk = parseInt(row.clicks || 0);
           var results = 0;
+          var rawLike = 0;       // FB action_type=like value, captured for name-strong fallback below
+          var rawPageLike = 0;   // FB action_type=page_like / onsite_conversion.page_like
           if (row.actions) {
             row.actions.forEach(function(a) {
               var at = String(a.action_type || "").toLowerCase();
@@ -217,9 +219,38 @@ export default async function handler(req, res) {
               // page_like row). Gate "like" on optimization_goal so the
               // profile-visit twin doesn't over-report the Trendline.
               // Matches api/ads.js / campaigns.js / adsets.js.
-              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "onsite_conversion.page_like" || at === "follow" || at === "onsite_conversion.follow")) results = Math.max(results, v);
-              else if (objective === "followers" && platform === "Facebook" && at === "like" && campPageLikeOpt[row.campaign_id] === true) results = Math.max(results, v);
+              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "onsite_conversion.page_like" || at === "follow" || at === "onsite_conversion.follow")) {
+                if (at === "page_like" || at === "onsite_conversion.page_like") rawPageLike = Math.max(rawPageLike, v);
+                results = Math.max(results, v);
+              }
+              else if (objective === "followers" && platform === "Facebook" && at === "like") {
+                rawLike = Math.max(rawLike, v);
+                if (campPageLikeOpt[row.campaign_id] === true) results = Math.max(results, v);
+              }
             });
+          }
+          // Name-strong fallback (mirror api/ads.js / Community Growth tile,
+          // see project_fb_page_like_fallback). When an ODAX Like&Follow
+          // campaign runs as OUTCOME_ENGAGEMENT with a LIKE_PAGE CTA, the
+          // optimization_goal gate above zeroes its per-day follower
+          // attribution, leaving the trendline a flat line at zero even
+          // though the Page-Like Campaigns tile (which has this fallback
+          // already) shows the real spend-attributed result. Fold
+          // action_type=like into results when the campaign NAME tags
+          // page-like intent AND the strict gate hasn't already filled it.
+          if (objective === "followers" && platform === "Facebook" && results === 0 && rawLike > 0 && rawPageLike === 0 && campPageLikeOpt[row.campaign_id] !== true) {
+            var cn = String(row.campaign_name || "").toLowerCase();
+            var nameStrongPageLike = (
+              cn.indexOf("like&follow") >= 0 ||
+              cn.indexOf("like_follow") >= 0 ||
+              cn.indexOf("like+follow") >= 0 ||
+              cn.indexOf("_like_") >= 0 ||
+              cn.indexOf("_like ") >= 0 ||
+              cn.indexOf("paidsocial_like") >= 0 ||
+              cn.indexOf("like_facebook") >= 0 ||
+              cn.indexOf("like_instagram") >= 0
+            );
+            if (nameStrongPageLike) results = rawLike;
           }
           // App Install campaigns are judged on CLICKS TO THE APP STORE,
           // not the downstream install. Meta rarely reports installs back
