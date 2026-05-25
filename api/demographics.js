@@ -21,6 +21,23 @@ var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
 var DEMO_CACHE_VERSION = "v10-meta-ig-proportional-inference";
 
+// Last-known-good Google demographics cache. The /api/demographics
+// response cache lives for 5 minutes, but the upstream Google Ads API
+// intermittently rate-limits or 5xx's a request — when that happens
+// fetchGoogleDemo returns empty arrays (the catch in googleSearch
+// swallows the error) and the 5-min cache locks that empty result in.
+// Net effect for the operator: the Top Brand percentage swings between
+// the correct (77% with Google included in the denominator) and an
+// inflated (97% without Google) read every cache rotation.
+// Solution: keep the last successful Google response in memory keyed
+// by date range. When a fresh fetch comes back with zero device rows
+// AND the last-good entry is fresh enough, fall back to it so the
+// downstream percentage stays stable. TTL chosen long enough to bridge
+// hours of intermittent Google failure but short enough that genuine
+// no-delivery days still update.
+var googleDemoLastGood = {}; // key = "from|to" -> { data, ts }
+var GOOGLE_LASTGOOD_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+
 function extractResults(actions, pageLikeOpt) {
   var map = {};
   (actions || []).forEach(function(a) { map[a.action_type] = parseInt(a.value || 0, 10); });
@@ -801,6 +818,21 @@ export default async function handler(req, res) {
       fetchGoogleDemo(from, to)
     ]);
     var meta = pulls[0], tt = pulls[1], google = pulls[2];
+
+    // Google fallback: if fresh fetch returned no rows but we have a
+    // recent last-known-good response for this date range, use it.
+    // Prevents transient Google API hiccups from inflating the Top
+    // Brand percentage by silently dropping Google from the denominator.
+    var googleKey = from + "|" + to;
+    var googleHasData = (google.device && google.device.length > 0) || (google.ageGender && google.ageGender.length > 0);
+    if (googleHasData) {
+      googleDemoLastGood[googleKey] = { data: google, ts: Date.now() };
+    } else {
+      var lg = googleDemoLastGood[googleKey];
+      if (lg && Date.now() - lg.ts < GOOGLE_LASTGOOD_TTL_MS) {
+        google = lg.data;
+      }
+    }
 
     // Client-scoped: strip rows for campaigns outside the allowlist.
     // Tokens carry the dashboard's suffixed form (e.g. `123_facebook`,
