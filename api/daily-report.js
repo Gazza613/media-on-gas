@@ -429,9 +429,21 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Key on c.campaignId (suffixed publisher form for Meta —
+  // "<rawId>_facebook" / "_instagram", raw id for TikTok/Google) so the
+  // FB and IG publisher splits of a Meta campaign don't collide on the
+  // same rawCampaignId. The previous key `rawCampaignId || campaignId
+  // || campaignName` lost the FB baseline because the IG row overwrote
+  // it (both shared the same raw id), then yesterday's two rows both
+  // looked up the same IG baseline and double-counted it — net effect
+  // for MoMo POS was "16 leads / R401 baseline" instead of the real
+  // "94 leads / R3,402" and a misleading "up 775%" phrase.
+  var baseKeyOf = function(c) {
+    return String(c.campaignId || c.rawCampaignId || c.campaignName || "");
+  };
   var baseByKey = {};
   (baselineData.campaigns || []).forEach(function(c) {
-    var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+    var k = baseKeyOf(c);
     if (k) baseByKey[k] = c;
   });
 
@@ -478,7 +490,7 @@ export default async function handler(req, res) {
     // is just dead-weight in the account — not interesting.
     if (!isLive(c)) {
       var hadActivity0 = (parseFloat(c.spend || 0) > 0) || (parseInt(c.impressions || 0) > 0);
-      var k0 = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+      var k0 = baseKeyOf(c);
       var b0 = baseByKey[k0] || null;
       var baselineMat0 = b0 && ((parseFloat(b0.spend || 0) > 0) || (parseInt(b0.impressions || 0) > 0));
       if (hadActivity0 || baselineMat0) {
@@ -487,7 +499,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+    var k = baseKeyOf(c);
     var b = baseByKey[k] || null;
     // Watched = active + delivered yesterday OR has a material 7-day
     // baseline. A truly dormant 'active' row (no spend, no impressions,
