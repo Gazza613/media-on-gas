@@ -150,7 +150,7 @@ function buildHtml(opts) {
     '<tr>' +
       '<td width="25%" style="padding:0 4px 0 0;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Campaigns watched</div>' +
+        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Campaigns</div>' +
         '<div style="font-size:22px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + totalCampaignsWatched + '</div></div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
@@ -560,11 +560,35 @@ export default async function handler(req, res) {
   });
 
   if (dryRun) {
+    // Per-client/family snapshot dump so we can verify the yesterday vs
+    // 7-day-baseline numbers that drive the "up X% vs 7d avg" phrase.
+    // Includes the baseline daily average so it's obvious when a thin
+    // baseline is inflating the percentage.
+    var snapDiag = {};
+    Object.keys(perClientSnap).forEach(function(name) {
+      var fams = perClientSnap[name];
+      snapDiag[name] = {};
+      Object.keys(fams).forEach(function(fam) {
+        var s = fams[fam];
+        var resultsDailyB = s.resultsB / 7;
+        var spendDailyB = s.spendB / 7;
+        snapDiag[name][fam] = {
+          camps: s.camps,
+          kind: s.kind,
+          yesterday: { results: s.results, spend: Number(s.spend.toFixed(2)), clicks: s.clicks, impressions: s.impressions, reach: s.reach },
+          baseline_7d_total: { results: s.resultsB, spend: Number(s.spendB.toFixed(2)), clicks: s.clicksB, impressions: s.impressionsB, reach: s.reachB },
+          baseline_daily_avg: { results: Number(resultsDailyB.toFixed(2)), spend: Number(spendDailyB.toFixed(2)) },
+          deltaResultsPct: resultsDailyB > 0 ? Number(((s.results - resultsDailyB) / resultsDailyB * 100).toFixed(1)) : null,
+          deltaSpendPct: spendDailyB > 0 ? Number(((s.spend - spendDailyB) / spendDailyB * 100).toFixed(1)) : null
+        };
+      });
+    });
     res.status(200).json({
       ok: true, dryRun: true, dateLabel: dateLabel,
       yFrom: yFrom, yTo: yTo, bFrom: bFrom, bTo: bTo,
       campaignsWatched: watchedCount,
       totalAnomalies: totalAnomalies,
+      perClientSnap: snapDiag,
       anomalies: Object.keys(anomaliesByType).map(function(k) {
         return { type: k, count: anomaliesByType[k].length, items: anomaliesByType[k] };
       }),
