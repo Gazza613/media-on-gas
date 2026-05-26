@@ -38,13 +38,30 @@ function ymd(d) {
 function resultsFromActions(actions) {
   if (!Array.isArray(actions)) return { leads: 0, installs: 0, follows: 0, linkClicks: 0 };
   var out = { leads: 0, installs: 0, follows: 0, linkClicks: 0 };
+  // Math.max across alias action_types within a single ad's actions
+  // array. Meta surfaces one conversion under multiple types at once
+  // (e.g. `lead` AND `leadgen_grouped` AND `onsite_conversion.lead_grouped`
+  // for a single submission), so summing double-counts. Mirrors
+  // /api/campaigns.js + /api/ads.js. Also adds the action types those
+  // files recognise but this one missed: onsite_web_lead,
+  // offsite_conversion.fb_pixel_lead, offsite_complete_registration_add_meta_leads.
   actions.forEach(function(a) {
     var t = String(a.action_type || "");
     var v = parseFloat(a.value || 0) || 0;
-    if (t === "lead" || t === "onsite_conversion.lead_grouped" || t.indexOf("leadgen") >= 0) out.leads += v;
-    else if (t.indexOf("app_install") >= 0 || t === "mobile_app_install") out.installs += v;
-    else if (t === "like" || t.indexOf("follow") >= 0 || t === "onsite_conversion.follow") out.follows += v;
-    else if (t === "link_click") out.linkClicks += v;
+    if (t === "lead"
+      || t === "onsite_web_lead"
+      || t === "offsite_conversion.fb_pixel_lead"
+      || t === "onsite_conversion.lead_grouped"
+      || t === "offsite_complete_registration_add_meta_leads"
+      || t.indexOf("leadgen") >= 0) {
+      out.leads = Math.max(out.leads, v);
+    } else if (t.indexOf("app_install") >= 0 || t === "mobile_app_install" || t === "omni_app_install") {
+      out.installs = Math.max(out.installs, v);
+    } else if (t === "like" || t.indexOf("follow") >= 0 || t === "onsite_conversion.follow") {
+      out.follows = Math.max(out.follows, v);
+    } else if (t === "link_click") {
+      out.linkClicks = Math.max(out.linkClicks, v);
+    }
   });
   return out;
 }

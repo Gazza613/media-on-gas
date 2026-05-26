@@ -841,17 +841,31 @@ export default async function handler(req, res) {
           a.spend += parseFloat(r.spend || 0);
           a.clicks += parseFloat(r.clicks || 0);
           if (r.actions) {
+            // Per-ad-row Math.max across alias action_types so a single
+            // conversion that Meta surfaces under multiple aliases
+            // (`lead` AND `leadgen_grouped` AND `onsite_conversion.lead_grouped`
+            // for one submission) doesn't double-count. THEN += those
+            // per-row deduped counts into adAgg so the campaign-level
+            // total still sums across multiple ads in the campaign.
+            var rowLeads = 0, rowInstalls = 0, rowLpv = 0, rowPageLikes = 0, rowReactionLikes = 0, rowPageFollows = 0, rowReactions = 0;
             r.actions.forEach(function(act) {
               var v = parseInt(act.value || 0, 10);
-              if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") a.leads += v;
-              if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") a.appInstalls += v;
-              if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") a.landingPageViews += v;
-              if (act.action_type === "page_like" || act.action_type === "onsite_conversion.page_like") a.pageLikes += v;
-              if (act.action_type === "like") a.reactionLikes += v;
-              if (act.action_type === "page_engagement") a.pageFollows += v;
-              if (act.action_type === "post_reaction") a.reactionsTotal += v;
+              if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") rowLeads = Math.max(rowLeads, v);
+              if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") rowInstalls = Math.max(rowInstalls, v);
+              if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") rowLpv = Math.max(rowLpv, v);
+              if (act.action_type === "page_like" || act.action_type === "onsite_conversion.page_like") rowPageLikes = Math.max(rowPageLikes, v);
+              if (act.action_type === "like") rowReactionLikes = Math.max(rowReactionLikes, v);
+              if (act.action_type === "page_engagement") rowPageFollows = Math.max(rowPageFollows, v);
+              if (act.action_type === "post_reaction") rowReactions = Math.max(rowReactions, v);
               a.actions.push(act);
             });
+            a.leads += rowLeads;
+            a.appInstalls += rowInstalls;
+            a.landingPageViews += rowLpv;
+            a.pageLikes += rowPageLikes;
+            a.reactionLikes += rowReactionLikes;
+            a.pageFollows += rowPageFollows;
+            a.reactionsTotal += rowReactions;
           }
         });
         // For any (campaign, publisher) missing from rowMap but present in
