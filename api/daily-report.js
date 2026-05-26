@@ -599,12 +599,40 @@ export default async function handler(req, res) {
         };
       });
     });
+    // Dump every POS-tagged campaign from BOTH date windows so we can see
+    // exactly what the email's fetchCampaigns is reading vs what the
+    // dashboard's /api/campaigns sees. POS leads have been reported as
+    // wildly off (16 in the email vs 94 in the dashboard for the same
+    // window) and we need to see the raw rows to find the divergence.
+    var dumpPos = function(arr) {
+      return (arr || []).filter(function(c) {
+        var n = String(c.campaignName || "").toUpperCase();
+        return n.indexOf("POS") >= 0 && n.indexOf("MOMO") >= 0;
+      }).map(function(c) {
+        return {
+          id: c.campaignId,
+          raw: c.rawCampaignId,
+          name: String(c.campaignName || "").substring(0, 60),
+          platform: c.platform,
+          objective: c.objective,
+          status: c.status,
+          accountName: c.accountName,
+          leads: parseInt(c.leads || 0),
+          spend: Number(parseFloat(c.spend || 0).toFixed(2)),
+          impressions: parseInt(c.impressions || 0),
+          clicks: parseInt(c.clicks || 0),
+          endDate: c.endDate || ""
+        };
+      });
+    };
     res.status(200).json({
       ok: true, dryRun: true, dateLabel: dateLabel,
       yFrom: yFrom, yTo: yTo, bFrom: bFrom, bTo: bTo,
       campaignsWatched: watchedCount,
       totalAnomalies: totalAnomalies,
       perClientSnap: snapDiag,
+      yesterdayPosRaw: dumpPos(yesterdayData && yesterdayData.campaigns),
+      baselinePosRaw: dumpPos(baselineData && baselineData.campaigns),
       anomalies: Object.keys(anomaliesByType).map(function(k) {
         return { type: k, count: anomaliesByType[k].length, items: anomaliesByType[k] };
       }),
