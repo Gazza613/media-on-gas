@@ -4315,6 +4315,9 @@ export default function MediaOnGas(){
   // captured-closure consumer) always reads the LATEST committed state.
   campaignsRef.current=campaigns;
   selectedRef.current=selected;
+  // Temporary debug hook: expose to window for operator console probes
+  // of objective-aggregation discrepancies (188 vs 94 leads on POS).
+  try{if(typeof window!=="undefined"){window.__gasState={campaigns:campaigns,selected:selected,compareCampaigns:compareCampaigns,compareMode:compareMode};}}catch(_){}
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.
