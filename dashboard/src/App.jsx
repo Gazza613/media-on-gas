@@ -159,6 +159,10 @@ var API=window.location.origin;
 // pull; a background pre-warm useEffect populates non-active presets
 // 1.5s after the initial paint so the first toggle is also instant.
 var summaryCache = { campaigns: {}, adsets: {}, ads: {}, daily: {} };
+// Debug: expose so console probes can inspect the slice source data
+// when an aggregator (e.g. Objective Highlights leads) reads 2x the
+// API's true value, to confirm whether the daily slice is doubling.
+if (typeof window !== "undefined") window.__gasSummaryCache = summaryCache;
 function summaryCacheKey(from, to) { return from + ".." + to; }
 // Find the smallest cached range whose [from..to] contains [df, dt],
 // so we can slice the daily breakdown client-side instead of fetching.
