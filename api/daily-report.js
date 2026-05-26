@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
+import { checkAuth, isAdminOrSuperadmin } from "./_auth.js";
 import {
   ORIGIN, RECIPIENT_LIST, escapeHtml, pad2, ymd, fmtR, fmtNum, fmtDate, sastNow,
   redisSetIfAbsent,
@@ -372,9 +373,24 @@ export default async function handler(req, res) {
     if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
     var apiKey = req.headers["x-api-key"] || req.query.api_key || "";
     var expectedKey = process.env.DASHBOARD_API_KEY || "";
-    if (!apiKey || !expectedKey || !timingSafeStrEqual(String(apiKey), expectedKey)) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
+    var apiKeyOk = apiKey && expectedKey && timingSafeStrEqual(String(apiKey), expectedKey);
+    if (!apiKeyOk) {
+      // Admin session fallback so operators can run dryRun from the
+      // dashboard DevTools console without needing the API key. dryRun
+      // is the only path that ever serves a session-authed caller; an
+      // actual cron send still goes through the API key / Bearer check.
+      var sessionOk = false;
+      if (req.query.dryRun === "1" || req.query.dry === "1") {
+        if (await checkAuth(req, res)) {
+          sessionOk = isAdminOrSuperadmin(req.authPrincipal || {});
+        } else {
+          return; // checkAuth already wrote 401
+        }
+      }
+      if (!sessionOk) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
     }
   }
 
