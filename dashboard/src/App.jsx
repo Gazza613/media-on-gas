@@ -5283,7 +5283,15 @@ export default function MediaOnGas(){
             var demoFbPaidPL=0;sel.forEach(function(camp){if(camp.platform!=="Facebook")return;var obj=String(camp.objective||"").toLowerCase();var nm=String(camp.campaignName||"").toLowerCase();var isFol=obj==="followers"||nm.indexOf("follower")>=0||nm.indexOf("like&follow")>=0||nm.indexOf("like_follow")>=0||nm.indexOf("_like_")>=0||nm.indexOf("_follow_")>=0;if(isFol)demoFbPaidPL+=parseFloat(camp.pageLikes||0);});
             var demoFbEarnedResolved=(demoFbGrowthKnown&&demoFbGrowth>0)?demoFbGrowth:demoFbPaidPL;
             var demoEarnedTotal=demoFbEarnedResolved+demoIgGrowth+demoTtE;
-            if(demoEarnedTotal>0){
+            // Page-metadata follower override: only swap when the selection
+            // actually contains follower campaigns (authObjFollowersRaw > 0).
+            // Without this gate, a Leads-only selection (e.g. MoMo POS) had
+            // matched-page follower growth ADDED to its lead total because
+            // there was no follower component to subtract first — net
+            // effect: Objective Demographics headline showed "Objective
+            // Actions 229" for 94 real leads, because ~135 of FB page
+            // growth from auto-matched MoMo pages leaked into the total.
+            if(demoEarnedTotal>0&&authObjFollowersRaw>0){
               authObj=authObj-authObjFollowersRaw+demoEarnedTotal;
             }
             // stageTotal / stageSpend now return AUTHORITATIVE values, so every
