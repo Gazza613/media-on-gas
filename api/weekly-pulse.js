@@ -242,9 +242,20 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
 }
 
 function buildCampaignRows(thisWeekCampaigns, lastWeekCampaigns, adsByCampaign) {
+  // Key on c.campaignId (publisher-suffixed for Meta — "<rawId>_facebook"
+  // / "_instagram", raw id for TikTok/Google) so the FB and IG publisher
+  // splits of a Meta campaign don't collide. The previous key
+  // `rawCampaignId || campaignId || campaignName` lost the FB baseline
+  // because the IG row overwrote it (both shared the same raw id), then
+  // each this-week row joined to the wrong publisher's baseline — net
+  // effect was the same family of "wildly wrong vs prior week" deltas
+  // we squashed in daily-report (e37311c).
+  var baseKeyOf = function(c) {
+    return String(c.campaignId || c.rawCampaignId || c.campaignName || "");
+  };
   var baseByKey = {};
   lastWeekCampaigns.forEach(function(c) {
-    var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+    var k = baseKeyOf(c);
     if (k) baseByKey[k] = c;
   });
 
@@ -261,7 +272,7 @@ function buildCampaignRows(thisWeekCampaigns, lastWeekCampaigns, adsByCampaign) 
     var spend = parseFloat(c.spend || 0);
     if (spend < MIN_WEEKLY_SPEND) return;
 
-    var k = String(c.rawCampaignId || c.campaignId || c.campaignName || "");
+    var k = baseKeyOf(c);
     var b = baseByKey[k] || null;
     var age = ageDaysFor(c);
     var disp = dispositionFor(c, b, age);
