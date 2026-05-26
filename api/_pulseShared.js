@@ -30,6 +30,97 @@ export var RECIPIENTS = [
 export var RECIPIENT_LIST = RECIPIENTS.join(", ");
 
 // ============================================================================
+// Meta action_type detection — single source of truth so every aggregator
+// (campaigns, campaigns-daily, ads, ad-assets, adsets, timeseries,
+// placements, demographics, reconcile, daily-report) classifies the same
+// raw Meta action_type the same way. Meta routinely ships new
+// action_types for new lead form variants and attribution windows
+// (e.g. `offsite_complete_registration_add_meta_leads` showed up in
+// 2025-ish, `onsite_conversion.flow_complete` newer still). Hardcoded
+// lists rot quietly — a brand-new MoMo POS-style lead campaign would
+// silently read zero leads everywhere until someone notices and edits
+// each file. These helpers use a hardcoded canonical list PLUS a
+// catch-all heuristic (contains "lead" but not the words that
+// indicate post engagement / video / impression) so future variants
+// are picked up automatically.
+//
+// Use them by NAME — every aggregator should call `isLeadAction(t)`
+// rather than maintaining its own list. When Meta ships a new ambiguous
+// type that this heuristic mishandles, fix it here once and every
+// surface picks it up.
+export function isLeadAction(actionType) {
+  var t = String(actionType || "").toLowerCase();
+  if (!t) return false;
+  // Exact canonical types Meta currently emits for lead conversions.
+  var EXACT = {
+    "lead": 1,
+    "onsite_web_lead": 1,
+    "leadgen.other": 1,
+    "leadgen_grouped": 1,
+    "offsite_conversion.fb_pixel_lead": 1,
+    "onsite_conversion.lead_grouped": 1,
+    "onsite_conversion.flow_complete": 1,
+    "offsite_complete_registration_add_meta_leads": 1,
+    "offsite_conversion.fb_pixel_complete_registration": 1,
+    "complete_registration": 1
+  };
+  if (EXACT[t]) return true;
+  // Catch-all: any action_type containing "lead" UNLESS the name
+  // includes a non-lead family ("post" for post engagement, "video"
+  // for thruplays, "install" for app installs). Mirrors the heuristic
+  // already in api/ads.js.
+  if (t.indexOf("lead") < 0) return false;
+  if (t.indexOf("install") >= 0) return false;
+  if (t.indexOf("video") >= 0) return false;
+  if (t.indexOf("post") >= 0) return false;
+  return true;
+}
+export function isAppInstallAction(actionType) {
+  var t = String(actionType || "").toLowerCase();
+  if (!t) return false;
+  if (t === "app_install" || t === "mobile_app_install" || t === "omni_app_install") return true;
+  if (t === "app_custom_event.fb_mobile_first_app_launch") return true;
+  if (t === "app_custom_event.fb_mobile_activate_app") return true;
+  if (t === "onsite_conversion.app_install") return true;
+  if (t.indexOf("app_install") >= 0) return true;
+  if (t.indexOf("mobile_app_install") >= 0) return true;
+  return false;
+}
+export function isPageLikeAction(actionType) {
+  var t = String(actionType || "").toLowerCase();
+  return t === "page_like" || t === "onsite_conversion.page_like";
+}
+export function isLandingPageViewAction(actionType) {
+  var t = String(actionType || "").toLowerCase();
+  return t === "landing_page_view" || t === "omni_landing_page_view";
+}
+// Per-row extraction: Math.max across alias matches so a single
+// conversion surfaced under multiple types is not double-counted.
+// Returns the per-row totals. Callers that aggregate across rows
+// should then += these per-row values (per-row max → cross-row sum).
+export function extractMetaCounts(actions) {
+  var leads = 0, installs = 0, pageLikes = 0, landingPageViews = 0, reactionLikes = 0, postReactions = 0;
+  (actions || []).forEach(function(a) {
+    var t = String(a && a.action_type || "").toLowerCase();
+    var v = parseInt(a && a.value || 0, 10) || 0;
+    if (isLeadAction(t)) leads = Math.max(leads, v);
+    else if (isAppInstallAction(t)) installs = Math.max(installs, v);
+    else if (isPageLikeAction(t)) pageLikes = Math.max(pageLikes, v);
+    else if (isLandingPageViewAction(t)) landingPageViews = Math.max(landingPageViews, v);
+    else if (t === "like") reactionLikes = Math.max(reactionLikes, v);
+    else if (t === "post_reaction") postReactions = Math.max(postReactions, v);
+  });
+  return {
+    leads: leads,
+    installs: installs,
+    pageLikes: pageLikes,
+    landingPageViews: landingPageViews,
+    reactionLikes: reactionLikes,
+    postReactions: postReactions
+  };
+}
+
+// ============================================================================
 // HTML + formatting primitives
 // ============================================================================
 export function escapeHtml(s) {

@@ -3,6 +3,7 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
+import { isLeadAction } from "./_pulseShared.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -205,13 +206,9 @@ export default async function handler(req, res) {
               // .lead* via prefix), missing onsite_web_lead and
               // offsite_complete_registration_add_meta_leads, which
               // undercounted lead campaigns that fired those events.
-              if (objective === "leads" && (
-                at === "lead" ||
-                at === "onsite_web_lead" ||
-                at === "offsite_conversion.fb_pixel_lead" ||
-                at === "onsite_conversion.lead_grouped" ||
-                at === "offsite_complete_registration_add_meta_leads"
-              )) results = Math.max(results, v);
+              // Lead detection via shared isLeadAction so new Meta lead
+              // variants are caught automatically across every aggregator.
+              if (objective === "leads" && isLeadAction(at)) results = Math.max(results, v);
               // FB follower-objective: page_like / onsite_conversion.page_like
               // / follow are unambiguous and always count. "like" is post
               // reactions EXCEPT on a page-like-optimised campaign, where

@@ -4315,9 +4315,6 @@ export default function MediaOnGas(){
   // captured-closure consumer) always reads the LATEST committed state.
   campaignsRef.current=campaigns;
   selectedRef.current=selected;
-  // Temporary: re-expose for live state probing while diagnosing the
-  // Objective Demographics 524 vs 366 discrepancy.
-  try{if(typeof window!=="undefined"){window.__gasState={campaigns:campaigns,selected:selected};}}catch(_){}
   // Hydrate campaigns from a cached response. Extracted so both the
   // cache-hit path and the fresh-fetch path can run the same selection-
   // preservation logic, instead of duplicating it.

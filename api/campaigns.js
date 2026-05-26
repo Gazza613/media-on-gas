@@ -2,7 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, filterPagesForPrincipal, isAdminOrSuperadmin } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
-import { redisGetJson, redisSetJson } from "./_pulseShared.js";
+import { redisGetJson, redisSetJson, isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
@@ -698,26 +698,25 @@ export default async function handler(req, res) {
           if (c.actions) {
             for (var a = 0; a < c.actions.length; a++) {
               var act = c.actions[a];
-              if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") {
-                leads = Math.max(leads, parseInt(act.value));
-              }
-              if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") {
-                appInstalls = Math.max(appInstalls, parseInt(act.value));
-              }
-              if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") {
-                landingPageViews = Math.max(landingPageViews, parseInt(act.value));
-              }
+              var t = String(act.action_type || "").toLowerCase();
+              var v = parseInt(act.value || 0, 10) || 0;
+              // Per-row Math.max via shared isLeadAction so new Meta lead
+              // variants are picked up automatically; same pattern for
+              // installs, page-likes, landing-page-views.
+              if (isLeadAction(t)) leads = Math.max(leads, v);
+              if (isAppInstallAction(t)) appInstalls = Math.max(appInstalls, v);
+              if (isLandingPageViewAction(t)) landingPageViews = Math.max(landingPageViews, v);
               // "page_like" is the unambiguous page-like action. "like" is
               // POST REACTIONS (hearts/likes on the post itself) for all
               // non-follower campaigns, counting those as page likes would
               // wildly inflate follower counts on engagement-heavy creative.
-              if (act.action_type === "page_like" || act.action_type === "onsite_conversion.page_like") pageLikes = Math.max(pageLikes, parseInt(act.value));
-              if (act.action_type === "like") reactionLikes = Math.max(reactionLikes, parseInt(act.value));
-              if (act.action_type === "page_engagement") pageFollows = Math.max(pageFollows, parseInt(act.value));
+              if (isPageLikeAction(t)) pageLikes = Math.max(pageLikes, v);
+              if (t === "like") reactionLikes = Math.max(reactionLikes, v);
+              if (t === "page_engagement") pageFollows = Math.max(pageFollows, v);
               // Authoritative total post reactions (all types combined).
               // Used as a confidence check against the per-type breakdown
               // from the action_reactions secondary call.
-              if (act.action_type === "post_reaction") reactionsTotal = Math.max(reactionsTotal, parseInt(act.value));
+              if (t === "post_reaction") reactionsTotal = Math.max(reactionsTotal, v);
             }
           }
           // Fold reactions into page likes ONLY for a strictly legacy
@@ -849,14 +848,15 @@ export default async function handler(req, res) {
             // total still sums across multiple ads in the campaign.
             var rowLeads = 0, rowInstalls = 0, rowLpv = 0, rowPageLikes = 0, rowReactionLikes = 0, rowPageFollows = 0, rowReactions = 0;
             r.actions.forEach(function(act) {
+              var t = String(act.action_type || "").toLowerCase();
               var v = parseInt(act.value || 0, 10);
-              if (act.action_type === "lead" || act.action_type === "onsite_web_lead" || act.action_type === "offsite_conversion.fb_pixel_lead" || act.action_type === "onsite_conversion.lead_grouped" || act.action_type === "offsite_complete_registration_add_meta_leads") rowLeads = Math.max(rowLeads, v);
-              if (act.action_type === "app_custom_event.fb_mobile_activate_app" || act.action_type === "app_install" || act.action_type === "mobile_app_install" || act.action_type === "omni_app_install") rowInstalls = Math.max(rowInstalls, v);
-              if (act.action_type === "landing_page_view" || act.action_type === "omni_landing_page_view") rowLpv = Math.max(rowLpv, v);
-              if (act.action_type === "page_like" || act.action_type === "onsite_conversion.page_like") rowPageLikes = Math.max(rowPageLikes, v);
-              if (act.action_type === "like") rowReactionLikes = Math.max(rowReactionLikes, v);
-              if (act.action_type === "page_engagement") rowPageFollows = Math.max(rowPageFollows, v);
-              if (act.action_type === "post_reaction") rowReactions = Math.max(rowReactions, v);
+              if (isLeadAction(t)) rowLeads = Math.max(rowLeads, v);
+              if (isAppInstallAction(t)) rowInstalls = Math.max(rowInstalls, v);
+              if (isLandingPageViewAction(t)) rowLpv = Math.max(rowLpv, v);
+              if (isPageLikeAction(t)) rowPageLikes = Math.max(rowPageLikes, v);
+              if (t === "like") rowReactionLikes = Math.max(rowReactionLikes, v);
+              if (t === "page_engagement") rowPageFollows = Math.max(rowPageFollows, v);
+              if (t === "post_reaction") rowReactions = Math.max(rowReactions, v);
               a.actions.push(act);
             });
             a.leads += rowLeads;

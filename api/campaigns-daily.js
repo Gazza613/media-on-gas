@@ -33,6 +33,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { isLeadAction, isAppInstallAction, isPageLikeAction } from "./_pulseShared.js";
 
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
@@ -52,37 +53,20 @@ function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
 // window. Lean — no follower-family disambiguation here; the daily
 // breakdown carries raw action counts and the client derives blended
 // numbers exactly the same way the existing aggregated path does.
-// Extract lead / install / page-like counts from a Meta insights row's
-// actions array. Meta returns each conversion under multiple alias
-// action_types simultaneously (e.g. a single lead event surfaces as
-// `lead` AND `leadgen_grouped` AND `onsite_conversion.lead_grouped`),
-// so summing across types double-counts. /api/campaigns uses Math.max
-// for exactly this reason — daily slicing must do the same or the
-// dashboard's Objective Highlights tile reads 2x the real lead count
-// on every sub-range navigated from a cached wider window. Also align
-// the lead action_type list with /api/campaigns.js so MoMo POS lead
-// campaigns that fire `offsite_complete_registration_add_meta_leads`
-// (and any future onsite_web_lead campaigns) are counted at all.
+// Per-row Math.max across alias action_types so Meta surfacing one
+// conversion under multiple types simultaneously doesn't double-count.
+// Action_type classification lives in the shared isLeadAction /
+// isAppInstallAction / isPageLikeAction helpers so any new Meta variant
+// is picked up everywhere at once.
 function metaActionCounts(actions) {
   var leads = 0, appInstalls = 0, pageLikes = 0, reactionLikes = 0;
   (actions || []).forEach(function(a) {
-    var t = String(a.action_type || "");
+    var t = String(a.action_type || "").toLowerCase();
     var v = num(a.value);
-    if (t === "lead"
-      || t === "leadgen.other"
-      || t === "leadgen_grouped"
-      || t === "onsite_web_lead"
-      || t === "offsite_conversion.fb_pixel_lead"
-      || t === "onsite_conversion.lead_grouped"
-      || t === "offsite_complete_registration_add_meta_leads") {
-      leads = Math.max(leads, v);
-    } else if (t.indexOf("app_install") >= 0 || t.indexOf("mobile_app_install") >= 0 || t === "app_custom_event.fb_mobile_first_app_launch") {
-      appInstalls = Math.max(appInstalls, v);
-    } else if (t === "page_like" || t === "onsite_conversion.page_like") {
-      pageLikes = Math.max(pageLikes, v);
-    } else if (t === "like") {
-      reactionLikes = Math.max(reactionLikes, v);
-    }
+    if (isLeadAction(t)) leads = Math.max(leads, v);
+    else if (isAppInstallAction(t)) appInstalls = Math.max(appInstalls, v);
+    else if (isPageLikeAction(t)) pageLikes = Math.max(pageLikes, v);
+    else if (t === "like") reactionLikes = Math.max(reactionLikes, v);
   });
   return { leads: leads, appInstalls: appInstalls, pageLikes: pageLikes, reactionLikes: reactionLikes };
 }

@@ -1,6 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
+import { isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
@@ -60,43 +61,26 @@ export default async function handler(req, res) {
           if (!platform) continue;
           var leads = 0, appInstalls = 0, pageLikes = 0, landingPageViews = 0, follows = 0, reactionLikes = 0;
           if (d.actions) {
-            // Math.max across alias action_types so a single conversion
-            // surfaced under multiple types isn't double-counted, AND
-            // the full lead alias list mirrors /api/campaigns + /api/ads
-            // so POS-style campaigns firing offsite_complete_registration_
-            // add_meta_leads / onsite_web_lead / leadgen_grouped show up
-            // at the adset level (previously only `lead` was matched, so
-            // MoMo POS adset rollups read 0 leads).
+            // Per-row Math.max across alias action_types via shared
+            // helpers — new Meta lead variants are picked up automatically
+            // by isLeadAction (canonical list + catch-all heuristic).
             for (var k = 0; k < d.actions.length; k++) {
               var a = d.actions[k];
+              var at = String(a.action_type || "").toLowerCase();
               var av = parseInt(a.value || 0);
-              if (a.action_type === "lead"
-                || a.action_type === "onsite_web_lead"
-                || a.action_type === "offsite_conversion.fb_pixel_lead"
-                || a.action_type === "onsite_conversion.lead_grouped"
-                || a.action_type === "offsite_complete_registration_add_meta_leads"
-                || a.action_type === "leadgen.other"
-                || a.action_type === "leadgen_grouped") {
-                leads = Math.max(leads, av);
-              }
-              if (a.action_type === "omni_app_install" || a.action_type === "app_install" || a.action_type === "mobile_app_install") {
-                appInstalls = Math.max(appInstalls, av);
-              }
+              if (isLeadAction(at)) leads = Math.max(leads, av);
+              if (isAppInstallAction(at)) appInstalls = Math.max(appInstalls, av);
               // "page_like" and the modern "onsite_conversion.page_like"
               // are the unambiguous page-follow actions. "like" is post
               // reactions EXCEPT on a PAGE_LIKES-optimised campaign, where
               // Meta returns the page-follow result under "like" (no
-              // page_like row at all). Track it separately and fold it
-              // only for page-like-optimised campaigns on FB placements,
-              // matching api/ads.js so adset rollups agree with ad level.
-              if (a.action_type === "page_like" || a.action_type === "onsite_conversion.page_like") {
-                pageLikes = Math.max(pageLikes, av);
-              }
-              if (a.action_type === "like") reactionLikes = Math.max(reactionLikes, av);
-              if (a.action_type === "landing_page_view" || a.action_type === "omni_landing_page_view") {
-                landingPageViews = Math.max(landingPageViews, av);
-              }
-              if (a.action_type === "onsite_conversion.messaging_first_reply") follows = Math.max(follows, av);
+              // page_like row at all). Track separately and fold only for
+              // page-like-optimised campaigns on FB placements, matching
+              // api/ads.js so adset rollups agree with ad level.
+              if (isPageLikeAction(at)) pageLikes = Math.max(pageLikes, av);
+              if (at === "like") reactionLikes = Math.max(reactionLikes, av);
+              if (isLandingPageViewAction(at)) landingPageViews = Math.max(landingPageViews, av);
+              if (at === "onsite_conversion.messaging_first_reply") follows = Math.max(follows, av);
             }
           }
           // Fold "like" into page likes only for a page-like-optimised
