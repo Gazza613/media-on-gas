@@ -284,7 +284,7 @@ function buildHtml(opts) {
     '</div>';
 
   return '<!DOCTYPE html>' +
-    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Anomalies</title>' +
+    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Pulse</title>' +
     glowStyles +
     '</head>' +
     '<body style="margin:0;padding:0;background:' + P.bg + ';font-family:Manrope,\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
@@ -356,7 +356,7 @@ function buildHtml(opts) {
       '</td><td valign="middle">' +
       '<div style="font-size:12px;color:' + P.txt + ';font-weight:800;letter-spacing:3px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
-      '<div style="font-size:10px;color:' + P.caption + ';letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Anomalies, 08:15 SAST</div>' +
+      '<div style="font-size:10px;color:' + P.caption + ';letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse, 08:15 SAST</div>' +
       '<div style="font-size:11px;color:' + P.caption + ';margin-top:6px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<a href="mailto:grow@gasmarketing.co.za" style="color:' + P.caption + ';text-decoration:none;">grow@gasmarketing.co.za</a></div>' +
       '</td></tr></table></td></tr>' +
@@ -684,8 +684,8 @@ async function sendEmail(res, dateLabel, html, isCron) {
     await transporter.sendMail({
       from: "GAS Marketing Automation <" + gmailUser + ">",
       to: RECIPIENT_LIST,
-      subject: "Daily Anomalies | " + dateLabel,
-      text: "GAS Daily Anomalies for " + dateLabel + ". Open the dashboard: " + ORIGIN,
+      subject: "Daily Pulse | " + dateLabel,
+      text: "GAS Daily Pulse for " + dateLabel + ". Open the dashboard: " + ORIGIN,
       html: html
     });
     res.status(200).json({ ok: true, sent: true, to: RECIPIENT_LIST, dateLabel: dateLabel });
