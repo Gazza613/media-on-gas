@@ -103,13 +103,13 @@ function buildHtml(opts) {
         } else if (s.kind === "Leads" || s.kind === "Clicks to App Store" || s.kind === "Follows + Likes") {
           // Lead with results + cost-per-result
           var resWord = String(s.kind || "results").toLowerCase();
-          leadHtml = '<strong style="color:' + P.mint + ';">' + fmtNum(s.results) + ' ' + escapeHtml(resWord) + '</strong>' +
+          leadHtml = '<strong style="color:' + P.cyan + ';">' + fmtNum(s.results) + ' ' + escapeHtml(resWord) + '</strong>' +
             (cpr !== null ? ' at ' + fmtR(cpr) + ' ' + escapeHtml(String(s.costLabel || "cost per result").toLowerCase()) : '') +
             escapeHtml(deltaWord(resultsDelta));
           adjacentHtml = fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC') + ' · reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
         } else {
           // Engagement / other: lead with CTR + CPC
-          leadHtml = '<strong style="color:' + P.solar + ';">' + fmtPct(ctr) + ' CTR</strong> on ' + fmtNum(s.clicks) + ' clicks at ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC');
+          leadHtml = '<strong style="color:' + P.cyan + ';">' + fmtPct(ctr) + ' CTR</strong> on ' + fmtNum(s.clicks) + ' clicks at ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC');
           adjacentHtml = 'Reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
         }
         var familyLabel = s.awareness ? "Awareness · reach-led" : (s.kind || "Engagement");
