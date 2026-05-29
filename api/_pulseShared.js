@@ -508,6 +508,218 @@ export var ANOMALY_DEFS = {
   }
 };
 
+// ============================================================================
+// Data-resolved corrective procedures
+// ============================================================================
+// The ANOMALY_DEFS.procedure arrays above are the static, platform-agnostic
+// fallback. buildProcedure() generates a PER-CAMPAIGN procedure that is
+// (a) platform-aware (Meta vs Google vs TikTok use different creative-
+// rotation, placement and audience concepts, so a Google Display CTR
+// collapse must never recommend Meta's "Advantage+ / Reels / Stories")
+// and (b) data-resolved CONSERVATIVELY: we only assert a cause when the
+// data is unambiguous (e.g. frequency clearly above or below the 3x
+// fatigue line). When the data is missing or borderline, we fall back to
+// the neutral "investigate X" phrasing so the email never states a cause
+// it cannot evidence.
+//
+// House style: commas, never em-dashes.
+function platformFamily(c) {
+  var p = String(c && c.platform || "").toLowerCase();
+  if (p.indexOf("google") >= 0 || p.indexOf("youtube") >= 0 || p.indexOf("display") >= 0 || p.indexOf("demand gen") >= 0 || p.indexOf("performance max") >= 0 || p.indexOf("pmax") >= 0) return "google";
+  if (p.indexOf("tiktok") >= 0) return "tiktok";
+  return "meta"; // facebook / instagram / meta / audience network / messenger
+}
+// Platform-specific phrasing for the three concepts that differ most
+// across ad platforms: where you confirm auto-rotation of creative,
+// what a placement-quality check looks like, and how you widen a
+// saturated audience.
+function creativeRotationStep(fam) {
+  if (fam === "google") return "Open the campaign in Google Ads and review Responsive Display / Demand Gen asset performance, a weak auto-assembled asset combination can win the auction and drag the blended number down.";
+  if (fam === "tiktok") return "Open the campaign in TikTok Ads Manager and check whether Smart Creative or Automatic Creative Optimization swapped in a weaker variant since launch.";
+  return "Open the campaign and confirm the creative was not auto-rotated by Dynamic Creative or Advantage+ since launch.";
+}
+function placementStep(fam) {
+  if (fam === "google") return "Review placement and topic exclusions, the Display network can drift onto low-quality auto-placements that barely engage, exclude the weak ones and recheck.";
+  if (fam === "tiktok") return "Review placements, the Pangle audience network usually performs well below the in-feed For You placement, exclude it and re-measure.";
+  return "Check placements, Feed, Reels and Stories perform very differently, one weak placement can drag the blended number, exclude or split-test it out.";
+}
+function widenAudienceStep(fam) {
+  if (fam === "google") return "Widen the audience, add similar / in-market segments or loosen the targeting so the campaign is not re-serving the same shrinking pool.";
+  if (fam === "tiktok") return "Widen the audience, broaden age and interest targeting or enable Automatic Targeting so the campaign reaches beyond the current pool.";
+  return "Widen the audience, broaden age, geo or interests, or switch to an Advantage+ audience to extend reach beyond the saturated pool.";
+}
+// Returns a number formatted to 2dp, or null sentinel handling left to caller.
+function fx2(n) { return (parseFloat(n) || 0).toFixed(2); }
+
+// buildProcedure(type, yesterday, baseline, rmY) -> [step strings].
+// Falls back to the static ANOMALY_DEFS[type].procedure if the type is
+// unknown, so a new anomaly type never renders an empty procedure block.
+export function buildProcedure(type, y, b, rmY) {
+  var fam = platformFamily(y);
+  var def = ANOMALY_DEFS[type] || null;
+  var fallback = (def && def.procedure) ? def.procedure.slice() : [];
+
+  var freqY = parseFloat((y && y.frequency) || 0);
+  var ctrY = parseFloat((y && y.ctr) || 0);
+  var ctrB = parseFloat((b && b.ctr) || 0);
+  var clicksY = parseInt((y && y.clicks) || 0, 10);
+  var spendY = parseFloat((y && y.spend) || 0);
+  var cpcY = clicksY > 0 ? spendY / clicksY : null;
+  var clicksB = parseInt((b && b.clicks) || 0, 10);
+  var spendB = parseFloat((b && b.spend) || 0);
+  var cpcB = clicksB > 0 ? spendB / clicksB : null;
+  var budgetMode = String((y && y.budgetMode) || "").toLowerCase();
+
+  // Conservative frequency verdict. Only assert fatigue / not-fatigue when
+  // we actually have a frequency reading; otherwise leave it neutral.
+  var freqStep;
+  if (freqY >= 3) {
+    freqStep = "Frequency is " + fx2(freqY) + "x, above the 3x fatigue line, so audience saturation is the likely cause, rotate fresh creative within 24 to 48 hours.";
+  } else if (freqY > 0) {
+    freqStep = "Frequency is " + fx2(freqY) + "x, below the 3x fatigue line, so saturation is unlikely to be the cause, look at creative relevance and auction pressure instead.";
+  } else {
+    freqStep = "Pull the frequency, a reading above 3x points to audience fatigue and a creative rotation.";
+  }
+
+  // Conservative CTR-direction verdict for cost-per-result spikes:
+  // CTR down with cost up = creative problem; CTR holding with cost up =
+  // a downstream conversion-rate problem. Only assert when both CTRs are
+  // material; otherwise stay neutral.
+  var ctrDirectionStep;
+  if (ctrB >= 0.3 && ctrY > 0) {
+    if (ctrY < ctrB * 0.9) {
+      ctrDirectionStep = "CTR also fell (" + fx2(ctrY) + "% yesterday vs " + fx2(ctrB) + "% 7d average), so this is creative side, rotate or refresh the assets rather than touching the landing page.";
+    } else if (ctrY > ctrB * 1.1) {
+      ctrDirectionStep = "CTR actually rose (" + fx2(ctrY) + "% vs " + fx2(ctrB) + "%), so the click layer is healthy and the cost rise is downstream, audit the landing page, form or checkout, not the creative.";
+    } else {
+      ctrDirectionStep = "CTR held roughly steady (" + fx2(ctrY) + "% vs " + fx2(ctrB) + "%), so the click layer is fine, the extra cost is downstream, audit the landing page, form or checkout conversion rate.";
+    }
+  } else {
+    ctrDirectionStep = "Compare CTR direction, if CTR dropped this is creative fatigue, if CTR held the cost rise is a downstream conversion-rate problem.";
+  }
+
+  // CPC-direction step for click collapses.
+  var cpcDirectionStep;
+  if (cpcB !== null && cpcY !== null && cpcB > 0) {
+    if (cpcY > cpcB * 1.1) {
+      cpcDirectionStep = "CPC climbed to " + fmtR(cpcY) + " from " + fmtR(cpcB) + ", the auction got more expensive, the campaign is paying more per click while delivering fewer, check audience overlap and bid strategy.";
+    } else {
+      cpcDirectionStep = "CPC held near " + fmtR(cpcY) + " (was " + fmtR(cpcB) + "), so the auction price is stable, the click drop is a creative or relevance issue rather than auction pressure.";
+    }
+  } else {
+    cpcDirectionStep = "Confirm the CPC trajectory, a climbing CPC with falling clicks means the auction got harder.";
+  }
+
+  switch (type) {
+    case "ctr_collapse":
+      return [
+        creativeRotationStep(fam),
+        freqStep,
+        placementStep(fam),
+        "Audit the creative for anything dated since launch (offer, headline, CTA, logo) that may have stopped resonating.",
+        "If the brief allows, queue 2 to 3 fresh creative variants to test against the current control."
+      ];
+    case "cpr_spike":
+      return [
+        ctrDirectionStep,
+        freqStep,
+        placementStep(fam),
+        (fam === "meta"
+          ? "Cross-reference the bid strategy, if it is Lowest Cost the auction is simply more expensive today, consider a Cost Cap or Bid Cap to enforce a ceiling."
+          : "Cross-reference the bid strategy, if it is maximise-conversions / lowest-cost the auction is more expensive today, set a target CPA or bid cap to enforce a ceiling.")
+      ];
+    case "frequency_cliff":
+      return [
+        "Frequency is " + fx2(freqY) + "x" + (freqY > 0 ? ", the audience pool is exhausting" : "") + ", open the campaign and check the audience size estimate.",
+        widenAudienceStep(fam),
+        "Rotate in fresh creative so the same people see a new asset rather than the same one repeated.",
+        (fam === "meta"
+          ? "Consider duplicating to a lookalike audience to extend reach beyond the current pool."
+          : "Consider adding a fresh similar / lookalike segment to extend reach beyond the current pool.")
+      ];
+    case "click_collapse":
+      return [
+        cpcDirectionStep,
+        "Audit the creative for date relevance, broken links or a platform policy issue that may have throttled delivery.",
+        (fam === "meta"
+          ? "Check audience overlap, multiple campaigns competing for the same users inflate cost and starve clicks."
+          : "Check for audience or keyword overlap with your other live campaigns competing for the same users."),
+        freqStep
+      ];
+    case "cpm_spike":
+      return [
+        (fam === "meta"
+          ? "Open the campaign and check Quality, Engagement Rate and Conversion Rate Rankings, any Below Average rating drives CPM up."
+          : fam === "tiktok"
+            ? "Open the campaign and review the creative's engagement signals, low early engagement raises delivery cost on TikTok."
+            : "Open the campaign and review ad strength / asset ratings, weak assets raise the effective CPM in the auction."),
+        "Cross-reference the calendar for known auction-pressure events (month-end, paydays, Black Friday, election noise) before assuming a campaign fault.",
+        freqStep,
+        (fam === "meta"
+          ? "Consider a Cost Cap to enforce a CPM ceiling, or pause the single highest-CPM placement."
+          : "Consider a bid cap to enforce a ceiling, or exclude the highest-cost placement.")
+      ];
+    case "impressions_cliff":
+      return [
+        (fam === "google"
+          ? "Open the campaign and check for Limited or Eligible (limited) status and any disapproved assets, one disapproved asset can throttle the whole ad group."
+          : fam === "tiktok"
+            ? "Open the campaign and check delivery status and the in-review / rejected flags, a rejected creative can throttle the whole ad group."
+            : "Open the campaign and check the Delivery column for Limited or Learning Limited flags."),
+        "Verify the bid cap is not strangling delivery, raise it 10 to 15% as a test if it looks tight.",
+        widenAudienceStep(fam),
+        (fam === "meta"
+          ? "Check for a disapproved variant in a Dynamic Creative set, it can starve the whole set, and confirm no per-user frequency cap was tightened."
+          : "Confirm no disapproved asset and no recently tightened delivery cap is throttling the campaign.")
+      ];
+    case "spend_spike":
+      return [
+        (budgetMode === "lifetime"
+          ? "This is a lifetime-budget campaign, Meta accelerates spend near the end date to complete the remaining budget, confirm the end date is close, if so this is normal pacing and needs no action."
+          : "This is a daily-budget campaign, open it and confirm the daily budget cap matches the brief, an accidental cap raise is the most common cause."),
+        "Check whether the bid strategy changed (Lowest Cost vs Cost Cap vs Bid Cap), a strategy change can release pent-up spend.",
+        (fam === "meta"
+          ? "Verify Advantage+ campaign budget was not toggled on if that was not intended."
+          : "Verify campaign-level budget settings and any automated rules did not raise the cap."),
+        "Cross-reference the client's monthly runway, if today's pace projects an over-spend, lower the cap or pause until reset."
+      ];
+    case "spend_collapse":
+      return [
+        "Open the campaign and check status (active vs paused) and any delivery-limited warnings.",
+        "Verify the account payment method is current, a declined card silently halts delivery.",
+        (fam === "meta"
+          ? "Check Account Quality for disapprovals or restricted-ad notifications."
+          : fam === "google"
+            ? "Check the account for policy disapprovals or a billing / payment hold."
+            : "Check the account for rejected ads or a billing hold."),
+        (budgetMode === "lifetime"
+          ? "This is a lifetime-budget campaign, confirm the budget was not already exhausted for the flight."
+          : "Confirm dayparting or a budget cap was not changed, then restore delivery same-day if the brief calls for continuous spend.")
+      ];
+    case "conversions_disappeared":
+      return [
+        "Open the campaign and confirm the ad-set delivery status is active, not paused or rejected.",
+        "Click the ad's primary CTA yourself, confirm the landing page, lead form or app-store listing loads on the correct URL.",
+        "Submit a test " + String((rmY && rmY.kind) || "conversion").toLowerCase() + " to confirm the flow completes end to end.",
+        (fam === "meta"
+          ? "Check the pixel / Conversions API in Events Manager, if the event still fires the issue is attribution, if not the tracking is broken."
+          : fam === "google"
+            ? "Check conversion tracking in Google Ads / GA4, if the event still fires the issue is attribution, if not the tag is broken."
+            : "Check the TikTok pixel / Events API, if the event still fires the issue is attribution, if not the tracking is broken."),
+        "If broken and not resolved within 4 hours, pause spend on the affected ad-set to stop funding a dead funnel."
+      ];
+    case "lead_volume_drop":
+      return [
+        "Open the campaign and audit the lead form, check for newly added required fields, validation rules or pre-fill changes.",
+        "Test-submit a lead yourself to confirm the form completes and the CRM or sheet receives it.",
+        "Check the audience targeting for any recent change to geo, age or interests that shrank the eligible pool.",
+        "Pull yesterday's leads and check lead quality, a deliberate quality filter can explain a volume drop, then notify the account manager so the client is not blindsided."
+      ];
+    default:
+      return fallback;
+  }
+}
+
 export function detectAnomalies(yesterday, baseline, rmY, opts) {
   if (!baseline) return [];
   // Campaign already ended: zero / collapsed delivery is the campaign
@@ -664,6 +876,15 @@ export function detectAnomalies(yesterday, baseline, rmY, opts) {
       message: fmtNum(impsY) + " impressions yesterday vs " + fmtNum(Math.round(impsDaily)) + "/day 7d average (down " + impDrop.toFixed(0) + "%) while spend held."
     });
   }
+
+  // Attach a platform-aware, data-resolved corrective procedure to every
+  // anomaly so the email can render exact steps per campaign instead of a
+  // single static list per anomaly type. Failures fall back to the
+  // static ANOMALY_DEFS procedure inside buildProcedure.
+  out.forEach(function(an) {
+    try { an.procedure = buildProcedure(an.type, yesterday, baseline, rmY); }
+    catch (_) { an.procedure = (ANOMALY_DEFS[an.type] && ANOMALY_DEFS[an.type].procedure) || []; }
+  });
 
   return out;
 }

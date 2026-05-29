@@ -202,6 +202,26 @@ function buildHtml(opts) {
       // Manager deep link. Uses a 2-column table for solid alignment
       // across Gmail / Outlook / Apple Mail (flex / grid is fragile in
       // email clients).
+      // Per-campaign corrective procedure. Each campaign carries its own
+      // data-resolved, platform-aware steps (it.procedure) so a Google
+      // Display CTR collapse no longer gets Meta-only advice and the
+      // frequency / CTR verdicts reflect that campaign's actual numbers.
+      // Falls back to the type-level static list only if a campaign
+      // somehow has no procedure attached.
+      var renderProc = function(steps) {
+        if (!steps || !steps.length) return '';
+        var rows = steps.map(function(step, idx) {
+          return '<div style="display:block;padding:7px 0;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
+            '<span style="display:inline-block;width:20px;height:20px;line-height:20px;border-radius:50%;background:' + col.fill + ';color:#0a0418;font-size:10px;font-weight:900;text-align:center;margin-right:10px;vertical-align:top;">' + (idx + 1) + '</span>' +
+            '<span style="display:inline-block;font-size:11.5px;color:' + P.txt + ';line-height:1.6;width:calc(100% - 38px);">' + escapeHtml(step) + '</span>' +
+          '</div>';
+        }).join("");
+        return '<div style="margin-top:10px;border-top:1px dashed ' + P.rule + ';background:rgba(0,0,0,0.18);border-radius:8px;padding:10px 12px;">' +
+          '<div style="font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:' + col.fill + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:4px;">Corrective procedure</div>' +
+          rows +
+        '</div>';
+      };
+
       var itemsHtml = items.map(function(it) {
         var link = it.adsManagerUrl ? it.adsManagerUrl : "";
         var linkHtml = link
@@ -218,6 +238,7 @@ function buildHtml(opts) {
         var thumbCell = it.previewUrl
           ? '<a href="' + escapeHtml(it.previewUrl) + '" target="_blank" rel="noopener" style="display:block;text-decoration:none;">' + thumbBody + '</a>'
           : thumbBody;
+        var steps = (it.procedure && it.procedure.length) ? it.procedure : (def.procedure || []);
         return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border-top:1px solid ' + P.rule + ';">' +
           '<tr>' +
             '<td valign="top" style="width:72px;padding:12px 0 12px 16px;">' + thumbCell + '</td>' +
@@ -227,26 +248,11 @@ function buildHtml(opts) {
               '</div>' +
               '<div style="font-size:12px;color:' + P.label + ';margin-top:5px;line-height:1.6;">' + escapeHtml(it.message) + '</div>' +
               linkHtml +
+              renderProc(steps) +
             '</td>' +
           '</tr>' +
         '</table>';
       }).join("");
-
-      // Corrective procedure list, rendered as a numbered SOP under the
-      // affected campaigns so the team can execute the fix without leaving
-      // the email.
-      var procHtml = (def.procedure || []).map(function(step, idx) {
-        return '<div style="display:block;padding:8px 0;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
-          '<span style="display:inline-block;width:22px;height:22px;line-height:22px;border-radius:50%;background:' + col.fill + ';color:#0a0418;font-size:10px;font-weight:900;text-align:center;margin-right:10px;vertical-align:top;">' + (idx + 1) + '</span>' +
-          '<span style="display:inline-block;font-size:12px;color:' + P.txt + ';line-height:1.6;width:calc(100% - 40px);">' + escapeHtml(step) + '</span>' +
-        '</div>';
-      }).join("");
-      var procBlock = procHtml
-        ? '<div style="border-top:1px solid ' + P.rule + ';background:rgba(0,0,0,0.20);padding:14px 18px 16px;">' +
-            '<div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:' + col.fill + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-bottom:6px;">Corrective procedure</div>' +
-            procHtml +
-          '</div>'
-        : '';
 
       return '<div style="margin-top:14px;border:1px solid ' + col.border + ';border-left:4px solid ' + col.fill + ';border-radius:10px;overflow:hidden;background:' + col.soft + ';">' +
         '<div style="padding:14px 18px;">' +
@@ -257,7 +263,6 @@ function buildHtml(opts) {
           '<div style="font-size:11px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:8px;line-height:1.6;">' + escapeHtml(def.caption) + '</div>' +
         '</div>' +
         itemsHtml +
-        procBlock +
       '</div>';
     }).join("");
 
@@ -329,7 +334,7 @@ function buildHtml(opts) {
           : "";
         return '<tr><td style="padding:18px 36px 0;">' +
           '<div style="font-size:13px;font-weight:900;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;margin-bottom:4px;">Sanity Checks · ' + sanityChecks.length + '</div>' +
-          '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:10px;">Active in-flight campaigns watched above. The list below is worth a quick look — campaigns that were recently delivering but are now paused. Ended campaigns are not included.</div>' +
+          '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.6;margin-bottom:10px;">Active in-flight campaigns watched above. The list below is worth a quick look, campaigns that were recently delivering but are now paused. Ended campaigns are not included.</div>' +
           '<div style="border:1px solid ' + (P.solar || "#fbbf24") + '40;border-left:3px solid ' + (P.solar || "#fbbf24") + ';border-radius:0 10px 10px 0;background:rgba(0,0,0,0.20);padding:10px 14px;">' +
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + rows + moreRow + '</table>' +
           '</div>' +
@@ -494,7 +499,7 @@ export default async function handler(req, res) {
       var b0 = baseByKey[k0] || null;
       var baselineMat0 = b0 && ((parseFloat(b0.spend || 0) > 0) || (parseInt(b0.impressions || 0) > 0));
       if (hadActivity0 || baselineMat0) {
-        sanityChecks.push(summarize(c, "paused but had recent delivery — confirm intended"));
+        sanityChecks.push(summarize(c, "paused but had recent delivery, confirm intended"));
       }
       return;
     }
@@ -571,7 +576,8 @@ export default async function handler(req, res) {
         message: an.message,
         adsManagerUrl: amUrl,
         thumbnail: thumbnail,
-        previewUrl: previewUrl
+        previewUrl: previewUrl,
+        procedure: an.procedure || []
       });
     });
   });
