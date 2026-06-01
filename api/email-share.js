@@ -728,8 +728,8 @@ function buildEmailHtml(opts) {
   // and reads heavy at 300px) get an override keyed by canonical slug.
   // Add new entries here as designers tune brand presence in the email.
   var LOGO_WIDTH_BY_SLUG = {
-    psychobunny: 180,
-    psychobunnyza: 180
+    psychobunny: 120,
+    psychobunnyza: 120
   };
   var canonSlug = canonicalClientSlug(opts.clientSlug);
   var logoWidth = LOGO_WIDTH_BY_SLUG[canonSlug] || 300;
