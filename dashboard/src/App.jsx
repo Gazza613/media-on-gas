@@ -4525,33 +4525,14 @@ export default function MediaOnGas(){
   useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
   // (30s tick for the freshness chip moved into FreshnessChip below
   //  to avoid re-rendering the entire App every 30 seconds.)
-  // Refresh-on-tab-return — replaces the previous 5-min interval that
-  // fired DURING the user's session and could reset the campaign
-  // selection mid-scroll (operator-reported, client-facing risk).
-  // New behaviour: only refresh when the tab REGAINS focus AND the
-  // current data is >5 min stale. While the operator is actively
-  // using the page, nothing auto-refreshes — they can hit the REFRESH
-  // button explicitly if they want fresh data. Stale-but-visible is
-  // signalled by the freshness chip going amber/red.
-  useEffect(function(){
-    if(!isAuthed())return;
-    if(typeof document==="undefined")return;
-    var onVis=function(){
-      if(document.hidden)return;
-      var ts=lastFetchTsRef.current||0;
-      if(!ts)return;
-      var ageMs=Date.now()-ts;
-      if(ageMs<5*60*1000)return;
-      var key=summaryCacheKey(df,dt);
-      delete summaryCache.campaigns[key];
-      delete summaryCache.adsets[key];
-      delete summaryCache.ads[key];
-      fetchData();
-    };
-    document.addEventListener("visibilitychange",onVis);
-    return function(){document.removeEventListener("visibilitychange",onVis);};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[df,dt,session,viewToken]);
+  // No auto-refresh on tab return. The operator-side team flagged the
+  // "data flashes through a loading state every time I switch back to
+  // the dashboard" pattern as disruptive in front of clients — even
+  // gated to >5 min stale. Refresh is now explicit only: the header
+  // REFRESH button (softRefresh), the post-idle "Refresh Now" nudge
+  // (hardRefresh), or a fresh login. The freshness chip still goes
+  // amber/red to signal staleness so it's obvious when manual refresh
+  // would buy newer data.
   // Background pre-warm of the other preset ranges (7 DAYS, 30 DAYS,
   // MTD, LAST MONTH minus the current one) 1.5s after first paint so
   // the visible fetch grabs the TCP slot first. Populates summaryCache
