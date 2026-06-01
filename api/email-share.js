@@ -726,13 +726,29 @@ function buildEmailHtml(opts) {
   // Per-client logo width. Default 300px for the hero treatment. Logos
   // that visually need to read smaller (Psycho Bunny's mark is dense
   // and reads heavy at 300px) get an override keyed by canonical slug.
+  // Uses longest-prefix matching the same way brandDisplayForSlug does
+  // so a slug carrying a campaign-name tail (e.g.
+  // "psychobunnyzaawarenessjune2026") still resolves to the override.
   // Add new entries here as designers tune brand presence in the email.
   var LOGO_WIDTH_BY_SLUG = {
     psychobunny: 120,
     psychobunnyza: 120
   };
   var canonSlug = canonicalClientSlug(opts.clientSlug);
-  var logoWidth = LOGO_WIDTH_BY_SLUG[canonSlug] || 300;
+  var logoWidth = 300;
+  if (canonSlug) {
+    if (LOGO_WIDTH_BY_SLUG[canonSlug]) {
+      logoWidth = LOGO_WIDTH_BY_SLUG[canonSlug];
+    } else {
+      var lwKeys = Object.keys(LOGO_WIDTH_BY_SLUG).sort(function(a, b) { return b.length - a.length; });
+      for (var lwI = 0; lwI < lwKeys.length; lwI++) {
+        if (canonSlug.indexOf(lwKeys[lwI]) === 0 && lwKeys[lwI].length >= 5) {
+          logoWidth = LOGO_WIDTH_BY_SLUG[lwKeys[lwI]];
+          break;
+        }
+      }
+    }
+  }
   var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
