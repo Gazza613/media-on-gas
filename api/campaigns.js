@@ -57,7 +57,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v15-pagelike-nobreakdown-floor";
+var CAMPAIGNS_CACHE_VERSION = "v16-pagelike-nobreakdown-strict-like";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -629,12 +629,28 @@ export default async function handler(req, res) {
           impsMap[cid] = parseInt(row.impressions || 0);
           clicksMap[cid] = parseInt(row.clicks || 0);
           var pl = 0;
+          var likeRaw = 0;
           (row.actions || []).forEach(function(a) {
             var t = String(a.action_type || "").toLowerCase();
             if (t === "page_like" || t === "onsite_conversion.page_like") {
               pl = Math.max(pl, parseInt(a.value || 0, 10) || 0);
+            } else if (t === "like") {
+              likeRaw = Math.max(likeRaw, parseInt(a.value || 0, 10) || 0);
             }
           });
+          // Strict PAGE_LIKES gate (mirrors reconcile.js rawMetaObjStrict
+          // and the per-publisher fold-in above). Pre-ODAX PAGE_LIKES and
+          // ad-sets explicitly optimised for PAGE_LIKES surface the
+          // page-like result under actions["like"], not page_like, so the
+          // no-breakdown floor missed them entirely. Without this gate
+          // the MTN-MoMo Like&Follow campaigns (PAGE_LIKES-optimised at
+          // ad-set level) read 46/22 likes on the truth side and 0 on the
+          // dashboard, which Ground Truth flagged red. Only ODAX strict-
+          // PAGE_LIKES campaigns get this fallback, so engagement
+          // campaigns where "like" is post reactions stay untouched.
+          var rawMetaObjStrict = pageLikeOpt[cid] === true
+            || String((campaignInfo[cid] || {}).objective || "").toUpperCase() === "PAGE_LIKES";
+          if (rawMetaObjStrict) pl = Math.max(pl, likeRaw);
           if (pl > 0) pageLikesNbMap[cid] = pl;
         });
       } catch (_) { /* non-fatal */ }
