@@ -143,8 +143,13 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
   // "frequency 2.00x" in the analyst note would just echo our own
   // placeholder back at the reader, so for Google we drop the freq
   // clause entirely. isFB/IG = the only real freq reading we have.
+  // Match _pulseShared.js platformFamily() exactly so an email-wide
+  // "Google" classification doesn't drift between the two files (a
+  // platform string of plain "Display" was classified Google in the
+  // shared file but missed here without the "display" check).
   var isGoogle = platformLower.indexOf("google") >= 0
               || platformLower.indexOf("youtube") >= 0
+              || platformLower.indexOf("display") >= 0
               || platformLower.indexOf("demand gen") >= 0
               || platformLower.indexOf("performance max") >= 0
               || platformLower.indexOf("pmax") >= 0;
@@ -185,7 +190,7 @@ function analystNote(thisWeek, lastWeek, rmY, ageDays) {
     var postClick = rmY.kind === "Leads" ? "lead form (fields, friction, validation)"
       : rmY.kind === "Clicks to App Store" ? "app store listing (ratings, screenshots, description)"
       : "follow flow (profile content quality, first-impression load)";
-    return fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR but zero " + rmY.kind.toLowerCase() + " for the week — the creative and targeting are earning attention, the breakdown is post-click. Audit " + postClick + " before allocating another week. Spend " + fmtR(spendY) + ", reach " + fmtNum(reachY) + " at " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + ".";
+    return fmtNum(clicksY) + " clicks at " + ctrY.toFixed(2) + "% CTR but zero " + rmY.kind.toLowerCase() + " for the week, the creative and targeting are earning attention, the breakdown is post-click. Audit " + postClick + " before allocating another week. Spend " + fmtR(spendY) + ", reach " + fmtNum(reachY) + " at " + (cpmY !== null ? fmtR(cpmY) + " CPM" : "n/a CPM") + ".";
   }
 
   // ===== Awareness lead =====
