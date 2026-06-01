@@ -57,7 +57,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v14-pagelike-gate-sync";
+var CAMPAIGNS_CACHE_VERSION = "v15-pagelike-nobreakdown-floor";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -600,8 +600,17 @@ export default async function handler(req, res) {
       var spendMap = {};
       var impsMap = {};
       var clicksMap = {};
+      // page_like + onsite_conversion.page_like surface at this level
+      // (no publisher_platform breakdown). The per-publisher fetch
+      // above silently drops them for ODAX OUTCOME_ENGAGEMENT campaigns
+      // even when the name explicitly tags Like&Follow, so the dashboard
+      // came back with pageLikes=0 while api/reconcile (same no-breakdown
+      // path) saw the real count. Capture them here and use them as a
+      // floor on the FB row's pageLikes downstream so Summary's
+      // followers tile reconciles with Ground Truth Audit.
+      var pageLikesNbMap = {};
       try {
-        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
         var rAll = [];
         var rNext = reachUrl;
         var rGuard = 0;
@@ -619,6 +628,14 @@ export default async function handler(req, res) {
           spendMap[cid] = parseFloat(row.spend || 0);
           impsMap[cid] = parseInt(row.impressions || 0);
           clicksMap[cid] = parseInt(row.clicks || 0);
+          var pl = 0;
+          (row.actions || []).forEach(function(a) {
+            var t = String(a.action_type || "").toLowerCase();
+            if (t === "page_like" || t === "onsite_conversion.page_like") {
+              pl = Math.max(pl, parseInt(a.value || 0, 10) || 0);
+            }
+          });
+          if (pl > 0) pageLikesNbMap[cid] = pl;
         });
       } catch (_) { /* non-fatal */ }
 
@@ -1023,6 +1040,32 @@ export default async function handler(req, res) {
         campTotalImps[r.rawCampaignId] = (campTotalImps[r.rawCampaignId] || 0) + r._sumImpressions;
         campTotalSpendPub[r.rawCampaignId] = (campTotalSpendPub[r.rawCampaignId] || 0) + r._sumSpend;
         campTotalClicksPub[r.rawCampaignId] = (campTotalClicksPub[r.rawCampaignId] || 0) + r._sumClicks;
+      });
+
+      // Apply the no-breakdown page_like floor exactly once per campaign:
+      // assign the total to the Facebook row (page likes only ever fire
+      // on the FB liking flow), fall back to the highest-impressions row
+      // if no FB row exists. Avoids double-counting across FB + IG splits
+      // and keeps Summary's followersCombined = follows + pageLikes
+      // reconciled with the Ground Truth Audit on ODAX engagement-
+      // optimised Like&Follow campaigns.
+      var pageLikesOwner = {};
+      Object.keys(rowMap).forEach(function(k) {
+        var r = rowMap[k];
+        var cid = String(r.rawCampaignId);
+        if (!pageLikesNbMap[cid] || pageLikesNbMap[cid] <= 0) return;
+        var existingKey = pageLikesOwner[cid];
+        if (!existingKey) { pageLikesOwner[cid] = k; return; }
+        var existing = rowMap[existingKey];
+        if (r.platform === "Facebook" && existing.platform !== "Facebook") pageLikesOwner[cid] = k;
+        else if (r.platform === existing.platform && r._sumImpressions > existing._sumImpressions) pageLikesOwner[cid] = k;
+      });
+      Object.keys(rowMap).forEach(function(k) {
+        var r = rowMap[k];
+        var cid = String(r.rawCampaignId);
+        if (pageLikesOwner[cid] !== k) return;
+        var floor = pageLikesNbMap[cid] || 0;
+        if (floor > r.pageLikes) r.pageLikes = floor;
       });
 
       Object.keys(rowMap).forEach(function(k) {
