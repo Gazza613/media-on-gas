@@ -150,9 +150,16 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile
     //     IMPRESSIONS+CPM, the prior default kept for non-profiled or
     //     non-reach-primary clients where per-ad reach can over-state
     //     on MIXED/DCO splits.
-    var primaryKpi = kpiProfile && kpiProfile.primaryKpis && kpiProfile.primaryKpis[0]
-      ? String(kpiProfile.primaryKpis[0]).toLowerCase() : "";
-    var reachPrimary = primaryKpi === "reach" || primaryKpi === "unique_reach";
+    // Any of the profile's primary KPIs nominating reach triggers the
+    // reach-ranked Top Ads block, not only when reach is first in the
+    // list. Sea Storm / Sea Weeds / Psycho Bunny all carry primary
+    // KPIs of [Impressions, Reach, Clicks, CTR] so reach sits at index
+    // 1 — the earlier "primaryKpis[0] only" check missed them.
+    var primaryKpis = (kpiProfile && Array.isArray(kpiProfile.primaryKpis)) ? kpiProfile.primaryKpis : [];
+    var reachPrimary = primaryKpis.some(function(k) {
+      var lk = String(k || "").toLowerCase();
+      return lk === "reach" || lk === "unique_reach";
+    });
     filtered.forEach(function(a) {
       if (reachPrimary) {
         var rch = parseFloat(a.reach || 0);
