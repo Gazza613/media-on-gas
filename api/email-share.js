@@ -4,7 +4,7 @@ import { checkAuth } from "./_auth.js";
 import { issueToken } from "./_jwt.js";
 import { logEmailSend } from "./_audit.js";
 import { getSession } from "./auth.js";
-import { clientIdentity, registeredDomain, brandDisplayForSlug } from "./_clientIdentity.js";
+import { clientIdentity, registeredDomain, brandDisplayForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
 import { redisSetIfAbsent } from "./_pulseShared.js";
 import { createHash } from "crypto";
@@ -723,6 +723,16 @@ function buildEmailHtml(opts) {
   // back to the GAS emblem instead of a broken image in the client's
   // inbox.
   var clientLogo = String(opts.clientLogo || "");
+  // Per-client logo width. Default 300px for the hero treatment. Logos
+  // that visually need to read smaller (Psycho Bunny's mark is dense
+  // and reads heavy at 300px) get an override keyed by canonical slug.
+  // Add new entries here as designers tune brand presence in the email.
+  var LOGO_WIDTH_BY_SLUG = {
+    psychobunny: 180,
+    psychobunnyza: 180
+  };
+  var canonSlug = canonicalClientSlug(opts.clientSlug);
+  var logoWidth = LOGO_WIDTH_BY_SLUG[canonSlug] || 300;
   var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
@@ -757,7 +767,7 @@ function buildEmailHtml(opts) {
         <div style="margin-bottom:18px;">
           ${clientLogo
             ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr><td align="center" style="text-align:center;padding:6px 0;">
-                <img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="300" border="0" style="width:300px;max-width:80%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>
+                <img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="${logoWidth}" border="0" style="width:${logoWidth}px;max-width:80%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>
               </td></tr></table>`
             : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
         </div>
