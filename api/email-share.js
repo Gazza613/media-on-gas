@@ -4,7 +4,7 @@ import { checkAuth } from "./_auth.js";
 import { issueToken } from "./_jwt.js";
 import { logEmailSend } from "./_audit.js";
 import { getSession } from "./auth.js";
-import { clientIdentity, registeredDomain } from "./_clientIdentity.js";
+import { clientIdentity, registeredDomain, brandDisplayForSlug } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
 import { redisSetIfAbsent } from "./_pulseShared.js";
 import { createHash } from "crypto";
@@ -117,7 +117,7 @@ function aggregate(arr) {
 }
 
 // Pull live top creative ads for the allowed campaigns. Top 3 per platform by spend.
-async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
+async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile) {
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, top ads skipped"); return null; }
@@ -141,16 +141,25 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
       return idSet[virtualCid] === true;
     });
     if (filtered.length === 0) return null;
-    // Awareness/reach ads headline on IMPRESSIONS with CPM, not link
-    // clicks. Deliberately NOT reach: these Top Ads rows are per-ad and
-    // split per publisher_platform, and Meta's per-ad reach under that
-    // breakdown is unreliable for MIXED / Dynamic Creative ads (the
-    // same dedup limitation that makes per-creative reach impossible) —
-    // it produced nonsense like 11K impressions / 539 reach. Impressions
-    // is the trustworthy per-ad awareness proxy, matching the
-    // per-creative breakdown. True de-duplicated reach is reported at
-    // the campaign level in the Performance Summary, not here.
+    // Two paths for headline metric:
+    //  1. Profile primary KPI is reach / unique_reach (Sea Weeds, Sea
+    //     Storm, Psycho Bunny) — every ad ranks + headlines on REACH
+    //     regardless of name. Operator-requested: their client narrative
+    //     is reach, so the Top Ads section must read in that voice.
+    //  2. Otherwise — awareness-tagged ads (name regex) headline on
+    //     IMPRESSIONS+CPM, the prior default kept for non-profiled or
+    //     non-reach-primary clients where per-ad reach can over-state
+    //     on MIXED/DCO splits.
+    var primaryKpi = kpiProfile && kpiProfile.primaryKpis && kpiProfile.primaryKpis[0]
+      ? String(kpiProfile.primaryKpis[0]).toLowerCase() : "";
+    var reachPrimary = primaryKpi === "reach" || primaryKpi === "unique_reach";
     filtered.forEach(function(a) {
+      if (reachPrimary) {
+        var rch = parseFloat(a.reach || 0);
+        a.results = rch > 0 ? rch : parseFloat(a.impressions || 0);
+        a.resultType = rch > 0 ? "reach" : "impressions";
+        return;
+      }
       // Test objective AND campaign name AND ad name. Awareness has no
       // dedicated objective bucket (it classifies as "landingpage"), so
       // the only reliable signal is the awareness/reach token in the
@@ -160,14 +169,6 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames) {
       var awr = hay.indexOf("aware") >= 0 || hay.indexOf("brand") >= 0
         || /(^|[_\s||-])(awr|awareness|reach|brand)([_\s||-]|$)/.test(hay);
       if (awr) {
-        // Rank + headline on IMPRESSIONS with CPM, never per-ad reach.
-        // These rows are per-ad and split by publisher_platform, where
-        // Meta's reach is NOT de-duplicated and is unreliable for MIXED
-        // / Dynamic Creative ads (it returns reach ≈ impressions, e.g.
-        // 10.4K served / 10.3K "reach", frequency ~1.0, which is wrong
-        // and misranks the top performers). Impressions is the
-        // trustworthy per-ad awareness proxy; true de-duplicated reach
-        // is reported only at campaign level in the Performance Summary.
         a.results = parseFloat(a.impressions || 0);
         a.resultType = "impressions";
       }
@@ -412,10 +413,24 @@ function renderSummaryBlock(summary, profile, eco) {
     [].concat(prof.primaryKpis || [], prof.secondaryKpis || [], prof.tertiaryKpis || []).forEach(function(k) {
       if (k && k !== "top_products" && KMAP[k] && !seenK[k]) { seenK[k] = 1; orderK.push(k); }
     });
+    // Mirror the dashboard's profiled OBJECTIVE HIGHLIGHTS layout: render
+    // every KPI the client nominated, even at zero. GA4-backed KPIs
+    // (newsletter / revenue / transactions / AOV) show "—" when the
+    // client hasn't connected GA4 yet (Sea Weeds, Sea Storm) or when
+    // there's genuinely nothing to report. Keeps the email tile grid
+    // identical across clients with the same profile shape and avoids
+    // the "missing tile" gap that earlier filtered them out.
     var built = orderK.map(function(k, idx) {
       var m = KMAP[k];
-      return { label: m.label, value: parseFloat(m.num || 0), display: m.display, cost: m.sub || "", accent: ACC[idx % ACC.length] };
-    }).filter(function(o) { return o.value > 0; }).slice(0, 8);
+      var v = parseFloat(m.num || 0);
+      return {
+        label: m.label,
+        value: v,
+        display: v > 0 ? m.display : "—",
+        cost: v > 0 ? (m.sub || "") : "",
+        accent: ACC[idx % ACC.length]
+      };
+    }).slice(0, 8);
     outcomes = built.length > 0 ? built : allOutcomes.filter(function(o) { return o.value > 0; });
   } else {
     outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
@@ -660,12 +675,12 @@ function renderTopAdsBlock(topAds, origin, token) {
 }
 
 function buildEmailHtml(opts) {
-  // Client name is used for the report title and header. It's derived from the
-  // slug so the report always has a clean brand name in the banner.
-  var clientName = opts.clientSlug
-    .split("-")
-    .map(function(w) { return w.toUpperCase(); })
-    .join(" ");
+  // Client name is used for the report title and header. Resolve to the
+  // brand display ("Sea Weeds") even when the slug arrives as the full
+  // canonicalised campaign name ("seaweedsseapointmetatraffic...").
+  // brandDisplayForSlug looks up the known-brand map first and falls
+  // back to a title-cased read so unknown slugs still render cleanly.
+  var clientName = (brandDisplayForSlug(opts.clientSlug) || "").toUpperCase();
   // Greeting name is what appears in "Hi ___,". If the sender gave a recipient
   // name on the form (a person or company), use that. Falls back to the
   // derived client name so old flows still work.
@@ -733,13 +748,13 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:36px 40px 24px;text-align:center;">
         <div style="margin-bottom:18px;">
-          ${clientLogo ? `<img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="104" height="104" border="0" style="width:104px;height:104px;display:inline-block;object-fit:contain;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>` : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
+          ${clientLogo ? `<img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="160" height="160" border="0" style="width:160px;height:160px;display:inline-block;object-fit:contain;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;margin:0 auto;"/>` : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
         </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
           <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
         </div>
-        <div style="font-size:10px;color:#8B7FA3;letter-spacing:3px;margin-top:6px;text-transform:uppercase;font-weight:600;">Performance Metrics That Matter</div>
+        <div style="font-size:10px;color:#8B7FA3;letter-spacing:3px;margin-top:6px;text-transform:uppercase;font-weight:600;">Metrics That Matter</div>
       </td></tr>
 
       <tr><td style="padding:0 40px;">
@@ -815,7 +830,7 @@ function buildEmailHtml(opts) {
               <div style="font-size:12px;color:#FFFBF8;font-weight:800;letter-spacing:3px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
                 <span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span>
               </div>
-              <div style="font-size:10px;color:#8B7FA3;letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;">Performance Metrics That Matter</div>
+              <div style="font-size:10px;color:#8B7FA3;letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;">Metrics That Matter</div>
               <div style="font-size:11px;color:#8B7FA3;margin-top:6px;">
                 <a href="mailto:grow@gasmarketing.co.za" style="color:#8B7FA3;text-decoration:none;">grow@gasmarketing.co.za</a>
               </div>
@@ -902,18 +917,19 @@ export default async function handler(req, res) {
     var shareUrl = origin + "/view/?token=" + encodeURIComponent(token);
     var expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch summary + top ads in parallel so the email isn't sequential slow.
-    // If either fails the email still sends, just with fewer inline sections.
+    // Profile fetched first (cheap, ~one Redis lookup) so fetchTopAds
+    // can be told whether to rank by reach when the client's profile
+    // nominates reach as the primary KPI. Other fetches are still
+    // parallelised below so the email isn't sequential-slow.
+    var kpiProfile = await getKpiProfile(clientSlug).catch(function(){ return null; });
     var results = await Promise.all([
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
-      fetchTopAds(req, from, to, campaignIds, campaignNames),
-      fetchEcommerce(req, from, to, clientSlug),
-      getKpiProfile(clientSlug).catch(function(){ return null; })
+      fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile),
+      fetchEcommerce(req, from, to, clientSlug)
     ]);
     var summary = results[0];
     var topAds = results[1];
     var ecommerce = results[2];
-    var kpiProfile = results[3];
 
     // The per-creative breakdown is intentionally NOT precomputed for
     // the email anymore: it is whole-ad / all-placements and cannot
@@ -958,9 +974,8 @@ export default async function handler(req, res) {
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
-    var clientName = clientSlug.indexOf("-") >= 0
-      ? clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" ")
-      : clientSlug.toUpperCase();
+    // Same brand resolution as buildEmailHtml so HTML and text stay in sync.
+    var clientName = (brandDisplayForSlug(clientSlug) || "").toUpperCase();
     var greetingName = (body.recipientName || "").trim() || clientName;
     var expiresDisplay = new Date(expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
     var textLines = [];
@@ -1080,9 +1095,7 @@ export default async function handler(req, res) {
 
     logEmailSend({
       clientSlug: clientSlug,
-      clientName: clientSlug.indexOf("-") >= 0
-        ? clientSlug.split("-").map(function(w) { return w.toUpperCase(); }).join(" ")
-        : clientSlug.toUpperCase(),
+      clientName: (brandDisplayForSlug(clientSlug) || "").toUpperCase(),
       to: toList,
       cc: ccList,
       bcc: bccList,

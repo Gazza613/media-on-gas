@@ -91,6 +91,49 @@ export function clientIdentity(email, slugHint) {
   return dom;
 }
 
+// Known brand display names keyed by canonical slug. Used by the
+// email-share template and the dashboard's share modal to render a
+// clean brand title ("Sea Weeds") instead of whatever long campaign
+// name happened to be passed through as the slug
+// ("seaweedsseapointmetatrafficproximityjune2026"). Add new clients
+// here as profiles are created.
+var KNOWN_BRAND_DISPLAY = {
+  seaweeds: "Sea Weeds",
+  seastorm: "Sea Storm",
+  psychobunny: "Psycho Bunny",
+  psychobunnyza: "Psycho Bunny",
+  mtnmomo: "MTN MoMo",
+  mtnmomopos: "MTN MoMo POS",
+  mtnkhava: "MTN Khava",
+  concordcollege: "Concord College",
+  edencollege: "Eden College",
+  willowbrookvillage: "Willowbrook Village",
+  gasagency: "GAS Agency"
+};
+
+// Best-effort brand display for a raw client identifier. Canonicalises
+// the input then looks for an exact match first, then a longest-prefix
+// match (so a campaign name like "Sea_Weeds_Canal_Walk_..." slugified
+// to "seaweedscanalwalk..." still resolves to "Sea Weeds"). Falls back
+// to a title-cased reading of the raw input when no known brand
+// matches, never returns an empty string for a non-empty input.
+export function brandDisplayForSlug(raw) {
+  var rawStr = String(raw || "").trim();
+  if (!rawStr) return "";
+  var s = canonicalClientSlug(rawStr);
+  if (s && KNOWN_BRAND_DISPLAY[s]) return KNOWN_BRAND_DISPLAY[s];
+  if (s) {
+    var keys = Object.keys(KNOWN_BRAND_DISPLAY).sort(function(a, b) { return b.length - a.length; });
+    for (var i = 0; i < keys.length; i++) {
+      if (s.indexOf(keys[i]) === 0 && keys[i].length >= 5) return KNOWN_BRAND_DISPLAY[keys[i]];
+    }
+  }
+  // Title-cased fallback. Replace hyphens / underscores with spaces and
+  // capitalise the first letter of each word.
+  return rawStr.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim()
+    .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+}
+
 // Best display name for a client: prefer whatever slug the team last typed
 // for this identity (from the audit log), fall back to a capitalised
 // version of the registered domain's first label.
