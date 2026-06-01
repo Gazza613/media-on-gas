@@ -7297,7 +7297,20 @@ export default function MediaOnGas(){
                   if(selCampNames[a.campaignName])return true;
                   return false;
                 });
-                if(filteredAds.length===0)return null;
+                // No ads yet for the selected client (typical for a freshly
+                // wired client, e.g. Sea Weeds in its first week, where the
+                // campaign is selected but ad-level insights haven't synced).
+                // The previous behaviour silently returned null and the
+                // whole section vanished, which read as "missing on this
+                // client". Render a visible empty-state card with the same
+                // header so the page stays consistent across clients.
+                if(filteredAds.length===0)return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
+                  <div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:ff,lineHeight:1.7,maxWidth:580,margin:"0 auto"}}>
+                    <div style={{fontSize:14,color:P.txt,fontWeight:700,marginBottom:8}}>No ad-level data for this selection yet</div>
+                    <div style={{fontSize:11.5,color:P.label}}>The selected campaigns haven't yet returned ad-level insights for this date range. Top performing ads will appear here once the campaign starts delivering impressions and the daily ad-insights sync catches up.</div>
+                  </div>
+                </div>;
 
                 var platformGroup=function(p){
                   if(p==="Facebook")return"Facebook";
@@ -7475,7 +7488,19 @@ export default function MediaOnGas(){
                   if(groups.length===0)return;
                   sections.push({og:og,groups:groups});
                 });
-                if(sections.length===0)return null;
+                // Ads exist for this client but none fell into the four
+                // objective buckets (leads / appinstall / followers /
+                // landingpage). Same empty-state pattern as the no-ads case
+                // above, the section still renders so the layout stays
+                // consistent and the team gets a clear signal rather than
+                // a silent gap on the page.
+                if(sections.length===0)return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
+                  <div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:ff,lineHeight:1.7,maxWidth:580,margin:"0 auto"}}>
+                    <div style={{fontSize:14,color:P.txt,fontWeight:700,marginBottom:8}}>No top ads to surface yet</div>
+                    <div style={{fontSize:11.5,color:P.label}}>The selected campaigns have ad-level data but none have generated enough lead, install, follower or landing-page click volume yet to rank. Top performers will appear here as delivery accumulates.</div>
+                  </div>
+                </div>;
 
                 var renderAdCard=function(ad,rank,pgAccent,pgShort,objAccent){
                   var fm2=fmtMeta(ad.format);
