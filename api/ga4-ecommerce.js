@@ -242,14 +242,24 @@ export default async function handler(req, res) {
 
   // Newsletter signups. Page-path mode: GA4 already filtered to the
   // thank-you path, so sum screenPageViews across whatever path variants
-  // came back (trailing slash, query string, etc). Event mode: sum the
-  // (filtered) eventCount rows as before.
+  // came back (trailing slash, query string, etc). Event mode: sum only
+  // rows that exactly match the configured event name.
+  //
+  // CRITICAL: when neither newsletterPath nor newsletterEvent is
+  // configured, the batched report runs with NO dimensionFilter and
+  // GA4 returns the top 5 events overall. Summing those would surface
+  // a bogus newsletter count for any client without a signup flow
+  // (Sea Storm hit this, showing the sum of unrelated top events as
+  // "newsletter sign-ups"). Require an explicit configured signal,
+  // otherwise return zero and let the dashboard tile read 0 (which it
+  // already does for any other unwired KPI).
   var newsletterCount = 0;
   // Admin diagnostic: the exact rows GA4 returned for the newsletter
   // filter, so the team can see WHY a count is 0 (wrong path, no
   // traffic, different page name) without guessing.
   var newsletterRows = [];
-  if (reports[1] && reports[1].rows) {
+  var newsletterConfigured = !!(newsletterPath || newsletterEvent);
+  if (newsletterConfigured && reports[1] && reports[1].rows) {
     if (newsletterPath) {
       reports[1].rows.forEach(function(row) {
         var p = (row.dimensionValues && row.dimensionValues[0] && row.dimensionValues[0].value) || "";
@@ -258,10 +268,13 @@ export default async function handler(req, res) {
         if (newsletterRows.length < 15) newsletterRows.push({ label: p, count: Math.round(v) });
       });
     } else {
+      // Event mode with a configured event name. Require exact match so
+      // a top-events report (still returned by GA4 here) does not bleed
+      // unrelated events into the count.
       reports[1].rows.forEach(function(row) {
         var name = row.dimensionValues && row.dimensionValues[0] ? row.dimensionValues[0].value : "";
         var v = parseFloat((row.metricValues && row.metricValues[0] && row.metricValues[0].value) || 0);
-        if (!newsletterEvent || name === newsletterEvent) {
+        if (name === newsletterEvent) {
           newsletterCount += v;
           if (newsletterRows.length < 15) newsletterRows.push({ label: name, count: Math.round(v) });
         }
