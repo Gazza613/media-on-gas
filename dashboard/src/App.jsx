@@ -7340,7 +7340,7 @@ export default function MediaOnGas(){
                   {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
                   {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
                   {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
-                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page (min 5k impressions)"}
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page"}
                 ];
 
                 var IMP_FLOOR=5000;
@@ -7438,20 +7438,28 @@ export default function MediaOnGas(){
                         return Object.assign({},a,{results:folRes,resultType:"follows"});
                       });
                     } else if(og.key==="landingpage"){
+                      // LANDING PAGE section is pure LP-clicks. The previous
+                      // awareness sub-remap (reach headline for ads whose
+                      // campaign name tagged AWR/Awareness/Reach/Brand) was
+                      // mislabelling MTN MoMo's traffic ads as REACH because
+                      // their level-1 campaign tags tripped the regex. Reach
+                      // metrics already have a dedicated home in AWARENESS
+                      // HIGHLIGHTS / AWARENESS KEY METRICS for non-profiled
+                      // clients and in the profile-driven layout for profiled
+                      // clients, so this bucket headlines clicks uniformly.
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
-                        // Awareness ads land in the LANDING PAGE bucket (no
-                        // dedicated awareness objective), but their job is
-                        // reach, not clicks. Lead the card with reach (or
-                        // impressions when ad-level reach is absent) so an
-                        // awareness creative isn't ranked/headlined on a
-                        // metric it was never optimised for. Non-awareness
-                        // traffic ads keep the LP-clicks headline exactly.
-                        if(isAwarenessAd(a)){
-                          var rch=parseFloat(a.reach||0),imp=parseFloat(a.impressions||0);
-                          return Object.assign({},a,{results:rch>0?rch:imp,resultType:rch>0?"reach":"impressions"});
-                        }
                         var clicks=parseFloat(a.clicks||0);
                         return Object.assign({},a,{results:clicks,resultType:"lp_clicks"});
+                      });
+                    } else if(og.key==="appinstall"){
+                      // App-install campaigns optimise for clicks to the app
+                      // store. Headline store clicks (upstream often leaves
+                      // resultType as reach, which made IG cards read "REACH"
+                      // inside the CLICKS TO APP STORE section). engagementSort
+                      // below already ranks by clicks DESC / CTR DESC.
+                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
+                        var cl=parseFloat(a.clicks||0);
+                        return Object.assign({},a,{results:cl,resultType:"store_clicks"});
                       });
                     } else {
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
@@ -7459,15 +7467,7 @@ export default function MediaOnGas(){
                     if(objAds.length===0)return;
                     var sorter;
                     if(og.key==="leads"||og.key==="followers")sorter=leadSort;
-                    else if(og.key==="landingpage"){
-                      // Awareness ads in the landing-page bucket carry
-                      // results=reach (resultType reach/impressions).
-                      // Rank them by reach desc (the client's KPI), not
-                      // by clicks. Non-awareness landing-page ads keep
-                      // the click-volume sort exactly.
-                      var anyAwr=objAds.some(function(a){return a.resultType==="reach"||a.resultType==="impressions";});
-                      sorter=anyAwr?function(a,b){return (parseFloat(b.results||0)-parseFloat(a.results||0))||(parseFloat(b.impressions||0)-parseFloat(a.impressions||0));}:landingPageSort;
-                    }
+                    else if(og.key==="landingpage") sorter=landingPageSort;
                     else sorter=engagementSort;
                     var sorted=objAds.slice().sort(sorter).slice(0,5);
                     groups.push({pg:pg,ads:sorted,total:objAds.length});
@@ -7514,9 +7514,17 @@ export default function MediaOnGas(){
                           var rt=ad.resultType;
                           var rch=parseFloat(ad.reach||0);
                           var lbl,val;
+                          // Any objective-typed resultType (leads, installs,
+                          // follows, store_clicks, lp_clicks, clicks,
+                          // profile_visits, conversions, tt_views) is the
+                          // section's chosen metric and MUST headline its
+                          // own label, even at zero. The IG-fallback to
+                          // REACH only applies when the row has no
+                          // objective metric at all.
+                          var objType=rt==="leads"||rt==="installs"||rt==="follows"||rt==="profile_visits"||rt==="store_clicks"||rt==="lp_clicks"||rt==="clicks"||rt==="conversions"||rt==="tt_views";
                           if(rt==="reach"){ lbl="REACH"; val=fmt(parseFloat(ad.results||0)||rch); }
                           else if(rt==="impressions"){ lbl="IMPRESSIONS"; val=fmt(parseFloat(ad.impressions||0)||parseFloat(ad.results||0)); }
-                          else if(parseFloat(ad.results||0)>0){ lbl=resultLabelS(rt); val=fmt(ad.results); }
+                          else if(objType){ lbl=resultLabelS(rt); val=fmt(parseFloat(ad.results||0)); }
                           else if(ad.platform==="Instagram"){ lbl=rch>0?"REACH":"IMPRESSIONS"; val=fmt(rch>0?rch:parseFloat(ad.impressions||0)); }
                           else { lbl=resultLabelS(rt); val="0"; }
                           return [
@@ -8297,22 +8305,22 @@ export default function MediaOnGas(){
                 return Object.assign({},a,{results:fbFol,resultType:"follows"});
               });
             }
-            // Awareness ads land in the landing-page bucket (no awareness
-            // objective in the classifier). Their KPI is reach, not LP
-            // clicks, so remap results->reach (resultType "reach") the
-            // same way Followers is remapped above. The existing
-            // results-desc sort then ranks them by reach, the headline
-            // reads REACH, and non-awareness landing-page ads (other
-            // clients) are untouched.
-            if (byObj.landingpage && byObj.landingpage.length > 0) {
-              byObj.landingpage = byObj.landingpage.map(function(a){
-                var o=String(a.objective||"").toLowerCase();
-                var nm=String(a.campaignName||"").toLowerCase();
-                var awr=o.indexOf("aware")>=0||o.indexOf("reach")>=0||o.indexOf("brand")>=0
-                  ||/(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/.test(nm);
-                if(!awr)return a;
-                var rch=parseFloat(a.reach||0),imp=parseFloat(a.impressions||0);
-                return Object.assign({},a,{results:rch>0?rch:imp,resultType:rch>0?"reach":"impressions"});
+            // LANDING PAGE bucket is pure LP clicks. The earlier awareness
+            // sub-remap (results->reach when name tagged AWR/Awareness/Reach/
+            // Brand) was mislabelling MTN MoMo's traffic ads as REACH because
+            // their level-1 campaign tags tripped the regex. Reach metrics
+            // live in the dedicated AWARENESS sections on Summary and in the
+            // profile-driven layout for profiled clients, so this section
+            // headlines clicks uniformly and api/ads.js' upstream
+            // resultType="lp_clicks" passes through unchanged.
+            // App-install ads must headline store clicks, not whatever upstream
+            // resultType set (often reach, which made IG cards read "REACH" in
+            // the CLICKS TO APP STORE section). sortBy:"results" then ranks by
+            // store-click volume, matching the section's stated criterion.
+            if (byObj.appinstall && byObj.appinstall.length > 0) {
+              byObj.appinstall = byObj.appinstall.map(function(a){
+                var cl=parseFloat(a.clicks||0);
+                return Object.assign({},a,{results:cl,resultType:"store_clicks"});
               });
             }
 
@@ -8383,10 +8391,29 @@ export default function MediaOnGas(){
                     {/* IG publisher rows often carry ad.results=0 because Meta
                         books conversion actions to the Facebook split; fall
                         back to the impressions headline so the overlay never
-                        disappears on Instagram thumbnails. */}
-                    <div style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?resultLabel(ad.resultType):"IMPRESSIONS"}</div>
-                    <div style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{ad.results>0?fmt(ad.results):fmt(ad.impressions)}</div>
-                    <div style={{fontSize:10,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(fR(ad.spend/ad.results)+" "+costPerLabel(ad.resultType)):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
+                        disappears on Instagram thumbnails. Click-based result
+                        types (store_clicks / lp_clicks / clicks) are tracked
+                        per-publisher, so they always headline their own label
+                        — never silently swap to IMPRESSIONS inside a CLICKS
+                        TO APP STORE / LANDING PAGE section. */}
+                    {(function(){
+                      var rt=ad.resultType;
+                      // Any objective-typed resultType is the section's chosen
+                      // metric and must headline its own label, even at zero.
+                      // The IMPRESSIONS fallback only applies when the row has
+                      // no objective metric at all (rt is reach / impressions
+                      // / empty).
+                      var objType=rt==="leads"||rt==="installs"||rt==="follows"||rt==="profile_visits"||rt==="store_clicks"||rt==="lp_clicks"||rt==="clicks"||rt==="conversions"||rt==="tt_views";
+                      var hasRes=ad.results>0;
+                      var lbl=hasRes||objType?resultLabel(rt):"IMPRESSIONS";
+                      var val=hasRes?fmt(ad.results):(objType?"0":fmt(ad.impressions));
+                      var sub=hasRes?(fR(ad.spend/ad.results)+" "+costPerLabel(rt)):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks");
+                      return [
+                        <div key="l" style={{fontSize:9,color:"rgba(255,255,255,0.78)",fontFamily:fm,letterSpacing:1.6,fontWeight:800,marginBottom:3,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{lbl}</div>,
+                        <div key="v" style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 10px rgba(0,0,0,0.9)"}}>{val}</div>,
+                        <div key="s" style={{fontSize:10,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{sub}</div>
+                      ];
+                    })()}
                   </div>}
                   <div style={{position:"absolute",top:10,left:10,background:isTop?P.mint:"rgba(255,255,255,0.18)",color:isTop?"#062014":P.txt,padding:"5px 11px",borderRadius:6,fontSize:11,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                   <div style={{position:"absolute",top:10,right:10,background:adPlatC,color:textOnAccent(adPlatC),padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.4)",zIndex:3}}>{adPlatShort}</div>
