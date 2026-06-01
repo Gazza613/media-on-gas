@@ -7297,18 +7297,18 @@ export default function MediaOnGas(){
                   if(selCampNames[a.campaignName])return true;
                   return false;
                 });
-                // No ads yet for the selected client (typical for a freshly
-                // wired client, e.g. Sea Weeds in its first week, where the
-                // campaign is selected but ad-level insights haven't synced).
-                // The previous behaviour silently returned null and the
-                // whole section vanished, which read as "missing on this
-                // client". Render a visible empty-state card with the same
-                // header so the page stays consistent across clients.
+                // Ad-level data didn't match the selected campaigns for
+                // this date range. Could mean a fresh client with no
+                // delivery yet, OR an ads-endpoint hiccup, OR a campaign-id
+                // join mismatch. The previous behaviour silently returned
+                // null and the whole section vanished. Render a visible
+                // header + neutral note so the page stays consistent and a
+                // missing section is never invisible to the team.
                 if(filteredAds.length===0)return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(P.mint,"TOP ADS PER OBJECTIVE (BY PLATFORM)",Ic.crown(P.mint,18))}
                   <div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:ff,lineHeight:1.7,maxWidth:580,margin:"0 auto"}}>
-                    <div style={{fontSize:14,color:P.txt,fontWeight:700,marginBottom:8}}>No ad-level data for this selection yet</div>
-                    <div style={{fontSize:11.5,color:P.label}}>The selected campaigns haven't yet returned ad-level insights for this date range. Top performing ads will appear here once the campaign starts delivering impressions and the daily ad-insights sync catches up.</div>
+                    <div style={{fontSize:14,color:P.txt,fontWeight:700,marginBottom:8}}>No ad-level rows matched the selected campaigns</div>
+                    <div style={{fontSize:11.5,color:P.label}}>Top ads will populate as soon as Meta / TikTok / Google return ad-row insights for the selected campaigns and date range.</div>
                   </div>
                 </div>;
 
