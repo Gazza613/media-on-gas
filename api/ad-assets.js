@@ -218,10 +218,16 @@ export async function computeAssetBreakdown(adId, from, to) {
   var totalInstalls = assets.reduce(function(s, a){ return s + a.installs; }, 0);
   var totalFollows = assets.reduce(function(s, a){ return s + a.follows; }, 0);
   // Awareness/reach: rank on impressions (the per-creative reach proxy)
-  // and report cost as CPM, never link clicks. Everything else keeps
-  // the leads/installs/follows/link-clicks ladder.
-  var resultKey = awareness ? "impressions" : totalLeads > 0 ? "leads" : totalInstalls > 0 ? "installs" : totalFollows > 0 ? "follows" : "linkClicks";
-  var resultLabel = awareness ? "Impressions" : resultKey === "leads" ? "Leads" : resultKey === "installs" ? "Installs" : resultKey === "follows" ? "Follows & Likes" : "Link Clicks";
+  // and report cost as CPM, never clicks. Everything else keeps the
+  // leads/installs/follows/clicks ladder. For the clicks bucket the
+  // per-asset metric is Meta's `row.clicks` (same field the top tile
+  // surfaces as LP CLICKS via `ins.clicks`), NOT the action_type=
+  // link_click subset. This keeps the per-creative breakdown using
+  // the same metric as the headline so the per-asset sum reconciles
+  // with the whole-ad LP CLICKS total (within Meta's per-asset
+  // attribution drift, usually within a click or two).
+  var resultKey = awareness ? "impressions" : totalLeads > 0 ? "leads" : totalInstalls > 0 ? "installs" : totalFollows > 0 ? "follows" : "clicks";
+  var resultLabel = awareness ? "Impressions" : resultKey === "leads" ? "Leads" : resultKey === "installs" ? "Installs" : resultKey === "follows" ? "Follows & Likes" : "LP Clicks";
 
   assets.forEach(function(a) {
     a.results = a[resultKey] || 0;
@@ -264,8 +270,8 @@ export async function computeAssetBreakdown(adId, from, to) {
       };
     }),
     note: awareness
-      ? "This is an awareness campaign, so the winning creative is the one that delivered the most impressions (reach is not exposed per creative by Meta, impressions is the per-creative proxy). Cost is shown as CPM. Spend, impressions and CTR per creative are exact."
-      : "Spend, impressions, clicks and CTR per creative are exact. Result counts are Meta's modelled attribution, the platform optimises combinations rather than running clean isolated splits, so treat results as a strong directional signal rather than a lab test."
+      ? "This is an awareness campaign, so the winning creative is the one that delivered the most impressions (reach is not exposed per creative by Meta, impressions is the per-creative proxy). Cost is shown as CPM. Per-creative spend, impressions and CTR come from Meta's per-asset breakdown, which can sum to slightly more or less than the whole-ad totals because Meta's attribution model treats each delivered asset independently — treat the per-creative read as a directional signal of which creative is winning, not a clean partition of the totals."
+      : "Per-creative spend, impressions, LP clicks and CTR come from Meta's per-asset breakdown, which can sum to slightly more or less than the whole-ad totals because Meta attributes some delivery and clicks at the asset level and some at the ad level (page-name clicks, profile clicks and generic engagement aren't asset-attributable). Treat the per-creative read as a directional signal of which creative is winning, not a clean partition of the totals."
   };
   assetCache[cacheKey] = { ts: Date.now(), payload: payload };
   return payload;
