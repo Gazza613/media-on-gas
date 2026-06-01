@@ -748,7 +748,11 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:36px 40px 24px;text-align:center;">
         <div style="margin-bottom:18px;">
-          ${clientLogo ? `<img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="160" height="160" border="0" style="width:160px;height:160px;display:inline-block;object-fit:contain;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;margin:0 auto;"/>` : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
+          ${clientLogo
+            ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr><td align="center" style="text-align:center;padding:6px 0;">
+                <img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="300" border="0" style="width:300px;max-width:80%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>
+              </td></tr></table>`
+            : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
         </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
