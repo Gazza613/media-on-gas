@@ -79,13 +79,22 @@ export default async function handler(req, res) {
   if (!clientName) { res.status(400).json({ error: "client required" }); return; }
 
   var profile = await getKpiProfile(clientName);
-  if (!profile || !profile.ecommerce || !profile.ecommerce.enabled) {
-    res.status(200).json({ ok: false, enabled: false, reason: "Ecommerce is not enabled for this client." });
+  // Self-diagnosing error messages: the previous one-line "Ecommerce is
+  // not enabled for this client" hid three different failure modes
+  // (no profile saved, profile saved without ecommerce, profile with
+  // ecommerce.enabled = false). The admin reads this as the "Team note"
+  // line on the Ecommerce tab, so be explicit about which case it is.
+  if (!profile) {
+    res.status(200).json({ ok: false, enabled: false, reason: "No KPI profile saved for \"" + clientName + "\". Open Settings, KPI Profiles, create a profile for this client and flip the Ecommerce toggle on." });
+    return;
+  }
+  if (!profile.ecommerce || !profile.ecommerce.enabled) {
+    res.status(200).json({ ok: false, enabled: false, reason: "KPI profile exists for \"" + clientName + "\" but the Ecommerce (GA4) toggle is off. Open Settings, KPI Profiles, edit the profile and switch Ecommerce to Enabled, then Save." });
     return;
   }
   var propertyId = String(profile.ecommerce.ga4PropertyId || "").replace(/[^0-9]/g, "");
   if (!propertyId) {
-    res.status(200).json({ ok: false, enabled: true, reason: "No GA4 property ID set on this client's KPI profile." });
+    res.status(200).json({ ok: false, enabled: true, reason: "Ecommerce is enabled for \"" + clientName + "\" but the GA4 property ID field is empty. Open Settings, KPI Profiles, edit the profile, paste the numeric GA4 property ID (e.g. 481822031) and Save." });
     return;
   }
   var newsletterEvent = String(profile.ecommerce.newsletterEvent || "").trim();

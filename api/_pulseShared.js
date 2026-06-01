@@ -572,8 +572,14 @@ export function buildProcedure(type, y, b, rmY) {
 
   // Conservative frequency verdict. Only assert fatigue / not-fatigue when
   // we actually have a frequency reading; otherwise leave it neutral.
+  // Skipped for Google: api/campaigns.js sets a hardcoded 2x frequency
+  // estimate (Google Ads does not expose a per-campaign frequency on
+  // most surfaces), so a "frequency is 2.00x" line is just the estimate
+  // echoed back, not a real reading. Better silence than a fake number.
   var freqStep;
-  if (freqY >= 3) {
+  if (fam === "google") {
+    freqStep = null;
+  } else if (freqY >= 3) {
     freqStep = "Frequency is " + fx2(freqY) + "x, above the 3x fatigue line, so audience saturation is the likely cause, rotate fresh creative within 24 to 48 hours.";
   } else if (freqY > 0) {
     freqStep = "Frequency is " + fx2(freqY) + "x, below the 3x fatigue line, so saturation is unlikely to be the cause, look at creative relevance and auction pressure instead.";
@@ -610,24 +616,28 @@ export function buildProcedure(type, y, b, rmY) {
     cpcDirectionStep = "Confirm the CPC trajectory, a climbing CPC with falling clicks means the auction got harder.";
   }
 
+  // Local helper: drop any null/empty step (lets freqStep = null for
+  // Google quietly disappear without each case having to know).
+  var clean = function(arr) { return arr.filter(function(s) { return !!s; }); };
+
   switch (type) {
     case "ctr_collapse":
-      return [
+      return clean([
         creativeRotationStep(fam),
         freqStep,
         placementStep(fam),
         "Audit the creative for anything dated since launch (offer, headline, CTA, logo) that may have stopped resonating.",
         "If the brief allows, queue 2 to 3 fresh creative variants to test against the current control."
-      ];
+      ]);
     case "cpr_spike":
-      return [
+      return clean([
         ctrDirectionStep,
         freqStep,
         placementStep(fam),
         (fam === "meta"
           ? "Cross-reference the bid strategy, if it is Lowest Cost the auction is simply more expensive today, consider a Cost Cap or Bid Cap to enforce a ceiling."
           : "Cross-reference the bid strategy, if it is maximise-conversions / lowest-cost the auction is more expensive today, set a target CPA or bid cap to enforce a ceiling.")
-      ];
+      ]);
     case "frequency_cliff":
       return [
         "Frequency is " + fx2(freqY) + "x" + (freqY > 0 ? ", the audience pool is exhausting" : "") + ", open the campaign and check the audience size estimate.",
@@ -638,16 +648,16 @@ export function buildProcedure(type, y, b, rmY) {
           : "Consider adding a fresh similar / lookalike segment to extend reach beyond the current pool.")
       ];
     case "click_collapse":
-      return [
+      return clean([
         cpcDirectionStep,
         "Audit the creative for date relevance, broken links or a platform policy issue that may have throttled delivery.",
         (fam === "meta"
           ? "Check audience overlap, multiple campaigns competing for the same users inflate cost and starve clicks."
           : "Check for audience or keyword overlap with your other live campaigns competing for the same users."),
         freqStep
-      ];
+      ]);
     case "cpm_spike":
-      return [
+      return clean([
         (fam === "meta"
           ? "Open the campaign and check Quality, Engagement Rate and Conversion Rate Rankings, any Below Average rating drives CPM up."
           : fam === "tiktok"
@@ -658,7 +668,7 @@ export function buildProcedure(type, y, b, rmY) {
         (fam === "meta"
           ? "Consider a Cost Cap to enforce a CPM ceiling, or pause the single highest-CPM placement."
           : "Consider a bid cap to enforce a ceiling, or exclude the highest-cost placement.")
-      ];
+      ]);
     case "impressions_cliff":
       return [
         (fam === "google"
