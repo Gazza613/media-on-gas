@@ -4909,12 +4909,23 @@ export default function MediaOnGas(){
   // names (most-frequent, platform suffix stripped). Used only for the
   // admin ?resolve=/?client= param — for a client viewToken the server
   // forces its own slug and ignores whatever we pass.
+  // Agency accounts (GAS Agency) host multiple distinct clients on one
+  // Meta ad account, the accountName is "GAS Agency" for all of them.
+  // Extract the real client from the campaign name's pipe-segment so the
+  // KPI-profile resolve hits the seaweeds / seastorm slug, not gasagency
+  // (which has no profile and falls back to the legacy objective layout).
   var ecoClientName=useMemo(function(){
     var PS=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
     var counts={};
     (computed.allSelected||[]).forEach(function(c){
       var clean=String(c.accountName||"").trim().replace(PS,"").replace(PS,"").trim();
-      if(clean)counts[clean]=(counts[clean]||0)+1;
+      if(!clean)return;
+      if(AGENCY_NAMES[clean.toLowerCase()]){
+        var subClient=extractAgencyClient(c.campaignName);
+        if(subClient)counts[subClient]=(counts[subClient]||0)+1;
+        return;
+      }
+      counts[clean]=(counts[clean]||0)+1;
     });
     var best="",bn=0;Object.keys(counts).forEach(function(k){if(counts[k]>bn){bn=counts[k];best=k;}});
     return best;
@@ -4986,6 +4997,14 @@ export default function MediaOnGas(){
     (computed.allSelected||[]).forEach(function(c){
       var clean=String(c.accountName||"").trim().replace(PS,"").replace(PS,"").trim();
       if(!clean)return;
+      // Agency-aware: GAS Agency hosts multiple clients on one ad
+      // account, the per-client identity lives in the campaign name's
+      // pipe-segment (matches ecoClientName above + deriveClientNames).
+      if(AGENCY_NAMES[clean.toLowerCase()]){
+        var subClient=extractAgencyClient(c.campaignName);
+        if(!subClient)return;
+        clean=subClient;
+      }
       var n=norm(clean);
       var match=false;
       Object.keys(enabledNorm).forEach(function(en){
