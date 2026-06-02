@@ -732,7 +732,12 @@ function buildEmailHtml(opts) {
   // Add new entries here as designers tune brand presence in the email.
   var LOGO_WIDTH_BY_SLUG = {
     psychobunny: 120,
-    psychobunnyza: 120
+    psychobunnyza: 120,
+    // MTN MoMo brand mark reads heavy at the 300px default in inbox
+    // preview panes; halved to 150px per user direction. POS shares
+    // the same logo and the same width override.
+    mtnmomo: 150,
+    mtnmomopos: 150
   };
   var canonSlug = canonicalClientSlug(opts.clientSlug);
   var logoWidth = 300;
