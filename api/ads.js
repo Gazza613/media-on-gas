@@ -51,6 +51,15 @@ var metaAccounts = [
 function detectObjective(campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  // Community Reach: awareness-style objective that reaches into an
+  // existing community audience (FB / IG fans, Like / Follow custom
+  // audiences). Headlined on REACH with CPM as efficiency, LP clicks
+  // kept as a secondary signal on the card. Matched BEFORE followers
+  // so the like/follow tokens don't divert these campaigns to the
+  // FOLLOWERS bucket.
+  if (n.indexOf("follow/like-audience") >= 0 || n.indexOf("follow_like_audience") >= 0
+      || n.indexOf("follow-like-audience") >= 0 || n.indexOf("like-audience") >= 0
+      || (n.indexOf("reach") >= 0 && n.indexOf("community") >= 0)) return "community_reach";
   if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
@@ -900,6 +909,11 @@ export default async function handler(req, res) {
         else if (objective === "appinstall") { resCount = installs > 0 ? installs : ins.clicks; resType = installs > 0 ? "installs" : "store_clicks"; }
         // For Followers: ALWAYS show follows count (even 0). Never fall back.
         else if (objective === "followers") { resCount = pageLikes + follows; resType = "follows"; }
+        // Community Reach: result is REACH (unique people inside the
+        // community), cost label CPM. LP clicks stay on the ad row
+        // (a.clicks) and the dashboard renders them as a sub-line on
+        // the card, the campaign's clicks still feed every total.
+        else if (objective === "community_reach") { resCount = parseInt(ins.reach || 0); resType = "reach"; }
         // Landing Page: clicks to landing page
         else { resCount = ins.clicks; resType = "lp_clicks"; }
         allAds.push({
@@ -1182,6 +1196,7 @@ export default async function handler(req, res) {
           if (ttObjective === "followers") { ttResCount = follows; ttResType = "follows"; }
           else if (ttObjective === "appinstall") { ttResCount = ttClicks; ttResType = "store_clicks"; }
           else if (ttObjective === "leads") { ttResCount = ttClicks; ttResType = "clicks"; }
+          else if (ttObjective === "community_reach") { ttResCount = parseInt(mt.reach || 0); ttResType = "reach"; }
           else { ttResCount = ttClicks; ttResType = "lp_clicks"; }
           ttStaged.push({
             platform: "TikTok",
@@ -1485,6 +1500,7 @@ export default async function handler(req, res) {
             if (gConv > 0) { gResCount = gConv; gResType = gObjective === "leads" ? "leads" : gObjective === "appinstall" ? "installs" : "conversions"; }
             else if (gObjective === "appinstall") { gResCount = clk; gResType = "store_clicks"; }
             else if (gObjective === "leads") { gResCount = clk; gResType = "clicks"; }
+            else if (gObjective === "community_reach") { gResCount = parseInt(r.metrics && r.metrics.reach || 0) || parseInt(r.metrics && r.metrics.impressions || 0); gResType = "reach"; }
             else { gResCount = clk; gResType = "lp_clicks"; }
             allAds.push({
               platform: gPlatform,

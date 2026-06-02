@@ -6447,20 +6447,25 @@ export default function MediaOnGas(){
               if(canon==="appinstall")obj="Clicks to App Store";
               else if(canon==="leads")obj="Leads";
               else if(canon==="followers")obj="Followers & Likes";
+              else if(canon==="community_reach")obj="Community Reach";
               else if(canon==="landingpage")obj="Landing Page Clicks";
               else{
                 // canon is "unknown" / empty, fall through to name-based.
                 var n=(camp.campaignName||"").toLowerCase();
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
+                // Community Reach matched BEFORE Followers so the
+                // like/follow tokens in the audience tag don't divert.
+                else if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
                 else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
                 else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
                 else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
               }
-              if(!objectives4[obj])objectives4[obj]={spend:0,clicks:0,imps:0,results:0,byPlatform:{}};
-              objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);
+              if(!objectives4[obj])objectives4[obj]={spend:0,clicks:0,imps:0,results:0,reach:0,byPlatform:{}};
+              objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);objectives4[obj].reach+=parseFloat(camp.reach||0);
               var result;
               if(obj==="Leads"){result=parseFloat(camp.leads||0);}
               else if(obj==="Followers & Likes"){result=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);if(result===0&&camp.platform==="Instagram"){var igFL1=findIgGrowth(camp.campaignName,pages);if(igFL1>0)result=igFL1;}}
+              else if(obj==="Community Reach"){result=parseFloat(camp.reach||0);}
               else{result=parseFloat(camp.clicks||0);}
               objectives4[obj].results+=result;
               // Per-platform split so the Objective Insights narrative can
@@ -6501,9 +6506,9 @@ export default function MediaOnGas(){
             var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
             var platCol4={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
             var platShort={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
-            var objKeys=["Clicks to App Store","Landing Page Clicks","Followers & Likes","Leads"];
-            var objCol4={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
-            var objCL4={"Clicks to App Store":"COST PER CLICK","Landing Page Clicks":"COST PER CLICK","Leads":"COST PER LEAD","Followers & Likes":"COST PER FOLLOWER"};
+            var objKeys=["Clicks to App Store","Landing Page Clicks","Community Reach","Followers & Likes","Leads"];
+            var objCol4={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.solar,"Leads":P.rose,"Followers & Likes":P.tt};
+            var objCL4={"Clicks to App Store":"COST PER CLICK","Landing Page Clicks":"COST PER CLICK","Community Reach":"COST PER 1,000 REACHED","Leads":"COST PER LEAD","Followers & Likes":"COST PER FOLLOWER"};
 
             var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
             var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember,_currency:true};}).sort(function(a,b){return b.value-a.value;});
@@ -6809,13 +6814,17 @@ export default function MediaOnGas(){
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14,marginBottom:20}}>
                   {objKeys.filter(function(k){return objectives4[k];}).map(function(objName){
-                    var od=objectives4[objName];var oc=objCol4[objName]||P.ember;var costPer=od.results>0?od.spend/od.results:0;
-                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:benchmarks.meta.cpc;
+                    var od=objectives4[objName];var oc=objCol4[objName]||P.ember;
+                    // Community Reach reports CPM (cost per 1,000 reached)
+                    // not the spend/reach raw fraction. Every other
+                    // objective keeps the standard spend/result formula.
+                    var costPer=od.results>0?(objName==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;
+                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:benchmarks.meta.cpc;
                     var bmCol=costPer>0&&bm&&costPer<=bm.mid?P.mint:costPer>0&&bm&&costPer>bm.high?P.rose:P.solar;
                     var bmTag=costPer>0&&bm?(costPer<=bm.low?"EXCELLENT":costPer<=bm.mid?"GOOD":costPer<=bm.high?"ON TRACK":"OPTIMISE"):"";
                     var cObjPrev=(compareComputed&&compareComputed.objectives&&compareComputed.objectives[objName])||null;
                     var prevResults=cObjPrev?cObjPrev.results:null;
-                    var prevCostPer=cObjPrev&&cObjPrev.results>0?cObjPrev.spend/cObjPrev.results:null;
+                    var prevCostPer=cObjPrev&&cObjPrev.results>0?(objName==="Community Reach"?(cObjPrev.spend/cObjPrev.results*1000):(cObjPrev.spend/cObjPrev.results)):null;
                     return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{objName}</span></div>
                       <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}{prevResults!==null&&deltaChip(od.results,prevResults,false)}</div>
@@ -6826,18 +6835,32 @@ export default function MediaOnGas(){
                       </div>
                     </div>;})}
                 </div>
-                {(function(){var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/"),results:od.results,spend:od.spend,costPer:od.results>0?parseFloat((od.spend/od.results).toFixed(2)):0,color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
-                {(function(){var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];var totalResults=0;var totalObjSpend=0;active.forEach(function(k){totalResults+=objectives4[k].results;totalObjSpend+=objectives4[k].spend;});
-                // Blended cost per result across all contributing platforms
-                // for the active objective(s). When a single objective is
-                // active the label reflects its specific cost (e.g. BLENDED
-                // COST PER LEAD for the Leads objective), when multiple
-                // objectives are mixed the label generalises to COST PER
-                // RESULT since the underlying result types differ.
-                var blendedCostPer=totalResults>0?totalObjSpend/totalResults:0;
-                var blendedLabel="BLENDED "+(active.length===1?(objCL4[active[0]]||"COST PER RESULT"):"COST PER RESULT");
-                var blendedCol=active.length===1?(objCol4[active[0]]||P.solar):P.solar;
-                return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(objectives4[bestEff].spend/objectives4[bestEff].results)+"/result",objCol4[bestEff]||P.mint):null,blendedCostPer>0?stand(blendedLabel,fR(blendedCostPer),blendedCol):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);})()}
+                {(function(){var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
+                {(function(){
+                  var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};
+                  var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;
+                  var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];
+                  // BEST EFFICIENCY can't fairly compare CPM against CPC across mixed
+                  // objectives. When the active set spans both types, fall back to a
+                  // same-type subset (everything except Community Reach), so the
+                  // comparison stays apples-to-apples.
+                  var costClass=function(k){return k==="Community Reach"?"cpm":"cpr";};
+                  var dominantClass=active.length>0?costClass(active[0]):"cpr";
+                  var efficiencyPool=active.filter(function(k){return costClass(k)===dominantClass;});
+                  if(efficiencyPool.length===0)efficiencyPool=active;
+                  var bestEff=efficiencyPool.slice().sort(function(a,b){return cpFor(a,objectives4[a])-cpFor(b,objectives4[b]);})[0];
+                  var totalResults=0;var totalObjSpend=0;active.forEach(function(k){totalResults+=objectives4[k].results;totalObjSpend+=objectives4[k].spend;});
+                  // Blended cost per result across all contributing platforms
+                  // for the active objective(s). When a single objective is
+                  // active the label reflects its specific cost (e.g. BLENDED
+                  // COST PER LEAD for the Leads objective), when multiple
+                  // objectives are mixed the label generalises to COST PER
+                  // RESULT since the underlying result types differ.
+                  var blendedCostPer=totalResults>0?totalObjSpend/totalResults:0;
+                  var blendedLabel="BLENDED "+(active.length===1?(objCL4[active[0]]||"COST PER RESULT"):"COST PER RESULT");
+                  var blendedCol=active.length===1?(objCol4[active[0]]||P.solar):P.solar;
+                  return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(cpFor(bestEff,objectives4[bestEff]))+(bestEff==="Community Reach"?" CPM":"/result"),objCol4[bestEff]||P.mint):null,blendedCostPer>0?stand(blendedLabel,fR(blendedCostPer),blendedCol):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);
+                })()}
                 {(function(){
                   var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
                   if(active.length===0)return null;
@@ -7353,6 +7376,7 @@ export default function MediaOnGas(){
                   {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
                   {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
                   {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
+                  {key:"community_reach",label:"COMMUNITY REACH",accent:P.solar,criterion:"by reach & CPM"},
                   {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page"}
                 ];
 
@@ -7379,6 +7403,17 @@ export default function MediaOnGas(){
                 var landingPageSort=function(a,b){
                   if(b.clicks!==a.clicks)return b.clicks-a.clicks;
                   return b.ctr-a.ctr;
+                };
+                // Community Reach ranks by reach DESC, then CPM ASC (cheapest
+                // reach wins the tiebreaker). Mirrors the way LANDING PAGE
+                // ranks on clicks: reach is what the campaign is optimised
+                // for, CPM is the efficiency tie-break.
+                var communityReachSort=function(a,b){
+                  var aR=parseFloat(a.results||a.reach||0),bR=parseFloat(b.results||b.reach||0);
+                  if(bR!==aR)return bR-aR;
+                  var aCpm=a.impressions>0?(a.spend/a.impressions*1000):Infinity;
+                  var bCpm=b.impressions>0?(b.spend/b.impressions*1000):Infinity;
+                  return aCpm-bCpm;
                 };
 
                 // Reordered: outer = objective, inner = platform.
@@ -7474,6 +7509,16 @@ export default function MediaOnGas(){
                         var cl=parseFloat(a.clicks||0);
                         return Object.assign({},a,{results:cl,resultType:"store_clicks"});
                       });
+                    } else if(og.key==="community_reach"){
+                      // Community Reach is awareness-style: headline REACH,
+                      // efficiency CPM, LP clicks kept as a secondary
+                      // signal rendered on the card. Per-ad result is the
+                      // ad's reach (unique people reached inside the
+                      // community audience), not its click count.
+                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
+                        var rch=parseFloat(a.reach||0);
+                        return Object.assign({},a,{results:rch,resultType:"reach"});
+                      });
                     } else {
                       objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;});
                     }
@@ -7481,6 +7526,7 @@ export default function MediaOnGas(){
                     var sorter;
                     if(og.key==="leads"||og.key==="followers")sorter=leadSort;
                     else if(og.key==="landingpage") sorter=landingPageSort;
+                    else if(og.key==="community_reach") sorter=communityReachSort;
                     else sorter=engagementSort;
                     var sorted=objAds.slice().sort(sorter).slice(0,5);
                     groups.push({pg:pg,ads:sorted,total:objAds.length});
@@ -7523,6 +7569,7 @@ export default function MediaOnGas(){
                           <div style={{fontSize:8,color:"rgba(255,255,255,0.7)",fontFamily:fm,letterSpacing:1.5,marginBottom:3,fontWeight:800}}>{resultLabelS(ad.resultType)}</div>
                           <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:fm,lineHeight:1,textShadow:"0 2px 12px rgba(0,0,0,0.6)"}}>{ad.results>0?fmt(ad.results):"\u2014"}</div>
                           {ad.results>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.85)",fontFamily:fm,letterSpacing:1,marginTop:4,fontWeight:700}}>{crStr}</div>}
+                          {ad.objective==="community_reach"&&parseFloat(ad.clicks||0)>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.75)",fontFamily:fm,letterSpacing:0.6,marginTop:3,fontWeight:600}}>{fmt(parseFloat(ad.clicks))+" LP CLICKS \u00b7 "+(parseFloat(ad.ctr||0)).toFixed(2)+"% CTR"}</div>}
                         </div>}
                       </div>
                       {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
@@ -7558,6 +7605,12 @@ export default function MediaOnGas(){
                           ];
                         })()}
                         <div style={{fontSize:9,color:"rgba(255,255,255,0.88)",fontFamily:fm,letterSpacing:0.8,marginTop:4,fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{ad.results>0?(crStr):(ad.ctr>0?ad.ctr.toFixed(2)+"% CTR":fmt(ad.clicks)+" clicks")}</div>
+                        {/* Community Reach sub-line: LP clicks + CTR are
+                            kept as a secondary signal on the card. The
+                            campaign is optimised for reach (headline),
+                            CPM is the efficiency read, LP clicks are a
+                            useful but not primary signal per the client. */}
+                        {ad.objective==="community_reach"&&parseFloat(ad.clicks||0)>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.82)",fontFamily:fm,letterSpacing:0.6,marginTop:3,fontWeight:600,textShadow:"0 1px 3px rgba(0,0,0,0.8)"}}>{fmt(parseFloat(ad.clicks))+" LP CLICKS · "+(parseFloat(ad.ctr||0)).toFixed(2)+"% CTR"}</div>}
                       </div>}
                       <div style={{position:"absolute",top:8,left:8,background:"rgba(255,255,255,0.18)",color:P.txt,padding:"4px 9px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",zIndex:3}}>{"#"+rank}</div>
                       <div style={{position:"absolute",bottom:8,left:8,background:fm2.color,color:textOnAccent(fm2.color),padding:"3px 7px",borderRadius:4,fontSize:8,fontWeight:900,fontFamily:fm,letterSpacing:0.8,boxShadow:"0 2px 6px rgba(0,0,0,0.5)",zIndex:3}}>{fm2.label}</div>
@@ -8281,6 +8334,7 @@ export default function MediaOnGas(){
               {key:"leads",label:"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.fb,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
               {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,icon:Ic.bolt(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on store clicks delivered and cost per click"},
               {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.fb,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
+              {key:"community_reach",label:"COMMUNITY REACH",accent:P.solar,icon:Ic.users(P.fb,20),metric:"reach",costLabel:"CPM",sortBy:"results",bench:benchmarks.meta.cpm,desc:"Best ad based on unique reach inside the targeted community and CPM"},
               {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
             ];
 
@@ -8346,6 +8400,16 @@ export default function MediaOnGas(){
               byObj.appinstall = byObj.appinstall.map(function(a){
                 var cl=parseFloat(a.clicks||0);
                 return Object.assign({},a,{results:cl,resultType:"store_clicks"});
+              });
+            }
+            // Community Reach bucket: headline REACH (unique people
+            // reached inside the targeted community), sort by reach,
+            // CPM as efficiency. LP clicks remain on the row so the
+            // card can render them as a secondary sub-line.
+            if (byObj.community_reach && byObj.community_reach.length > 0) {
+              byObj.community_reach = byObj.community_reach.map(function(a){
+                var rch=parseFloat(a.reach||0);
+                return Object.assign({},a,{results:rch,resultType:"reach"});
               });
             }
 
@@ -9406,9 +9470,13 @@ export default function MediaOnGas(){
                 if(canon==="appinstall")return "Clicks to App Store";
                 if(canon==="leads")return "Leads";
                 if(canon==="followers")return "Followers & Likes";
+                if(canon==="community_reach")return "Community Reach";
                 if(canon==="landingpage")return "Landing Page Clicks";
                 var n=String(adset.campaignName||"").toLowerCase();
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
+                // Community Reach matched BEFORE Followers so the
+                // like/follow tokens in the audience tag don't divert.
+                if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))return "Community Reach";
                 if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
@@ -9424,9 +9492,12 @@ export default function MediaOnGas(){
               // Like&Follow adsets showed 0/1 here. Fall back to the
               // breakdown sum only when followsTrue is absent.
               var followsLikesAttr=(parseFloat(a.followsTrue||0)>0)?parseFloat(a.followsTrue||0):(parseFloat(a.follows||0)+parseFloat(a.pageLikes||0));
-              var result=obj==="Leads"?parseFloat(a.leads||0):obj==="Followers & Likes"?followsLikesAttr:parseFloat(a.clicks||0);
+              var result=obj==="Leads"?parseFloat(a.leads||0):obj==="Followers & Likes"?followsLikesAttr:obj==="Community Reach"?parseFloat(a.reach||0):parseFloat(a.clicks||0);
               var spend=parseFloat(a.spend||0);var clicks=parseFloat(a.clicks||0);var imps=parseFloat(a.impressions||0);
-              var ctr=imps>0?(clicks/imps*100):0;var cpc=clicks>0?spend/clicks:0;var costPer=result>0?spend/result:0;
+              // Community Reach reports CPM (cost per 1,000 reached) on its
+              // costPer column to match the section's stated efficiency
+              // metric. Every other objective keeps spend/result.
+              var ctr=imps>0?(clicks/imps*100):0;var cpc=clicks>0?spend/clicks:0;var costPer=result>0?(obj==="Community Reach"?spend/result*1000:spend/result):0;
               return{adsetName:a.adsetName,campaignName:a.campaignName,platform:a.platform,objective:obj,spend:spend,clicks:clicks,impressions:imps,reach:parseFloat(a.reach||0),ctr:ctr,cpc:cpc,result:result,costPer:costPer,follows:parseFloat(a.follows||0),pageLikes:parseFloat(a.pageLikes||0),followsTrue:parseFloat(a.followsTrue||0),leads:parseFloat(a.leads||0)};
             });
 
@@ -9446,10 +9517,10 @@ export default function MediaOnGas(){
             var platList3=["Facebook","Instagram","TikTok","Google Display"];
             var platCol3={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd};
             var platBdg3={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD"};
-            var objList3=["Clicks to App Store","Landing Page Clicks","Followers & Likes","Leads"];
-            var objCol3={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Leads":P.rose,"Followers & Likes":P.tt};
-            var objRL3={"Clicks to App Store":"App Clicks","Landing Page Clicks":"LP Clicks","Leads":"Leads","Followers & Likes":"Follows/Likes"};
-            var objCL3={"Clicks to App Store":"CPC","Landing Page Clicks":"CPC","Leads":"CPL","Followers & Likes":"CPF"};
+            var objList3=["Clicks to App Store","Landing Page Clicks","Community Reach","Followers & Likes","Leads"];
+            var objCol3={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.solar,"Leads":P.rose,"Followers & Likes":P.tt};
+            var objRL3={"Clicks to App Store":"App Clicks","Landing Page Clicks":"LP Clicks","Community Reach":"Reach","Leads":"Leads","Followers & Likes":"Follows/Likes"};
+            var objCL3={"Clicks to App Store":"CPC","Landing Page Clicks":"CPC","Community Reach":"CPM","Leads":"CPL","Followers & Likes":"CPF"};
             var platOrd3={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
 
             var adsetTip=function(props){if(!props.active||!props.payload||!props.payload[0])return null;var d=props.payload[0].payload;return <div style={{background:"rgba(6,2,14,0.95)",border:"1px solid "+P.rule,borderRadius:10,padding:"10px 14px",maxWidth:360}}><div style={{fontSize:12,fontWeight:700,color:P.txt,marginBottom:6,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.5}}>{d.fullName||d.name}</div><div style={{fontSize:10,color:P.label,marginBottom:2}}>{d.platform||""}</div>{props.payload.map(function(p,i){return <div key={i} style={{fontSize:11,color:P.ember,fontFamily:fm,fontWeight:700}}>{p.name}: {typeof p.value==="number"&&p.name.indexOf("CTR")>=0?p.value.toFixed(2)+"%":typeof p.value==="number"&&(p.name==="Results"||p.name==="Clicks")?fmt(p.value):typeof p.value==="number"?fR(p.value):p.value}</div>;})}</div>;};
@@ -9467,7 +9538,10 @@ export default function MediaOnGas(){
               var oImps=sorted6.reduce(function(a,r){return a+r.impressions;},0);
               var oCtr=oImps>0?(oClicks/oImps*100):0;
               var oCpc=oClicks>0?oSpend/oClicks:0;
-              var oCostPer=oResults>0?oSpend/oResults:0;
+              // Community Reach reports CPM (cost per 1,000 reached) on the
+              // section's COST PER tile. Every other objective keeps the
+              // standard spend/result formula.
+              var oCostPer=oResults>0?(objName==="Community Reach"?oSpend/oResults*1000:oSpend/oResults):0;
               var qualifiedAds=sorted6.filter(function(r){return r.result>=10&&r.costPer>0&&r.spend>=oSpend*0.03;});
               var bestAd=qualifiedAds.length>0?qualifiedAds.reduce(function(a,r){var aScore=a.result>0?(a.result/a.spend):0;var rScore=r.result>0?(r.result/r.spend):0;return rScore>aScore?r:a;}):sorted6.reduce(function(a,r){return r.result>a.result?r:a;},{result:0,adsetName:"",platform:"",costPer:0,ctr:0,spend:0});
               var chartD=sorted6.slice().sort(function(a,b){return b.result-a.result;}).map(function(r){var platTag=r.platform==="Facebook"?"FB":r.platform==="Instagram"?"IG":r.platform==="TikTok"?"TT":"GD";return{name:platTag+" | "+r.adsetName,fullName:r.adsetName,platform:r.platform,Results:r.result,CostPer:r.costPer,CTR:r.ctr};});
