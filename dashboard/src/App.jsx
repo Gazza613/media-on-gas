@@ -5130,7 +5130,11 @@ export default function MediaOnGas(){
     // selected client has no GA4 connection — the panel itself renders a
     // "no ecommerce connection yet" empty state). Clients still only see
     // it when their own KPI profile has ecommerce enabled (above).
-    tabs.splice(1,0,{id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
+    // Placed 2nd-from-last (left of Create) per user direction so the
+    // primary insight tabs (Summary, Deep Dive, Creative, ...) read
+    // before the secondary GA4 surface and the Create workflow stays
+    // anchored at the far right.
+    tabs.splice(tabs.length-1,0,{id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
   }
   useEffect(function(){if(isClient&&tab!=="summary"&&!(ecoOn&&tab==="ecommerce"))setTab("summary");},[isClient,tab,ecoOn]);
   // Scroll to top whenever the tab changes so each page lands cleanly
@@ -9306,37 +9310,45 @@ export default function MediaOnGas(){
               
               var tApp=rows.filter(function(r){return r.objective==="Clicks to App Store";}).reduce(function(a,r){return a+r.result;},0);
               var tLp=rows.filter(function(r){return r.objective==="Landing Page Clicks"||r.objective==="Traffic";}).reduce(function(a,r){return a+r.result;},0);
+              var tCommReach=rows.filter(function(r){return r.objective==="Community Reach";}).reduce(function(a,r){return a+r.result;},0);
               var sLeads=rows.filter(function(r){return r.objective==="Leads";}).reduce(function(a,r){return a+r.spend;},0);
               var sFollows=rows.filter(function(r){return r.objective==="Followers & Likes";}).reduce(function(a,r){return a+r.spend;},0);
-              
+
               var sApp=rows.filter(function(r){return r.objective==="Clicks to App Store";}).reduce(function(a,r){return a+r.spend;},0);
               var sLp=rows.filter(function(r){return r.objective==="Landing Page Clicks"||r.objective==="Traffic";}).reduce(function(a,r){return a+r.spend;},0);
+              var sCommReach=rows.filter(function(r){return r.objective==="Community Reach";}).reduce(function(a,r){return a+r.spend;},0);
               var allSpend=rows.reduce(function(a,r){return a+r.spend;},0);
               var allClicks=rows.reduce(function(a,r){return a+r.clicks;},0);
+              // Community Reach CPM = spend/reach*1000, not spend/reach.
+              var commReachCpm=tCommReach>0?(sCommReach/tCommReach*1000):0;
 
               return <div>
                 {sections}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:16}}>
                   <Glass accent={P.fb} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>CLICKS TO APP STORE</div><div style={{fontSize:22,fontWeight:900,color:P.fb,fontFamily:fm}}>{fmt(tApp)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CPC: {fR(tApp>0?sApp/tApp:0)}</div></Glass>
                   <Glass accent={P.cyan} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>CLICKS TO LANDING PAGE</div><div style={{fontSize:22,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(tLp)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CPC: {fR(tLp>0?sLp/tLp:0)}</div></Glass>
                   <Glass accent={P.rose} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>LEADS</div><div style={{fontSize:22,fontWeight:900,color:P.rose,fontFamily:fm}}>{fmt(tLeads)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CPL: {fR(tLeads>0?sLeads/tLeads:0)}</div></Glass>
                   <Glass accent={P.tt} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>FOLLOWERS & LIKES</div><div style={{fontSize:22,fontWeight:900,color:P.mint,fontFamily:fm}}>{fmt(tFollows)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CPF: {fR(tFollows>0?sFollows/tFollows:0)}</div></Glass>
+                  <Glass accent={P.momoYellow} hv={true} st={{padding:16,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>COMMUNITY REACH</div><div style={{fontSize:22,fontWeight:900,color:P.momoYellow,fontFamily:fm}}>{fmt(tCommReach)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontFamily:fm,marginTop:4}}>CPM: {fR(commReachCpm)}</div></Glass>
 
                 </div>
                 {(function(){
                   // Consolidated view across all objectives — spend allocation
                   // (donut) + cost-per-result comparison (horizontal bars).
                   // Only renders when we actually have objective data to show.
+                  // Community Reach uses CPM (spend/reach*1000), every other
+                  // objective uses the standard spend/result for its bar.
                   var consolidated=[
-                    {objName:"Clicks to App Store",results:tApp,spend:sApp,costLabel:"CPC",color:P.fb},
-                    {objName:"Landing Page Clicks",results:tLp,spend:sLp,costLabel:"CPC",color:P.cyan},
-                    {objName:"Leads",results:tLeads,spend:sLeads,costLabel:"CPL",color:P.rose},
-                    {objName:"Followers & Likes",results:tFollows,spend:sFollows,costLabel:"CPF",color:P.mint}
+                    {objName:"Clicks to App Store",results:tApp,spend:sApp,costLabel:"CPC",color:P.fb,cost:tApp>0?sApp/tApp:0},
+                    {objName:"Landing Page Clicks",results:tLp,spend:sLp,costLabel:"CPC",color:P.cyan,cost:tLp>0?sLp/tLp:0},
+                    {objName:"Leads",results:tLeads,spend:sLeads,costLabel:"CPL",color:P.rose,cost:tLeads>0?sLeads/tLeads:0},
+                    {objName:"Followers & Likes",results:tFollows,spend:sFollows,costLabel:"CPF",color:P.mint,cost:tFollows>0?sFollows/tFollows:0},
+                    {objName:"Community Reach",results:tCommReach,spend:sCommReach,costLabel:"CPM",color:P.momoYellow,cost:commReachCpm}
                   ].filter(function(x){return x.spend>0;});
                   if(consolidated.length===0)return null;
                   var grandSpend=consolidated.reduce(function(a,x){return a+x.spend;},0);
                   var donutData=consolidated.map(function(x){return{name:x.objName,value:x.spend,color:x.color};});
-                  var costData=consolidated.filter(function(x){return x.results>0;}).map(function(x){return{name:x.objName,Cost:parseFloat((x.spend/x.results).toFixed(2)),Label:fR(x.spend/x.results)+" "+x.costLabel,color:x.color};}).sort(function(a,b){return b.Cost-a.Cost;});
+                  var costData=consolidated.filter(function(x){return x.results>0;}).map(function(x){return{name:x.objName,Cost:parseFloat(x.cost.toFixed(2)),Label:fR(x.cost)+" "+x.costLabel,color:x.color};}).sort(function(a,b){return b.Cost-a.Cost;});
                   return <div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"20px 22px",marginBottom:18,border:"1px solid "+P.ember+"25"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
                       {Ic.chart(P.ember,16)}
