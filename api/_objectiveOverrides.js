@@ -97,6 +97,7 @@ export function displayToCanonical(display) {
     case "Clicks to App Store": return "appinstall";
     case "Leads": return "leads";
     case "Followers & Likes": return "followers";
+    case "Community Reach": return "community_reach";
     case "Landing Page Clicks": return "landingpage";
     case "Unclassified": return "unknown";
     default: return null;
@@ -108,6 +109,7 @@ export function canonicalToDisplay(canon) {
     case "appinstall": return "Clicks to App Store";
     case "leads": return "Leads";
     case "followers": return "Followers & Likes";
+    case "community_reach": return "Community Reach";
     case "landingpage": return "Landing Page Clicks";
     case "unknown": return "Unclassified";
     default: return null;

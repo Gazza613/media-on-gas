@@ -36,18 +36,19 @@ function detectObjective(campaignName) {
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   // Community Reach matched BEFORE followers so the like/follow tokens
   // in the audience tag don't divert these campaigns to FOLLOWERS.
-  // Mirrors ads.js + campaigns.js detection so all three endpoints
-  // classify the same campaign identically.
+  // Mirrors ads.js + campaigns.js detection (anchored "_Reach_" tag
+  // matched here too).
   if (n.indexOf("follow/like-audience") >= 0 || n.indexOf("follow_like_audience") >= 0
       || n.indexOf("follow-like-audience") >= 0 || n.indexOf("like-audience") >= 0
+      || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)
       || (n.indexOf("reach") >= 0 && n.indexOf("community") >= 0)) return "community_reach";
   if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
   return null;
 }
-function mapMetaObjective(o) { if (!o) return null; o = String(o).toUpperCase(); if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall"; if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads"; if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers"; if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage"; if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads"; return null; }
-function mapTikTokObjective(o) { if (!o) return null; o = String(o).toUpperCase(); if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "appinstall"; if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "leads"; if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "followers"; if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "landingpage"; return null; }
+function mapMetaObjective(o) { if (!o) return null; o = String(o).toUpperCase(); if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall"; if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads"; if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers"; if (o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "community_reach"; if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC") return "landingpage"; if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads"; return null; }
+function mapTikTokObjective(o) { if (!o) return null; o = String(o).toUpperCase(); if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "appinstall"; if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "leads"; if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "followers"; if (o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "community_reach"; if (o === "TRAFFIC") return "landingpage"; return null; }
 
 // Compute the Monday of the ISO week for a given YYYY-MM-DD string (weekly bucket)
 function weekStart(ymd) {

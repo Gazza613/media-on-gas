@@ -53,12 +53,16 @@ function detectObjective(campaignName) {
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
   // Community Reach: awareness-style objective that reaches into an
   // existing community audience (FB / IG fans, Like / Follow custom
-  // audiences). Headlined on REACH with CPM as efficiency, LP clicks
-  // kept as a secondary signal on the card. Matched BEFORE followers
-  // so the like/follow tokens don't divert these campaigns to the
-  // FOLLOWERS bucket.
+  // audiences, plus any campaign tagged "_Reach_" in the team's
+  // 3-level naming convention). Headlined on REACH with CPM as
+  // efficiency, LP clicks kept as a secondary signal on the card.
+  // Matched BEFORE followers so the like/follow tokens in the audience
+  // tag (Follow/Like-Audiences) don't divert to FOLLOWERS. The anchored
+  // /(^|[_\s|-])reach([_\s|-]|$)/ regex matches "_Reach_", " Reach ",
+  // "|Reach|" without false-positiving on "reach" inside a longer word.
   if (n.indexOf("follow/like-audience") >= 0 || n.indexOf("follow_like_audience") >= 0
       || n.indexOf("follow-like-audience") >= 0 || n.indexOf("like-audience") >= 0
+      || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)
       || (n.indexOf("reach") >= 0 && n.indexOf("community") >= 0)) return "community_reach";
   if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
@@ -72,7 +76,11 @@ function mapMetaObjective(metaObj) {
   if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
   if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
   if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
-  if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
+  // Awareness-side API objectives route to community_reach (the new
+  // dedicated bucket). LINK_CLICKS / OUTCOME_TRAFFIC stay as landingpage
+  // because they're traffic-style click optimisations, not awareness.
+  if (o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "community_reach";
+  if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC") return "landingpage";
   if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
   return null;
 }
@@ -83,7 +91,10 @@ function mapTikTokObjective(ttObj) {
   if (o.indexOf("APP_PROMOTION") >= 0 || o.indexOf("APP_INSTALL") >= 0) return "appinstall";
   if (o === "LEAD_GENERATION" || o === "WEB_CONVERSIONS" || o === "CONVERSIONS") return "leads";
   if (o === "COMMUNITY_INTERACTION" || o === "ENGAGEMENT" || o === "PAGE_VISITS") return "followers";
-  if (o === "TRAFFIC" || o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "landingpage";
+  // TikTok REACH / VIDEO_VIEW are awareness-side, route to community_reach
+  // so they show under COMMUNITY REACH on Top Ads / Targeting / Trendlines.
+  if (o === "REACH" || o === "VIDEO_VIEW" || o === "VIDEO_VIEWS") return "community_reach";
+  if (o === "TRAFFIC") return "landingpage";
   return null;
 }
 

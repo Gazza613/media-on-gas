@@ -41,9 +41,13 @@ function objectiveFromName(name) {
       || n.indexOf("googleapp") >= 0 || n.indexOf("google_app") >= 0 || n.indexOf("google app") >= 0) return "appinstall";
   // Community Reach. Must be tested BEFORE the followers branch so the
   // like/follow tokens in "Reach_Follow/Like-Audiences" don't divert
-  // these campaigns to the FOLLOWERS bucket. Mirrors ads.js detection.
+  // these campaigns to FOLLOWERS. Mirrors ads.js detection. Anchored
+  // /(^|[_\s|-])reach([_\s|-]|$)/ catches the team's "_Reach_" tag in
+  // the standard 3-level naming convention without false-positiving on
+  // "reach" inside a longer word.
   if (n.indexOf("follow/like-audience") >= 0 || n.indexOf("follow_like_audience") >= 0
       || n.indexOf("follow-like-audience") >= 0 || n.indexOf("like-audience") >= 0
+      || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)
       || (n.indexOf("reach") >= 0 && n.indexOf("community") >= 0)) return "community_reach";
   if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
@@ -63,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v17-community-reach-objective";
+var CAMPAIGNS_CACHE_VERSION = "v18-community-reach-broaden-api-fallback";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -728,7 +732,8 @@ export default async function handler(req, res) {
             if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
             if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
             if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
-            if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
+            if (o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "community_reach";
+            if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC") return "landingpage";
             if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
             return "unknown";
           })();
@@ -927,7 +932,8 @@ export default async function handler(req, res) {
             if (o.indexOf("APP_INSTALL") >= 0 || o.indexOf("APP_PROMOTION") >= 0) return "appinstall";
             if (o === "LEAD_GENERATION" || o === "OUTCOME_LEADS") return "leads";
             if (o === "PAGE_LIKES" || o === "POST_ENGAGEMENT" || o === "OUTCOME_ENGAGEMENT" || o === "EVENT_RESPONSES") return "followers";
-            if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC" || o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "landingpage";
+            if (o === "REACH" || o === "BRAND_AWARENESS" || o === "OUTCOME_AWARENESS" || o === "VIDEO_VIEWS") return "community_reach";
+            if (o === "LINK_CLICKS" || o === "OUTCOME_TRAFFIC") return "landingpage";
             if (o === "CONVERSIONS" || o === "OUTCOME_SALES" || o === "PRODUCT_CATALOG_SALES") return "leads";
             return "unknown";
           })();

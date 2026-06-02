@@ -6455,7 +6455,8 @@ export default function MediaOnGas(){
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
                 // Community Reach matched BEFORE Followers so the
                 // like/follow tokens in the audience tag don't divert.
-                else if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
+                // Anchored "_Reach_" tag matched here too.
+                else if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
                 else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
                 else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
                 else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
@@ -9476,7 +9477,8 @@ export default function MediaOnGas(){
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
                 // Community Reach matched BEFORE Followers so the
                 // like/follow tokens in the audience tag don't divert.
-                if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))return "Community Reach";
+                // Anchored "_Reach_" tag matched here too.
+                if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))return "Community Reach";
                 if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
