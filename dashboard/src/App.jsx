@@ -17,7 +17,7 @@ import CommandCentre from "./CommandCentre.jsx";
 //   void   #06020e  page bottom, matches header background exactly
 //   cosmos #0a0418  modal + card surface, one notch lifted
 //   nebula #0d061f  gradient mid, slightly more depth
-var P={void:"#06020e",cosmos:"#0a0418",nebula:"#0d061f",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
+var P={void:"#06020e",cosmos:"#0a0418",nebula:"#0d061f",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",momoYellow:"#FFCC00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
 var ff="Poppins,Outfit,Segoe UI,sans-serif",fm="JetBrains Mono,Consolas,monospace";
 
@@ -4773,7 +4773,7 @@ export default function MediaOnGas(){
     // section reads as a clean visual block; Optimisation keeps the
     // momentum-leader / attention-point summary at the foot.
     var showCommentary=!opts||opts.showCommentary!==false;
-    var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"Clicks to App Store",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"community_reach",label:"Community Reach",accent:P.solar},{key:"landingpage",label:"Landing Page",accent:P.cyan}];
+    var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"Clicks to App Store",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"landingpage",label:"Landing Page",accent:P.cyan},{key:"community_reach",label:"Community Reach",accent:P.momoYellow}];
     var platCols=[{key:"Facebook",label:"FB",accent:P.fb},{key:"Instagram",label:"IG",accent:P.ig},{key:"TikTok",label:"TT",accent:P.tt},{key:"Google",label:"Google",accent:P.gd}];
     var hasData=timeseries&&timeseries.series&&timeseries.series.length>0;
     var buckets=(timeseries&&timeseries.buckets)||[];
@@ -6538,8 +6538,8 @@ export default function MediaOnGas(){
             var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
             var platCol4={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
             var platShort={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
-            var objKeys=["Clicks to App Store","Landing Page Clicks","Community Reach","Followers & Likes","Leads"];
-            var objCol4={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.solar,"Leads":P.rose,"Followers & Likes":P.tt};
+            var objKeys=["Clicks to App Store","Landing Page Clicks","Followers & Likes","Leads","Community Reach"];
+            var objCol4={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.momoYellow,"Leads":P.rose,"Followers & Likes":P.tt};
             var objCL4={"Clicks to App Store":"COST PER CLICK","Landing Page Clicks":"COST PER CLICK","Community Reach":"COST PER 1,000 REACHED","Leads":"COST PER LEAD","Followers & Likes":"COST PER FOLLOWER"};
 
             var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
@@ -7408,8 +7408,8 @@ export default function MediaOnGas(){
                   {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
                   {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
                   {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
-                  {key:"community_reach",label:"COMMUNITY REACH",accent:P.solar,criterion:"by reach & CPM"},
-                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page"}
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page"},
+                  {key:"community_reach",label:"COMMUNITY REACH",accent:P.momoYellow,criterion:"by reach & CPM"}
                 ];
 
                 var IMP_FLOOR=5000;
@@ -8366,8 +8366,8 @@ export default function MediaOnGas(){
               {key:"leads",label:"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.fb,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
               {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,icon:Ic.bolt(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on store clicks delivered and cost per click"},
               {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.fb,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
-              {key:"community_reach",label:"COMMUNITY REACH",accent:P.solar,icon:Ic.users(P.fb,20),metric:"reach",costLabel:"CPM",sortBy:"results",bench:benchmarks.meta.cpm,desc:"Best ad based on unique reach inside the targeted community and CPM"},
-              {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"}
+              {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"},
+              {key:"community_reach",label:"COMMUNITY REACH",accent:P.momoYellow,icon:Ic.users(P.fb,20),metric:"reach",costLabel:"CPM",sortBy:"results",bench:benchmarks.meta.cpm,desc:"Best ad based on unique reach inside the targeted community and CPM"}
             ];
 
             // Group ads by objective. Followers gets a special union: any ad that earned
@@ -9550,8 +9550,8 @@ export default function MediaOnGas(){
             var platList3=["Facebook","Instagram","TikTok","Google Display"];
             var platCol3={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd};
             var platBdg3={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD"};
-            var objList3=["Clicks to App Store","Landing Page Clicks","Community Reach","Followers & Likes","Leads"];
-            var objCol3={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.solar,"Leads":P.rose,"Followers & Likes":P.tt};
+            var objList3=["Clicks to App Store","Landing Page Clicks","Followers & Likes","Leads","Community Reach"];
+            var objCol3={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.momoYellow,"Leads":P.rose,"Followers & Likes":P.tt};
             var objRL3={"Clicks to App Store":"App Clicks","Landing Page Clicks":"LP Clicks","Community Reach":"Reach","Leads":"Leads","Followers & Likes":"Follows/Likes"};
             var objCL3={"Clicks to App Store":"CPC","Landing Page Clicks":"CPC","Community Reach":"CPM","Leads":"CPL","Followers & Likes":"CPF"};
             var platOrd3={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3};
