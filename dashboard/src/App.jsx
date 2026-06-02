@@ -5224,20 +5224,33 @@ export default function MediaOnGas(){
               var canon=String(camp.objective||"").toLowerCase();
               if(canon==="leads")return "Leads";
               if(canon==="followers")return "Followers";
+              if(canon==="community_reach")return "CommunityReach";
               if(canon==="appinstall"||canon==="landingpage")return "Traffic";
               var n=String(camp.campaignName||"").toLowerCase();
               if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
+              // Community Reach matched BEFORE Followers (anchored "_Reach_"
+              // tag) so the like/follow tokens in the audience tag don't
+              // divert these campaigns away.
+              if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "CommunityReach";
               if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
               if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
               return "Traffic";
             };
             // Per-campaign objective value — matches Summary's per-objective
-            // result computation: Leads -> camp.leads, Followers -> follows+pageLikes,
-            // everything else -> camp.clicks.
+            // result computation: Leads -> camp.leads, Followers ->
+            // follows+pageLikes, Community Reach -> camp.reach (the KPI),
+            // everything else -> camp.clicks. The Community Reach reach
+            // contribution makes the Demographics headline reconcile with
+            // Summary's TOTAL OBJECTIVE RESULTS (which folds reach in too).
+            // The DEMOGRAPHIC BREAKDOWN (bubble %, province bars) still
+            // weights Community Reach rows by clicks via the stage.field()
+            // function below, so reach doesn't contaminate the per-province
+            // distribution per the team's intent.
             var objectiveValueFor=function(camp){
               var type=classifyObjective(camp);
               if(type==="Leads")return parseFloat(camp.leads||0);
               if(type==="Followers")return parseFloat(camp.follows||0)+parseFloat(camp.pageLikes||0);
+              if(type==="CommunityReach")return parseFloat(camp.reach||0);
               return parseFloat(camp.clicks||0);
             };
             // Lookup: row.campaignId -> objective type, for scoring demographic
