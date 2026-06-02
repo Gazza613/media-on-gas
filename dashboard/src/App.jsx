@@ -6119,13 +6119,23 @@ export default function MediaOnGas(){
               var ctr=platImps>0?(platClk/platImps*100):0;
               var blendedCtr=authImps>0?(authClicks/authImps*100):0;
               var ctrRatio=blendedCtr>0?(ctr/blendedCtr):0;
-              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio};
+              // hasPlatformClicks: real platform-level click signal from
+              // authPlat (campaign-level totals). When Meta drops per-
+              // publisher_platform age/gender cells for sparsity (common
+              // on short date ranges), agP-derived totalClicks falls to 0
+              // even when the platform has thousands of clicks. Use this
+              // flag below to keep the card rendered with the data we have
+              // (CTR, share of clicks) and let age / gender / mobile show
+              // as dashes, instead of swapping the whole card for an
+              // empty placeholder.
+              var hasPlatformClicks=platClk>0;
+              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,hasPlatformClicks:hasPlatformClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio};
             };
             targetingPersonas=[
               buildPersona("facebook","Facebook",P.fb,Ic.eye),
               buildPersona("instagram","Instagram",P.ig,Ic.fire),
               buildPersona("tiktok","TikTok",P.tt,Ic.bolt)
-            ].filter(function(p){return p.totalClicks>0;});
+            ].filter(function(p){return p.totalClicks>0||p.hasPlatformClicks;});
             return null;
   })();
   // Page backdrop. Solid navy that matches the header strip exactly —
