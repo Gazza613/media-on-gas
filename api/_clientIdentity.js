@@ -135,6 +135,25 @@ export function brandDisplayForSlug(raw) {
     .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
 }
 
+// Strict variant. Returns the brand display ONLY if the canonical slug
+// matches (or longest-prefix matches) a KNOWN_BRAND_DISPLAY entry; an
+// empty string otherwise. Use where the title-cased echo would be wrong
+// (e.g. daily pulse agency-client extraction, where falling back to a
+// title-cased campaign name would surface the full ad-slug as a client
+// label). Caller can decide how to handle the "no known brand" case.
+export function knownBrandForSlug(raw) {
+  var rawStr = String(raw || "").trim();
+  if (!rawStr) return "";
+  var s = canonicalClientSlug(rawStr);
+  if (!s) return "";
+  if (KNOWN_BRAND_DISPLAY[s]) return KNOWN_BRAND_DISPLAY[s];
+  var keys = Object.keys(KNOWN_BRAND_DISPLAY).sort(function(a, b) { return b.length - a.length; });
+  for (var i = 0; i < keys.length; i++) {
+    if (s.indexOf(keys[i]) === 0 && keys[i].length >= 5) return KNOWN_BRAND_DISPLAY[keys[i]];
+  }
+  return "";
+}
+
 // Best display name for a client: prefer whatever slug the team last typed
 // for this identity (from the audit log), fall back to a capitalised
 // version of the registered domain's first label.

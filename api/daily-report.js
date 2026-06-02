@@ -12,6 +12,7 @@ import {
   ANOMALY_DEFS, detectAnomalies,
   fetchCampaigns, fetchAdsByCampaign
 } from "./_pulseShared.js";
+import { knownBrandForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 
 // A campaign counts as "live" for anomaly purposes if it's actually
 // serving today. Meta's effective_status, TikTok's status, Google's
@@ -25,6 +26,42 @@ var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
 var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
 var GAS_PREFIX_CLIENT = /(?:^|\|\s*)GAS\s*\|\s*([^|]+?)\s*\|/i;
 
+// Agency accounts host multiple distinct clients on one Meta ad account.
+// The per-client identity lives in the campaign-name pipe-segments, e.g.
+// "Sea Weeds | Sea Point | Meta | Traffic | Proximity | June 2026".
+// Without this the daily pulse rolled every GAS Agency sub-client into a
+// single "GAS Agency" bucket. Mirrors dashboard extractAgencyClient.
+// See project_objective_classification + daily-pulse user direction.
+var AGENCY_NAMES = { "gas agency": true, "gas": true };
+var SKIP_SEGMENTS = /^(gas|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\d{0,4}$/i;
+function extractAgencyClient(campaignName) {
+  var parts = (campaignName || "").split(/\s*\|\s*/);
+  for (var i = 0; i < parts.length; i++) {
+    var seg = parts[i].trim();
+    if (!seg) continue;
+    if (SKIP_SEGMENTS.test(seg.replace(/\s+/g, ""))) continue;
+    if (/^start\s/i.test(seg) || /^funnel\s/i.test(seg) || /^end\s/i.test(seg)) continue;
+    return seg;
+  }
+  return "";
+}
+
+// Clients explicitly excluded from the daily pulse per user direction.
+// Match by canonical slug PREFIX so every variant resolves to the same
+// skip ("Simpson Properties" → "simpsonproperties", "Simpson Properties
+// - Arnie Berman" → "simpsonpropertiesarnieberman", both excluded).
+// canonicalClientSlug also strips month + year tags so e.g. a "Simpson
+// Properties June 2026" client name still matches.
+var DAILY_PULSE_EXCLUDED_PREFIXES = ["simpsonproperties"];
+function isExcludedFromDailyPulse(clientName) {
+  var s = canonicalClientSlug(clientName);
+  if (!s) return false;
+  for (var i = 0; i < DAILY_PULSE_EXCLUDED_PREFIXES.length; i++) {
+    if (s.indexOf(DAILY_PULSE_EXCLUDED_PREFIXES[i]) === 0) return true;
+  }
+  return false;
+}
+
 function snapshotClientName(c) {
   var accountRaw = String(c && c.accountName || "").trim();
   var base = accountRaw
@@ -32,6 +69,29 @@ function snapshotClientName(c) {
     .replace(PLATFORM_SUFFIX, "")
     .trim() || "Unknown";
   var campaignName = String(c && c.campaignName || "");
+
+  // Agency-hosted account, prefer the per-client identity from the
+  // campaign name's pipe-segments so Sea Weeds, Sea Storm, etc. each
+  // get their own snapshot block instead of all rolling into "GAS
+  // Agency". When the campaign name has no pipe segments (the team
+  // also ships space / underscore-separated names like "Sea Weeds Sea
+  // Point Meta Traffic Proximity June 2026"), fall back to the known-
+  // brand prefix-match in _clientIdentity so the same brand surfaces.
+  if (AGENCY_NAMES[base.toLowerCase()]) {
+    var sub = extractAgencyClient(campaignName);
+    if (!sub) {
+      // Strict known-brand lookup, returns "" instead of a title-cased
+      // echo of the campaign name, so unknown agency campaigns fall
+      // through to base ("GAS Agency") rather than surfacing a wall of
+      // text as the client label.
+      sub = knownBrandForSlug(campaignName) || "";
+    }
+    if (sub) {
+      if (POS_TAG.test(campaignName) && !POS_TAG.test(sub)) return sub + " POS";
+      return sub;
+    }
+  }
+
   var routed = "";
   var gm = campaignName.match(GAS_PREFIX_CLIENT);
   if (gm && gm[1]) {
@@ -481,6 +541,14 @@ export default async function handler(req, res) {
     };
   };
   (yesterdayData.campaigns || []).forEach(function(c) {
+    // Per-client daily-pulse exclusions. Resolve the snapshot client
+    // name first so the skip matches whatever the rest of the email
+    // would have surfaced (Simpson Properties currently). Skip wins
+    // over every later check, the campaign is invisible to the daily
+    // pulse: no snapshot, no anomaly, no sanity-check row.
+    var _earlyClient = snapshotClientName(c);
+    if (isExcludedFromDailyPulse(_earlyClient)) return;
+
     // Ended campaigns are filtered out entirely — never reported in
     // any list. User explicitly flagged 2024/2025 rows showing up.
     var endRaw = c && c.endDate ? String(c.endDate) : "";
