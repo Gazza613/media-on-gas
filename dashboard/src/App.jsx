@@ -5222,16 +5222,17 @@ export default function MediaOnGas(){
             // bucket and absorbs LandingPage / AppInstall / PaidSearch / etc.
             var classifyObjective=function(camp){
               var canon=String(camp.objective||"").toLowerCase();
+              var n=String(camp.campaignName||"").toLowerCase();
+              // Community Reach name match wins over a stale backend
+              // "landingpage" classification (cache lag), and beats the
+              // followers branch when the audience tag carries
+              // like/follow tokens.
+              if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "CommunityReach";
               if(canon==="leads")return "Leads";
               if(canon==="followers")return "Followers";
               if(canon==="community_reach")return "CommunityReach";
               if(canon==="appinstall"||canon==="landingpage")return "Traffic";
-              var n=String(camp.campaignName||"").toLowerCase();
               if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
-              // Community Reach matched BEFORE Followers (anchored "_Reach_"
-              // tag) so the like/follow tokens in the audience tag don't
-              // divert these campaigns away.
-              if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "CommunityReach";
               if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
               if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
               return "Traffic";
@@ -6398,14 +6399,17 @@ export default function MediaOnGas(){
               var cObj={};
               cmpSel.forEach(function(camp){
                 var obj="Traffic";var canon=(camp.objective||"").toLowerCase();
-                if(canon==="appinstall")obj="Clicks to App Store";
+                var n=(camp.campaignName||"").toLowerCase();
+                // Community Reach name match wins over stale backend (see
+                // main classifier above, same reasoning).
+                if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))obj="Community Reach";
+                else if(canon==="appinstall")obj="Clicks to App Store";
                 else if(canon==="leads")obj="Leads";
                 else if(canon==="followers")obj="Followers & Likes";
                 else if(canon==="community_reach")obj="Community Reach";
                 else if(canon==="landingpage")obj="Landing Page Clicks";
-                else{var n=(camp.campaignName||"").toLowerCase();
+                else{
                   if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)obj="Clicks to App Store";
-                  else if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))obj="Community Reach";
                   else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
                   else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
                   else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
@@ -6501,19 +6505,21 @@ export default function MediaOnGas(){
               // campaigns so they stay out of Landing Page instead of
               // inflating it.
               var canon=(camp.objective||"").toLowerCase();
-              if(canon==="appinstall")obj="Clicks to App Store";
+              var n=(camp.campaignName||"").toLowerCase();
+              // Community Reach NAME match wins over a stale backend
+              // "landingpage" classification (campaigns cache lag after a
+              // recent deploy). Anchored "_Reach_" tag is the team's
+              // naming convention and authoritative per
+              // project_objective_classification.
+              if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
+              else if(canon==="appinstall")obj="Clicks to App Store";
               else if(canon==="leads")obj="Leads";
               else if(canon==="followers")obj="Followers & Likes";
               else if(canon==="community_reach")obj="Community Reach";
               else if(canon==="landingpage")obj="Landing Page Clicks";
               else{
                 // canon is "unknown" / empty, fall through to name-based.
-                var n=(camp.campaignName||"").toLowerCase();
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
-                // Community Reach matched BEFORE Followers so the
-                // like/follow tokens in the audience tag don't divert.
-                // Anchored "_Reach_" tag matched here too.
-                else if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
                 else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
                 else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
                 else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
@@ -9144,14 +9150,20 @@ export default function MediaOnGas(){
               // Landing Page bucket on Deep Dive.
               var getObj=function(camp){
                 var canon=String(camp&&camp.objective||"").toLowerCase();
+                var n=String(camp&&camp.campaignName||"").toLowerCase();
+                // Name-first Community Reach detection wins over a stale
+                // backend "landingpage" classification (campaigns cache may
+                // still be serving the pre-Community-Reach payload for up
+                // to 5 minutes after a deploy). Anchored "_Reach_" tag is
+                // the team's naming convention for awareness campaigns and
+                // is authoritative per project_objective_classification.
+                if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "Community Reach";
                 if(canon==="appinstall")return "Clicks to App Store";
                 if(canon==="leads")return "Leads";
                 if(canon==="followers")return "Followers & Likes";
                 if(canon==="community_reach")return "Community Reach";
                 if(canon==="landingpage")return "Landing Page Clicks";
-                var n=String(camp&&camp.campaignName||"").toLowerCase();
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
-                if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "Community Reach";
                 if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
@@ -9537,17 +9549,17 @@ export default function MediaOnGas(){
             var allRows=filtered.map(function(a){
               var getObj2=function(adset){
                 var canon=campObjById[String(adset.campaignId||"")]||campObjByName[adset.campaignName]||"";
+                var n=String(adset.campaignName||"").toLowerCase();
+                // Community Reach name match wins over a stale backend
+                // "landingpage" classification (cache lag). Anchored
+                // "_Reach_" tag is the team's naming convention.
+                if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))return "Community Reach";
                 if(canon==="appinstall")return "Clicks to App Store";
                 if(canon==="leads")return "Leads";
                 if(canon==="followers")return "Followers & Likes";
                 if(canon==="community_reach")return "Community Reach";
                 if(canon==="landingpage")return "Landing Page Clicks";
-                var n=String(adset.campaignName||"").toLowerCase();
                 if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
-                // Community Reach matched BEFORE Followers so the
-                // like/follow tokens in the audience tag don't divert.
-                // Anchored "_Reach_" tag matched here too.
-                if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))return "Community Reach";
                 if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
                 if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
                 if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
