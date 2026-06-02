@@ -698,7 +698,17 @@ function GrowBar(props){
   return <div ref={ref} style={merged}/>;
 }
 function Metric(props){return(<Glass accent={props.accent} hv={true} st={{padding:"22px 20px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{display:"flex",alignItems:"center",gap:8}}>{props.icon}<span style={{fontSize:9,fontWeight:700,color:P.label,letterSpacing:2.5,textTransform:"uppercase",fontFamily:fm}}>{props.label}</span></div><div style={{width:8,height:8,borderRadius:"50%",background:props.accent,boxShadow:"0 0 12px "+props.accent+"60",animation:"pulse-glow 2s ease-in-out infinite"}}></div></div><div style={{fontSize:28,fontWeight:900,fontFamily:ff,lineHeight:1,letterSpacing:-1.5,color:props.accent,marginBottom:6}}>{props.value}</div>{props.sub&&<div style={{fontSize:10,color:P.caption,marginTop:10,fontFamily:fm,lineHeight:1.7,borderTop:"1px solid "+P.rule,paddingTop:10}}>{props.sub}</div>}</Glass>);}
-function SH(props){var a=props.accent||P.ember;return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{props.icon}</div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);}
+function SH(props){
+  var a=props.accent||P.ember;
+  // When a logoUrl is provided (resolved per-client by the caller for
+  // known brands like MTN MoMo / MoMo POS), render the logo inside the
+  // same 40x40 styled box instead of the generic crown icon, so the
+  // page reads as "this client's media insights" at a glance.
+  var badge=props.logoUrl
+    ? <img src={props.logoUrl} alt="" style={{width:32,height:32,objectFit:"contain",display:"block"}} onError={function(e){e.target.style.display="none";}}/>
+    : props.icon;
+  return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{badge}</div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);
+}
 function Pill(props){return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:props.color+"12",border:"1px solid "+props.color+"30",borderRadius:20,padding:"3px 10px",fontSize:9,fontWeight:700,color:props.color,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:6,height:6,borderRadius:"50%",background:props.color}}/>{props.name}</span>);}
 // Targeting persona card for the Targeting tab. Click-weighted per-platform
 // audience profile, shows the dominant age bracket as the visual anchor and
@@ -1531,6 +1541,27 @@ function AdPreviewModal(props){
 // name. Convention: "Apr26 | GAS | Willowbrook Village (Cycle2) | ..."
 // The client is the first pipe-segment that isn't a date tag or "GAS".
 var AGENCY_NAMES={"gas agency":true,"gas":true};
+// Known-client logo map, keyed by canonical client slug (lowercase,
+// alphanumeric only). When the current dashboard selection resolves to
+// one of these clients, the page header (SH) swaps its generic crown
+// icon for the client's brand mark, same 40x40 box, same chrome, just
+// the badge changes. Add new entries here as more client logos land.
+// MTN MoMo + MTN MoMo POS share the same brand mark (POS is a sub-line
+// of MoMo, not a separate identity), per project_objective_classification.
+var CLIENT_LOGOS={
+  mtnmomo:"/clients/mtn-momo.png",
+  mtnmomopos:"/clients/mtn-momo.png"
+};
+function clientLogoForName(name){
+  var s=String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  if(!s)return"";
+  if(CLIENT_LOGOS[s])return CLIENT_LOGOS[s];
+  // Prefix match so e.g. "mtnmomopayments2026" still resolves to mtnmomo,
+  // guarded at >=5 chars to avoid short false-positives.
+  var keys=Object.keys(CLIENT_LOGOS).sort(function(a,b){return b.length-a.length;});
+  for(var i=0;i<keys.length;i++){if(s.indexOf(keys[i])===0&&keys[i].length>=5)return CLIENT_LOGOS[keys[i]];}
+  return"";
+}
 var SKIP_SEGMENTS=/^(gas|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\d{0,4}$/i;
 function extractAgencyClient(campaignName){
   var parts=(campaignName||"").split(/\s*\|\s*/);
@@ -6268,7 +6299,7 @@ export default function MediaOnGas(){
           {/* Client dashboard keeps GAS branding (unchanged). The
               per-client logo is used ONLY in the personalised report
               email, not here. */}
-          <SH icon={Ic.crown(P.ember,20)} title="Media Insights Summary" sub={(function(){var ddmm=function(ymd){var p=String(ymd||"").split("-");return p.length===3?p[2]+"-"+p[1]+"-"+p[0]:String(ymd||"");};var base=ddmm(df)+" to "+ddmm(dt);if(compareMode==="off")return base;var cmp=computeComparisonRange(df,dt,compareMode);if(!cmp)return base;return base+" vs "+ddmm(cmp.from)+" to "+ddmm(cmp.to);})()} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} logoUrl={clientLogoForName(ecoClientName)} title="Media Insights Summary" sub={(function(){var ddmm=function(ymd){var p=String(ymd||"").split("-");return p.length===3?p[2]+"-"+p[1]+"-"+p[0]:String(ymd||"");};var base=ddmm(df)+" to "+ddmm(dt);if(compareMode==="off")return base;var cmp=computeComparisonRange(df,dt,compareMode);if(!cmp)return base;return base+" vs "+ddmm(cmp.from)+" to "+ddmm(cmp.to);})()} accent={P.ember}/>
           {/* The per-client KPI objectives used to render here at the top.
               They now live in the Objectives section lower down (rendered
               in place of the legacy OBJECTIVE KEY METRICS block for
