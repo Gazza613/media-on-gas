@@ -925,15 +925,37 @@ export async function fetchAdsByCampaign(from, to, apiKey) {
     var data = await r.json();
     var ads = (data && data.ads) || [];
     var byCamp = {};
+    // Two-pass selection: prefer the highest-spend ad WITH a thumbnail
+    // first, then fall back to the highest-spend ad overall when no ad
+    // in the campaign returned a thumbnail. The old single-pass logic
+    // would silently drop the thumbnail when the top-spending Meta ad
+    // happened to have no image_hash-derived URL (DCO sets sometimes,
+    // raw-link posts often), even though lower-spend ads in the same
+    // campaign had perfectly good signed URLs. Surfaced as missing FB
+    // / IG thumbnails on the Command Centre while TikTok / Google
+    // worked because their per-ad thumbnail resolution is denser.
     ads.forEach(function(a) {
       var cid = String(a.campaignId || "");
       if (!cid) return;
       var sp = parseFloat(a.spend || 0);
+      var thumb = a.thumbnail || "";
       var cur = byCamp[cid];
-      if (!cur || sp > cur.spend) {
-        byCamp[cid] = { spend: sp, thumbnail: a.thumbnail || "", previewUrl: a.previewUrl || "" };
+      if (!cur) {
+        byCamp[cid] = { spend: sp, thumbnail: thumb, previewUrl: a.previewUrl || "", _hasThumb: !!thumb };
+        return;
+      }
+      // Priority: keep an entry with a thumbnail over one without,
+      // regardless of spend. Within the same has-thumbnail class,
+      // higher spend wins.
+      if (thumb && !cur._hasThumb) {
+        byCamp[cid] = { spend: sp, thumbnail: thumb, previewUrl: a.previewUrl || "", _hasThumb: true };
+      } else if (cur._hasThumb === !!thumb && sp > cur.spend) {
+        byCamp[cid] = { spend: sp, thumbnail: thumb || cur.thumbnail, previewUrl: a.previewUrl || cur.previewUrl, _hasThumb: cur._hasThumb };
       }
     });
+    // Strip the internal sentinel before returning so callers see the
+    // same {thumbnail, previewUrl, spend} shape as before.
+    Object.keys(byCamp).forEach(function(k) { delete byCamp[k]._hasThumb; });
     return byCamp;
   } catch (_) {
     return {};
