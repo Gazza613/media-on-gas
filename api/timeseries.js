@@ -34,6 +34,13 @@ function overrideFor(overridesMap, campaignId) {
 function detectObjective(campaignName) {
   var n = (campaignName || "").toLowerCase();
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "appinstall";
+  // Community Reach matched BEFORE followers so the like/follow tokens
+  // in the audience tag don't divert these campaigns to FOLLOWERS.
+  // Mirrors ads.js + campaigns.js detection so all three endpoints
+  // classify the same campaign identically.
+  if (n.indexOf("follow/like-audience") >= 0 || n.indexOf("follow_like_audience") >= 0
+      || n.indexOf("follow-like-audience") >= 0 || n.indexOf("like-audience") >= 0
+      || (n.indexOf("reach") >= 0 && n.indexOf("community") >= 0)) return "community_reach";
   if (n.indexOf("follower") >= 0 || n.indexOf("_follow_") >= 0 || n.indexOf("_follow ") >= 0 || n.indexOf("|follow") >= 0 || n.indexOf("like&follow") >= 0 || n.indexOf("like_follow") >= 0 || n.indexOf("like+follow") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "followers";
   if (n.indexOf("lead_gen") >= 0 || n.indexOf("_lead_") >= 0 || n.indexOf("_lead ") >= 0 || n.indexOf(" lead ") >= 0 || n.indexOf("|lead") >= 0 || n.indexOf("_pos_") >= 0 || n.indexOf(" pos ") >= 0 || n.indexOf("|pos") >= 0 || n.indexOf("momo pos") >= 0) return "leads";
   if (n.indexOf("homeloan") >= 0 || n.indexOf("traffic") >= 0 || n.indexOf("paidsearch") >= 0) return "landingpage";
@@ -165,7 +172,7 @@ export default async function handler(req, res) {
         };
         var timeRange = encodeURIComponent(JSON.stringify({ since: from, until: to }));
         var incr = granularity === "month" ? "monthly" : (granularity === "day" ? "1" : "7");
-        var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,actions&level=campaign&breakdowns=publisher_platform&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
+        var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=publisher_platform&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Follow pagination for big date ranges / many campaigns.
         var metaAllRows = [];
         var insNext = insUrl;
@@ -192,6 +199,7 @@ export default async function handler(req, res) {
           var spend = parseFloat(row.spend || 0);
           var imps = parseInt(row.impressions || 0);
           var clk = parseInt(row.clicks || 0);
+          var rch = parseInt(row.reach || 0);
           var results = 0;
           var rawLike = 0;       // FB action_type=like value, captured for name-strong fallback below
           var rawPageLike = 0;   // FB action_type=page_like / onsite_conversion.page_like
@@ -262,6 +270,10 @@ export default async function handler(req, res) {
           // the ad actually drives.
           if (objective === "landingpage") results = clk;
           if (objective === "followers" && platform === "Instagram") results = clk;
+          // Community Reach: per-bucket result is reach (unique people
+          // reached inside the targeted community), so the trendline
+          // cell sparkline tracks reach over time, not clicks.
+          if (objective === "community_reach") results = rch;
           // Reconstruct the dashboard's per-publisher virtual id so the
           // selection filter matches exactly what was selected (the
           // dashboard keys Meta as "<rawCampaignId>_facebook" /
@@ -290,7 +302,7 @@ export default async function handler(req, res) {
       } catch (e) {}
 
       var ttDims = encodeURIComponent(JSON.stringify(["campaign_id", "stat_time_day"]));
-      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "follows", "likes"]));
+      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes"]));
       var ttBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
       // Follow TikTok pagination, dropping pages 2+ undercounted large date ranges.
       var ttAllRows = [];
@@ -318,10 +330,11 @@ export default async function handler(req, res) {
           var spend = parseFloat(m.spend || 0);
           var imps = parseInt(m.impressions || 0);
           var clk = parseInt(m.clicks || 0);
+          var rch = parseInt(m.reach || 0);
           // TikTok "likes" metric is video hearts (engagement), NOT follows,
           // never fold them into the follower-objective result count.
           var follows = parseInt(m.follows || 0);
-          var results = objective === "followers" ? follows : clk;
+          var results = objective === "followers" ? follows : objective === "community_reach" ? rch : clk;
           if (!campaignAllowed(d.campaign_id, m.campaign_name)) return;
           addTo(seriesMap, "TikTok", objective, bucket, { spend: spend, impressions: imps, clicks: clk, results: results });
         });

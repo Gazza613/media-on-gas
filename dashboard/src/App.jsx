@@ -4742,7 +4742,7 @@ export default function MediaOnGas(){
     // section reads as a clean visual block; Optimisation keeps the
     // momentum-leader / attention-point summary at the foot.
     var showCommentary=!opts||opts.showCommentary!==false;
-    var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"Clicks to App Store",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"landingpage",label:"Landing Page",accent:P.cyan}];
+    var objRows=[{key:"leads",label:"Lead Gen",accent:P.rose},{key:"appinstall",label:"Clicks to App Store",accent:P.fb},{key:"followers",label:"Followers",accent:P.tt},{key:"community_reach",label:"Community Reach",accent:P.solar},{key:"landingpage",label:"Landing Page",accent:P.cyan}];
     var platCols=[{key:"Facebook",label:"FB",accent:P.fb},{key:"Instagram",label:"IG",accent:P.ig},{key:"TikTok",label:"TT",accent:P.tt},{key:"Google",label:"Google",accent:P.gd}];
     var hasData=timeseries&&timeseries.series&&timeseries.series.length>0;
     var buckets=(timeseries&&timeseries.buckets)||[];
