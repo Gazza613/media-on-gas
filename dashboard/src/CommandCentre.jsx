@@ -45,15 +45,28 @@ function previousPeriodWindow(from, to) {
     if (pm < 0) { pm = 11; py -= 1; }
     var prevFrom = new Date(Date.UTC(py, pm, 1));
     var daysInPrev = new Date(Date.UTC(py, pm + 1, 0)).getUTCDate();
-    // If the current window IS the whole calendar month (1st through the
-    // last day), compare to the WHOLE previous month, not just the same
-    // day-count. Apr 1-30 was clamping to Mar 1-30 instead of Mar 1-31,
-    // dropping a day of comparable spend / delivery and skewing the
-    // delta. MTD windows still clamp (May 1-24 vs Apr 1-24) since the
-    // operator is reading "month so far".
+    // MTD detection. If the picker extends into the future (operator
+    // chose "June 1-30" mid-June so the dashboard's whole-month view
+    // covers a current month not yet finished), the actual delivery
+    // is MTD — June 1 through today. Comparing that against the WHOLE
+    // prior month (May 1-31) silently divides a 2-day current against
+    // a 31-day prior and surfaces ~94% drops that are pure date-range
+    // artifacts. Clamp the effective current "to" to today so prev
+    // mirrors the same MTD-equivalent (May 1 → today's day-of-month).
+    // When the current month has finished (operator looking back at
+    // June 1-30 in July) toD <= today and the existing whole-month
+    // comparison kicks in.
+    var nowUtc = new Date();
+    var today = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth(), nowUtc.getUTCDate()));
+    var effectiveToD = toD > today ? today : toD;
     var daysInCur = new Date(Date.UTC(fromD.getUTCFullYear(), fromD.getUTCMonth() + 1, 0)).getUTCDate();
-    var curIsFullMonth = toD.getUTCDate() === daysInCur;
-    var prevToDay = curIsFullMonth ? daysInPrev : Math.min(toD.getUTCDate(), daysInPrev);
+    // Full-month comparison only when the effective current end IS the
+    // calendar last day of the current month (and we haven't been
+    // clamped to mid-month by the today guard above).
+    var curIsFullMonth = effectiveToD.getUTCDate() === daysInCur
+      && effectiveToD.getUTCMonth() === fromD.getUTCMonth()
+      && effectiveToD.getUTCFullYear() === fromD.getUTCFullYear();
+    var prevToDay = curIsFullMonth ? daysInPrev : Math.min(effectiveToD.getUTCDate(), daysInPrev);
     var prevTo = new Date(Date.UTC(py, pm, prevToDay));
     return { from: iso(prevFrom), to: iso(prevTo) };
   }
