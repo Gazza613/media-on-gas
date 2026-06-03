@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v18-community-reach-broaden-api-fallback";
+var CAMPAIGNS_CACHE_VERSION = "v19-pagelike-namestrong-fallback";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -651,16 +651,36 @@ export default async function handler(req, res) {
           // Strict PAGE_LIKES gate (mirrors reconcile.js rawMetaObjStrict
           // and the per-publisher fold-in above). Pre-ODAX PAGE_LIKES and
           // ad-sets explicitly optimised for PAGE_LIKES surface the
-          // page-like result under actions["like"], not page_like, so the
-          // no-breakdown floor missed them entirely. Without this gate
-          // the MTN-MoMo Like&Follow campaigns (PAGE_LIKES-optimised at
-          // ad-set level) read 46/22 likes on the truth side and 0 on the
-          // dashboard, which Ground Truth flagged red. Only ODAX strict-
-          // PAGE_LIKES campaigns get this fallback, so engagement
-          // campaigns where "like" is post reactions stay untouched.
+          // page-like result under actions["like"], not page_like.
           var rawMetaObjStrict = pageLikeOpt[cid] === true
             || String((campaignInfo[cid] || {}).objective || "").toUpperCase() === "PAGE_LIKES";
           if (rawMetaObjStrict) pl = Math.max(pl, likeRaw);
+          // Name-strong page-like fallback (mirrors ads.js line ~892 and
+          // timeseries.js line ~249, see project_fb_page_like_fallback).
+          // ODAX Like&Follow campaigns frequently run as
+          // OUTCOME_ENGAGEMENT with a LIKE_PAGE CTA but a NON-PAGE_LIKES
+          // optimisation_goal (engagement / profile-visit). The strict
+          // gate above zeroes those, leaving the per-campaign pageLikes
+          // at zero even though the operator's intent is clearly page
+          // likes and actions["like"] carries the real result.
+          // When the campaign name TAGS page-like intent AND gated pl is
+          // still zero, fall back to the raw "like" action so Ground
+          // Truth reconciles. Same name-token list every other
+          // classifier uses (ads / timeseries / reconcile name path).
+          if (pl === 0 && likeRaw > 0) {
+            var cn = String((campaignInfo[cid] || {}).name || "").toLowerCase();
+            var nameStrongPageLike = (
+              cn.indexOf("like&follow") >= 0
+              || cn.indexOf("like_follow") >= 0
+              || cn.indexOf("like+follow") >= 0
+              || cn.indexOf("_like_") >= 0
+              || cn.indexOf("_like ") >= 0
+              || cn.indexOf("paidsocial_like") >= 0
+              || cn.indexOf("like_facebook") >= 0
+              || cn.indexOf("like_instagram") >= 0
+            );
+            if (nameStrongPageLike) pl = likeRaw;
+          }
           if (pl > 0) pageLikesNbMap[cid] = pl;
         });
       } catch (_) { /* non-fatal */ }
@@ -782,6 +802,28 @@ export default async function handler(req, res) {
           // mostly on the IG split. Strict-PAGE_LIKES gate still prevents
           // OUTCOME_ENGAGEMENT campaigns from inflating via post reactions.
           if ((pageLikeOpt[c.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && reactionLikes > pageLikes) pageLikes = reactionLikes;
+          // Name-strong page-like fallback (mirrors ads.js + timeseries.js,
+          // see project_fb_page_like_fallback). ODAX Like&Follow campaigns
+          // run as OUTCOME_ENGAGEMENT with a LIKE_PAGE CTA but a
+          // non-PAGE_LIKES optimisation_goal. The strict gate above zeroes
+          // them; the campaign-name page-like intent then folds the raw
+          // "like" action in so per-publisher pageLikes reconciles to
+          // Ground Truth on the same campaigns the no-breakdown floor
+          // catches below.
+          if (pageLikes === 0 && reactionLikes > 0) {
+            var _cn = String(c.campaign_name || "").toLowerCase();
+            var _nameStrongPageLike = (
+              _cn.indexOf("like&follow") >= 0
+              || _cn.indexOf("like_follow") >= 0
+              || _cn.indexOf("like+follow") >= 0
+              || _cn.indexOf("_like_") >= 0
+              || _cn.indexOf("_like ") >= 0
+              || _cn.indexOf("paidsocial_like") >= 0
+              || _cn.indexOf("like_facebook") >= 0
+              || _cn.indexOf("like_instagram") >= 0
+            );
+            if (_nameStrongPageLike) pageLikes = reactionLikes;
+          }
 
           if (!rowMap[uniqueId]) {
             rowMap[uniqueId] = {
@@ -945,6 +987,25 @@ export default async function handler(req, res) {
           // campaign on IG returns the page-follow under actions["like"]
           // on the IG-placement row too.
           if ((pageLikeOpt[a.campaign_id] === true || rawMetaObj === "PAGE_LIKES") && a.reactionLikes > pageLikes) pageLikes = a.reactionLikes;
+          // Name-strong page-like fallback (mirrors the per-campaign path
+          // above, ads.js + timeseries.js, see project_fb_page_like_fallback).
+          // Catches ODAX Like&Follow campaigns running as OUTCOME_ENGAGEMENT
+          // with a non-PAGE_LIKES optimisation_goal so the rolled-up row
+          // matches the per-campaign treatment.
+          if (pageLikes === 0 && a.reactionLikes > 0) {
+            var _acn = String(a.campaignName || "").toLowerCase();
+            var _aNameStrongPageLike = (
+              _acn.indexOf("like&follow") >= 0
+              || _acn.indexOf("like_follow") >= 0
+              || _acn.indexOf("like+follow") >= 0
+              || _acn.indexOf("_like_") >= 0
+              || _acn.indexOf("_like ") >= 0
+              || _acn.indexOf("paidsocial_like") >= 0
+              || _acn.indexOf("like_facebook") >= 0
+              || _acn.indexOf("like_instagram") >= 0
+            );
+            if (_aNameStrongPageLike) pageLikes = a.reactionLikes;
+          }
           seenIds[a.campaign_id] = true;
           rowMap[k] = {
             platform: a.platform,

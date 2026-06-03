@@ -167,6 +167,28 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
         var rawMetaObjStrict = pageLikeOpt[row.campaign_id] === true || String(objMap[row.campaign_id] || "").toUpperCase() === "PAGE_LIKES";
         var pageLikesRaw = Math.max(actions["page_like"] || 0, actions["onsite_conversion.page_like"] || 0);
         if (rawMetaObjStrict) pageLikesRaw = Math.max(pageLikesRaw, actions["like"] || 0);
+        // Name-strong page-like fallback. ODAX Like&Follow campaigns
+        // running as OUTCOME_ENGAGEMENT with a non-PAGE_LIKES
+        // optimisation goal escape the strict gate above, even though
+        // the operator's intent is clearly page likes. Fold actions[
+        // "like"] when the campaign name tags page-like intent AND the
+        // strict-only result is still zero. Matches campaigns.js +
+        // ads.js + timeseries.js so source and dashboard agree.
+        // See project_fb_page_like_fallback.
+        if (pageLikesRaw === 0 && (actions["like"] || 0) > 0) {
+          var _rcn = String(row.campaign_name || "").toLowerCase();
+          var _rNameStrongPageLike = (
+            _rcn.indexOf("like&follow") >= 0
+            || _rcn.indexOf("like_follow") >= 0
+            || _rcn.indexOf("like+follow") >= 0
+            || _rcn.indexOf("_like_") >= 0
+            || _rcn.indexOf("_like ") >= 0
+            || _rcn.indexOf("paidsocial_like") >= 0
+            || _rcn.indexOf("like_facebook") >= 0
+            || _rcn.indexOf("like_instagram") >= 0
+          );
+          if (_rNameStrongPageLike) pageLikesRaw = actions["like"] || 0;
+        }
         // 'follow' / onsite_conversion.follow / onsite_conversion.ig_follow
         // dropped from the Meta SoT side. The dashboard's c.pageLikes is
         // the entire follower signal on Meta — c.follows is a TikTok-only
