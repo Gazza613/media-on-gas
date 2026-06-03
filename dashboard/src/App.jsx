@@ -702,12 +702,14 @@ function SH(props){
   var a=props.accent||P.ember;
   // When a logoUrl is provided (resolved per-client by the caller for
   // known brands like MTN MoMo / MoMo POS), render the logo inside the
-  // same 40x40 styled box instead of the generic crown icon, so the
-  // page reads as "this client's media insights" at a glance.
-  var badge=props.logoUrl
-    ? <img src={props.logoUrl} alt="" style={{width:32,height:32,objectFit:"contain",display:"block"}} onError={function(e){e.target.style.display="none";}}/>
-    : props.icon;
-  return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>{badge}</div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);
+  // same 40x40 styled box. Layer it OVER the existing icon so a failed
+  // image load (404, CORS, etc) reveals the icon underneath rather
+  // than leaving the box empty. onError hides the broken img element.
+  var hasLogo=!!props.logoUrl;
+  return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{position:"relative",width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    {props.icon}
+    {hasLogo&&<img src={props.logoUrl} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",borderRadius:11,objectFit:"contain",padding:4,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",display:"block"}} onError={function(e){e.target.style.display="none";}}/>}
+  </div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);
 }
 function Pill(props){return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:props.color+"12",border:"1px solid "+props.color+"30",borderRadius:20,padding:"3px 10px",fontSize:9,fontWeight:700,color:props.color,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:6,height:6,borderRadius:"50%",background:props.color}}/>{props.name}</span>);}
 // Targeting persona card for the Targeting tab. Click-weighted per-platform
@@ -2402,7 +2404,7 @@ function CampaignAuditModal(props){
   });
   var platforms={};data.forEach(function(c){platforms[c.platform]=true;});
   var objectives={};data.forEach(function(c){objectives[c.detectedObjective]=true;});
-  var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Unclassified":P.label};
+  var objCol={"Leads":P.rose,"Clicks to App Store":P.fb,"Followers & Likes":P.tt,"Landing Page Clicks":P.cyan,"Community Reach":P.momoYellow,"Unclassified":P.label};
   // Per-state colours for the new Discrepancy chip + filter pills.
   // agrees = mint, name_overrode = warning amber (the eyeball-it row),
   // api_fallback = cyan info, unclassified = muted label grey,
@@ -6930,16 +6932,31 @@ export default function MediaOnGas(){
                   return standRow([topVol?stand("HIGHEST VOLUME",topVol+", "+fmt(objectives4[topVol].results),objCol4[topVol]||P.rose):null,bestEff?stand("BEST EFFICIENCY",bestEff+", "+fR(cpFor(bestEff,objectives4[bestEff]))+(bestEff==="Community Reach"?" CPM":"/result"),objCol4[bestEff]||P.mint):null,blendedCostPer>0?stand(blendedLabel,fR(blendedCostPer),blendedCol):null,stand("TOTAL OBJECTIVE RESULTS",fmt(totalResults),P.ember)]);
                 })()}
                 {(function(){
+                  // Per-objective cost helper, same as the first standRow
+                  // (Community Reach uses CPM, every other objective uses
+                  // spend/result). Without this, the duplicate executive
+                  // narrative below was sorting Community Reach as the
+                  // "strongest efficiency" against a microscopic
+                  // spend/reach number, which is mathematically meaningless.
+                  var _cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};
+                  var _costClass=function(k){return k==="Community Reach"?"cpm":"cpr";};
                   var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
                   if(active.length===0)return null;
                   var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];
-                  var bestEff=active.slice().sort(function(a,b){return(objectives4[a].spend/objectives4[a].results)-(objectives4[b].spend/objectives4[b].results);})[0];
+                  // BEST EFFICIENCY only compares within the same cost class
+                  // (CPM vs CPR), so CPM-class Community Reach never gets
+                  // unfairly compared against CPL / CPC objectives.
+                  var _dominantClass=active.length>0?_costClass(active[0]):"cpr";
+                  var _effPool=active.filter(function(k){return _costClass(k)===_dominantClass;});
+                  if(_effPool.length===0)_effPool=active;
+                  var bestEff=_effPool.slice().sort(function(a,b){return _cpFor(a,objectives4[a])-_cpFor(b,objectives4[b]);})[0];
                   var totalResults=0;var totalSpend=0;active.forEach(function(k){totalResults+=objectives4[k].results;totalSpend+=objectives4[k].spend;});
-                  var bestEffCost=bestEff?objectives4[bestEff].spend/objectives4[bestEff].results:0;
+                  var bestEffCost=bestEff?_cpFor(bestEff,objectives4[bestEff]):0;
+                  var bestEffUnit=bestEff==="Community Reach"?" CPM":" per result";
                   var lines=[];
                   lines.push(fmt(totalResults)+" objective results were delivered across "+active.length+" active objective"+(active.length>1?"s":"")+" from "+fR(totalSpend)+" invested.");
                   if(topVol)lines.push(topVol+" led volume with "+fmt(objectives4[topVol].results)+" results.");
-                  if(bestEff&&bestEffCost>0)lines.push(bestEff+" achieved the strongest efficiency at "+fR(bestEffCost)+" per result.");
+                  if(bestEff&&bestEffCost>0)lines.push(bestEff+" achieved the strongest efficiency at "+fR(bestEffCost)+bestEffUnit+".");
                   if(active.length>1&&topVol!==bestEff)lines.push("Volume and efficiency leaders differ, a signal to weigh budget shift toward "+bestEff+" if efficiency is the priority, or hold "+topVol+" to protect scale.");
                   // Per-platform cost split for each active objective. Only
                   // emit when the objective actually ran across 2+ platforms,
@@ -8790,15 +8807,21 @@ export default function MediaOnGas(){
                   <Insight title={sec.label+" Insights"} accent={sec.accent} icon={sec.icon}>{(function(){
                     var lines=[];
                     var topAd=top10[0];
-                    lines.push(arr.length+" "+sec.label.toLowerCase()+" creatives delivered "+(totals.results>0?fmt(totals.results)+" "+resultLabel(arr[0]?arr[0].resultType:sec.metric).toLowerCase():"no measurable results yet")+" from "+fR(totals.spend)+" spend"+(totals.cpr>0?", a blended "+sec.costLabel+" of "+fR(totals.cpr):"")+(verdict?" ("+verdict.toLowerCase()+")":"")+".");
+                    // Awareness / Community Reach sections use CPM (spend per
+                    // 1,000 impressions). Every other section uses spend/result.
+                    // Same gate as the headline tile (awrSec / awrCpm / bmV).
+                    var blendedCost=awrSec?awrCpm:totals.cpr;
+                    var costBm=awrSec?benchmarks.meta.cpm:bm;
+                    lines.push(arr.length+" "+sec.label.toLowerCase()+" creatives delivered "+(totals.results>0?fmt(totals.results)+" "+resultLabel(arr[0]?arr[0].resultType:sec.metric).toLowerCase():"no measurable results yet")+" from "+fR(totals.spend)+" spend"+(blendedCost>0?", a blended "+sec.costLabel+" of "+fR(blendedCost):"")+(verdict?" ("+verdict.toLowerCase()+")":"")+".");
                     if(topAd&&topAd.results>0){
-                      lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,70)+"\" on "+topAd.platform+", delivering "+fmt(topAd.results)+" "+resultLabel(topAd.resultType).toLowerCase()+" at "+fR(topAd.spend/topAd.results)+" "+sec.costLabel+" with "+topAd.ctr.toFixed(2)+"% CTR.");
+                      var topCost=awrSec?(topAd.impressions>0?topAd.spend/topAd.impressions*1000:0):(topAd.results>0?topAd.spend/topAd.results:0);
+                      lines.push("Top performer: \""+(topAd.adName||"Unnamed").substring(0,70)+"\" on "+topAd.platform+", delivering "+fmt(topAd.results)+" "+resultLabel(topAd.resultType).toLowerCase()+" at "+fR(topCost)+" "+sec.costLabel+" with "+topAd.ctr.toFixed(2)+"% CTR.");
                     }else if(topAd){
-                      lines.push("Top performer by spend: \""+(topAd.adName||"Unnamed").substring(0,70)+"\" with "+fR(topAd.spend)+" invested but no measurable conversions yet \u2014 verify pixel tracking and landing page experience.");
+                      lines.push("Top performer by spend: \""+(topAd.adName||"Unnamed").substring(0,70)+"\" with "+fR(topAd.spend)+" invested but no measurable conversions yet, verify pixel tracking and landing page experience.");
                     }
-                    if(totals.cpr>0&&bm){
-                      if(totals.cpr<=bm.low)lines.push("Cost efficiency is excellent. Scale by increasing budget 15 to 25 percent on the top 3 ad sets feeding these creatives.");
-                      else if(totals.cpr<=bm.mid)lines.push("Cost efficiency is in the healthy range. Test creative variants on the top 5 ads to push "+sec.costLabel+" lower.");
+                    if(blendedCost>0&&costBm){
+                      if(blendedCost<=costBm.low)lines.push("Cost efficiency is excellent. Scale by increasing budget 15 to 25 percent on the top 3 ad sets feeding these creatives.");
+                      else if(blendedCost<=costBm.mid)lines.push("Cost efficiency is in the healthy range. Test creative variants on the top 5 ads to push "+sec.costLabel+" lower.");
                       else lines.push(sec.costLabel+" is above the benchmark midpoint. Audit the bottom of the rankings, pause underperformers, and reallocate budget to the top winners.");
                     }
                     if(rest.length>top10.length)lines.push("The "+rest.length+" lower-ranked creatives represent the long tail. Worth reviewing the bottom 25 percent for fatigue or targeting issues.");
@@ -8853,9 +8876,19 @@ export default function MediaOnGas(){
                   top5.forEach(function(a){topSpend+=a.spend;topRes+=a.results;});
                   var tail=srt.slice(Math.max(Math.floor(srt.length*0.75),10));
                   tail.forEach(function(a){tailSpend+=a.spend;tailRes+=a.results;});
-                  var topCpr=topRes>0?topSpend/topRes:0;
-                  var tailCpr=tailRes>0?tailSpend/tailRes:0;
+                  // Community Reach uses CPM (spend/impressions*1000) for
+                  // every cost-per number on this section, not spend/result
+                  // (which would give a meaningless spend/reach for awareness
+                  // ads). Every other objective keeps the standard formula.
+                  var isAwrSec=sec.key==="community_reach";
+                  var topImpsP=0;top5.forEach(function(a){topImpsP+=a.impressions;});
+                  var tailImpsP=0;tail.forEach(function(a){tailImpsP+=a.impressions;});
+                  var topCpr=isAwrSec?(topImpsP>0?topSpend/topImpsP*1000:0):(topRes>0?topSpend/topRes:0);
+                  var tailCpr=isAwrSec?(tailImpsP>0?tailSpend/tailImpsP*1000:0):(tailRes>0?tailSpend/tailRes:0);
                   var efficiencyGap=(topCpr>0&&tailCpr>0)?(tailCpr/topCpr):0;
+                  // Blended cost on the same gate so headline + narrative
+                  // sentences + cross-objective sort all agree.
+                  var blendedCost=isAwrSec?(t.imps>0?t.spend/t.imps*1000:0):t.cpr;
                   // Format mix inside top 5
                   var fmtMix={};
                   top5.forEach(function(a){var fl=fmtMeta(a.format).label;fmtMix[fl]=(fmtMix[fl]||0)+1;});
@@ -8872,7 +8905,7 @@ export default function MediaOnGas(){
                   // Reallocation impact: if tail spend moved to top CPR, projected additional results
                   var realloc=topCpr>0&&tailSpend>0?Math.round(tailSpend/topCpr)-tailRes:0;
                   return {sec:sec,arr:arr,sorted:srt,top5:top5,next5:next5,totals:t,count:arr.length,
-                    topCpr:topCpr,tailCpr:tailCpr,efficiencyGap:efficiencyGap,
+                    topCpr:topCpr,tailCpr:tailCpr,efficiencyGap:efficiencyGap,blendedCost:blendedCost,isAwrSec:isAwrSec,
                     fmtMix:fmtMix,fmtTop:fmtTop,platMix:platMix,platTop:platTop,
                     topCtr:topCtr,tailCtr:tailCtr,tailSpend:tailSpend,tailCount:tail.length,realloc:realloc};
                 }).filter(function(x){return x!==null;});
@@ -8926,7 +8959,7 @@ export default function MediaOnGas(){
                             <span style={{fontSize:12,fontWeight:900,color:pc,fontFamily:ff,letterSpacing:1}}>{p.pg.toUpperCase()}</span>
                             <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{p.count+" ads | "+fR(p.spend)+" | "+p.ctr.toFixed(2)+"% CTR"}</span>
                           </div>
-                          {miniCard(p.winner,pc,resultLabel(resT),p.winner.results>0?fmt(p.winner.results):"0",costPerLabel(resT),p.winner.results>0?fR(p.winner.spend/p.winner.results):null)}
+                          {(function(){var awr=resT==="reach"||resT==="impressions";var cv=awr?(p.winner.impressions>0?p.winner.spend/p.winner.impressions*1000:0):(p.winner.results>0?p.winner.spend/p.winner.results:0);return miniCard(p.winner,pc,resultLabel(resT),p.winner.results>0?fmt(p.winner.results):"0",costPerLabel(resT),cv>0?fR(cv):null);})()}
                         </div>;
                       })}
                     </div>
@@ -8942,7 +8975,7 @@ export default function MediaOnGas(){
                         {sec.icon}
                         <span style={{fontSize:13,fontWeight:900,color:sec.accent,fontFamily:ff,letterSpacing:1.5}}>{sec.label+" | TOP 10"}</span>
                         <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
-                        <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{o.count+" ads | "+fR(o.totals.spend)+" | "+(o.totals.cpr>0?fR(o.totals.cpr)+" "+sec.costLabel:"no results yet")}</span>
+                        <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{o.count+" ads | "+fR(o.totals.spend)+" | "+(o.blendedCost>0?fR(o.blendedCost)+" "+sec.costLabel:"no results yet")}</span>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
                         {ten.map(function(ad,ai){
@@ -8956,7 +8989,7 @@ export default function MediaOnGas(){
                               <div style={{background:isScale?P.mint:P.warning,color:isScale?"#062014":"#2a1605",fontSize:8,fontWeight:900,padding:"3px 6px",borderRadius:4,fontFamily:fm,letterSpacing:0.8,whiteSpace:"nowrap",textAlign:"center"}}>{isScale?"\u25B2 SCALE":"\u2605 TOP"}</div>
                             </div>
                             <div style={{flex:1,minWidth:0}}>
-                              {miniCard(ad,sec.accent,resultLabel(resT),ad.results>0?fmt(ad.results):"0",costPerLabel(resT),ad.results>0?fR(ad.spend/ad.results):null)}
+                              {(function(){var awr=resT==="reach"||resT==="impressions";var cv=awr?(ad.impressions>0?ad.spend/ad.impressions*1000:0):(ad.results>0?ad.spend/ad.results:0);return miniCard(ad,sec.accent,resultLabel(resT),ad.results>0?fmt(ad.results):"0",costPerLabel(resT),cv>0?fR(cv):null);})()}
                             </div>
                           </div>;
                         })}
@@ -8988,10 +9021,13 @@ export default function MediaOnGas(){
                           if(o.realloc>0){
                             lines.push("Reallocation impact: moving the "+fR(o.tailSpend)+" currently in the bottom quartile to the top 5 at their CPR would project ~"+fmt(o.realloc)+" additional "+resultLabel(resT).toLowerCase()+" at the same spend. Action: pause "+o.tailCount+" tail ads, lift top-5 ad-set budgets by 20%.");
                           }
-                          // L4: benchmark read
-                          if(o.totals.cpr>0&&bm){
-                            var bVerd=o.totals.cpr<=bm.low?"well below the industry benchmark floor ("+fR(bm.low)+"), strong efficiency":o.totals.cpr<=bm.mid?"inside the industry benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+"), performing to standard":o.totals.cpr<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+"), room to tighten":"above the industry benchmark ceiling ("+fR(bm.high)+"), red flag, revisit targeting and creative hooks";
-                            lines.push("Blended "+sec.costLabel+" at "+fR(o.totals.cpr)+" is "+bVerd+".");
+                          // L4: benchmark read. Community Reach uses the
+                          // meta.cpm band (sec.bench is meta.cpm for that
+                          // section), every other objective uses its own
+                          // sec.bench. blendedCost is already CPM for CR.
+                          if(o.blendedCost>0&&bm){
+                            var bVerd=o.blendedCost<=bm.low?"well below the industry benchmark floor ("+fR(bm.low)+"), strong efficiency":o.blendedCost<=bm.mid?"inside the industry benchmark range ("+fR(bm.low)+"-"+fR(bm.mid)+"), performing to standard":o.blendedCost<=bm.high?"above midpoint but under the ceiling ("+fR(bm.high)+"), room to tighten":"above the industry benchmark ceiling ("+fR(bm.high)+"), red flag, revisit targeting and creative hooks";
+                            lines.push("Blended "+sec.costLabel+" at "+fR(o.blendedCost)+" is "+bVerd+".");
                           }
                           // L5: format mix insight
                           if(o.fmtTop&&o.fmtMix[o.fmtTop]>=3){
@@ -9030,20 +9066,27 @@ export default function MediaOnGas(){
                     </div>
                     {(function(){
                       var lines=[];
-                      // Spend efficiency ranked across objectives
-                      var objRanked=objBreakdown.slice().filter(function(o){return o.totals.cpr>0;}).sort(function(a,b){
+                      // Spend efficiency ranked across objectives. Compare
+                      // each objective's blendedCost against its own
+                      // benchmark midpoint (a ratio under 1 = better than
+                      // benchmark), so CPM-class Community Reach gets
+                      // ranked against meta.cpm.mid and CPR-class objectives
+                      // against their own bench. Comparing absolute cost
+                      // numbers across classes would always make CR look
+                      // worst, the ratio normalises that.
+                      var objRanked=objBreakdown.slice().filter(function(o){return o.blendedCost>0;}).sort(function(a,b){
                         var aBm=a.sec.bench,bBm=b.sec.bench;
-                        var aR=aBm?a.totals.cpr/aBm.mid:1;
-                        var bR=bBm?b.totals.cpr/bBm.mid:1;
+                        var aR=aBm?a.blendedCost/aBm.mid:1;
+                        var bR=bBm?b.blendedCost/bBm.mid:1;
                         return aR-bR;
                       });
                       if(objRanked.length>=2){
                         var best=objRanked[0],worst=objRanked[objRanked.length-1];
                         var costParts=objRanked.map(function(o){
                           var bm=o.sec.bench;
-                          if(!bm||o.totals.cpr<=0)return o.sec.label+" no benchmark";
-                          var pct=Math.abs(1-(o.totals.cpr/bm.mid))*100;
-                          var dir=(o.totals.cpr/bm.mid)<1?"under":"over";
+                          if(!bm||o.blendedCost<=0)return o.sec.label+" no benchmark";
+                          var pct=Math.abs(1-(o.blendedCost/bm.mid))*100;
+                          var dir=(o.blendedCost/bm.mid)<1?"under":"over";
                           return o.sec.label+" "+pct.toFixed(2)+"% "+dir;
                         });
                         lines.push("Cost vs industry average, by objective: "+costParts.join(", ")+". Best running: "+best.sec.label+". Most expensive: "+worst.sec.label+".");
@@ -9686,7 +9729,7 @@ export default function MediaOnGas(){
                   <div style={{background:"rgba(0,0,0,0.12)",borderRadius:10,padding:16}}><div style={{fontSize:9,fontWeight:800,color:"rgba(255,255,255,0.5)",letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Results by Adset</div><ChartReveal><ResponsiveContainer width="100%" height={Math.max(160,chartD.length*52)}><BarChart data={chartD} layout="vertical" barSize={14}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis type="number" tick={{fontSize:9,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><YAxis type="category" dataKey="name" width={220} tick={function(props){var lines=[];var txt=props.payload.value||"";var maxW=28;for(var si=0;si<txt.length;si+=maxW){lines.push(txt.substring(si,si+maxW));}return <g transform={"translate("+props.x+","+props.y+")"}>{lines.map(function(ln,li){return <text key={li} x={-4} y={li*13-((lines.length-1)*6)} textAnchor="end" fill="rgba(255,255,255,0.85)" fontSize={9} fontFamily="'JetBrains Mono',monospace">{ln}</text>;})}</g>;}} stroke="transparent"/><Tooltip content={adsetTip} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="Results" fill={oc} radius={[0,6,6,0]}/></BarChart></ResponsiveContainer></ChartReveal></div>
                   <div style={{background:"rgba(0,0,0,0.12)",borderRadius:10,padding:16}}><div style={{fontSize:9,fontWeight:800,color:"rgba(255,255,255,0.5)",letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:10}}>Cost Per Result</div><ChartReveal><ResponsiveContainer width="100%" height={Math.max(160,chartD.filter(function(x){return x.CostPer>0;}).length*52)}><BarChart data={chartD.filter(function(x){return x.CostPer>0;}).sort(function(a,b){return a.CostPer-b.CostPer;})} layout="vertical" barSize={14}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis type="number" tick={{fontSize:9,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fR(v);}}/><YAxis type="category" dataKey="name" width={220} tick={function(props){var lines=[];var txt=props.payload.value||"";var maxW=28;for(var si=0;si<txt.length;si+=maxW){lines.push(txt.substring(si,si+maxW));}return <g transform={"translate("+props.x+","+props.y+")"}>{lines.map(function(ln,li){return <text key={li} x={-4} y={li*13-((lines.length-1)*6)} textAnchor="end" fill="rgba(255,255,255,0.85)" fontSize={9} fontFamily="'JetBrains Mono',monospace">{ln}</text>;})}</g>;}} stroke="transparent"/><Tooltip content={adsetTip} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar dataKey="CostPer" fill={P.ember} radius={[0,6,6,0]}/></BarChart></ResponsiveContainer></ChartReveal></div>
                 </div>
-                <Insight title={objName+" Targeting Assessment"} accent={oc} icon={Ic.radar(oc,16)}>{(function(){var p=[];var objBench=objName==="Clicks to App Store"||objName==="Landing Page Clicks"?benchmarks.meta.cpc:objName==="Leads"?benchmarks.meta.cpl:benchmarks.meta.cpf;var benchNote=oCostPer>0?" This is "+benchLabel(oCostPer,objBench)+".":"";p.push(objName+" targeting operates "+sorted6.length+" adsets across "+Object.keys(platGrp).join(", ")+" with "+fR(oSpend)+" total investment delivering "+fmt(oResults)+" results"+(oResults>0?" at "+fR(oCostPer)+" blended cost per result":"")+" and "+oCtr.toFixed(2)+"% Click Through Rate."+benchNote);Object.keys(platGrp).sort(function(a,b){return (platOrd3[a]||9)-(platOrd3[b]||9);}).forEach(function(plat){var pg=platGrp[plat];var pgCtr=pg.imps>0?(pg.clicks/pg.imps*100):0;var pgCost=pg.results>0?pg.spend/pg.results:0;var pgShareR=oResults>0?((pg.results/oResults)*100).toFixed(2):"0.00";var pgShareS=oSpend>0?((pg.spend/oSpend)*100).toFixed(2):"0.00";var pgEff=parseFloat(pgShareS)>0?(parseFloat(pgShareR)/parseFloat(pgShareS)).toFixed(2):"0";var pgHasScale=pg.spend>=oSpend*0.05&&pg.imps>=5000&&pg.results>=3;p.push(plat+" contributes "+fmt(pg.results)+" results ("+pgShareR+"%) from "+pgShareS+"% of objective budget"+(pg.results>0?" at "+fR(pgCost)+" cost per result":"")+" and "+pgCtr.toFixed(2)+"% CTR.");if(pgHasScale&&parseFloat(pgEff)>=1.3){p.push(plat+" delivers "+pgEff+"x more results per rand than its budget share, confirmed across "+fmt(pg.imps)+" impressions.");}else if(pgHasScale&&parseFloat(pgEff)<0.7){p.push(plat+" is underdelivering at "+pgEff+"x efficiency ratio across "+fmt(pg.imps)+" impressions, consuming more budget than its result contribution warrants.");}else if(!pgHasScale&&pg.results>0){p.push(plat+" results are from limited volume ("+fR(pg.spend)+" spend, "+fmt(pg.imps)+" impressions). Insufficient data to confirm whether this efficiency is sustainable at scale.");}if(pgHasScale&&pg.rows.length>1){var pBest=pg.rows.reduce(function(a,r){return r.result>a.result?r:a;},{result:0});var pBestShare=pg.results>0?((pBest.result/pg.results)*100).toFixed(2):"0.00";if(pBest.result>0&&pBest.spend>=pg.spend*0.1){p.push("The strongest "+plat+" adset is "+pBest.adsetName+" delivering "+pBestShare+"% of "+plat+" results"+(pBest.costPer>0?" at "+fR(pBest.costPer)+" cost per result":"")+".");}}});if(bestAd.result>=10&&bestAd.spend>=oSpend*0.05&&bestAd.impressions>=5000){p.push("Overall top performer with proven scale: "+bestAd.adsetName+" on "+bestAd.platform+" with "+fmt(bestAd.result)+" results"+(bestAd.costPer>0?" at "+fR(bestAd.costPer)+" cost per result":"")+" across "+fmt(bestAd.impressions)+" impressions.");}else if(bestAd.result>=3){p.push("Highest result count is "+bestAd.adsetName+" on "+bestAd.platform+" with "+fmt(bestAd.result)+" results at "+fR(bestAd.costPer)+" cost per result. "+(bestAd.result<10?"Volume is below the 10-result threshold for a confirmed performance read.":""));}else if(bestAd.result>0){p.push("No adset has yet reached the 10-result minimum required for a confirmed performance assessment. The highest count is "+fmt(bestAd.result)+" from "+bestAd.adsetName+" on "+bestAd.platform+".");}if(freqStatus==="critical"||freqStatus==="warning"){var freqAdsets=sorted6.filter(function(r){return r.platform==="Facebook"||r.platform==="Instagram";});if(freqAdsets.length>0){p.push("Note: Meta frequency is at "+m.frequency.toFixed(2)+"x"+(freqStatus==="critical"?" which has breached the fatigue ceiling. Performance of Meta adsets in this objective may be suppressed by audience saturation.":" and approaching the fatigue threshold. Monitor Meta adset CTR closely for signs of diminishing returns."));}}var zeroSpend=sorted6.filter(function(r){return r.spend>200&&r.result===0;});if(zeroSpend.length>0){var zeroTotal=zeroSpend.reduce(function(a,r){return a+r.spend;},0);p.push(zeroSpend.length+" adset"+(zeroSpend.length>1?"s have":" has")+" invested "+fR(zeroTotal)+" without producing results. This represents "+((zeroTotal/oSpend)*100).toFixed(2)+"% of objective budget with zero return.");}return p.join(" ");})()}</Insight>
+                <Insight title={objName+" Targeting Assessment"} accent={oc} icon={Ic.radar(oc,16)}>{(function(){var p=[];var objBench=objName==="Clicks to App Store"||objName==="Landing Page Clicks"?benchmarks.meta.cpc:objName==="Leads"?benchmarks.meta.cpl:objName==="Community Reach"?benchmarks.meta.cpm:benchmarks.meta.cpf;var benchNote=oCostPer>0?" This is "+benchLabel(oCostPer,objBench)+".":"";p.push(objName+" targeting operates "+sorted6.length+" adsets across "+Object.keys(platGrp).join(", ")+" with "+fR(oSpend)+" total investment delivering "+fmt(oResults)+" results"+(oResults>0?" at "+fR(oCostPer)+" blended cost per result":"")+" and "+oCtr.toFixed(2)+"% Click Through Rate."+benchNote);Object.keys(platGrp).sort(function(a,b){return (platOrd3[a]||9)-(platOrd3[b]||9);}).forEach(function(plat){var pg=platGrp[plat];var pgCtr=pg.imps>0?(pg.clicks/pg.imps*100):0;var pgCost=pg.results>0?pg.spend/pg.results:0;var pgShareR=oResults>0?((pg.results/oResults)*100).toFixed(2):"0.00";var pgShareS=oSpend>0?((pg.spend/oSpend)*100).toFixed(2):"0.00";var pgEff=parseFloat(pgShareS)>0?(parseFloat(pgShareR)/parseFloat(pgShareS)).toFixed(2):"0";var pgHasScale=pg.spend>=oSpend*0.05&&pg.imps>=5000&&pg.results>=3;p.push(plat+" contributes "+fmt(pg.results)+" results ("+pgShareR+"%) from "+pgShareS+"% of objective budget"+(pg.results>0?" at "+fR(pgCost)+" cost per result":"")+" and "+pgCtr.toFixed(2)+"% CTR.");if(pgHasScale&&parseFloat(pgEff)>=1.3){p.push(plat+" delivers "+pgEff+"x more results per rand than its budget share, confirmed across "+fmt(pg.imps)+" impressions.");}else if(pgHasScale&&parseFloat(pgEff)<0.7){p.push(plat+" is underdelivering at "+pgEff+"x efficiency ratio across "+fmt(pg.imps)+" impressions, consuming more budget than its result contribution warrants.");}else if(!pgHasScale&&pg.results>0){p.push(plat+" results are from limited volume ("+fR(pg.spend)+" spend, "+fmt(pg.imps)+" impressions). Insufficient data to confirm whether this efficiency is sustainable at scale.");}if(pgHasScale&&pg.rows.length>1){var pBest=pg.rows.reduce(function(a,r){return r.result>a.result?r:a;},{result:0});var pBestShare=pg.results>0?((pBest.result/pg.results)*100).toFixed(2):"0.00";if(pBest.result>0&&pBest.spend>=pg.spend*0.1){p.push("The strongest "+plat+" adset is "+pBest.adsetName+" delivering "+pBestShare+"% of "+plat+" results"+(pBest.costPer>0?" at "+fR(pBest.costPer)+" cost per result":"")+".");}}});if(bestAd.result>=10&&bestAd.spend>=oSpend*0.05&&bestAd.impressions>=5000){p.push("Overall top performer with proven scale: "+bestAd.adsetName+" on "+bestAd.platform+" with "+fmt(bestAd.result)+" results"+(bestAd.costPer>0?" at "+fR(bestAd.costPer)+" cost per result":"")+" across "+fmt(bestAd.impressions)+" impressions.");}else if(bestAd.result>=3){p.push("Highest result count is "+bestAd.adsetName+" on "+bestAd.platform+" with "+fmt(bestAd.result)+" results at "+fR(bestAd.costPer)+" cost per result. "+(bestAd.result<10?"Volume is below the 10-result threshold for a confirmed performance read.":""));}else if(bestAd.result>0){p.push("No adset has yet reached the 10-result minimum required for a confirmed performance assessment. The highest count is "+fmt(bestAd.result)+" from "+bestAd.adsetName+" on "+bestAd.platform+".");}if(freqStatus==="critical"||freqStatus==="warning"){var freqAdsets=sorted6.filter(function(r){return r.platform==="Facebook"||r.platform==="Instagram";});if(freqAdsets.length>0){p.push("Note: Meta frequency is at "+m.frequency.toFixed(2)+"x"+(freqStatus==="critical"?" which has breached the fatigue ceiling. Performance of Meta adsets in this objective may be suppressed by audience saturation.":" and approaching the fatigue threshold. Monitor Meta adset CTR closely for signs of diminishing returns."));}}var zeroSpend=sorted6.filter(function(r){return r.spend>200&&r.result===0;});if(zeroSpend.length>0){var zeroTotal=zeroSpend.reduce(function(a,r){return a+r.spend;},0);p.push(zeroSpend.length+" adset"+(zeroSpend.length>1?"s have":" has")+" invested "+fR(zeroTotal)+" without producing results. This represents "+((zeroTotal/oSpend)*100).toFixed(2)+"% of objective budget with zero return.");}return p.join(" ");})()}</Insight>
               </div>);
             });
 
