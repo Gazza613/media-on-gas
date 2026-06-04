@@ -212,7 +212,14 @@ export default async function handler(req, res) {
       // breakdown caused Meta to drop most ad rows entirely for Page Like and
       // similar campaigns (a 45-ad campaign would return just 1 row). We split
       // FB vs IG via publisher_platform but take no further breakdowns.
-      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+      // video_avg_time_watched_actions: avg seconds watched per impression
+      // (returned as an actions array). video_p100_watched_actions: count
+      // of plays that reached 100% (returned as an actions array). Both
+      // are video-format-only; non-video ads return empty arrays so the
+      // dashboard cleanly skips the watch-time sub-line. video_play_actions
+      // gives the play denominator for completion rate (more accurate than
+      // impressions, which counts the slot served not the play started).
+      var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions,video_avg_time_watched_actions,video_p100_watched_actions,video_play_actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
       // Follow paging.next so accounts with more than 500 ad rows don't silently drop data.
       var insAllRows = [];
       var insNext = insUrl;
@@ -269,7 +276,16 @@ export default async function handler(req, res) {
               _pub: pub,
               spend: 0, impressions: 0, clicks: 0, reach: 0,
               actionsAgg: {},
-              placements: {}
+              placements: {},
+              // Video watch aggregates. Meta returns these as actions
+              // arrays keyed by action_type=video_view (the canonical
+              // play action). Each metric needs an impressions-weighted
+              // average (avg-of-avgs is wrong), so accumulate both the
+              // weighted sum and the impressions weight here.
+              videoAvgWatchSumWeighted: 0,
+              videoAvgWatchWeight: 0,
+              videoP100Plays: 0,
+              videoPlays: 0
             };
           }
           var cur = insMap[key];
@@ -282,6 +298,32 @@ export default async function handler(req, res) {
             ins.actions.forEach(function(a) {
               if (!cur.actionsAgg[a.action_type]) cur.actionsAgg[a.action_type] = 0;
               cur.actionsAgg[a.action_type] += parseInt(a.value || 0);
+            });
+          }
+          // Video watch metrics. Meta returns them as actions-style
+          // arrays; we sum the video_view entry across publisher rows
+          // (the only entry videos actually populate). Avg watch time
+          // is weighted by impressions so multi-row aggregation stays
+          // honest. Non-video rows return empty arrays and contribute
+          // zero, so this is a no-op for static / carousel creative.
+          if (ins.video_avg_time_watched_actions) {
+            ins.video_avg_time_watched_actions.forEach(function(v) {
+              if (String(v.action_type || "") !== "video_view") return;
+              var sec = parseFloat(v.value || 0) || 0;
+              cur.videoAvgWatchSumWeighted += sec * imps;
+              cur.videoAvgWatchWeight += imps;
+            });
+          }
+          if (ins.video_p100_watched_actions) {
+            ins.video_p100_watched_actions.forEach(function(v) {
+              if (String(v.action_type || "") !== "video_view") return;
+              cur.videoP100Plays += parseInt(v.value || 0, 10) || 0;
+            });
+          }
+          if (ins.video_play_actions) {
+            ins.video_play_actions.forEach(function(v) {
+              if (String(v.action_type || "") !== "video_view") return;
+              cur.videoPlays += parseInt(v.value || 0, 10) || 0;
             });
           }
           // placements populated from a secondary query below with the
@@ -989,6 +1031,19 @@ export default async function handler(req, res) {
           ctr: ctr,
           cpc: cpc,
           cpm: cpm,
+          // Video watch metrics. videoAvgWatchSec is impressions-
+          // weighted average seconds watched (Meta's
+          // video_avg_time_watched_actions). videoCompletionPct is
+          // p100 plays / total plays (the true "% finished" number).
+          // Both are 0 for non-video creative so the dashboard
+          // gracefully skips the watch-time sub-line.
+          videoAvgWatchSec: (ins.videoAvgWatchWeight > 0)
+            ? parseFloat((ins.videoAvgWatchSumWeighted / ins.videoAvgWatchWeight).toFixed(2))
+            : 0,
+          videoCompletionPct: (ins.videoPlays > 0)
+            ? parseFloat((ins.videoP100Plays / ins.videoPlays * 100).toFixed(2))
+            : 0,
+          videoPlays: ins.videoPlays || 0,
           objective: objective,
           results: resCount,
           resultType: resType,
@@ -1119,7 +1174,7 @@ export default async function handler(req, res) {
 
       // Ad-level insights
       var ttDims = encodeURIComponent(JSON.stringify(["ad_id"]));
-      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "adgroup_name", "ad_name", "spend", "impressions", "clicks", "cpm", "cpc", "ctr", "reach", "follows", "likes", "video_views_p100"]));
+      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "adgroup_name", "ad_name", "spend", "impressions", "clicks", "cpm", "cpc", "ctr", "reach", "follows", "likes", "video_views_p100", "video_play_actions", "average_video_play"]));
       var ttInsBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_AD&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=200";
       // Follow TikTok pagination via page_info.total_page. Single-page fetch
       // silently dropped ~20% of ads on accounts with >200 ad rows, showing
@@ -1196,6 +1251,15 @@ export default async function handler(req, res) {
           var ttSpend = parseFloat(mt.spend || 0);
           var ttImps = parseInt(mt.impressions || 0);
           var ttClicks = parseInt(mt.clicks || 0);
+          // Video watch metrics. TikTok returns average_video_play in
+          // seconds (avg watch time per play), video_play_actions as the
+          // play denominator, video_views_p100 as the 100%-completion
+          // count. Static / image creative returns 0s for all three.
+          var ttAvgWatchSec = parseFloat(mt.average_video_play || 0) || 0;
+          var ttPlays = parseInt(mt.video_play_actions || 0, 10) || 0;
+          var ttCompletionPct = ttPlays > 0
+            ? parseFloat((ttVViews / ttPlays * 100).toFixed(2))
+            : 0;
           var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
           // Override → name → API → landingpage.
           var ttObjective = overrideFor(overridesMap, mt.campaign_id) || detectObjective(mt.campaign_name) || ttApiObj || "landingpage";
@@ -1239,6 +1303,9 @@ export default async function handler(req, res) {
             resultType: ttResType,
             followsRaw: follows,
             videoViews: ttVViews,
+            videoAvgWatchSec: ttAvgWatchSec,
+            videoCompletionPct: ttCompletionPct,
+            videoPlays: ttPlays,
             videoId: ad.video_id || "",
             placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
           });
