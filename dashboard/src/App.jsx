@@ -5216,6 +5216,10 @@ export default function MediaOnGas(){
             // click-a-province scope filter. Same inSel scope, same
             // shape as agRows but with a region field per row.
             var agByRegRowsRaw=(demoData.ageGenderByRegion||[]).filter(inSel);
+            // device x region rows. Powers the device mix scope when a
+            // province bubble is clicked. Same shape as devRows but
+            // with a region field per row.
+            var devByRegRows=(demoData.deviceByRegion||[]).filter(inSel);
 
             // Strip Unknown age / gender rows — they pollute the
             // visualisation without adding signal (Meta sometimes returns
@@ -5235,6 +5239,11 @@ export default function MediaOnGas(){
             // without contamination.
             var agByRegRows=agByRegRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
             var scopedAgRows=selectedProvince?agByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):agRows;
+            // Device mix companion. When a province is selected, swap
+            // devRows for the per-province slice. Falls back to the
+            // all-provinces aggregate (existing behaviour) when nothing
+            // is selected.
+            var scopedDevRows=selectedProvince?devByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):devRows;
             // Honest transparency: the male/female split is of the
             // gender-IDENTIFIED audience only. Meta returns 'unknown'
             // gender for blocked/private profiles; that volume is
@@ -5655,11 +5664,13 @@ export default function MediaOnGas(){
               </div>;
             };
 
-            // Device donut with gradient slices.
+            // Device donut with gradient slices. Reads scopedDevRows so
+            // a clicked-province selection narrows the donut to that
+            // province's device mix.
             var renderDeviceDonut=function(stage){
               var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
               var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
-              devRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
+              scopedDevRows.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
               var labels={mobile:"Mobile",desktop:"Desktop",tablet:"Tablet",ctv:"Connected TV",other:"Other"};
               var colors={mobile:"#22d3ee",desktop:"#a855f7",tablet:"#fbbf24",ctv:"#d946ef",other:"#8b7fa3"};
               var data=["mobile","desktop","tablet","ctv","other"].filter(function(k){return bucket[k]>0;}).map(function(k){return{name:labels[k],key:k,value:bucket[k],color:colors[k]};});
@@ -5727,7 +5738,7 @@ export default function MediaOnGas(){
             // Device bars — percent-only, using tagged-device subset as the
             // denominator so rows always sum to 100% of known-device data.
             var renderDeviceBars=function(stage,rowOverride){
-              var devData=rowOverride||devRows;
+              var devData=rowOverride||scopedDevRows;
               var deviceNorm=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0||s==="iphone")return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";if(s.indexOf("ctv")>=0||s.indexOf("connected_tv")>=0)return "ctv";return "other";};
               var bucket={mobile:0,desktop:0,tablet:0,ctv:0,other:0};
               devData.forEach(function(r){var d=deviceNorm(r.device);bucket[d]+=stage.field(r);});
@@ -5812,7 +5823,7 @@ export default function MediaOnGas(){
               var ta=topAgeFor(stage);var gs=genderSharesFor(stage);var genTotal=gs.female+gs.male;var femaleShare=genTotal>0?(gs.female/genTotal*100):0;
               var tp=topProvFor(stage);var champ=topSegmentFor(stage);
               var devNormLine=function(d){var s=String(d||"").toLowerCase();if(s.indexOf("mobile")>=0||s.indexOf("android")>=0||s.indexOf("ios")>=0)return "mobile";if(s==="ipad"||s.indexOf("tablet")>=0)return "tablet";if(s.indexOf("desktop")>=0||s==="web")return "desktop";return "other";};
-              var devTL={mobile:0,desktop:0,tablet:0};devRows.forEach(function(r){var d=devNormLine(r.device);if(devTL[d]===undefined)return;devTL[d]+=stage.field(r);});
+              var devTL={mobile:0,desktop:0,tablet:0};scopedDevRows.forEach(function(r){var d=devNormLine(r.device);if(devTL[d]===undefined)return;devTL[d]+=stage.field(r);});
               var devSum=devTL.mobile+devTL.desktop+devTL.tablet;var mobileShare=devSum>0?(devTL.mobile/devSum*100):0;
               // Share formatter — a value like 99.7 was being rounded to "100%"
               // which then read as factually wrong next to the chart showing
@@ -6105,7 +6116,7 @@ export default function MediaOnGas(){
             // and Other are excluded from the visualisation).
             var mobileShareFor=function(s){
               var b={mobile:0,desktop:0,tablet:0};
-              devRows.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)b[k]+=s.field(r);});
+              scopedDevRows.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)b[k]+=s.field(r);});
               var sum=b.mobile+b.desktop+b.tablet;return sum>0?(b.mobile/sum*100):0;
             };
             var topAgeShareFor=function(s){

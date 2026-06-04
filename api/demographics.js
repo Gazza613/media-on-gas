@@ -20,7 +20,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v11-age-gender-by-region";
+var DEMO_CACHE_VERSION = "v12-age-gender-device-by-region";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -136,13 +136,14 @@ async function fetchMetaDemo(token, from, to) {
   var agAll = [];
   var regAll = [];
   var devAll = [];
-  // New: age x gender x region 3-dim, so the Demographics tab can scope
-  // age + gender charts to a clicked province. publisher_platform is
-  // intentionally dropped from this 3-dim cut to keep cells dense
-  // (4-dim age,gender,region,publisher_platform is too sparse for Meta
-  // to return reliably). FB vs IG attribution stays available on the
-  // primary 3-dim cut and on the existing region rows.
+  // New: age x gender x region 3-dim and impression_device x region
+  // 2-dim, so the Demographics tab can scope the WHO + HOW charts to
+  // a clicked province. publisher_platform is dropped from these cuts
+  // to keep cells dense (4-dim with publisher_platform is too sparse
+  // for Meta to return reliably). FB vs IG attribution stays available
+  // on the primary 3-dim cut and on the existing region rows.
   var agByRegAll = [];
+  var devByRegAll = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
     // publisher_platform added to every Meta breakdown so each row can
     // be labelled Facebook or Instagram distinctly. This matches how
@@ -151,9 +152,10 @@ async function fetchMetaDemo(token, from, to) {
       fetchMetaBreakdown(acc, token, from, to, "age,gender,publisher_platform"),
       fetchMetaBreakdown(acc, token, from, to, "region,publisher_platform"),
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform"),
-      fetchMetaBreakdown(acc, token, from, to, "age,gender,region")
+      fetchMetaBreakdown(acc, token, from, to, "age,gender,region"),
+      fetchMetaBreakdown(acc, token, from, to, "impression_device,region")
     ]);
-    var ag = res[0], reg = res[1], dev = res[2], agByReg = res[3];
+    var ag = res[0], reg = res[1], dev = res[2], agByReg = res[3], devByReg = res[4];
     // Cached (6h) page-like-optimised map, same helper /api/ads uses.
     // Per-request campaigns+adsets fetch here was as heavy as the one
     // that timed out /api/ads. Matches api/ads.js.
@@ -298,7 +300,38 @@ async function fetchMetaDemo(token, from, to) {
     // 3-dim age x gender x region rows for the click-a-province filter.
     // Platform is "Meta" rather than FB/IG because publisher_platform is
     // dropped from this cut (see comment above the 3-dim fetch).
-    (agByReg || []).forEach(function(row) {
+    //
+    // Meta's 3-dim age,gender,region cut is unreliable for accounts with
+    // narrow traffic (it can come back empty even when 2-dim age,region
+    // and 2-dim gender,region both return rows). When the 3-dim is empty
+    // we fall back to TWO 2-dim pulls in parallel and synthesise rows:
+    // age,region rows enter with gender="unknown" (still feed the age
+    // bar helper), gender,region rows enter with age="unknown" (still
+    // feed the gender donut). The Demographics tab's per-province scope
+    // therefore always has at least the age bars + gender split, even
+    // when Meta refuses the full 3-dim join.
+    var agByRegRows = agByReg || [];
+    if (agByRegRows.length === 0) {
+      var fb = await Promise.all([
+        fetchMetaBreakdown(acc, token, from, to, "age,region"),
+        fetchMetaBreakdown(acc, token, from, to, "gender,region")
+      ]);
+      var ageRegOnly = fb[0] || [];
+      var genRegOnly = fb[1] || [];
+      console.log("[demo-meta] " + acc.name + " agByReg 3-dim empty; 2-dim fallback counts", {
+        ageRegOnly: ageRegOnly.length,
+        genRegOnly: genRegOnly.length
+      });
+      ageRegOnly.forEach(function(row) {
+        agByRegRows.push(Object.assign({}, row, { gender: "unknown" }));
+      });
+      genRegOnly.forEach(function(row) {
+        agByRegRows.push(Object.assign({}, row, { age: "unknown" }));
+      });
+    } else {
+      console.log("[demo-meta] " + acc.name + " agByReg 3-dim returned " + agByRegRows.length + " rows");
+    }
+    agByRegRows.forEach(function(row) {
       var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       agByRegAll.push({
         platform: "Meta",
@@ -307,6 +340,24 @@ async function fetchMetaDemo(token, from, to) {
         campaignName: row.campaign_name || "",
         age: row.age || "unknown",
         gender: row.gender || "unknown",
+        region: row.region || "Unknown",
+        impressions: parseInt(row.impressions || 0, 10),
+        clicks: parseInt(row.clicks || 0, 10),
+        spend: parseFloat(row.spend || 0),
+        results: r
+      });
+    });
+    // impression_device x region 2-dim rows for the click-a-province
+    // device mix scope. No publisher_platform in this cut (kept dense),
+    // platform tag normalised to "Meta".
+    (devByReg || []).forEach(function(row) {
+      var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
+      devByRegAll.push({
+        platform: "Meta",
+        account: acc.name,
+        campaignId: String(row.campaign_id || ""),
+        campaignName: row.campaign_name || "",
+        device: String(row.impression_device || "unknown"),
         region: row.region || "Unknown",
         impressions: parseInt(row.impressions || 0, 10),
         clicks: parseInt(row.clicks || 0, 10),
@@ -383,7 +434,7 @@ async function fetchMetaDemo(token, from, to) {
     }
   });
 
-  return { ageGender: agAll, region: regAll, device: devAll, ageGenderByRegion: agByRegAll };
+  return { ageGender: agAll, region: regAll, device: devAll, ageGenderByRegion: agByRegAll, deviceByRegion: devByRegAll };
 }
 
 // Province id -> name map for TikTok. IDs are documented in TikTok's
@@ -481,15 +532,18 @@ async function fetchTikTokDemo(token, advId, from, to) {
   var ageGender = [];
   var region = [];
   var device = [];
-  // 3-dim age x gender x province_id for the click-a-province filter
-  // on the Demographics tab, mirrors the Meta path.
+  // 3-dim age x gender x province_id and 2-dim platform x province_id
+  // for the click-a-province filter on the Demographics tab, mirrors
+  // the Meta path.
   var ageGenderByRegion = [];
+  var deviceByRegion = [];
 
   var res = await Promise.all([
     fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "age", "gender"]),
     fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "province_id"]),
     fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "platform"]),
-    fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "age", "gender", "province_id"])
+    fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "age", "gender", "province_id"]),
+    fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "platform", "province_id"])
   ]);
 
   (res[0] || []).forEach(function(row) {
@@ -563,7 +617,81 @@ async function fetchTikTokDemo(token, advId, from, to) {
     });
   });
 
-  return { ageGender: ageGender, region: region, device: device, ageGenderByRegion: ageGenderByRegion };
+  // TikTok 4-dim fallback. When age,gender,province_id is empty (TikTok
+  // occasionally rejects 4-dim requests with low traffic), fall back to
+  // age,province_id + gender,province_id 3-dim pulls and synthesise rows
+  // with the missing axis as "unknown", same pattern as the Meta path.
+  if (ageGenderByRegion.length === 0) {
+    var ttFb = await Promise.all([
+      fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "age", "province_id"]),
+      fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "gender", "province_id"])
+    ]);
+    console.log("[demo-tt] 4-dim age x gender x province empty; 3-dim fallback counts", {
+      ageProv: (ttFb[0] || []).length,
+      genProv: (ttFb[1] || []).length
+    });
+    (ttFb[0] || []).forEach(function(row) {
+      var dim = row.dimensions || {};
+      var met = row.metrics || {};
+      var pn = TT_PROVINCE_NAMES[String(dim.province_id || "")] || null;
+      if (!pn) return;
+      ageGenderByRegion.push({
+        platform: "TikTok",
+        account: "TikTok",
+        campaignId: String(dim.campaign_id || ""),
+        campaignName: "",
+        age: normaliseTikTokAge(dim.age),
+        gender: "unknown",
+        region: pn,
+        impressions: parseInt(met.impressions || 0, 10),
+        clicks: parseInt(met.clicks || 0, 10),
+        spend: parseFloat(met.spend || 0),
+        results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
+      });
+    });
+    (ttFb[1] || []).forEach(function(row) {
+      var dim = row.dimensions || {};
+      var met = row.metrics || {};
+      var pn = TT_PROVINCE_NAMES[String(dim.province_id || "")] || null;
+      if (!pn) return;
+      ageGenderByRegion.push({
+        platform: "TikTok",
+        account: "TikTok",
+        campaignId: String(dim.campaign_id || ""),
+        campaignName: "",
+        age: "unknown",
+        gender: normaliseTikTokGender(dim.gender),
+        region: pn,
+        impressions: parseInt(met.impressions || 0, 10),
+        clicks: parseInt(met.clicks || 0, 10),
+        spend: parseFloat(met.spend || 0),
+        results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
+      });
+    });
+  } else {
+    console.log("[demo-tt] 4-dim age x gender x province returned " + ageGenderByRegion.length + " rows");
+  }
+
+  (res[4] || []).forEach(function(row) {
+    var dim = row.dimensions || {};
+    var met = row.metrics || {};
+    var pn = TT_PROVINCE_NAMES[String(dim.province_id || "")] || null;
+    if (!pn) return;
+    deviceByRegion.push({
+      platform: "TikTok",
+      account: "TikTok",
+      campaignId: String(dim.campaign_id || ""),
+      campaignName: "",
+      device: String(dim.platform || "unknown").toLowerCase(),
+      region: pn,
+      impressions: parseInt(met.impressions || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
+      spend: parseFloat(met.spend || 0),
+      results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
+    });
+  });
+
+  return { ageGender: ageGender, region: region, device: device, ageGenderByRegion: ageGenderByRegion, deviceByRegion: deviceByRegion };
 }
 
 // Google demographics with Redis-first read. The Google Ads API rate-
@@ -910,8 +1038,8 @@ export default async function handler(req, res) {
 
   try {
     var pulls = await Promise.all([
-      metaToken ? fetchMetaDemo(metaToken, from, to) : Promise.resolve({ ageGender: [], region: [], device: [], ageGenderByRegion: [] }),
-      ttToken && ttAdvId ? fetchTikTokDemo(ttToken, ttAdvId, from, to) : Promise.resolve({ ageGender: [], region: [], device: [], ageGenderByRegion: [] }),
+      metaToken ? fetchMetaDemo(metaToken, from, to) : Promise.resolve({ ageGender: [], region: [], device: [], ageGenderByRegion: [], deviceByRegion: [] }),
+      ttToken && ttAdvId ? fetchTikTokDemo(ttToken, ttAdvId, from, to) : Promise.resolve({ ageGender: [], region: [], device: [], ageGenderByRegion: [], deviceByRegion: [] }),
       fetchGoogleDemo(from, to)
     ]);
     var meta = pulls[0], tt = pulls[1], google = pulls[2];
@@ -940,8 +1068,8 @@ export default async function handler(req, res) {
         var cid = String(row.campaignId || "");
         return allowed[cid] === true || allowed[cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "")] === true;
       };
-      meta = { ageGender: meta.ageGender.filter(scope), region: meta.region.filter(scope), device: meta.device.filter(scope), ageGenderByRegion: (meta.ageGenderByRegion || []).filter(scope) };
-      tt = { ageGender: tt.ageGender.filter(scope), region: tt.region.filter(scope), device: tt.device.filter(scope), ageGenderByRegion: (tt.ageGenderByRegion || []).filter(scope) };
+      meta = { ageGender: meta.ageGender.filter(scope), region: meta.region.filter(scope), device: meta.device.filter(scope), ageGenderByRegion: (meta.ageGenderByRegion || []).filter(scope), deviceByRegion: (meta.deviceByRegion || []).filter(scope) };
+      tt = { ageGender: tt.ageGender.filter(scope), region: tt.region.filter(scope), device: tt.device.filter(scope), ageGenderByRegion: (tt.ageGenderByRegion || []).filter(scope), deviceByRegion: (tt.deviceByRegion || []).filter(scope) };
       google = { ageGender: google.ageGender.filter(scope), region: google.region.filter(scope), device: google.device.filter(scope), city: google.city.filter(scope) };
     }
 
@@ -956,6 +1084,9 @@ export default async function handler(req, res) {
       // breakdowns (its API exposes audience segments, not geo cross
       // age/gender), so this is Meta + TikTok only.
       ageGenderByRegion: [].concat(meta.ageGenderByRegion || [], tt.ageGenderByRegion || []),
+      // 2-dim device x region rows that scope the Device Mix tile to
+      // the clicked province. Same Meta + TikTok shape.
+      deviceByRegion: [].concat(meta.deviceByRegion || [], tt.deviceByRegion || []),
       googleCity: google.city || []
     };
     demoCache[cacheKey] = { data: response, ts: Date.now() };
