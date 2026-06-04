@@ -961,3 +961,58 @@ export async function fetchAdsByCampaign(from, to, apiKey) {
     return {};
   }
 }
+
+// Inline every ad thumbnail in an adsByCampaign map as a base64 data
+// URL. Daily Pulse + Weekly Pulse + any other email previewing ad
+// creative consumes adsByCampaign directly, so this single sweep at
+// build time guarantees the renderer never embeds a brittle CDN URL
+// (Meta signed _nc_oc= URLs expire in 24-48h, TikTok x-expires= URLs
+// in <24h, Google is stable but inconsistent timing breaks all three
+// when an email client opens the body 3 days later). Inlining bytes
+// means the image lives inside the email forever, no auth, no proxy
+// hop, no expiry, no broken-link boxes.
+//
+// Bounded concurrency (4 parallel fetches) + 4s per-fetch timeout +
+// best-effort failure handling: a slow or dead CDN never blocks the
+// cron beyond a few seconds, and a failed fetch leaves the thumbnail
+// empty so the renderer's gradient placeholder takes over instead of
+// crashing. Idempotent: URLs already in data: form are skipped.
+export async function inlineAdThumbnails(adsByCampaign) {
+  if (!adsByCampaign) return;
+  var work = [];
+  Object.keys(adsByCampaign).forEach(function(k) {
+    var entry = adsByCampaign[k];
+    if (!entry || !entry.thumbnail) return;
+    var url = String(entry.thumbnail);
+    if (url.indexOf("data:") === 0) return;
+    if (url.indexOf("http") !== 0) return;
+    work.push(entry);
+  });
+  if (work.length === 0) return;
+  var CONCURRENCY = 4;
+  var idx = 0;
+  async function fetchOne(entry) {
+    try {
+      var ctrl = new AbortController();
+      var to = setTimeout(function() { ctrl.abort(); }, 4000);
+      var r = await fetch(entry.thumbnail, { signal: ctrl.signal });
+      clearTimeout(to);
+      if (!r.ok) { entry.thumbnail = ""; return; }
+      var buf = await r.arrayBuffer();
+      var b64 = Buffer.from(buf).toString("base64");
+      var ct = r.headers.get("content-type") || "image/jpeg";
+      entry.thumbnail = "data:" + ct + ";base64," + b64;
+    } catch (_) {
+      entry.thumbnail = "";
+    }
+  }
+  async function worker() {
+    while (idx < work.length) {
+      var i = idx++;
+      await fetchOne(work[i]);
+    }
+  }
+  var workers = [];
+  for (var w = 0; w < CONCURRENCY; w++) workers.push(worker());
+  await Promise.all(workers);
+}

@@ -8,7 +8,7 @@ import {
   P, DISP_COLORS, COLOR_RANK, worse,
   resultMetricFor, clientKeyOf, ageDaysFor, isAwarenessObjective,
   adsManagerUrl,
-  fetchCampaigns, fetchAdsByCampaign
+  fetchCampaigns, fetchAdsByCampaign, inlineAdThumbnails
 } from "./_pulseShared.js";
 
 // Weekly Pulse, campaign performance summary for the GAS leadership +
@@ -671,6 +671,13 @@ export default async function handler(req, res) {
     thisWeekData = triple[0];
     lastWeekData = triple[1];
     adsByCampaign = triple[2] || {};
+    // Inline every ad thumbnail in the map as base64 data URLs before
+    // buildCampaignRows picks them up. Same reasoning as daily-report:
+    // Meta signed URLs / TikTok x-expires URLs go dead within hours
+    // of issue, and a Weekly Pulse may sit in the inbox over a
+    // weekend. Inlining bytes guarantees the previews render forever.
+    // See inlineAdThumbnails in _pulseShared for the safety belts.
+    await inlineAdThumbnails(adsByCampaign);
   } catch (err) {
     console.error("weekly-pulse fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });

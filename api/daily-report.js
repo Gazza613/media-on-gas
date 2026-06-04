@@ -10,7 +10,7 @@ import {
   adsManagerUrl,
   parseCampaignEndMs,
   ANOMALY_DEFS, detectAnomalies,
-  fetchCampaigns, fetchAdsByCampaign
+  fetchCampaigns, fetchAdsByCampaign, inlineAdThumbnails
 } from "./_pulseShared.js";
 import { knownBrandForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 
@@ -22,57 +22,13 @@ function isLive(c) {
   return String(c && c.status || "").toLowerCase() === "active";
 }
 
-// Inline TikTok thumbnails as base64 data URLs in the anomalies map.
-// TikTok CDN URLs (p16-sign-sg.tiktokcdn.com etc.) carry signed
-// query parameters that expire within hours, and most email-client
-// image proxies drop them outright. FB and Google CDN URLs are
-// stable enough that direct embedding works, so this helper touches
-// TikTok only. Bounded concurrency (4 parallel fetches) + a 4s
-// per-fetch timeout means a slow or hanging TikTok CDN never blocks
-// the cron beyond a few extra seconds at most. Failed fetches leave
-// the thumbnail empty, the renderer's gradient placeholder takes
-// over so the row layout never breaks.
-async function inlineTikTokThumbnails(anomaliesByType) {
-  if (!anomaliesByType) return;
-  var work = [];
-  Object.keys(anomaliesByType).forEach(function(k) {
-    (anomaliesByType[k] || []).forEach(function(it) {
-      if (!it || !it.thumbnail) return;
-      var url = String(it.thumbnail);
-      if (url.indexOf("data:") === 0) return;
-      var plat = String(it.platform || "").toLowerCase();
-      if (plat.indexOf("tiktok") < 0) return;
-      work.push(it);
-    });
-  });
-  if (work.length === 0) return;
-  var CONCURRENCY = 4;
-  var idx = 0;
-  async function fetchOne(it) {
-    try {
-      var ctrl = new AbortController();
-      var to = setTimeout(function() { ctrl.abort(); }, 4000);
-      var r = await fetch(it.thumbnail, { signal: ctrl.signal });
-      clearTimeout(to);
-      if (!r.ok) { it.thumbnail = ""; return; }
-      var buf = await r.arrayBuffer();
-      var b64 = Buffer.from(buf).toString("base64");
-      var ct = r.headers.get("content-type") || "image/jpeg";
-      it.thumbnail = "data:" + ct + ";base64," + b64;
-    } catch (_) {
-      it.thumbnail = "";
-    }
-  }
-  async function worker() {
-    while (idx < work.length) {
-      var i = idx++;
-      await fetchOne(work[i]);
-    }
-  }
-  var workers = [];
-  for (var w = 0; w < CONCURRENCY; w++) workers.push(worker());
-  await Promise.all(workers);
-}
+// (Per-anomaly TikTok-only inline helper retired in favour of the
+// shared inlineAdThumbnails from _pulseShared.js. The shared helper
+// runs once on the adsByCampaign map BEFORE buildHtml, inlines every
+// platform's thumbnail in one sweep, and the rendered anomalies just
+// read the already-inlined data URLs from topAd.thumbnail. Net
+// effect: no brittle CDN URLs in any Pulse email regardless of
+// platform.)
 
 var PLATFORM_SUFFIX = /\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
 var POS_TAG = /(^|[^A-Za-z])POS([^A-Za-z]|$)/i;
@@ -567,6 +523,14 @@ export default async function handler(req, res) {
       if (yAds[k] && yAds[k].thumbnail) adsByCampaign[k] = yAds[k];
       else if (!adsByCampaign[k]) adsByCampaign[k] = yAds[k];
     });
+    // Inline every ad thumbnail in the merged map as base64 data URLs
+    // BEFORE downstream anomaly rows pick them up. Meta / TikTok / Google
+    // all get the same treatment, so no Pulse email will ever ship a
+    // brittle CDN URL that expires before the operator opens the inbox.
+    // See inlineAdThumbnails in _pulseShared for the safety belts
+    // (bounded concurrency, per-fetch timeout, gradient placeholder
+    // fallback on failure).
+    await inlineAdThumbnails(adsByCampaign);
   } catch (err) {
     console.error("daily-anomalies fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
@@ -765,15 +729,6 @@ export default async function handler(req, res) {
   });
 
   var totalAnomalies = Object.keys(anomaliesByType).reduce(function(a, k) { return a + anomaliesByType[k].length; }, 0);
-
-  // Inline TikTok ad thumbnails as base64 data URLs. TikTok CDN URLs
-  // are signed and short-lived, and the email-client image proxies
-  // (Gmail's, Outlook's) drop them by the time the recipient opens
-  // the email, so the slot rendered as the empty fallback box. FB
-  // and Google CDN URLs are stable enough to embed directly, this
-  // step touches only TikTok. Bounded concurrency + per-fetch
-  // timeout so a slow CDN never blocks the cron.
-  await inlineTikTokThumbnails(anomaliesByType);
 
   var html = buildHtml({
     dateLabel: dateLabel,
