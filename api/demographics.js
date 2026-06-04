@@ -20,7 +20,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v13-region-2dim-primary";
+var DEMO_CACHE_VERSION = "v14-region-2dim-primary-diag";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -1061,7 +1061,17 @@ export default async function handler(req, res) {
       // 2-dim device x region rows that scope the Device Mix tile to
       // the clicked province. Same Meta + TikTok shape.
       deviceByRegion: [].concat(meta.deviceByRegion || [], tt.deviceByRegion || []),
-      googleCity: google.city || []
+      googleCity: google.city || [],
+      // Surface row counts in the payload so we (and admins viewing
+      // dev tools) can verify the per-province cuts are actually
+      // returning rows without having to dig through Vercel logs.
+      _diag: {
+        metaAgeGenderByRegion: (meta.ageGenderByRegion || []).length,
+        ttAgeGenderByRegion: (tt.ageGenderByRegion || []).length,
+        metaDeviceByRegion: (meta.deviceByRegion || []).length,
+        ttDeviceByRegion: (tt.deviceByRegion || []).length,
+        regionRows: ([].concat(meta.region, tt.region, google.region || [])).length
+      }
     };
     demoCache[cacheKey] = { data: response, ts: Date.now() };
     res.status(200).json(response);

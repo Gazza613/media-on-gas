@@ -6047,6 +6047,18 @@ export default function MediaOnGas(){
                     <span style={{fontSize:13,marginLeft:2,opacity:0.8}}>×</span>
                   </div>}
                 </div>
+                {/* Honest empty-state when the per-province cut is empty.
+                    The bubble map renders fine because it reads regRows
+                    (2-dim region+publisher_platform, which always works).
+                    The age/gender/device tiles read agByRegRows /
+                    devByRegRows (separate per-region 2-dim cuts). When
+                    Meta and TikTok both refuse those cuts for the
+                    selected period, the helpers below would render blank
+                    bars and "no data" tiles with no explanation. Surface
+                    why instead. */}
+                {selectedProvince&&agByRegRows.length===0&&devByRegRows.length===0&&<div style={{marginBottom:14,padding:"10px 14px",background:"#FFCC0010",border:"1px solid #FFCC0033",borderRadius:10,fontSize:10.5,color:"#FFCC00",fontFamily:fm,lineHeight:1.6,letterSpacing:0.3}}>
+                  Meta and TikTok did not return a per-province age, gender, or device breakdown for this period (the platforms only return cross-cuts above a delivery-volume threshold). The province totals on the map are accurate, but the age, gender, and device tiles cannot be scoped to {selectedProvince}. Click the × pill above to return to the all-provinces view, or try a wider date range.
+                </div>}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(stage)}</div>
                   <div>{renderProvinceRanks(stage)}</div>
