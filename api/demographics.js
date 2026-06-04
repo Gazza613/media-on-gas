@@ -20,7 +20,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v10-meta-ig-proportional-inference";
+var DEMO_CACHE_VERSION = "v11-age-gender-by-region";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -136,6 +136,13 @@ async function fetchMetaDemo(token, from, to) {
   var agAll = [];
   var regAll = [];
   var devAll = [];
+  // New: age x gender x region 3-dim, so the Demographics tab can scope
+  // age + gender charts to a clicked province. publisher_platform is
+  // intentionally dropped from this 3-dim cut to keep cells dense
+  // (4-dim age,gender,region,publisher_platform is too sparse for Meta
+  // to return reliably). FB vs IG attribution stays available on the
+  // primary 3-dim cut and on the existing region rows.
+  var agByRegAll = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
     // publisher_platform added to every Meta breakdown so each row can
     // be labelled Facebook or Instagram distinctly. This matches how
@@ -143,9 +150,10 @@ async function fetchMetaDemo(token, from, to) {
     var res = await Promise.all([
       fetchMetaBreakdown(acc, token, from, to, "age,gender,publisher_platform"),
       fetchMetaBreakdown(acc, token, from, to, "region,publisher_platform"),
-      fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform")
+      fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform"),
+      fetchMetaBreakdown(acc, token, from, to, "age,gender,region")
     ]);
-    var ag = res[0], reg = res[1], dev = res[2];
+    var ag = res[0], reg = res[1], dev = res[2], agByReg = res[3];
     // Cached (6h) page-like-optimised map, same helper /api/ads uses.
     // Per-request campaigns+adsets fetch here was as heavy as the one
     // that timed out /api/ads. Matches api/ads.js.
@@ -287,6 +295,25 @@ async function fetchMetaDemo(token, from, to) {
         results: r
       });
     });
+    // 3-dim age x gender x region rows for the click-a-province filter.
+    // Platform is "Meta" rather than FB/IG because publisher_platform is
+    // dropped from this cut (see comment above the 3-dim fetch).
+    (agByReg || []).forEach(function(row) {
+      var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
+      agByRegAll.push({
+        platform: "Meta",
+        account: acc.name,
+        campaignId: String(row.campaign_id || ""),
+        campaignName: row.campaign_name || "",
+        age: row.age || "unknown",
+        gender: row.gender || "unknown",
+        region: row.region || "Unknown",
+        impressions: parseInt(row.impressions || 0, 10),
+        clicks: parseInt(row.clicks || 0, 10),
+        spend: parseFloat(row.spend || 0),
+        results: r
+      });
+    });
   }));
 
   // Proportional Instagram inference. Meta's age/gender/region breakdowns
@@ -356,7 +383,7 @@ async function fetchMetaDemo(token, from, to) {
     }
   });
 
-  return { ageGender: agAll, region: regAll, device: devAll };
+  return { ageGender: agAll, region: regAll, device: devAll, ageGenderByRegion: agByRegAll };
 }
 
 // Province id -> name map for TikTok. IDs are documented in TikTok's
@@ -454,11 +481,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
   var ageGender = [];
   var region = [];
   var device = [];
+  // 3-dim age x gender x province_id for the click-a-province filter
+  // on the Demographics tab, mirrors the Meta path.
+  var ageGenderByRegion = [];
 
   var res = await Promise.all([
     fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "age", "gender"]),
     fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "province_id"]),
-    fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "platform"])
+    fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "platform"]),
+    fetchTikTokDemoDim(token, advId, from, to, ["campaign_id", "age", "gender", "province_id"])
   ]);
 
   (res[0] || []).forEach(function(row) {
@@ -512,7 +543,27 @@ async function fetchTikTokDemo(token, advId, from, to) {
     });
   });
 
-  return { ageGender: ageGender, region: region, device: device };
+  (res[3] || []).forEach(function(row) {
+    var dim = row.dimensions || {};
+    var met = row.metrics || {};
+    var pn = TT_PROVINCE_NAMES[String(dim.province_id || "")] || null;
+    if (!pn) return;
+    ageGenderByRegion.push({
+      platform: "TikTok",
+      account: "TikTok",
+      campaignId: String(dim.campaign_id || ""),
+      campaignName: "",
+      age: normaliseTikTokAge(dim.age),
+      gender: normaliseTikTokGender(dim.gender),
+      region: pn,
+      impressions: parseInt(met.impressions || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
+      spend: parseFloat(met.spend || 0),
+      results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
+    });
+  });
+
+  return { ageGender: ageGender, region: region, device: device, ageGenderByRegion: ageGenderByRegion };
 }
 
 // Google demographics with Redis-first read. The Google Ads API rate-
@@ -859,8 +910,8 @@ export default async function handler(req, res) {
 
   try {
     var pulls = await Promise.all([
-      metaToken ? fetchMetaDemo(metaToken, from, to) : Promise.resolve({ ageGender: [], region: [], device: [] }),
-      ttToken && ttAdvId ? fetchTikTokDemo(ttToken, ttAdvId, from, to) : Promise.resolve({ ageGender: [], region: [], device: [] }),
+      metaToken ? fetchMetaDemo(metaToken, from, to) : Promise.resolve({ ageGender: [], region: [], device: [], ageGenderByRegion: [] }),
+      ttToken && ttAdvId ? fetchTikTokDemo(ttToken, ttAdvId, from, to) : Promise.resolve({ ageGender: [], region: [], device: [], ageGenderByRegion: [] }),
       fetchGoogleDemo(from, to)
     ]);
     var meta = pulls[0], tt = pulls[1], google = pulls[2];
@@ -889,8 +940,8 @@ export default async function handler(req, res) {
         var cid = String(row.campaignId || "");
         return allowed[cid] === true || allowed[cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "")] === true;
       };
-      meta = { ageGender: meta.ageGender.filter(scope), region: meta.region.filter(scope), device: meta.device.filter(scope) };
-      tt = { ageGender: tt.ageGender.filter(scope), region: tt.region.filter(scope), device: tt.device.filter(scope) };
+      meta = { ageGender: meta.ageGender.filter(scope), region: meta.region.filter(scope), device: meta.device.filter(scope), ageGenderByRegion: (meta.ageGenderByRegion || []).filter(scope) };
+      tt = { ageGender: tt.ageGender.filter(scope), region: tt.region.filter(scope), device: tt.device.filter(scope), ageGenderByRegion: (tt.ageGenderByRegion || []).filter(scope) };
       google = { ageGender: google.ageGender.filter(scope), region: google.region.filter(scope), device: google.device.filter(scope), city: google.city.filter(scope) };
     }
 
@@ -899,6 +950,12 @@ export default async function handler(req, res) {
       ageGender: [].concat(meta.ageGender, tt.ageGender, google.ageGender),
       region: [].concat(meta.region, tt.region, google.region || []),
       device: [].concat(meta.device, tt.device, google.device),
+      // 3-dim age x gender x region rows that power the "click a
+      // province to scope the age/gender charts" interaction on the
+      // Demographics tab. Google never returns per-province age/gender
+      // breakdowns (its API exposes audience segments, not geo cross
+      // age/gender), so this is Meta + TikTok only.
+      ageGenderByRegion: [].concat(meta.ageGenderByRegion || [], tt.ageGenderByRegion || []),
       googleCity: google.city || []
     };
     demoCache[cacheKey] = { data: response, ts: Date.now() };

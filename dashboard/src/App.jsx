@@ -3941,6 +3941,17 @@ export default function MediaOnGas(){
   var dm3=useState(""),demoErr=dm3[0],setDemoErr=dm3[1];
   var dm4=useState(QUIRKY_AD_LOADERS[0]),demoQuip=dm4[0],setDemoQuip=dm4[1];
   var dm5=useState("impressions"),demoMetric=dm5[0],setDemoMetric=dm5[1];
+  // Province scope filter for the Demographics tab. When set (via
+  // clicking a province bubble on the map), the age / gender / device
+  // and segment helpers all rescope to ONLY that province's rows. null
+  // = the default all-provinces aggregate (existing behaviour).
+  var dm6=useState(null),selectedProvince=dm6[0],setSelectedProvince=dm6[1];
+  // Clear the province filter whenever the date range, the campaign
+  // selection, or the auth context changes. Without this a filter set
+  // on yesterday's data could silently persist after the operator
+  // narrows the selection to a single campaign that didn't deliver in
+  // the chosen province, leaving the age/gender charts mysteriously
+  // empty. Defensive, the bubble can always be clicked again.
   // Google intent signals for the Targeting and Summary persona cards.
   // Admin-only endpoint, so clients silently get null and the frontend
   // skips rendering the Google card for share-link views.
@@ -3958,7 +3969,7 @@ export default function MediaOnGas(){
   var cd2=useState(false),communityDemoLoading=cd2[0],setCommunityDemoLoading=cd2[1];
   // Reset cached demo payload when date range changes so the tab fetches
   // fresh the next time it's opened.
-  useEffect(function(){setDemoData(null);setGoogleIntent(null);setCommunityDemo(null);},[df,dt]);
+  useEffect(function(){setDemoData(null);setGoogleIntent(null);setCommunityDemo(null);setSelectedProvince(null);},[df,dt,selected.length]);
   useEffect(function(){
     // Summary tab also renders per-stage demographic blocks under each
     // HIGHLIGHTS section, so fetch demoData whenever the user is on Summary
@@ -5201,6 +5212,10 @@ export default function MediaOnGas(){
             var regRows=(demoData.region||[]).filter(inSel);
             var devRows=(demoData.device||[]).filter(inSel);
             var cityRows=(demoData.googleCity||[]).filter(inSel);
+            // 3-dim age x gender x region rows. Source for the
+            // click-a-province scope filter. Same inSel scope, same
+            // shape as agRows but with a region field per row.
+            var agByRegRowsRaw=(demoData.ageGenderByRegion||[]).filter(inSel);
 
             // Strip Unknown age / gender rows — they pollute the
             // visualisation without adding signal (Meta sometimes returns
@@ -5209,6 +5224,17 @@ export default function MediaOnGas(){
             var genderOrder=["female","male"];
             var genderLabel={female:"Female",male:"Male"};
             var agRows=agRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
+            // Province-scoped age/gender slice. When the operator has
+            // clicked a province bubble (selectedProvince set), the
+            // age/gender/segment helpers swap their source to the rows
+            // for that province only. Falls back to the all-provinces
+            // agRows when nothing is selected, so the default view is
+            // identical to today's behaviour. agByRegRowsRaw carries
+            // ALL three dims (age, gender, region); we apply the same
+            // known-bracket filter here so the helpers can call .field()
+            // without contamination.
+            var agByRegRows=agByRegRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
+            var scopedAgRows=selectedProvince?agByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):agRows;
             // Honest transparency: the male/female split is of the
             // gender-IDENTIFIED audience only. Meta returns 'unknown'
             // gender for blocked/private profiles; that volume is
@@ -5482,11 +5508,15 @@ export default function MediaOnGas(){
                         <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
                       </circle>
                     </g>;})}
-                    {/* Bubbles — sized by sqrt of share. Sorted ascending so the largest bubble renders last and sits on top when two provinces overlap. */}
-                    {Object.keys(provCenters).slice().sort(function(a,b){return (totals[a]||0)-(totals[b]||0);}).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var gradId=hasVal?"bubbleGrad_"+stage.key:"bubbleGhost_"+stage.key;return <g key={"b"+p}>
-                      <circle cx={c.x} cy={c.y} r={r} fill={"url(#"+gradId+")"} stroke="rgba(255,255,255,0.75)" strokeWidth={hasVal?2:1} filter={hasVal&&typeof rnk==="number"&&rnk<3?"url(#bubbleGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}>
-                        <title>{p+" — "+share.toFixed(2)+"% of tagged "+stage.label.toLowerCase()}</title>
+                    {/* Bubbles — sized by sqrt of share. Sorted ascending so the largest bubble renders last and sits on top when two provinces overlap. Clicking a bubble sets selectedProvince so the age + gender + segment helpers below rescope to ONLY that province. Click the same bubble again (or the Clear pill above the map) to reset. */}
+                    {Object.keys(provCenters).slice().sort(function(a,b){return (totals[a]||0)-(totals[b]||0);}).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var gradId=hasVal?"bubbleGrad_"+stage.key:"bubbleGhost_"+stage.key;var isSel=selectedProvince===p;return <g key={"b"+p} style={{cursor:hasVal?"pointer":"default"}} onClick={hasVal?function(){setSelectedProvince(isSel?null:p);}:undefined}>
+                      <circle cx={c.x} cy={c.y} r={r} fill={"url(#"+gradId+")"} stroke={isSel?"#FFCC00":"rgba(255,255,255,0.75)"} strokeWidth={isSel?4:(hasVal?2:1)} filter={hasVal&&typeof rnk==="number"&&rnk<3?"url(#bubbleGlow_"+stage.key+")":undefined} style={{transition:"all 0.4s ease"}}>
+                        <title>{p+" — "+share.toFixed(2)+"% of tagged "+stage.label.toLowerCase()+(hasVal?(isSel?" (click to clear filter)":" (click to filter age + gender below)"):"")}</title>
                       </circle>
+                      {/* Selection ring — yellow halo when this province is the active filter. */}
+                      {isSel&&<circle cx={c.x} cy={c.y} r={r+10} fill="none" stroke="#FFCC00" strokeWidth="2" strokeDasharray="6,4" opacity="0.85" pointerEvents="none">
+                        <animate attributeName="stroke-dashoffset" values="0;20" dur="2s" repeatCount="indefinite"/>
+                      </circle>}
                       {/* Glossy highlight — small white ellipse top-left of bubble */}
                       {hasVal&&r>22&&<ellipse cx={c.x-r*0.35} cy={c.y-r*0.4} rx={r*0.32} ry={r*0.18} fill="rgba(255,255,255,0.3)" pointerEvents="none"/>}
                     </g>;})}
@@ -5575,8 +5605,10 @@ export default function MediaOnGas(){
 
             // Horizontal bar renderer — shares computed against the tagged
             // subset so the column always sums to 100% of known-age data.
+            // Defaults to scopedAgRows so a clicked-province selection
+            // narrows the bars to that province's age distribution.
             var renderAgeBars=function(stage,rowOverride){
-              var agData=rowOverride||agRows;
+              var agData=rowOverride||scopedAgRows;
               var sums={};ageOrder.forEach(function(a){sums[a]=0;});
               agData.forEach(function(r){var a=String(r.age||"");if(sums[a]===undefined)return;sums[a]+=stage.field(r);});
               var knownSum=ageOrder.reduce(function(s,a){return s+sums[a];},0);
@@ -5594,9 +5626,11 @@ export default function MediaOnGas(){
             };
 
             // Gender donut (no Unknown). Uses Recharts PieChart.
+            // Reads from scopedAgRows so a clicked-province selection
+            // narrows the donut to that province's gender split.
             var renderGenderDonut=function(stage){
               var byGen={female:0,male:0};
-              agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(byGen[g]===undefined)return;byGen[g]+=stage.field(r);});
+              scopedAgRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(byGen[g]===undefined)return;byGen[g]+=stage.field(r);});
               var total=byGen.female+byGen.male;
               if(total===0)return <div style={{padding:20,textAlign:"center",color:P.label,fontFamily:fm,fontSize:11}}>No gender data</div>;
               var data=[{name:"Female",value:byGen.female,color:"#ec4899"},{name:"Male",value:byGen.male,color:"#3b82f6"}];
@@ -5643,10 +5677,15 @@ export default function MediaOnGas(){
             };
 
             // Top-age/top-gender helpers reused in insights and tiles.
-            var topAgeFor=function(stage){var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});agRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});var t=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];return{age:t,val:ageSums[t]||0};};
-            var genderSharesFor=function(stage){var s={female:0,male:0};agRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(s[g]===undefined)return;s[g]+=stage.field(r);});return s;};
+            // All age / gender / segment helpers read from scopedAgRows
+            // so when a province bubble is clicked they automatically
+            // narrow to that province. topProvFor stays unscoped
+            // (province ranking has no meaning when one province is
+            // already filtered to).
+            var topAgeFor=function(stage){var ageSums={};ageOrder.forEach(function(a){ageSums[a]=0;});scopedAgRows.forEach(function(r){var a=String(r.age||"");if(ageSums[a]===undefined)return;ageSums[a]+=stage.field(r);});var t=ageOrder.slice().sort(function(a,b){return ageSums[b]-ageSums[a];})[0];return{age:t,val:ageSums[t]||0};};
+            var genderSharesFor=function(stage){var s={female:0,male:0};scopedAgRows.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(s[g]===undefined)return;s[g]+=stage.field(r);});return s;};
             var topProvFor=function(stage){var t={};regRows.forEach(function(r){var pn=String(r.region||"");if(!provincePaths[pn])return;if(!t[pn])t[pn]=0;t[pn]+=stage.field(r);});var ks=Object.keys(t).sort(function(a,b){return t[b]-t[a];});return ks[0]||"";};
-            var topSegmentFor=function(stage){var best={val:0,age:"",gen:""};agRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});return best;};
+            var topSegmentFor=function(stage){var best={val:0,age:"",gen:""};scopedAgRows.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var v=stage.field(r);if(v>best.val){best={val:v,age:a,gen:g};}});return best;};
 
             // Platform tiles — share of total impressions per channel (FB / IG / TikTok / Google),
             // always on, not stage-scoped. Uses authoritative per-platform
@@ -5807,7 +5846,9 @@ export default function MediaOnGas(){
               // for the objective top-cell line where both axes matter.
               var taggedAgeOnly=0;
               var taggedAgeAndGender=0;
-              agRows.forEach(function(r){
+              // Use scopedAgRows so narrative numbers track the same
+              // province scope as the chart numbers.
+              scopedAgRows.forEach(function(r){
                 var ax=String(r.age||""),gx=String(r.gender||"").toLowerCase();
                 if(ageOrder.indexOf(ax)>=0)taggedAgeOnly+=stage.field(r);
                 if(ageOrder.indexOf(ax)>=0&&genderOrder.indexOf(gx)>=0)taggedAgeAndGender+=stage.field(r);
@@ -5982,7 +6023,19 @@ export default function MediaOnGas(){
                 {/* Where — map + ranked provinces. Grid split 1:1 so the bubble
                     map visually ties to the ranked-provinces table on the left
                     instead of dominating the section. */}
-                <div style={{fontSize:15,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900,marginBottom:12}}>· Where</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:10,flexWrap:"wrap"}}>
+                  <div style={{fontSize:15,color:stage.accent,fontFamily:fm,letterSpacing:2.5,textTransform:"uppercase",fontWeight:900}}>· Where</div>
+                  {/* Province-scope active pill. Appears only when the
+                      operator has clicked a province bubble. Shows which
+                      province is scoping the age + gender charts below and
+                      offers a one-tap clear. Same pill shows across every
+                      stage block because selectedProvince is global. */}
+                  {selectedProvince&&<div title="Click to clear the province filter and return to the all-provinces aggregate." onClick={function(){setSelectedProvince(null);}} style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8,background:"#FFCC0014",border:"1px solid #FFCC0055",borderRadius:14,padding:"6px 12px",fontSize:10,color:"#FFCC00",fontFamily:fm,fontWeight:800,letterSpacing:1.2,textTransform:"uppercase"}}>
+                    <span style={{display:"inline-flex",width:8,height:8,borderRadius:"50%",background:"#FFCC00",boxShadow:"0 0 8px #FFCC00aa"}}/>
+                    Scoped to {selectedProvince}
+                    <span style={{fontSize:13,marginLeft:2,opacity:0.8}}>×</span>
+                  </div>}
+                </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(stage)}</div>
                   <div>{renderProvinceRanks(stage)}</div>
