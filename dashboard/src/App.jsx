@@ -5229,18 +5229,21 @@ export default function MediaOnGas(){
             var classifyObjective=function(camp){
               var canon=String(camp.objective||"").toLowerCase();
               var n=String(camp.campaignName||"").toLowerCase();
-              // Community Reach name match wins over a stale backend
-              // "landingpage" classification (cache lag), and beats the
-              // followers branch when the audience tag carries
-              // like/follow tokens.
+              // Name detection authoritative, every pattern runs ahead
+              // of canon (project_objective_classification). AppInstall
+              // name beats canon=community_reach for campaigns tagged
+              // ..._AppInstall_..._Follower-Audiences_... so they roll
+              // into the Traffic objective bucket (the Demographics tab
+              // collapses appinstall + landingpage into Traffic) instead
+              // of CommunityReach.
               if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "CommunityReach";
+              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
+              if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
+              if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
               if(canon==="leads")return "Leads";
               if(canon==="followers")return "Followers";
               if(canon==="community_reach")return "CommunityReach";
               if(canon==="appinstall"||canon==="landingpage")return "Traffic";
-              if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Traffic";
-              if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers";
-              if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
               return "Traffic";
             };
             // Per-campaign objective value — matches Summary's per-objective
@@ -6406,20 +6409,18 @@ export default function MediaOnGas(){
               cmpSel.forEach(function(camp){
                 var obj="Traffic";var canon=(camp.objective||"").toLowerCase();
                 var n=(camp.campaignName||"").toLowerCase();
-                // Community Reach name match wins over stale backend (see
-                // main classifier above, same reasoning).
+                // Name detection authoritative, every pattern runs before
+                // canon. Same priority as the main classifier above.
                 if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))obj="Community Reach";
+                else if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
+                else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
+                else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
+                else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
                 else if(canon==="appinstall")obj="Clicks to App Store";
                 else if(canon==="leads")obj="Leads";
                 else if(canon==="followers")obj="Followers & Likes";
                 else if(canon==="community_reach")obj="Community Reach";
                 else if(canon==="landingpage")obj="Landing Page Clicks";
-                else{
-                  if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0)obj="Clicks to App Store";
-                  else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
-                  else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
-                  else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
-                }
                 if(!cObj[obj])cObj[obj]={spend:0,results:0};
                 cObj[obj].spend+=parseFloat(camp.spend||0);
                 var r=0;
@@ -6512,24 +6513,24 @@ export default function MediaOnGas(){
               // inflating it.
               var canon=(camp.objective||"").toLowerCase();
               var n=(camp.campaignName||"").toLowerCase();
-              // Community Reach NAME match wins over a stale backend
-              // "landingpage" classification (campaigns cache lag after a
-              // recent deploy). Anchored "_Reach_" tag is the team's
-              // naming convention and authoritative per
-              // project_objective_classification.
+              // Name detection is authoritative per
+              // project_objective_classification, so every name pattern
+              // runs ahead of canon (not just Community Reach). Priority:
+              // Community Reach (audience + Reach tags), AppInstall,
+              // Followers, Leads, LandingPage. AppInstall is matched
+              // BEFORE Followers so a campaign tagged
+              // ..._AppInstall_..._Follower-Audiences_... lands in App
+              // Store, not Followers or Community Reach.
               if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
+              else if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
+              else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
+              else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
+              else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
               else if(canon==="appinstall")obj="Clicks to App Store";
               else if(canon==="leads")obj="Leads";
               else if(canon==="followers")obj="Followers & Likes";
               else if(canon==="community_reach")obj="Community Reach";
               else if(canon==="landingpage")obj="Landing Page Clicks";
-              else{
-                // canon is "unknown" / empty, fall through to name-based.
-                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
-                else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
-                else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
-                else if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)obj="Landing Page Clicks";
-              }
               if(!objectives4[obj])objectives4[obj]={spend:0,clicks:0,imps:0,results:0,reach:0,byPlatform:{}};
               objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);objectives4[obj].reach+=parseFloat(camp.reach||0);
               var result;
@@ -9202,22 +9203,24 @@ export default function MediaOnGas(){
               var getObj=function(camp){
                 var canon=String(camp&&camp.objective||"").toLowerCase();
                 var n=String(camp&&camp.campaignName||"").toLowerCase();
-                // Name-first Community Reach detection wins over a stale
-                // backend "landingpage" classification (campaigns cache may
-                // still be serving the pre-Community-Reach payload for up
-                // to 5 minutes after a deploy). Anchored "_Reach_" tag is
-                // the team's naming convention for awareness campaigns and
-                // is authoritative per project_objective_classification.
+                // Name detection is authoritative per
+                // project_objective_classification, so it runs ahead of
+                // ALL canon checks (not just landingpage). Priority order:
+                // Community Reach, AppInstall, Followers, Leads,
+                // LandingPage. AppInstall is matched BEFORE Followers so
+                // a campaign targeting Follower-Audiences with an
+                // appinstall objective tag routes to App Store, not
+                // Followers, and not Community Reach.
                 if(n.indexOf("follow/like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n))return "Community Reach";
+                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
+                if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
+                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
+                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
                 if(canon==="appinstall")return "Clicks to App Store";
                 if(canon==="leads")return "Leads";
                 if(canon==="followers")return "Followers & Likes";
                 if(canon==="community_reach")return "Community Reach";
                 if(canon==="landingpage")return "Landing Page Clicks";
-                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
-                if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
-                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
-                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
                 return "Traffic";
               };
 
@@ -9609,19 +9612,28 @@ export default function MediaOnGas(){
               var getObj2=function(adset){
                 var canon=campObjById[String(adset.campaignId||"")]||campObjByName[adset.campaignName]||"";
                 var n=String(adset.campaignName||"").toLowerCase();
-                // Community Reach name match wins over a stale backend
-                // "landingpage" classification (cache lag). Anchored
-                // "_Reach_" tag is the team's naming convention.
+                // Name detection is authoritative per
+                // project_objective_classification, so it runs ahead of
+                // ALL canon checks (not just landingpage). This stops a
+                // stale or overridden backend canon from routing a
+                // clearly-named campaign (AppInstall, Like&Follow, _Reach_,
+                // lead/POS, traffic) to the wrong bucket. Priority order:
+                // Community Reach (most specific Reach/audience tags),
+                // then AppInstall, Followers, Leads, LandingPage. Subtle:
+                // AppInstall is matched BEFORE Followers so a campaign
+                // targeting Follower-Audiences (audience tag) but with
+                // appinstall as the objective tag routes correctly.
                 if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))return "Community Reach";
+                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
+                if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
+                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
+                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
+                // Canon fallback only when no name token matched.
                 if(canon==="appinstall")return "Clicks to App Store";
                 if(canon==="leads")return "Leads";
                 if(canon==="followers")return "Followers & Likes";
                 if(canon==="community_reach")return "Community Reach";
                 if(canon==="landingpage")return "Landing Page Clicks";
-                if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)return "Clicks to App Store";
-                if(n.indexOf("follower")>=0||n.indexOf("page like")>=0||n.indexOf("pagelikes")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)return "Followers & Likes";
-                if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)return "Leads";
-                if(n.indexOf("homeloan")>=0||n.indexOf("traffic")>=0||n.indexOf("paidsearch")>=0)return "Landing Page Clicks";
                 return "Traffic";
               };
               var obj=getObj2(a);
