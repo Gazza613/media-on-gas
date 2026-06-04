@@ -224,7 +224,9 @@ function buildHtml(opts) {
           leadHtml = '<strong style="color:' + P.cyan + ';">' + fmtPct(ctr) + ' CTR</strong> on ' + fmtNum(s.clicks) + ' clicks at ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC');
           adjacentHtml = 'Reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
         }
-        var familyLabel = s.awareness ? "Awareness · reach-led" : (s.kind || "Engagement");
+        var familyLabel = s.isCommunityReach
+          ? "Community Reach · reach into existing community"
+          : s.awareness ? "Awareness · reach-led" : (s.kind || "Engagement");
         return '<tr><td style="padding:8px 0;font-family:Manrope,Helvetica,Arial,sans-serif;border-top:1px solid ' + P.rule + ';">' +
           '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:1.5px;text-transform:uppercase;font-weight:800;margin-bottom:4px;">' + escapeHtml(familyLabel) + ' · ' + s.camps + ' campaign' + (s.camps === 1 ? '' : 's') + '</div>' +
           '<div style="font-size:13px;color:' + P.txt + ';line-height:1.5;margin-bottom:3px;">' + leadHtml + '</div>' +
@@ -645,7 +647,21 @@ export default async function handler(req, res) {
     // result-objective campaigns roll into their result family.
     var clientName = snapshotClientName(c);
     var awareness = isAwarenessObjective(c);
-    var family = awareness ? "awareness" : (rm.kind || "Other");
+    // Community Reach campaigns are a distinct sub-bucket of awareness:
+    // they reach into an EXISTING community audience (FB / IG Like or
+    // Follow custom audiences, MoMo Deals seed lists, etc.), so the
+    // operator wants them labelled "Community Reach" in the per-client
+    // snapshot instead of the generic "Awareness · reach-led".
+    // Detect via the canonical backend tag and a name-strong anchored
+    // _Reach_ fallback (same pattern every other classifier uses).
+    var _canonObj = String(c.objective || "").toLowerCase();
+    var _campName = String(c.campaignName || "").toLowerCase();
+    var isCommunityReach = _canonObj === "community_reach"
+      || _campName.indexOf("follow/like-audience") >= 0
+      || _campName.indexOf("follow_like_audience") >= 0
+      || _campName.indexOf("like-audience") >= 0
+      || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(_campName);
+    var family = isCommunityReach ? "community_reach" : (awareness ? "awareness" : (rm.kind || "Other"));
     if (!perClientSnap[clientName]) perClientSnap[clientName] = {};
     if (!perClientSnap[clientName][family]) {
       perClientSnap[clientName][family] = {
@@ -653,6 +669,7 @@ export default async function handler(req, res) {
         kind: rm.kind,
         costLabel: rm.costLabel,
         awareness: awareness,
+        isCommunityReach: isCommunityReach,
         camps: 0, spend: 0, impressions: 0, reach: 0, clicks: 0, results: 0,
         spendB: 0, impressionsB: 0, reachB: 0, clicksB: 0, resultsB: 0,
         freqSum: 0, freqWeightSum: 0
