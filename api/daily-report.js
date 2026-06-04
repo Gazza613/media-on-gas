@@ -543,14 +543,30 @@ export default async function handler(req, res) {
 
   var yesterdayData, baselineData, adsByCampaign;
   try {
-    var triple = await Promise.all([
+    // Pull ad-level thumbnails for BOTH yesterday and the 7-day
+    // baseline. SPEND COLLAPSE anomalies fire on campaigns that
+    // had material spend in the 7d window but R0.00 yesterday, so
+    // the yesterday-only ads pull returns nothing for them and
+    // their thumbnail slot rendered as the empty fallback box.
+    // Merge with yesterday's map taking priority (current creative
+    // when both windows have it), baseline filling the gap when
+    // yesterday is dark.
+    var quad = await Promise.all([
       fetchCampaigns(yFrom, yTo, dashKey),
       fetchCampaigns(bFrom, bTo, dashKey),
-      fetchAdsByCampaign(yFrom, yTo, dashKey)
+      fetchAdsByCampaign(yFrom, yTo, dashKey),
+      fetchAdsByCampaign(bFrom, bTo, dashKey)
     ]);
-    yesterdayData = triple[0];
-    baselineData = triple[1];
-    adsByCampaign = triple[2] || {};
+    yesterdayData = quad[0];
+    baselineData = quad[1];
+    var yAds = quad[2] || {};
+    var bAds = quad[3] || {};
+    adsByCampaign = {};
+    Object.keys(bAds).forEach(function(k) { adsByCampaign[k] = bAds[k]; });
+    Object.keys(yAds).forEach(function(k) {
+      if (yAds[k] && yAds[k].thumbnail) adsByCampaign[k] = yAds[k];
+      else if (!adsByCampaign[k]) adsByCampaign[k] = yAds[k];
+    });
   } catch (err) {
     console.error("daily-anomalies fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
