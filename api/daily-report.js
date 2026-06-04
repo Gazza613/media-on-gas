@@ -227,10 +227,19 @@ function buildHtml(opts) {
         var familyLabel = s.isCommunityReach
           ? "Community Reach · reach into existing community"
           : s.awareness ? "Awareness · reach-led" : (s.kind || "Engagement");
+        // When IG follower delivery has been merged into this Follows
+        // + Likes row, the IG portion is the per-ad profile-visits
+        // proxy (Meta does not attribute IG follows per ad), so the
+        // operator gets a one-line note acknowledging the mixed
+        // attribution model.
+        var igProfileVisitsNote = s.hasIgProfileVisits
+          ? '<div style="font-size:10px;color:' + P.caption + ';font-style:italic;line-height:1.6;margin-top:3px;">Includes IG profile visits as the per-ad follow proxy, Meta does not attribute IG follows to individual ads.</div>'
+          : "";
         return '<tr><td style="padding:8px 0;font-family:Manrope,Helvetica,Arial,sans-serif;border-top:1px solid ' + P.rule + ';">' +
           '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:1.5px;text-transform:uppercase;font-weight:800;margin-bottom:4px;">' + escapeHtml(familyLabel) + ' · ' + s.camps + ' campaign' + (s.camps === 1 ? '' : 's') + '</div>' +
           '<div style="font-size:13px;color:' + P.txt + ';line-height:1.5;margin-bottom:3px;">' + leadHtml + '</div>' +
           '<div style="font-size:11px;color:' + P.label + ';line-height:1.6;">' + adjacentHtml + '</div>' +
+          igProfileVisitsNote +
           '</td></tr>';
       }).join("");
       return '<div style="margin-top:10px;border:1px solid ' + P.rule + ';border-left:3px solid ' + P.cyan + ';border-radius:0 10px 10px 0;background:rgba(0,0,0,0.20);padding:12px 16px;">' +
@@ -661,20 +670,40 @@ export default async function handler(req, res) {
       || _campName.indexOf("follow_like_audience") >= 0
       || _campName.indexOf("like-audience") >= 0
       || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(_campName);
-    var family = isCommunityReach ? "community_reach" : (awareness ? "awareness" : (rm.kind || "Other"));
+    // Bucket IG follower campaigns ("Profile Visits" kind, the IG
+    // follow-proxy Meta does not attribute per ad) into the same
+    // "Follows + Likes" family as FB / TikTok follower campaigns so the
+    // operator sees one consolidated community-growth row per client
+    // instead of two adjacent ones with the same intent. The
+    // hasIgProfileVisits flag carries through so the renderer can note
+    // the IG contribution is counted via profile visits (clicks), not
+    // attributed follows.
+    var isIgProfileVisits = rm.kind === "Profile Visits";
+    var family;
+    if (isCommunityReach) family = "community_reach";
+    else if (awareness) family = "awareness";
+    else if (isIgProfileVisits) family = "Follows + Likes";
+    else family = (rm.kind || "Other");
     if (!perClientSnap[clientName]) perClientSnap[clientName] = {};
     if (!perClientSnap[clientName][family]) {
       perClientSnap[clientName][family] = {
         family: family,
-        kind: rm.kind,
-        costLabel: rm.costLabel,
+        // For the merged Follows + Likes bucket, force the kind and
+        // cost label to the follows semantics so the rendering uses
+        // "follows + likes" terminology regardless of whether the
+        // first campaign into the bucket was IG (Profile Visits) or
+        // FB / TikTok (Follows + Likes).
+        kind: isIgProfileVisits ? "Follows + Likes" : rm.kind,
+        costLabel: isIgProfileVisits ? "CPF" : rm.costLabel,
         awareness: awareness,
         isCommunityReach: isCommunityReach,
+        hasIgProfileVisits: false,
         camps: 0, spend: 0, impressions: 0, reach: 0, clicks: 0, results: 0,
         spendB: 0, impressionsB: 0, reachB: 0, clicksB: 0, resultsB: 0,
         freqSum: 0, freqWeightSum: 0
       };
     }
+    if (isIgProfileVisits) perClientSnap[clientName][family].hasIgProfileVisits = true;
     var snap = perClientSnap[clientName][family];
     snap.camps += 1;
     snap.spend += parseFloat(c.spend || 0);
