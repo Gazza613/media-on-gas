@@ -7838,8 +7838,9 @@ export default function MediaOnGas(){
                           Only renders for video creative with a non-
                           zero watch signal, so static / image / text
                           ads keep the same compact card height. */}
-                      {(function(){var fmtUp=String(ad.format||"").toUpperCase();var isVid=fmtUp==="MP4"||fmtUp==="VIDEO";var avg=parseFloat(ad.videoAvgWatchSec||0)||0;if(!isVid||avg<=0)return null;return <div style={{fontSize:8,fontFamily:fm,marginBottom:8,padding:"4px 7px",background:P.warning+"10",border:"1px solid "+P.warning+"30",borderRadius:6,color:P.warning,fontWeight:800,letterSpacing:0.8,textAlign:"center"}}>
-                        AVG WATCH {avg.toFixed(1)}s
+                      {(function(){var fmtUp=String(ad.format||"").toUpperCase();var isVid=fmtUp==="MP4"||fmtUp==="VIDEO";var avg=parseFloat(ad.videoAvgWatchSec||0)||0;var tpr=parseFloat(ad.videoThruplayRate||0)||0;if(!isVid||(avg<=0&&tpr<=0))return null;return <div style={{display:"flex",justifyContent:"space-between",fontSize:8,fontFamily:fm,marginBottom:8,padding:"4px 7px",background:P.warning+"10",border:"1px solid "+P.warning+"30",borderRadius:6,color:P.warning,fontWeight:800,letterSpacing:0.8}}>
+                        <span>{avg>0?("AVG WATCH "+avg.toFixed(1)+"s"):"AVG WATCH —"}</span>
+                        <span title="ThruPlay rate, % of impressions that watched 15 sec or to completion">{tpr>0?(tpr.toFixed(2)+"% THRUPLAY"):"— THRUPLAY"}</span>
                       </div>;})()}
                       {/* CTA uses the PLATFORM colour (Facebook blue,
                           Instagram pink, TikTok teal, Google green, YouTube
@@ -8743,9 +8744,9 @@ export default function MediaOnGas(){
                       returned non-zero watch metrics. Static / image /
                       text ads see nothing here, so the card stays the
                       same height for non-video creative. */}
-                  {(function(){var fmtUp=String(ad.format||"").toUpperCase();var isVid=fmtUp==="MP4"||fmtUp==="VIDEO";var avg=parseFloat(ad.videoAvgWatchSec||0)||0;if(!isVid||avg<=0)return null;return <div style={{fontSize:10,fontFamily:fm,marginBottom:10,padding:"6px 10px",background:P.warning+"10",border:"1px solid "+P.warning+"30",borderRadius:8,textAlign:"center"}}>
-                    <div style={{color:P.warning,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>AVG WATCH</div>
-                    <div style={{color:P.warning,fontWeight:900,fontSize:13}}>{avg.toFixed(1)}s</div>
+                  {(function(){var fmtUp=String(ad.format||"").toUpperCase();var isVid=fmtUp==="MP4"||fmtUp==="VIDEO";var avg=parseFloat(ad.videoAvgWatchSec||0)||0;var tpr=parseFloat(ad.videoThruplayRate||0)||0;if(!isVid||(avg<=0&&tpr<=0))return null;return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:10,fontFamily:fm,marginBottom:10,padding:"6px 10px",background:P.warning+"10",border:"1px solid "+P.warning+"30",borderRadius:8}}>
+                    <div><div style={{color:P.warning,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>AVG WATCH</div><div style={{color:P.warning,fontWeight:900,fontSize:13}}>{avg>0?(avg.toFixed(1)+"s"):"—"}</div></div>
+                    <div title="ThruPlay rate, % of impressions that watched 15 sec or to completion. Meta's recommended creative-quality signal because it filters out scroll-by auto-plays."><div style={{color:P.warning,marginBottom:2,letterSpacing:1,fontSize:8,fontWeight:800}}>THRUPLAY</div><div style={{color:P.warning,fontWeight:900,fontSize:13}}>{tpr>0?(tpr.toFixed(2)+"%"):"—"}</div></div>
                   </div>;})()}
                   <button onClick={function(){setPreviewAd(ad);}} style={{display:"block",marginTop:"auto",padding:"9px 10px",background:adPlatC,border:"none",borderRadius:6,color:textOnAccent(adPlatC),fontSize:11,fontWeight:900,fontFamily:fm,textAlign:"center",letterSpacing:1.5,boxShadow:"0 2px 6px "+adPlatC+"40",cursor:"pointer",width:"100%",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span className="gas-view-ad-full">{viewAdLabel(ad.platform)}</span><span className="gas-view-ad-short">VIEW AD</span></button>
                 </div>
