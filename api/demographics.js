@@ -20,7 +20,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v14-region-2dim-primary-diag";
+var DEMO_CACHE_VERSION = "v15-region-3dim-with-platform";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -136,29 +136,31 @@ async function fetchMetaDemo(token, from, to) {
   var agAll = [];
   var regAll = [];
   var devAll = [];
-  // Per-province slice rows. Three independent 2-dim cuts feed the
-  // click-a-province scope: age,region for the age bars, gender,region
-  // for the gender donut, impression_device,region for the device mix.
-  // We deliberately avoid the 3-dim age,gender,region attempt because
-  // Meta routinely rejects (400s) that breakdown for accounts with
-  // narrow per-cell traffic; the 2-dim cuts are reliable. Each helper
-  // gates on its own axis being known (topAgeFor needs only age,
-  // genderSharesFor needs only gender) so a 2-dim row with the other
-  // axis as "unknown" correctly feeds the chart that needs it.
+  // Per-province slice rows. Three independent 3-dim cuts WITH
+  // publisher_platform feed the click-a-province scope. Earlier
+  // attempts with 2-dim age,region / gender,region / impression_device,
+  // region (no publisher_platform) returned zero rows from Meta even
+  // when the existing 2-dim region,publisher_platform cut returns
+  // hundreds. The fix is to mirror the SAME 3-dim+publisher_platform
+  // shape that already works for the primary breakdowns, just with
+  // region swapped in for gender (or kept alongside age / device).
+  // Note: the 4-dim age,gender,region,publisher_platform attempt is
+  // STILL skipped because that 4-dim does 400 (it's what the existing
+  // proportional IG inference comment refers to).
   var agByRegAll = [];
   var devByRegAll = [];
   await Promise.all(META_ACCOUNTS.map(async function(acc) {
-    // publisher_platform added to the primary 3-dim Meta breakdowns so
-    // each row can be labelled Facebook or Instagram distinctly. The
-    // per-region 2-dim cuts drop publisher_platform to keep the cells
-    // dense and the response reliable.
+    // publisher_platform sits on every breakdown so each row can be
+    // labelled Facebook or Instagram distinctly AND so Meta returns
+    // the rows at all (2-dim breakdowns without publisher_platform
+    // come back empty for MoMo-shape accounts, confirmed via _diag).
     var res = await Promise.all([
       fetchMetaBreakdown(acc, token, from, to, "age,gender,publisher_platform"),
       fetchMetaBreakdown(acc, token, from, to, "region,publisher_platform"),
       fetchMetaBreakdown(acc, token, from, to, "impression_device,publisher_platform"),
-      fetchMetaBreakdown(acc, token, from, to, "age,region"),
-      fetchMetaBreakdown(acc, token, from, to, "gender,region"),
-      fetchMetaBreakdown(acc, token, from, to, "impression_device,region")
+      fetchMetaBreakdown(acc, token, from, to, "age,region,publisher_platform"),
+      fetchMetaBreakdown(acc, token, from, to, "gender,region,publisher_platform"),
+      fetchMetaBreakdown(acc, token, from, to, "impression_device,region,publisher_platform")
     ]);
     var ag = res[0], reg = res[1], dev = res[2];
     var ageByReg = res[3] || [], genByReg = res[4] || [], devByReg = res[5] || [];
@@ -308,13 +310,13 @@ async function fetchMetaDemo(token, from, to) {
         results: r
       });
     });
-    // age,region 2-dim rows -> agByRegAll with gender="unknown".
-    // topAgeFor only checks "age in ageOrder" so these rows correctly
-    // feed the age bar helper.
+    // age,region,publisher_platform 3-dim rows -> agByRegAll with
+    // gender="unknown". topAgeFor only checks "age in ageOrder" so
+    // these rows correctly feed the age bar helper.
     ageByReg.forEach(function(row) {
       var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       agByRegAll.push({
-        platform: "Meta",
+        platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
         campaignId: String(row.campaign_id || ""),
         campaignName: row.campaign_name || "",
@@ -327,13 +329,13 @@ async function fetchMetaDemo(token, from, to) {
         results: r
       });
     });
-    // gender,region 2-dim rows -> agByRegAll with age="unknown".
-    // genderSharesFor only checks "gender in [female,male]" so these
-    // rows correctly feed the gender donut.
+    // gender,region,publisher_platform 3-dim rows -> agByRegAll with
+    // age="unknown". genderSharesFor only checks gender so these rows
+    // correctly feed the gender donut.
     genByReg.forEach(function(row) {
       var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       agByRegAll.push({
-        platform: "Meta",
+        platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
         campaignId: String(row.campaign_id || ""),
         campaignName: row.campaign_name || "",
@@ -346,12 +348,12 @@ async function fetchMetaDemo(token, from, to) {
         results: r
       });
     });
-    // impression_device,region 2-dim rows -> devByRegAll for the
-    // device mix scope.
+    // impression_device,region,publisher_platform 3-dim rows ->
+    // devByRegAll for the device mix scope.
     devByReg.forEach(function(row) {
       var r = extractResults(row.actions, campPageLikeOpt[String(row.campaign_id || "")] === true);
       devByRegAll.push({
-        platform: "Meta",
+        platform: metaPlatformLabel(row.publisher_platform),
         account: acc.name,
         campaignId: String(row.campaign_id || ""),
         campaignName: row.campaign_name || "",
