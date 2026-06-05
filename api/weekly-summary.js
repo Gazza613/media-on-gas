@@ -226,8 +226,27 @@ function buildHtml(opts) {
 
   var thStyle = 'padding:10px 12px;text-align:left;font-size:9px;font-weight:800;color:#F96203;letter-spacing:2px;text-transform:uppercase;border-bottom:1px solid rgba(168,85,247,0.18);background:rgba(249,98,3,0.08);';
 
+  // Logo block, matches the Daily Pulse header treatment: 84x84
+  // circular crop, centred, with the same ember/lava glow shadow.
+  // The keyframe animation is kept identical so both emails feel
+  // like one product family.
+  var glowStyles =
+    '<style>' +
+    '@keyframes gasGlow {' +
+      '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
+      '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
+    '}' +
+    '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
+    '</style>';
+  var logoBlock =
+    '<div style="text-align:center;margin-bottom:18px;">' +
+      '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>' +
+    '</div>';
+
   return '<!DOCTYPE html>' +
-    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Weekly Activity Summary</title></head>' +
+    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Weekly Activity Summary</title>' +
+    glowStyles +
+    '</head>' +
     '<body style="margin:0;padding:0;background:#070E16;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#070E16;padding:40px 16px;">' +
     '<tr><td align="center">' +
@@ -235,6 +254,7 @@ function buildHtml(opts) {
 
     // Header
     '<tr><td style="padding:40px 40px 28px;text-align:center;">' +
+    logoBlock +
     '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>' +
     '<div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">' +
     '<span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span></div>' +
