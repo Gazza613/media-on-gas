@@ -5954,6 +5954,14 @@ export default function MediaOnGas(){
               var googleDev=devRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
               var googleReg=regRows.filter(function(r){return String(r.platform||"").toLowerCase()==="google";});
               if(googleAg.length===0&&googleDev.length===0&&googleReg.length===0)return null;
+              // Province-scope companion for the Google block. Mirrors
+              // the Meta + TikTok renderStageBlock behaviour, click a
+              // province bubble on the Google map (or any other map)
+              // and the age + gender + device tiles below rescope to
+              // that province via the same campaign-delivery-weighted
+              // synthesis used elsewhere.
+              var scopedGoogleAg=selectedProvince?synthByProv(googleAg,selectedProvince):googleAg;
+              var scopedGoogleDev=selectedProvince?synthByProv(googleDev,selectedProvince):googleDev;
               var googleStage={
                 key:"google",
                 label:"Clicks",
@@ -6004,21 +6012,21 @@ export default function MediaOnGas(){
                       <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
                       <div title="Share of age-tagged Google traffic (sums to 100%)" style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
-                    {renderAgeBars(googleStage,googleAg)}
+                    {renderAgeBars(googleStage,scopedGoogleAg)}
                   </div>
                   <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                       <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
                       <div title="Share of gender-tagged Google traffic (sums to 100%)" style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
-                    {renderGenderCards(googleStage,googleAg)}
+                    {renderGenderCards(googleStage,scopedGoogleAg)}
                   </div>
                   <div style={{background:"linear-gradient(145deg,#0f1a11,#060b08)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                       <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Device Mix</div>
                       <div title="Share of Mobile + Desktop + Tablet Google traffic (sums to 100%). Connected TV and Other are excluded." style={{fontSize:8,color:P.gd,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                     </div>
-                    {renderDeviceBars(googleStage,googleDev)}
+                    {renderDeviceBars(googleStage,scopedGoogleDev)}
                   </div>
                 </div>
               </div>;
