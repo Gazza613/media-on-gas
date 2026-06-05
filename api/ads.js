@@ -581,18 +581,30 @@ export default async function handler(req, res) {
       // Dynamic/Advantage+ and doesn't have a top-level video_id).
       var adPrimaryVideoId = {};
       var adPrimaryImageHash = {};
-      // Collect unique video IDs for high-res thumbnail fetch
+      // Collect unique video IDs for high-res thumbnail fetch. Must
+      // match the per-ad candidate list below, otherwise Page Like /
+      // Like&Follow page-post video ads (which carry the video_id only
+      // in object_story_spec.video_data.video_id) miss the batch fetch
+      // and fall through to an empty thumbnail.
       var videoIds = [];
       Object.keys(creativesByAdId).forEach(function(adId) {
         var cr = creativesByAdId[adId];
         var vid = cr.video_id;
         var afs = cr.asset_feed_spec || {};
+        var oss = cr.object_story_spec || {};
+        // Primary video id (falls through OSS variants when the top
+        // level is empty, which is the FB page-post case).
+        if (!vid && oss.video_data && oss.video_data.video_id) vid = oss.video_data.video_id;
+        if (!vid && oss.link_data && oss.link_data.video_id) vid = oss.link_data.video_id;
         if (!vid && afs.videos && afs.videos.length > 0) vid = afs.videos[0].video_id;
         if (vid) {
           adPrimaryVideoId[adId] = vid;
           if (videoIds.indexOf(vid) < 0) videoIds.push(vid);
         }
-        // Also any DCO video variant thumbnails (thumbnail_hash is an image hash)
+        // Also any OSS / DCO variant video ids so the batch covers
+        // every id the per-ad candidate walker checks below.
+        if (oss.video_data && oss.video_data.video_id && videoIds.indexOf(oss.video_data.video_id) < 0) videoIds.push(oss.video_data.video_id);
+        if (oss.link_data && oss.link_data.video_id && videoIds.indexOf(oss.link_data.video_id) < 0) videoIds.push(oss.link_data.video_id);
         if (afs.videos) {
           afs.videos.forEach(function(v) {
             if (v.video_id && videoIds.indexOf(v.video_id) < 0) videoIds.push(v.video_id);
