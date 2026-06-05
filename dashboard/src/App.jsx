@@ -5238,12 +5238,61 @@ export default function MediaOnGas(){
             // known-bracket filter here so the helpers can call .field()
             // without contamination.
             var agByRegRows=agByRegRowsRaw.filter(function(r){return ageOrder.indexOf(String(r.age||""))>=0||genderOrder.indexOf(String(r.gender||"").toLowerCase())>=0;});
-            var scopedAgRows=selectedProvince?agByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):agRows;
-            // Device mix companion. When a province is selected, swap
-            // devRows for the per-province slice. Falls back to the
-            // all-provinces aggregate (existing behaviour) when nothing
-            // is selected.
-            var scopedDevRows=selectedProvince?devByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):devRows;
+            // Synthesise per-province slices when the platforms refuse
+            // to return a real cross-cut. Meta silently returns zero
+            // rows for every region-paired age/gender/device breakdown
+            // on MTN MoMo's account regardless of dimensionality, so
+            // the click-a-province filter would always render empty
+            // unless we approximate. The approximation: for each
+            // campaign, compute its delivery share to the selected
+            // province from the working region rows, then scale that
+            // campaign's age/gender/device rows by the share. Honest
+            // because (a) it uses real per-campaign region totals as
+            // the weighting basis, and (b) age/gender distributions
+            // inside a single campaign tend to be highly consistent
+            // across the provinces it serves (the campaign targets
+            // the same audience everywhere). The user is told this is
+            // a "campaign-delivery-weighted estimate" via a small
+            // pill above the WHO + HOW grid so the approximation is
+            // never silently treated as ground truth.
+            var synthByProv=function(srcRows,province){
+              if(!province)return srcRows;
+              var shareByCamp={},totalByCamp={};
+              regRows.forEach(function(r){
+                var c=String(r.campaignId||"");
+                var im=parseFloat(r.impressions||0)||0;
+                totalByCamp[c]=(totalByCamp[c]||0)+im;
+                if(String(r.region||"")===province)shareByCamp[c]=(shareByCamp[c]||0)+im;
+              });
+              var out=[];
+              srcRows.forEach(function(row){
+                var c=String(row.campaignId||"");
+                var tot=totalByCamp[c]||0;
+                if(tot<=0)return;
+                var s=(shareByCamp[c]||0)/tot;
+                if(s<=0)return;
+                var scaledResults={};
+                Object.keys(row.results||{}).forEach(function(k){scaledResults[k]=(row.results[k]||0)*s;});
+                out.push(Object.assign({},row,{
+                  impressions:(row.impressions||0)*s,
+                  clicks:(row.clicks||0)*s,
+                  spend:(row.spend||0)*s,
+                  results:scaledResults,
+                  _estimated:true
+                }));
+              });
+              return out;
+            };
+            // Prefer real per-province rows when the backend has them.
+            // Fall back to the synthesised slice (always available as
+            // long as the campaign delivered to the selected province).
+            var realScopedAg=selectedProvince?agByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):[];
+            var realScopedDev=selectedProvince?devByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):[];
+            var scopedAgRows=!selectedProvince?agRows:(realScopedAg.length>0?realScopedAg:synthByProv(agRows,selectedProvince));
+            var scopedDevRows=!selectedProvince?devRows:(realScopedDev.length>0?realScopedDev:synthByProv(devRows,selectedProvince));
+            // Flag whether we're showing real or synthesised data so
+            // the WHO + HOW header can carry the right label.
+            var scopedIsEstimated=!!(selectedProvince&&realScopedAg.length===0&&realScopedDev.length===0);
             // Honest transparency: the male/female split is of the
             // gender-IDENTIFIED audience only. Meta returns 'unknown'
             // gender for blocked/private profiles; that volume is
@@ -6047,17 +6096,17 @@ export default function MediaOnGas(){
                     <span style={{fontSize:13,marginLeft:2,opacity:0.8}}>×</span>
                   </div>}
                 </div>
-                {/* Honest empty-state when the per-province cut is empty.
-                    The bubble map renders fine because it reads regRows
-                    (2-dim region+publisher_platform, which always works).
-                    The age/gender/device tiles read agByRegRows /
-                    devByRegRows (separate per-region 2-dim cuts). When
-                    Meta and TikTok both refuse those cuts for the
-                    selected period, the helpers below would render blank
-                    bars and "no data" tiles with no explanation. Surface
-                    why instead. */}
-                {selectedProvince&&agByRegRows.length===0&&devByRegRows.length===0&&<div style={{marginBottom:14,padding:"10px 14px",background:"#FFCC0010",border:"1px solid #FFCC0033",borderRadius:10,fontSize:10.5,color:"#FFCC00",fontFamily:fm,lineHeight:1.6,letterSpacing:0.3}}>
-                  Meta and TikTok did not return a per-province age, gender, or device breakdown for this period (the platforms only return cross-cuts above a delivery-volume threshold). The province totals on the map are accurate, but the age, gender, and device tiles cannot be scoped to {selectedProvince}. Click the × pill above to return to the all-provinces view, or try a wider date range.
+                {/* Estimated-split badge. When the platforms refuse to
+                    return a real per-province cross-cut (Meta does this
+                    for most accounts), the tiles below show a campaign-
+                    delivery-weighted estimate computed from working
+                    per-campaign region totals and per-campaign age /
+                    gender / device. The badge tells the operator the
+                    tiles are an approximation, not Meta's actual
+                    per-province join. */}
+                {scopedIsEstimated&&<div style={{marginBottom:14,padding:"10px 14px",background:"#FFCC0010",border:"1px solid #FFCC0033",borderRadius:10,fontSize:10.5,color:"#FFCC00",fontFamily:fm,lineHeight:1.6,letterSpacing:0.3}}>
+                  <span style={{fontWeight:900,letterSpacing:1.2,textTransform:"uppercase",fontSize:10,marginRight:8}}>Estimated split</span>
+                  Meta does not expose a per-province cross-cut for this account, so the age, gender, and device tiles for {selectedProvince} are weighted by each campaign's delivery share to the province. The province totals on the map remain Meta's actual figures.
                 </div>}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(stage)}</div>
