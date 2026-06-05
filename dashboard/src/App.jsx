@@ -6096,18 +6096,6 @@ export default function MediaOnGas(){
                     <span style={{fontSize:13,marginLeft:2,opacity:0.8}}>×</span>
                   </div>}
                 </div>
-                {/* Estimated-split badge. When the platforms refuse to
-                    return a real per-province cross-cut (Meta does this
-                    for most accounts), the tiles below show a campaign-
-                    delivery-weighted estimate computed from working
-                    per-campaign region totals and per-campaign age /
-                    gender / device. The badge tells the operator the
-                    tiles are an approximation, not Meta's actual
-                    per-province join. */}
-                {scopedIsEstimated&&<div style={{marginBottom:14,padding:"10px 14px",background:"#FFCC0010",border:"1px solid #FFCC0033",borderRadius:10,fontSize:10.5,color:"#FFCC00",fontFamily:fm,lineHeight:1.6,letterSpacing:0.3}}>
-                  <span style={{fontWeight:900,letterSpacing:1.2,textTransform:"uppercase",fontSize:10,marginRight:8}}>Estimated split</span>
-                  Meta does not expose a per-province cross-cut for this account, so the age, gender, and device tiles for {selectedProvince} are weighted by each campaign's delivery share to the province. The province totals on the map remain Meta's actual figures.
-                </div>}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                   <div>{renderProvinceMap(stage)}</div>
                   <div>{renderProvinceRanks(stage)}</div>
