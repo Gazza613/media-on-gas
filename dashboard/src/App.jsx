@@ -9079,13 +9079,13 @@ export default function MediaOnGas(){
                       <span style={{fontSize:12,fontWeight:900,color:P.cyan,fontFamily:ff,letterSpacing:1.5}}>BEST PERFORMER PER PLATFORM</span>
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.cyan+"30, transparent)"}}/>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:platWinners.length>=3?"repeat(2,1fr)":"1fr",gap:12}}>
+                    <div style={{display:"grid",gridTemplateColumns:platWinners.length>=3?"repeat(2,minmax(0,1fr))":"minmax(0,1fr)",gap:12}}>
                       {platWinners.map(function(p){
                         var pc=platCol5[p.pg]||P.ember;
                         if(!p.winner)return null;
                         var resT=p.winner.resultType;
-                        return <div key={p.pg} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+pc+"30"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        return <div key={p.pg} style={{background:"rgba(0,0,0,0.3)",borderRadius:12,padding:16,border:"1px solid "+pc+"30",minWidth:0,overflow:"hidden"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}}>
                             <span style={{fontSize:12,fontWeight:900,color:pc,fontFamily:ff,letterSpacing:1}}>{p.pg.toUpperCase()}</span>
                             <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{p.count+" ads | "+fR(p.spend)+" | "+p.ctr.toFixed(2)+"% CTR"}</span>
                           </div>
@@ -9107,13 +9107,13 @@ export default function MediaOnGas(){
                         <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+sec.accent+"30, transparent)"}}/>
                         <span style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:1}}>{o.count+" ads | "+fR(o.totals.spend)+" | "+(o.blendedCost>0?fR(o.blendedCost)+" "+sec.costLabel:"no results yet")}</span>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
                         {ten.map(function(ad,ai){
                           var isScale=ai<5;
                           var isTP=ai>=5;
                           var bordCol=isScale?P.mint+"60":P.warning+"50";
                           var bgCol=isScale?"rgba(52,211,153,0.05)":"rgba(251,191,36,0.04)";
-                          return <div key={ad.adId+"_obj_"+ai} style={{display:"flex",gap:10,background:bgCol,borderRadius:10,padding:10,border:"1px solid "+bordCol,alignItems:"stretch",overflow:"hidden"}}>
+                          return <div key={ad.adId+"_obj_"+ai} style={{display:"flex",gap:10,background:bgCol,borderRadius:10,padding:10,border:"1px solid "+bordCol,alignItems:"stretch",overflow:"hidden",minWidth:0}}>
                             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,minWidth:52}}>
                               <div style={{fontSize:14,fontWeight:900,color:isScale?P.mint:P.warning,fontFamily:fm,lineHeight:1}}>{"#"+(ai+1)}</div>
                               <div style={{background:isScale?P.mint:P.warning,color:isScale?"#062014":"#2a1605",fontSize:8,fontWeight:900,padding:"3px 6px",borderRadius:4,fontFamily:fm,letterSpacing:0.8,whiteSpace:"nowrap",textAlign:"center"}}>{isScale?"\u25B2 SCALE":"\u2605 TOP"}</div>
