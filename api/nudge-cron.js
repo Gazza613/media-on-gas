@@ -283,9 +283,9 @@ function buildNudgeHtml(opts) {
       </td></tr>
 
       <tr><td class="pad-x" style="padding:28px 40px 4px;">
-        <div class="small-text" style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;">SAMI</div>
-        <div style="font-size:11px;color:#F96203;font-weight:700;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">AI EXPERT AGENT</div>
-        <div style="font-size:10px;color:#8B7FA3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">GAS MEDIA DEPARTMENT</div>
+        <div class="small-text" style="font-size:13px;color:#FFFBF8;font-weight:800;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>
+        <div style="font-size:11px;color:#F96203;font-weight:700;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>
+        <div style="font-size:10px;color:#8B7FA3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>
       </td></tr>
 
       <tr><td class="pad-x" style="padding:28px 40px 8px;">
