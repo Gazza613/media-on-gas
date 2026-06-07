@@ -939,18 +939,25 @@ export async function fetchAdsByCampaign(from, to, apiKey) {
       if (!cid) return;
       var sp = parseFloat(a.spend || 0);
       var thumb = a.thumbnail || "";
+      // adId + platform are kept on each entry so downstream
+      // renderers can rebuild a /api/ad-image proxy URL instead of
+      // shipping the raw CDN URL or a base64-inlined payload. The
+      // Daily Pulse uses this to keep email size under Gmail's
+      // 102 KB clipping threshold.
+      var aid = String(a.adId || "");
+      var pPlat = String(a.platform || "").toLowerCase();
       var cur = byCamp[cid];
       if (!cur) {
-        byCamp[cid] = { spend: sp, thumbnail: thumb, previewUrl: a.previewUrl || "", _hasThumb: !!thumb };
+        byCamp[cid] = { spend: sp, thumbnail: thumb, previewUrl: a.previewUrl || "", adId: aid, platform: pPlat, _hasThumb: !!thumb };
         return;
       }
       // Priority: keep an entry with a thumbnail over one without,
       // regardless of spend. Within the same has-thumbnail class,
       // higher spend wins.
       if (thumb && !cur._hasThumb) {
-        byCamp[cid] = { spend: sp, thumbnail: thumb, previewUrl: a.previewUrl || "", _hasThumb: true };
+        byCamp[cid] = { spend: sp, thumbnail: thumb, previewUrl: a.previewUrl || "", adId: aid, platform: pPlat, _hasThumb: true };
       } else if (cur._hasThumb === !!thumb && sp > cur.spend) {
-        byCamp[cid] = { spend: sp, thumbnail: thumb || cur.thumbnail, previewUrl: a.previewUrl || cur.previewUrl, _hasThumb: cur._hasThumb };
+        byCamp[cid] = { spend: sp, thumbnail: thumb || cur.thumbnail, previewUrl: a.previewUrl || cur.previewUrl, adId: aid || cur.adId, platform: pPlat || cur.platform, _hasThumb: cur._hasThumb };
       }
     });
     // Strip the internal sentinel before returning so callers see the
@@ -1015,4 +1022,43 @@ export async function inlineAdThumbnails(adsByCampaign) {
   var workers = [];
   for (var w = 0; w < CONCURRENCY; w++) workers.push(worker());
   await Promise.all(workers);
+}
+
+// Lighter-weight alternative to inlineAdThumbnails for emails that
+// risk Gmail's 102 KB clipping ceiling. Instead of fetching every
+// thumbnail and embedding the bytes as a base64 data: URL, rewrite
+// each entry.thumbnail to point at our /api/ad-image proxy with a
+// supplied admin-scoped token. When the recipient opens the email,
+// Gmail's image fetcher hits the proxy from Google's IPs; the proxy
+// honours the token (verifyToken at the rate-limit layer), resolves
+// the freshest signed CDN URL, and streams the bytes back. The email
+// payload itself stays tiny because each thumbnail is now a ~120-byte
+// URL instead of a ~50-100 KB inlined image.
+//
+// Trade-off: Gmail's image proxy caches the response, so a recipient
+// who archives the email and opens it weeks later still sees the
+// image AS LONG AS the proxy resolution still works. inlineAdThumbnails
+// embeds the bytes permanently and survives token rotation; this
+// helper depends on the proxy being reachable when the email is
+// viewed. For internal team emails (Daily Pulse) this is acceptable;
+// for client-facing emails inlineAdThumbnails remains the safer pick.
+//
+// Idempotent: URLs already pointing at the proxy are skipped.
+export function rewriteThumbsToProxy(adsByCampaign, origin, token) {
+  if (!adsByCampaign) return;
+  if (!origin || !token) return;
+  var proxyPath = "/api/ad-image";
+  Object.keys(adsByCampaign).forEach(function(k) {
+    var entry = adsByCampaign[k];
+    if (!entry) return;
+    if (!entry.adId || !entry.platform) return;
+    if (entry.platform !== "meta" && entry.platform !== "tiktok") return;
+    // Already a proxy URL, leave it alone.
+    if (entry.thumbnail && entry.thumbnail.indexOf(proxyPath) >= 0) return;
+    entry.thumbnail = origin + proxyPath +
+      "?platform=" + encodeURIComponent(entry.platform) +
+      "&adId=" + encodeURIComponent(entry.adId) +
+      "&raw=1" +
+      "&token=" + encodeURIComponent(token);
+  });
 }

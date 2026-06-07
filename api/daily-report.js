@@ -10,8 +10,9 @@ import {
   adsManagerUrl,
   parseCampaignEndMs,
   ANOMALY_DEFS, detectAnomalies,
-  fetchCampaigns, fetchAdsByCampaign, inlineAdThumbnails
+  fetchCampaigns, fetchAdsByCampaign, inlineAdThumbnails, rewriteThumbsToProxy
 } from "./_pulseShared.js";
+import { issueToken } from "./_jwt.js";
 import { knownBrandForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 
 // A campaign counts as "live" for anomaly purposes if it's actually
@@ -523,14 +524,22 @@ export default async function handler(req, res) {
       if (yAds[k] && yAds[k].thumbnail) adsByCampaign[k] = yAds[k];
       else if (!adsByCampaign[k]) adsByCampaign[k] = yAds[k];
     });
-    // Inline every ad thumbnail in the merged map as base64 data URLs
-    // BEFORE downstream anomaly rows pick them up. Meta / TikTok / Google
-    // all get the same treatment, so no Pulse email will ever ship a
-    // brittle CDN URL that expires before the operator opens the inbox.
-    // See inlineAdThumbnails in _pulseShared for the safety belts
-    // (bounded concurrency, per-fetch timeout, gradient placeholder
-    // fallback on failure).
-    await inlineAdThumbnails(adsByCampaign);
+    // Rewrite each thumbnail URL to point at our /api/ad-image proxy
+    // with a 7-day admin-scoped JWT instead of base64-inlining the
+    // bytes. Gmail clips emails over 102 KB of HTML, and the Daily
+    // Pulse with inlined thumbnails routinely crossed that threshold
+    // (the mobile view showed a "view entire message" link). Each
+    // proxy URL is ~150 bytes vs ~50-100 KB per inlined thumbnail,
+    // which keeps the email well under the clip limit.
+    //
+    // Trade-off: Gmail's image fetcher hits the proxy from Google's
+    // IPs when the recipient opens the email, so the proxy must be
+    // reachable AND the token must still verify. The token expires
+    // in 7 days; a recipient archiving and opening it weeks later
+    // would see broken images. For an internal Daily Pulse this is
+    // acceptable, the value is in the next-day window.
+    var imgToken = issueToken({ role: "admin", scope: "pulse-email" }, 7 * 24 * 60 * 60);
+    rewriteThumbsToProxy(adsByCampaign, ORIGIN, imgToken);
   } catch (err) {
     console.error("daily-anomalies fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
