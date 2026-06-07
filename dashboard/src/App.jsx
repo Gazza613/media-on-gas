@@ -6516,27 +6516,61 @@ export default function MediaOnGas(){
               // Build the prior-period match set. Two modes:
               //
               //   1. Whole-client mode (sel covers >=80% of the campaigns
-              //      with activity in the current period): the user is
-              //      effectively viewing the full client. Compare client
-              //      totals to client totals — DON'T filter the prior pool
-              //      by current-selection IDs. Otherwise relaunched-each-
-              //      month campaigns (different IDs / slightly renamed)
-              //      drop from the prior pool while their successors stay
-              //      in the current pool, producing misleading 800%+
-              //      deltas where the real client MoM is closer to a
-              //      single-digit percentage.
+              //      with activity in the current period FOR THE SAME
+              //      BRAND): the user is effectively viewing the full
+              //      client. Compare client totals to client totals,
+              //      DON'T filter the prior pool by current-selection
+              //      IDs. Otherwise relaunched-each-month campaigns
+              //      (different IDs / slightly renamed) drop from the
+              //      prior pool while their successors stay in the
+              //      current pool, producing misleading 800%+ deltas
+              //      where the real client MoM is single-digit.
               //
-              //   2. Narrowed mode (sel <80% of activity): the user has
-              //      explicitly chosen a subset (e.g. only LEADS
-              //      campaigns). Honour that by filtering the prior pool
-              //      to ID + templateKey matches so the comparison stays
-              //      like-for-like at the campaign level.
-              var activeNow=campaigns.filter(function(c){return parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0;}).length;
+              //   2. Narrowed mode (sel <80% of brand activity): the
+              //      user has explicitly chosen a subset (e.g. only
+              //      LEADS campaigns). Honour that by filtering the
+              //      prior pool to ID + templateKey matches so the
+              //      comparison stays like-for-like at the campaign
+              //      level.
+              //
+              // Critical: BOTH the coverage check and the prior pool
+              // are scoped to the same brand(s) present in the current
+              // selection. Without this scope, an admin managing many
+              // clients would mix prior brand A totals into current
+              // brand B comparisons, AND the coverage gate would
+              // misfire (sel.length / all-admin-active drops below
+              // 0.8 even when the selection is the full single client),
+              // forcing matched-only mode and reproducing the same
+              // missing-new-campaign bug whole-client mode exists to
+              // prevent.
+              var PS_CMP=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+              var brandOf=function(c){
+                var clean=String(c.accountName||"").trim().replace(PS_CMP,"").replace(PS_CMP,"").trim();
+                if(AGENCY_NAMES[clean.toLowerCase()]){
+                  return extractAgencyClient(c.campaignName)||"";
+                }
+                return clean;
+              };
+              var selBrands={};
+              sel.forEach(function(c){var b=brandOf(c);if(b)selBrands[b]=true;});
+              // When no brand could be inferred from the selection
+              // (extremely rare), fall through to admin-wide behaviour
+              // so the chip still computes a value instead of going
+              // blank.
+              var hasBrandScope=Object.keys(selBrands).length>0;
+              var activeNow=campaigns.filter(function(c){
+                if(!(parseFloat(c.impressions||0)>0||parseFloat(c.spend||0)>0))return false;
+                if(!hasBrandScope)return true;
+                return selBrands[brandOf(c)]===true;
+              }).length;
               var coverageRatio=activeNow>0?(sel.length/activeNow):1;
               var wholeClientMode=coverageRatio>=0.8;
+              var priorInBrands=hasBrandScope
+                ? compareCampaigns.filter(function(c){return selBrands[brandOf(c)]===true;})
+                : compareCampaigns;
               var cmpSel;
               if(wholeClientMode){
-                cmpSel=compareCampaigns;
+                cmpSel=priorInBrands;
               }else{
                 var cmpIdSet={};
                 var cmpTplSet={};
@@ -6546,7 +6580,7 @@ export default function MediaOnGas(){
                   var tk=templateKey(c.campaignName,c.platform);
                   if(tk)cmpTplSet[tk]=true;
                 });
-                cmpSel=compareCampaigns.filter(function(c){
+                cmpSel=priorInBrands.filter(function(c){
                   var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");
                   if(cmpIdSet[raw]||cmpIdSet[c.campaignId])return true;
                   var tk=templateKey(c.campaignName,c.platform);
@@ -6610,7 +6644,7 @@ export default function MediaOnGas(){
                 sel.forEach(function(c){var raw=c.rawCampaignId||String(c.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");if(!curByRaw[raw])curByRaw[raw]={name:c.campaignName,spend:0,clicks:0,imps:0};curByRaw[raw].spend+=parseFloat(c.spend||0);curByRaw[raw].clicks+=parseFloat(c.clicks||0);curByRaw[raw].imps+=parseFloat(c.impressions||0);});
                 var perCampaign=Object.keys(curByRaw).map(function(raw){var cur=curByRaw[raw];var prev=priorByRaw[raw]||{spend:0,clicks:0,imps:0};return{campaign:cur.name,current_spend:cur.spend,prior_spend:prev.spend,current_clicks:cur.clicks,prior_clicks:prev.clicks,spendDelta:prev.spend>0?((cur.spend-prev.spend)/prev.spend*100).toFixed(2)+"%":(cur.spend>0?"NEW":"0")};}).sort(function(a,b){return b.current_spend-a.current_spend;});
                 var priorOnlyIds=Object.keys(priorByRaw).filter(function(raw){return !curByRaw[raw];});
-                console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,scope:wholeClientMode?"whole-client":"matched-only",coverageRatio:coverageRatio.toFixed(2),currentCampaigns:Object.keys(curByRaw).length,priorCampaigns:Object.keys(priorByRaw).length,priorOnlyCampaigns:priorOnlyIds.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks},perCampaign:perCampaign},null,2));
+                console.log("[GAS compare "+compareMode+"] current vs prior\n"+JSON.stringify({mode:compareMode,scope:wholeClientMode?"whole-client":"matched-only",brandScope:Object.keys(selBrands),coverageRatio:coverageRatio.toFixed(2),activeNowInBrand:activeNow,priorInBrandCount:priorInBrands.length,currentCampaigns:Object.keys(curByRaw).length,priorCampaigns:Object.keys(priorByRaw).length,priorOnlyCampaigns:priorOnlyIds.length,current:{spend:computed.totalSpend,imps:computed.totalImps,clicks:computed.totalClicks},prior:{spend:cSpend,imps:cImps,clicks:cClicks},perCampaign:perCampaign},null,2));
               }catch(_){}
             }
             // Inline delta chip. Returns a small coloured chip next to a
