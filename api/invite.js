@@ -137,7 +137,7 @@ export default async function handler(req, res) {
   if (!gmailUser || !gmailPass) { res.status(500).json({ error: "Mailer not configured" }); return; }
 
   var invite = await createInvite(inviteEmail, inviteName, session.email);
-  var origin = (req.headers.origin || req.headers.Origin || "https://media-on-gas.vercel.app").replace(/\/$/, "");
+  var origin = (req.headers.origin || req.headers.Origin || "https://media.gasmarketing.co.za").replace(/\/$/, "");
   var signupUrl = origin + "/signup?token=" + encodeURIComponent(invite.token);
 
   try {

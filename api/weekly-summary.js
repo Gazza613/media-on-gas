@@ -17,7 +17,7 @@ import { timingSafeStrEqual } from "./_createAuth.js";
 var TO_EMAIL = "gary@gasmarketing.co.za, sam@gasmarketing.co.za";
 var SLA_DAYS = 7;
 var TEAM_DOMAIN = "gasmarketing.co.za";
-var ORIGIN = "https://media-on-gas.vercel.app";
+var ORIGIN = "https://media.gasmarketing.co.za";
 
 function isActiveStatus(s) {
   s = String(s || "").toLowerCase();

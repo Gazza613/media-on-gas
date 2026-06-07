@@ -8,7 +8,11 @@
 // both surface clickable links into the platform-native ads manager so a
 // reader can jump straight from the email into Meta / TikTok / Google.
 
-export var ORIGIN = "https://media-on-gas.vercel.app";
+// User-facing domain for every CTA / logo / proxy URL we embed in
+// an outgoing email. The vercel.app fallback was confusing
+// recipients clicking through to the dashboard, the custom domain
+// matches the registered URL.
+export var ORIGIN = "https://media.gasmarketing.co.za";
 
 // Distribution list. Both pulse emails go to every named address as
 // primary recipients (TO line, no CC distinction). brunettenkuna@gmail.com

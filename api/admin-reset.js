@@ -81,7 +81,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  var origin = (req.headers.origin || req.headers.Origin || "https://media-on-gas.vercel.app").replace(/\/$/, "");
+  var origin = (req.headers.origin || req.headers.Origin || "https://media.gasmarketing.co.za").replace(/\/$/, "");
   var resetUrl = origin + "/signup?token=" + encodeURIComponent(record.token);
 
   // Try to email the user. Email failure does NOT fail the request, since

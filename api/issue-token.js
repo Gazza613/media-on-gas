@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       from: from,
       to: to
     }, expiresInDays * 24 * 60 * 60);
-    var origin = (req.headers.origin || req.headers.Origin || "https://media-on-gas.vercel.app").replace(/\/$/, "");
+    var origin = (req.headers.origin || req.headers.Origin || "https://media.gasmarketing.co.za").replace(/\/$/, "");
     var shareUrl = origin + "/view/?token=" + encodeURIComponent(token);
     var expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
     res.status(200).json({ token: token, shareUrl: shareUrl, expiresAt: expiresAt, clientSlug: clientSlug });

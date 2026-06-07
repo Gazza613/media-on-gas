@@ -21,7 +21,7 @@ var SUPERADMIN_EMAIL = "gary@gasmarketing.co.za";
 var TEAM_DOMAIN = "gasmarketing.co.za";
 var SLA_DAYS = 7;
 var BUFFER_HOURS = 2; // hit right after SLA, not in the middle of day 7
-var ORIGIN = "https://media-on-gas.vercel.app";
+var ORIGIN = "https://media.gasmarketing.co.za";
 
 // Fixed leadership distribution. Every overdue-client nudge ships to this
 // list as TO recipients so all five leaders see every SLA breach. The list
