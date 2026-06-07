@@ -701,14 +701,16 @@ function Metric(props){return(<Glass accent={props.accent} hv={true} st={{paddin
 function SH(props){
   var a=props.accent||P.ember;
   // When a logoUrl is provided (resolved per-client by the caller for
-  // known brands like MTN MoMo / MoMo POS), render the logo inside the
-  // same 40x40 styled box. Layer it OVER the existing icon so a failed
-  // image load (404, CORS, etc) reveals the icon underneath rather
-  // than leaving the box empty. onError hides the broken img element.
+  // known brands like MTN MoMo / MoMo POS), render the logo in a
+  // borderless 48x48 box (20% larger than the icon-only 40x40 chip).
+  // The icon underneath is kept as a failed-load fallback, so a 404
+  // or CORS error still shows a meaningful chip instead of a blank.
+  // onError hides the broken img element.
   var hasLogo=!!props.logoUrl;
-  return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{position:"relative",width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",border:"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>
+  var boxSize=hasLogo?48:40;
+  return(<div style={{marginBottom:28}}><div style={{display:"flex",alignItems:"center",gap:14}}><div style={{position:"relative",width:boxSize,height:boxSize,borderRadius:12,background:hasLogo?"transparent":"linear-gradient(135deg,"+a+"20,"+a+"08)",border:hasLogo?"none":"1px solid "+a+"30",display:"flex",alignItems:"center",justifyContent:"center"}}>
     {props.icon}
-    {hasLogo&&<img src={props.logoUrl} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",borderRadius:11,objectFit:"contain",padding:4,background:"linear-gradient(135deg,"+a+"20,"+a+"08)",display:"block"}} onError={function(e){e.target.style.display="none";}}/>}
+    {hasLogo&&<img src={props.logoUrl} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",borderRadius:11,objectFit:"contain",display:"block"}} onError={function(e){e.target.style.display="none";}}/>}
   </div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);
 }
 function Pill(props){return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:props.color+"12",border:"1px solid "+props.color+"30",borderRadius:20,padding:"3px 10px",fontSize:9,fontWeight:700,color:props.color,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:6,height:6,borderRadius:"50%",background:props.color}}/>{props.name}</span>);}
