@@ -5584,16 +5584,18 @@ export default function MediaOnGas(){
                       <circle cx={ct.x} cy={ct.y} r="2.5" fill="rgba(255,251,248,0.7)" stroke="rgba(0,0,0,0.6)" strokeWidth="0.8"/>
                       <text x={ct.x+6} y={ct.y+2} style={{fontSize:8.5,fontFamily:fm,fontWeight:600,fill:"rgba(255,255,255,0.55)",letterSpacing:0.3,paintOrder:"stroke",stroke:"rgba(0,0,0,0.75)",strokeWidth:"2px",strokeLinejoin:"round"}}>{ct.name}</text>
                     </g>;})}
-                    {/* Pulse rings on top 3 — expanding outward from bubble edge */}
-                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);if(typeof rnk!=="number"||rnk>=3||val===0)return null;var delay=(rnk*0.5).toFixed(2);return <g key={"pulse"+p} style={{pointerEvents:"none"}}>
-                      <circle cx={c.x} cy={c.y} r={r+6} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="2.5" opacity="0.85">
-                        <animate attributeName="r" values={(r)+";"+(r+38)+";"+(r)} dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.85;0;0.85" dur="2.6s" begin={delay+"s"} repeatCount="indefinite"/>
-                      </circle>
-                      <circle cx={c.x} cy={c.y} r={r+4} fill="none" stroke={rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32"} strokeWidth="1.5" opacity="0.55">
-                        <animate attributeName="r" values={(r)+";"+(r+30)+";"+(r)} dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
-                        <animate attributeName="opacity" values="0.7;0;0.7" dur="2.6s" begin={(parseFloat(delay)+0.9).toFixed(2)+"s"} repeatCount="indefinite"/>
-                      </circle>
+                    {/* Static medal rings on the top 3 — replaces the
+                        previous animated pulse rings. Each province
+                        map ran 6 continuous SVG animate elements, and
+                        with 4 maps on screen (3 stages + Google) the
+                        page held 24+ smil animations driving frame
+                        paints regardless of scroll. SVG animations do
+                        not pause when off-screen, so they competed
+                        with scroll for paint budget. Replacing them
+                        with static rings keeps the medal hierarchy
+                        without the per-frame cost. */}
+                    {Object.keys(provCenters).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);if(typeof rnk!=="number"||rnk>=3||val===0)return null;var ringCol=rnk===0?"#FFD700":rnk===1?"#E0E0E0":"#CD7F32";return <g key={"pulse"+p} style={{pointerEvents:"none"}}>
+                      <circle cx={c.x} cy={c.y} r={r+4} fill="none" stroke={ringCol} strokeWidth="2" opacity="0.55"/>
                     </g>;})}
                     {/* Bubbles — sized by sqrt of share. Sorted ascending so the largest bubble renders last and sits on top when two provinces overlap. Clicking a bubble sets selectedProvince so the age + gender + segment helpers below rescope to ONLY that province. Click the same bubble again (or the Clear pill above the map) to reset. */}
                     {Object.keys(provCenters).slice().sort(function(a,b){return (totals[a]||0)-(totals[b]||0);}).map(function(p){var c=provCenters[p];var val=totals[p]||0;var rnk=rankMap[p];var r=radiusFor(val);var share=sumAll>0?(val/sumAll*100):0;var hasVal=val>0;var gradId=hasVal?"bubbleGrad_"+stage.key:"bubbleGhost_"+stage.key;var isSel=selectedProvince===p;return <g key={"b"+p} style={{cursor:hasVal?"pointer":"default"}} onClick={hasVal?function(){setSelectedProvince(isSel?null:p);}:undefined}>
