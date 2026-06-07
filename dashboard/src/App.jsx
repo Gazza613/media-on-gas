@@ -4977,6 +4977,33 @@ export default function MediaOnGas(){
     return best;
   },[computed]);
 
+  // Pure-brand check for the section-header logo. The SH chip swaps
+  // its icon for a client logo only when the operator has narrowed
+  // the selection to a single brand (e.g. clicked the MTN MoMo group
+  // checkbox). On the default mixed-clients load the logo would
+  // otherwise show because ecoClientName picks the majority brand,
+  // and the team wants the icon on the default view, the logo only
+  // after an explicit narrow.
+  var ecoPureBrand=useMemo(function(){
+    var PS=/\s+(Meta|Google|TikTok|Facebook|Instagram|Ads|FB|IG)$/i;
+    var seen={};
+    var total=0;
+    (computed.allSelected||[]).forEach(function(c){
+      var clean=String(c.accountName||"").trim().replace(PS,"").replace(PS,"").trim();
+      if(!clean)return;
+      var brand=clean;
+      if(AGENCY_NAMES[clean.toLowerCase()]){
+        brand=extractAgencyClient(c.campaignName)||"";
+        if(!brand)return;
+      }
+      seen[brand]=true;
+      total++;
+    });
+    var keys=Object.keys(seen);
+    if(total===0||keys.length!==1)return"";
+    return keys[0];
+  },[computed]);
+
   // Resolve the KPI profile for the active client. Server returns
   // { profile } and forces a client principal to its own slug, so this
   // is safe to call from a share view. Empty string for clients (server
@@ -6455,7 +6482,7 @@ export default function MediaOnGas(){
           {/* Client dashboard keeps GAS branding (unchanged). The
               per-client logo is used ONLY in the personalised report
               email, not here. */}
-          <SH icon={Ic.crown(P.ember,20)} logoUrl={clientLogoForName(ecoClientName)} title="Media Insights Summary" sub={(function(){var ddmm=function(ymd){var p=String(ymd||"").split("-");return p.length===3?p[2]+"-"+p[1]+"-"+p[0]:String(ymd||"");};var base=ddmm(df)+" to "+ddmm(dt);if(compareMode==="off")return base;var cmp=computeComparisonRange(df,dt,compareMode);if(!cmp)return base;return base+" vs "+ddmm(cmp.from)+" to "+ddmm(cmp.to);})()} accent={P.ember}/>
+          <SH icon={Ic.crown(P.ember,20)} logoUrl={clientLogoForName(ecoPureBrand)} title="Media Insights Summary" sub={(function(){var ddmm=function(ymd){var p=String(ymd||"").split("-");return p.length===3?p[2]+"-"+p[1]+"-"+p[0]:String(ymd||"");};var base=ddmm(df)+" to "+ddmm(dt);if(compareMode==="off")return base;var cmp=computeComparisonRange(df,dt,compareMode);if(!cmp)return base;return base+" vs "+ddmm(cmp.from)+" to "+ddmm(cmp.to);})()} accent={P.ember}/>
           {/* The per-client KPI objectives used to render here at the top.
               They now live in the Objectives section lower down (rendered
               in place of the legacy OBJECTIVE KEY METRICS block for
