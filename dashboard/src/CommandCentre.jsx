@@ -597,6 +597,28 @@ export default function CommandCentre(props) {
         // Single row renderer reused by both the live section (top) and
         // the paused section (bottom). dimmed=true mutes the row a bit
         // so the paused section reads as reference rather than action.
+        // Resolves the best available thumbnail for a campaign tile.
+        // Priority: (1) the server-attached raw CDN URL when present,
+        // (2) a same-origin /api/ad-image proxy URL built from
+        // topAdId + topAdPlatform when the server returned no raw
+        // CDN URL (the proxy re-resolves on demand against Meta /
+        // TikTok and is the same path the Creative tab uses), (3) ""
+        // so the platform-glyph fallback shows through. Without the
+        // proxy fallback, ENDED campaigns and any campaign whose top
+        // ad had a missing / expired CDN URL on the latest backend
+        // run rendered the bare "FB" / "IG" / "TT" glyph card.
+        var sessionParam = session ? ("&st=" + encodeURIComponent(session)) : "";
+        var thumbForCampaign = function(c) {
+          if (c.thumbnail) return c.thumbnail;
+          if (!c.topAdId) return "";
+          var pLow = String(c.topAdPlatform || c.platform || "").toLowerCase();
+          var pKey = pLow.indexOf("meta") >= 0 || pLow.indexOf("facebook") >= 0 || pLow.indexOf("instagram") >= 0
+            ? "meta"
+            : (pLow.indexOf("tiktok") >= 0 ? "tiktok" : "");
+          if (!pKey) return "";
+          var rawCid = String(c.rawCampaignId || c.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "");
+          return apiBase + "/api/ad-image?platform=" + pKey + "&adId=" + encodeURIComponent(c.topAdId) + (rawCid ? ("&campaignId=" + encodeURIComponent(rawCid)) : "") + sessionParam;
+        };
         var renderCampaignRow = function(c, dimmed) {
           var hasAlert = c.alerts.length > 0;
           var amUrl = c.adsManagerUrl || "";
@@ -610,10 +632,10 @@ export default function CommandCentre(props) {
           // explicitly asked the thumbnail to be a creative preview.
           // The Ads Manager link lives only on the dedicated 'Fix
           // in Ads Manager' button per alert.
-          var cdnUrl = c.thumbnail || "";
+          var cdnUrl = thumbForCampaign(c);
           var thumbInner = <div style={{ flexShrink: 0, width: 106, height: 106, borderRadius: 12, overflow: "hidden", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + gradA + "22," + gradB + "15)", position: "relative", opacity: dimmed ? 0.75 : 1 }}>
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 15, fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
-            {c.thumbnail && <img src={c.thumbnail} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
+            {cdnUrl && <img src={cdnUrl} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
           </div>;
           var thumb = cdnUrl
             ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none", cursor: "pointer" }}>{thumbInner}</a>
@@ -1926,9 +1948,10 @@ export default function CommandCentre(props) {
         // the glyph beneath. Used by Issue / Scale / Paused cards.
         var thumbBox = function(c, size) {
           var sz = size || 72;
+          var thumbUrl = thumbForCampaign(c);
           return <div style={{ flexShrink: 0, width: sz, height: sz, borderRadius: 10, overflow: "hidden", border: "1px solid " + P.rule, background: "linear-gradient(135deg," + (P.cyan || "#22D3EE") + "22," + (P.ember || "#F96203") + "15)", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: Math.max(10, sz / 6), fontWeight: 900, fontFamily: fm, letterSpacing: 1 }}>{platShort(c.platform)}</div>
-            {c.thumbnail && <img src={c.thumbnail} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
+            {thumbUrl && <img src={thumbUrl} alt="" loading="lazy" decoding="async" onError={function(e) { e.target.style.display = "none"; }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>}
           </div>;
         };
 
@@ -1950,7 +1973,7 @@ export default function CommandCentre(props) {
           // team can preview the exact ad served), NOT Ads Manager.
           // The "Open ↗" button on the right of each card is the
           // single source of truth for jumping into Ads Manager.
-          var cdnUrl = c.thumbnail || "";
+          var cdnUrl = thumbForCampaign(c);
           return <div key={c.campaignId + "-issue-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "55", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
             {cdnUrl
               ? <a href={cdnUrl} target="_blank" rel="noopener noreferrer" title="Open the full-size creative" style={{ display: "block", textDecoration: "none" }}>{thumbBox(c, 106)}</a>
@@ -2006,7 +2029,7 @@ export default function CommandCentre(props) {
         var renderScaleCard = function(entry, idx) {
           var c = entry.c;
           var amUrl = c.adsManagerUrl || "";
-          var cdnUrl = c.thumbnail || "";
+          var cdnUrl = thumbForCampaign(c);
           var col = P.mint || "#34D399";
           return <div key={c.campaignId + "-scale-" + idx} style={{ display: "flex", gap: 14, padding: 14, marginBottom: 10, background: "rgba(0,0,0,0.3)", border: "1px solid " + col + "44", borderLeft: "4px solid " + col, borderRadius: 10, alignItems: "flex-start" }}>
             {cdnUrl

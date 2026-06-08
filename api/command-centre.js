@@ -574,6 +574,13 @@ export default async function handler(req, res) {
       pacing: pacing,
       alerts: alerts,
       thumbnail: (adsByCampaign[String(c.rawCampaignId || "")] || adsByCampaign[id] || {}).thumbnail || "",
+      // Top-ad id + platform from the same adsByCampaign map. Lets the
+      // Optimise / Command Centre UI build a /api/ad-image proxy URL
+      // fallback when the raw Meta CDN thumbnail is empty or has
+      // expired, instead of falling all the way through to the
+      // platform-glyph placeholder ("FB" / "IG" / "TT" text card).
+      topAdId: (adsByCampaign[String(c.rawCampaignId || "")] || adsByCampaign[id] || {}).adId || "",
+      topAdPlatform: (adsByCampaign[String(c.rawCampaignId || "")] || adsByCampaign[id] || {}).platform || "",
       adsManagerUrl: adsManagerUrlFor(c)
     };
     clients[cl].campaigns.push(entry);
