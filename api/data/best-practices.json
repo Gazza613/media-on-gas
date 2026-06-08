@@ -1,6 +1,6 @@
 {
-  "version": "2026-01",
-  "asOf": "2026-01-15",
+  "version": "2026-06",
+  "asOf": "2026-06-08",
   "source": "Hardcoded fallback. Replaced monthly by /api/cron/refresh-best-practices when ANTHROPIC_API_KEY is configured. The latest cron-refreshed copy lives in Redis under 'bp:v1'.",
   "meta": {
     "audiences": [
