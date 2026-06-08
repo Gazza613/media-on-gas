@@ -394,18 +394,29 @@ function buildHtml(opts) {
       return '<span style="display:inline-block;background:' + c.soft + ';border:1px solid ' + c.border + ';color:' + c.fill + ';font-size:10px;font-weight:800;padding:3px 9px;border-radius:6px;margin-right:6px;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">' + t[k] + ' ' + c.word + '</span>';
     }).join("");
 
+    // Per-campaign row, two-column layout matching the Daily Pulse.
+    // Left: thumbnail. Right: campaign name + platform + status,
+    // inline metric strip (Spend / CTR / CPC / Results), then the
+    // narrative (analyst note, flags, wins, context) and the Ads
+    // Manager link. Previously each row used a six-column table
+    // (thumb | name+copy | spend | CTR | CPC | results) which forced
+    // the copy column into a narrow strip and made the narrative
+    // wrap awkwardly on smaller widths.
     var rowsHtml = b.rows.map(function(r) {
       var c = DISP_COLORS[r.disposition.color] || DISP_COLORS.green;
       var flags = r.disposition.flags || [];
       var wins = r.disposition.wins || [];
       var context = r.disposition.context || [];
 
-      var thumbHtml = r.thumbnail
+      var thumbBody = r.thumbnail
         ? '<img src="' + escapeHtml(r.thumbnail) + '" alt="ad creative" width="64" height="64" style="width:64px;height:64px;display:block;border-radius:10px;object-fit:cover;border:1px solid ' + P.rule + ';"/>'
         : '<div style="width:64px;height:64px;display:block;border-radius:10px;background:linear-gradient(135deg,' + P.ember + '40,' + P.lava + '40);border:1px solid ' + P.rule + ';"></div>';
+      var thumbCell = r.previewUrl
+        ? '<a href="' + escapeHtml(r.previewUrl) + '" target="_blank" rel="noopener" style="display:block;text-decoration:none;">' + thumbBody + '</a>'
+        : thumbBody;
 
       var analystHtml = r.analystNote ?
-        '<div class="pulse-analyst" style="margin-top:8px;padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
+        '<div class="pulse-analyst" style="margin-top:10px;padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid ' + P.amber + ';border-radius:0 8px 8px 0;font-size:11px;color:' + P.label + ';line-height:1.6;font-family:Manrope,Helvetica,Arial,sans-serif;font-style:italic;">' +
         escapeHtml(r.analystNote) + '</div>' : '';
 
       var flagsHtml = flags.length === 0 ? "" :
@@ -422,43 +433,48 @@ function buildHtml(opts) {
         : "";
 
       var amLink = r.adsManagerUrl
-        ? '<a href="' + escapeHtml(r.adsManagerUrl) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:10px;color:' + P.cyan + ';text-decoration:none;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open in ' + escapeHtml(r.platform || "") + ' Ads Manager &rarr;</a>'
+        ? '<a href="' + escapeHtml(r.adsManagerUrl) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-size:10px;color:' + P.cyan + ';text-decoration:none;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Open in ' + escapeHtml(r.platform || "") + ' Ads Manager &rarr;</a>'
         : '';
 
-      var ctrTxt = r.ctr > 0 ? r.ctr.toFixed(2) + "%" : '<span style="color:' + P.caption + ';">-</span>';
-      var cpcTxt = r.cpc !== null ? escapeHtml(fmtR(r.cpc)) : '<span style="color:' + P.caption + ';">-</span>';
-      var cprStack = r.cpr !== null
-        ? '<div style="font-size:9px;color:' + P.mint + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:4px;font-weight:800;">' + escapeHtml(fmtR(r.cpr)) + ' ' + escapeHtml(r.cprLabel) + '</div>'
-        : '';
+      var ctrTxt = r.ctr > 0 ? r.ctr.toFixed(2) + "%" : '-';
+      var cpcTxt = r.cpc !== null ? escapeHtml(fmtR(r.cpc)) : '-';
+      // Inline 4-tile metric strip living INSIDE the copy column so
+      // the row never has to wedge four extra outer cells in next
+      // to the narrative. Each tile is a tiny inline-table card,
+      // safe to wrap on narrow viewports.
+      var metricTile = function(color, value, label) {
+        return '<td valign="top" style="padding:6px 9px;background:rgba(0,0,0,0.22);border:1px solid ' + P.rule + ';border-radius:8px;font-family:Manrope,Helvetica,Arial,sans-serif;white-space:nowrap;">' +
+          '<div style="font-size:13px;font-weight:900;color:' + color + ';line-height:1.1;">' + value + '</div>' +
+          '<div style="font-size:8px;color:' + P.caption + ';letter-spacing:1.5px;text-transform:uppercase;margin-top:3px;font-weight:800;">' + label + '</div>' +
+        '</td>';
+      };
+      var resultsValue = escapeHtml(fmtNum(r.results)) +
+        (r.cpr !== null ? '<div style="font-size:9px;color:' + P.mint + ';font-weight:800;margin-top:3px;">' + escapeHtml(fmtR(r.cpr)) + ' ' + escapeHtml(r.cprLabel) + '</div>' : '');
+      var metricStrip =
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;border-collapse:separate;border-spacing:6px 0;">' +
+        '<tr>' +
+          metricTile(P.ember, escapeHtml(fmtR(r.spend)), 'Spend') +
+          metricTile(P.txt, ctrTxt, 'CTR') +
+          metricTile(P.amber, cpcTxt, 'CPC') +
+          metricTile(P.cyan, resultsValue, escapeHtml(r.resultsKind)) +
+        '</tr></table>';
 
-      return '<tr>' +
-        '<td class="pulse-row-thumb" style="padding:12px 0 12px 14px;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';width:78px;vertical-align:top;">' + thumbHtml + '</td>' +
-        '<td class="pulse-row-name" style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';background:' + c.soft + ';vertical-align:top;">' +
-          '<div style="margin-bottom:4px;line-height:1.6;">' +
-            dispChip(r.disposition) +
-            '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
-          '</div>' +
-          '<div style="font-size:13px;color:' + P.txt + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.35;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
-          analystHtml + flagsHtml + winsHtml + contextHtml + noSignalHtml + amLink +
-        '</td>' +
-        '<td class="pulse-row-metric" style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.ember + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(r.spend)) + '</div>' +
-          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">spend</div>' +
-        '</td>' +
-        '<td class="pulse-row-metric" style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.txt + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + ctrTxt + '</div>' +
-          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CTR</div>' +
-        '</td>' +
-        '<td class="pulse-row-metric" style="padding:12px 12px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.amber + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + cpcTxt + '</div>' +
-          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">CPC</div>' +
-        '</td>' +
-        '<td class="pulse-row-metric" style="padding:12px 14px;border-bottom:1px solid ' + P.rule + ';text-align:right;vertical-align:top;white-space:nowrap;">' +
-          '<div style="font-size:13px;color:' + P.cyan + ';font-weight:900;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtNum(r.results)) + '</div>' +
-          '<div style="font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">' + escapeHtml(r.resultsKind) + '</div>' +
-          cprStack +
-        '</td>' +
-      '</tr>';
+      return '<tr><td colspan="6" style="padding:0;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;border-bottom:1px solid ' + P.rule + ';border-left:3px solid ' + c.fill + ';background:' + c.soft + ';">' +
+          '<tr>' +
+            '<td valign="top" style="width:80px;padding:14px 0 14px 14px;">' + thumbCell + '</td>' +
+            '<td valign="top" style="padding:14px 16px 14px 12px;">' +
+              '<div style="margin-bottom:4px;line-height:1.6;">' +
+                dispChip(r.disposition) +
+                '<span style="display:inline-block;margin-left:10px;padding:2px 0;font-size:9px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">' + escapeHtml(r.platform || "") + '</span>' +
+              '</div>' +
+              '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1.4;word-break:break-word;">' + escapeHtml(r.campaignName) + '</div>' +
+              metricStrip +
+              analystHtml + flagsHtml + winsHtml + contextHtml + noSignalHtml + amLink +
+            '</td>' +
+          '</tr>' +
+        '</table>' +
+      '</td></tr>';
     }).join("");
 
     return '<tr><td style="padding:24px 36px 0;">' +
@@ -484,7 +500,7 @@ function buildHtml(opts) {
     '<tr>' +
       '<td width="25%" style="padding:0 4px 0 0;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
-        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Total Media Spend</div>' +
+        '<div style="font-size:9px;color:' + P.caption + ';letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;font-family:Manrope,Helvetica,Arial,sans-serif;">Spend</div>' +
         '<div style="font-size:22px;font-weight:900;color:' + P.ember + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(fmtR(totals.spend)) + '</div></div></td>' +
       '<td width="25%" style="padding:0 2px;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
