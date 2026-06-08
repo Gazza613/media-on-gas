@@ -159,6 +159,35 @@ export function parseCampaignEndMs(raw) {
   return Date.parse(s) || 0;
 }
 
+// Pulls the LATEST month-year tag out of a campaign name and returns
+// the millisecond timestamp for the first day of that month. Used by
+// detectAnomalies as the fallback "ended flight" signal when a
+// campaign doesn't carry a formal endDate (TikTok / continuous-budget
+// Meta). Matches "_May2026", "_June2026", "April 26", "APRIL/MAY 26",
+// and similar variants. Two-digit years are interpreted as 20YY.
+// Returns -Infinity when no month tag is present, callers should
+// guard with isFinite() before comparing.
+var MONTH_NAME_MAP = {
+  jan:0,january:0,feb:1,february:1,mar:2,march:2,apr:3,april:3,
+  may:4,jun:5,june:5,jul:6,july:6,aug:7,august:7,
+  sep:8,sept:8,september:8,oct:9,october:9,nov:10,november:10,dec:11,december:11
+};
+export function extractLatestMonthMsFromName(name) {
+  var s = String(name || "").toLowerCase();
+  var re = /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{2,4})\b/g;
+  var latest = -Infinity;
+  var m;
+  while ((m = re.exec(s)) !== null) {
+    var monthIdx = MONTH_NAME_MAP[m[1]];
+    if (monthIdx === undefined) continue;
+    var year = parseInt(m[2], 10);
+    if (year < 100) year += 2000;
+    var ms = new Date(year, monthIdx, 1).getTime();
+    if (ms > latest) latest = ms;
+  }
+  return latest;
+}
+
 // SAST = UTC+2. Shifts a date by +2 hours before formatting so the
 // reported "today" / "yesterday" aligns with the team's calendar even
 // though the cron itself fires in UTC.
@@ -767,6 +796,27 @@ export function detectAnomalies(yesterday, baseline, rmY, opts) {
   if (_endRaw) {
     var _endMs = parseCampaignEndMs(_endRaw);
     if (isFinite(_endMs) && _endMs < Date.now()) return [];
+  }
+  // Name-based ended-flight fallback. TikTok campaigns and a lot of
+  // continuous-budget Meta campaigns don't carry a formal endDate
+  // (operator toggles status to off when the flight is done). The
+  // GAS naming convention tags the flight month at the tail of the
+  // campaign name ("MTN-MoMo_TIKTOK_..._May2026"), so a name whose
+  // latest month tag points at a calendar month BEFORE the current
+  // month, combined with zero impressions yesterday, is an obvious
+  // concluded flight rather than a SPEND COLLAPSE anomaly. The
+  // impressions=0 guard is important so we don't suppress real
+  // anomalies on a campaign whose name happens to carry a stale tag
+  // but is still spending.
+  var _impsY = parseInt((yesterday && yesterday.impressions) || 0, 10) || 0;
+  var _spendY = parseFloat((yesterday && yesterday.spend) || 0) || 0;
+  if (_impsY === 0 && _spendY === 0) {
+    var _nameMonthMs = extractLatestMonthMsFromName((yesterday && yesterday.campaignName) || "");
+    if (isFinite(_nameMonthMs)) {
+      var _now = new Date();
+      var _firstOfMonth = new Date(_now.getFullYear(), _now.getMonth(), 1).getTime();
+      if (_nameMonthMs < _firstOfMonth) return [];
+    }
   }
   var out = [];
   // Awareness/reach campaigns are not graded on CTR or click volume,
