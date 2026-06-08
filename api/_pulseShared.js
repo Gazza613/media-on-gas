@@ -320,8 +320,30 @@ export function isAwarenessObjective(c) {
   return false;
 }
 
+// Multi-word client prefixes that must NOT be truncated by the
+// default "first underscore segment" rule. Without this, campaigns
+// named "Psycho_Bunny_*" bucket as "Psycho" (collapsing both the
+// label AND missing the clientLabels entry that keys on "PsychoBunny"),
+// and "Sea_Storm_*" / "Sea_Weeds_*" both bucket as "Sea" — merging
+// two unrelated clients into one row. Prefixes are case-sensitive
+// and matched in order, longest-first so "Sea_Weeds" wins over a
+// hypothetical "Sea" alone.
+var KNOWN_MULTI_WORD_PREFIXES = [
+  "Psycho_Bunny",
+  "Sea_Storm",
+  "Sea_Weeds"
+];
 export function clientKeyOf(name) {
-  var first = String(name || "").split("_")[0] || "";
+  var raw = String(name || "");
+  for (var i = 0; i < KNOWN_MULTI_WORD_PREFIXES.length; i++) {
+    var p = KNOWN_MULTI_WORD_PREFIXES[i];
+    if (raw.indexOf(p) === 0) {
+      // Strip the underscore so the key matches the PascalCase form
+      // used by clientLabels (PsychoBunny / SeaStorm / SeaWeeds).
+      return p.replace(/_/g, "");
+    }
+  }
+  var first = raw.split("_")[0] || "";
   return first || "Unsorted";
 }
 

@@ -25,8 +25,10 @@ export var clientLabels = {
   Willowbrook: "Willowbrook",
   ConcordCollege: "Concord College",
   EdenCollege: "Eden College",
-  PsychoBunny: "Psycho Bunny ZA",
-  PsychoBunnyZA: "Psycho Bunny ZA",
+  PsychoBunny: "Psycho Bunny",
+  PsychoBunnyZA: "Psycho Bunny",
+  SeaStorm: "Sea Storm",
+  SeaWeeds: "Sea Weeds",
   GAS: "GAS Agency",
   GASAgency: "GAS Agency"
 };
