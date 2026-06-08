@@ -8,8 +8,9 @@ import {
   P, DISP_COLORS, COLOR_RANK, worse,
   resultMetricFor, clientKeyOf, ageDaysFor, isAwarenessObjective,
   adsManagerUrl,
-  fetchCampaigns, fetchAdsByCampaign, inlineAdThumbnails
+  fetchCampaigns, fetchAdsByCampaign, inlineAdThumbnails, rewriteThumbsToProxy
 } from "./_pulseShared.js";
+import { issueToken } from "./_jwt.js";
 
 // Weekly Pulse, campaign performance summary for the GAS leadership +
 // media team. Fires every Monday at 08:00 SAST (06:00 UTC) via Vercel
@@ -687,13 +688,30 @@ export default async function handler(req, res) {
     thisWeekData = triple[0];
     lastWeekData = triple[1];
     adsByCampaign = triple[2] || {};
-    // Inline every ad thumbnail in the map as base64 data URLs before
-    // buildCampaignRows picks them up. Same reasoning as daily-report:
-    // Meta signed URLs / TikTok x-expires URLs go dead within hours
-    // of issue, and a Weekly Pulse may sit in the inbox over a
-    // weekend. Inlining bytes guarantees the previews render forever.
-    // See inlineAdThumbnails in _pulseShared for the safety belts.
-    await inlineAdThumbnails(adsByCampaign);
+    // Rewrite each ad thumbnail to point at our /api/ad-image proxy
+    // with a 14-day admin-scoped JWT, mirroring the Daily Pulse fix
+    // that lives in api/daily-report.js. Two problems base64-inlining
+    // caused in the Weekly Pulse:
+    //
+    //   1. Gmail clips emails over ~102 KB of HTML and renders a
+    //      "view entire message" link on mobile. The Weekly Pulse,
+    //      with one creative thumbnail per active campaign across
+    //      every client, regularly crossed that ceiling.
+    //
+    //   2. TikTok thumbnails (which encode larger after base64 than
+    //      Meta thumbnails because TikTok's CDN serves higher-res
+    //      JPEGs) were the first to fall outside Gmail's clipped
+    //      window, so they appeared on desktop (which fetches the
+    //      full body) but vanished on mobile (which honours the
+    //      clip).
+    //
+    // Each proxy URL is ~150 bytes, so the body now lands well
+    // inside the clip ceiling and every platform's thumbnail
+    // resolves through the same code path. Token TTL is 14 days
+    // (vs Daily Pulse's 7) because Weekly Pulses are more likely
+    // to sit unread in the inbox longer.
+    var imgToken = issueToken({ role: "admin", scope: "pulse-email" }, 14 * 24 * 60 * 60);
+    rewriteThumbsToProxy(adsByCampaign, ORIGIN, imgToken);
   } catch (err) {
     console.error("weekly-pulse fetch failed", err);
     res.status(500).json({ error: "Upstream campaign fetch failed", message: String(err && err.message || err) });
