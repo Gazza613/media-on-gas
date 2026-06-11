@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v20-follower-effective-clicks";
+var CAMPAIGNS_CACHE_VERSION = "v21-engagement-floor-unconditional";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -1181,19 +1181,17 @@ export default async function handler(req, res) {
         if (authSpend && totalSpendPub > 0) spendForRow = authSpend * (r._sumSpend / totalSpendPub);
         if (authImps && totalImps > 0) impsForRow = Math.round(authImps * (r._sumImpressions / totalImps));
         if (authClicks && totalClicksPub > 0) clicksForRow = Math.round(authClicks * (r._sumClicks / totalClicksPub));
-        // Follower / Page-Like campaigns: Meta's `clicks` (link clicks)
-        // is 0 because the creative has no destination URL, the user
-        // taps "Like Page" or "Follow". Substitute pageLikes (the
-        // engagement event Meta does count) so CTR matches what Ads
-        // Manager UI shows. Mirrors the TikTok follower-CTR fix.
-        var metaCampObj = (r.objective || "").toLowerCase();
-        var metaIsFollower = metaCampObj === "followers" ||
-                             metaCampObj === "page_likes" ||
-                             /follower|page.?like|like.?follow|_like_|_follow_|paidsocial_like/.test((r.campaignName || "").toLowerCase());
+        // Engagement-event floor for Meta. ins.clicks is link-clicks
+        // only; Page Like / Follow ads have no URL destination and
+        // come back with clicks=0. Use max(clicks, pageLikes, follows)
+        // so the engagement signal always feeds CTR / CPC. Non-
+        // engagement campaigns naturally have clicks >> pageLikes /
+        // follows so it's a no-op for them. Unconditional max() avoids
+        // missing rows whose objective the upstream detection mis-
+        // classifies as TRAFFIC / unknown.
         var pageLikesForRow = parseInt(r.pageLikes || 0, 10) || 0;
-        var effectiveClicksForRow = metaIsFollower
-          ? Math.max(clicksForRow, pageLikesForRow)
-          : clicksForRow;
+        var followsForRow = parseInt(r.pageFollows || r.follows || 0, 10) || 0;
+        var effectiveClicksForRow = Math.max(clicksForRow, pageLikesForRow, followsForRow);
         var impsStr = impsForRow.toString();
         var spendStr = spendForRow.toFixed(2);
         var clicksStr = effectiveClicksForRow.toString();
@@ -1401,10 +1399,17 @@ export default async function handler(req, res) {
             var ttProfileVisits = parseInt(tm.profile_visits || 0, 10) || 0;
             var ttRawFollows = parseInt(tm.follows || 0, 10) || 0;
             var ttObj = ttObjectives[tc.dimensions.campaign_id] || objectiveFromName(ttNames[tc.dimensions.campaign_id] || "");
-            var ttIsFollower = String(ttObj || "").toLowerCase().indexOf("follow") >= 0;
-            var ttEffClicks = ttIsFollower
-              ? Math.max(ttRawClicks, ttProfileVisits, ttRawFollows)
-              : ttRawClicks;
+            // Unconditional max() instead of an objective-gated swap.
+            // The objective detection upstream sometimes mis-fires when
+            // TikTok's API objective ends up "REACH" or "TRAFFIC" on a
+            // campaign the operator runs for follower growth (no name
+            // token, no override), so a gated swap missed those rows
+            // and the blended TT CTR stayed pulled down. Taking the
+            // max across (raw_clicks, profile_visits, follows) is a
+            // no-op for click-objective rows (clicks > profile_visits >
+            // follows naturally) and reliably promotes the engagement
+            // event for any row where profile_visits or follows lead.
+            var ttEffClicks = Math.max(ttRawClicks, ttProfileVisits, ttRawFollows);
             var ttImpsInt = parseInt(tm.impressions || 0, 10) || 0;
             var ttSpendNum = parseFloat(tm.spend || 0) || 0;
             var ttEffCtr = ttImpsInt > 0 ? ((ttEffClicks / ttImpsInt) * 100).toFixed(2) : "0";

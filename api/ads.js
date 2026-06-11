@@ -984,16 +984,15 @@ export default async function handler(req, res) {
             }
           }
         }
-        // Effective clicks substitution for follower-objective Meta
-        // ads (Like&Follow, Page Likes). Meta's ins.clicks is link
-        // clicks; follower ads have no URL destination so it reads 0
-        // and ad cards on the Creative tab show 0.00% CTR. Use
-        // pageLikes (FB row) / follows (IG row, when present) as the
-        // engagement-click denominator so the card CTR matches what
-        // Ads Manager UI reports. Mirrors the campaigns.js fix.
-        var effClicks = (objective === "followers")
-          ? Math.max(parseInt(ins.clicks || 0, 10) || 0, pageLikes, follows)
-          : (parseInt(ins.clicks || 0, 10) || 0);
+        // Unconditional engagement floor for Meta ads. ins.clicks is
+        // link-clicks only; Page Like / Follow ads have no URL
+        // destination and come back with clicks=0. Take the max of
+        // (raw_clicks, pageLikes, follows) so the engagement event
+        // always feeds CTR / CPC. No-op for non-engagement rows
+        // because link-clicks naturally exceed pageLikes / follows
+        // there. Avoids missing rows whose objective upstream
+        // classifies as TRAFFIC / unknown.
+        var effClicks = Math.max(parseInt(ins.clicks || 0, 10) || 0, pageLikes, follows);
         var ctr = ins.impressions > 0 ? (effClicks / ins.impressions * 100) : 0;
         var cpc = effClicks > 0 ? (ins.spend / effClicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
@@ -1320,18 +1319,16 @@ export default async function handler(req, res) {
           var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
           // Override → name → API → landingpage.
           var ttObjective = overrideFor(overridesMap, mt.campaign_id) || detectObjective(mt.campaign_name) || ttApiObj || "landingpage";
-          // Effective clicks substitution for follower-objective ads.
-          // TikTok's `clicks` metric only counts link-clicks; follower
-          // ads have no URL destination so it returns 0. profile_visits
-          // is the engagement event TikTok's Ads Manager UI uses as
-          // the click denominator. Mirrors the campaigns.js fix; the
-          // ad cards on Top Ads / Creative tab now show a non-zero
-          // CTR for follower creative, and the aggregated blended TT
-          // CTR reconciles closer to what the platform UI reports.
+          // Unconditional engagement floor for TikTok ads. ttClicks is
+          // link-clicks only; follower / engagement ads have no URL
+          // destination and come back with clicks=0. Take the max of
+          // (raw_clicks, profile_visits, follows) so the engagement
+          // event always feeds CTR / CPC. No-op for non-engagement
+          // rows because link-clicks naturally exceed profile-visits
+          // and follows there. Avoids missing rows whose objective
+          // upstream classifies as REACH / TRAFFIC / unknown.
           var ttProfileVisits = parseInt(mt.profile_visits || 0, 10) || 0;
-          var ttEffClicks = ttObjective === "followers"
-            ? Math.max(ttClicks, ttProfileVisits, follows)
-            : ttClicks;
+          var ttEffClicks = Math.max(ttClicks, ttProfileVisits, follows);
           var ttEffCtr = ttImps > 0 ? (ttEffClicks / ttImps * 100) : 0;
           var ttEffCpc = ttEffClicks > 0 ? (ttSpend / ttEffClicks) : 0;
           var ttResCount, ttResType;
