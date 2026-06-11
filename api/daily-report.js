@@ -157,8 +157,27 @@ function buildHtml(opts) {
         var cpm = s.impressions > 0 ? (s.spend / s.impressions * 1000) : null;
         var freq = s.freqWeightSum > 0 ? (s.freqSum / s.freqWeightSum) : 0;
         var cpr = s.results > 0 ? (s.spend / s.results) : null;
+        // Effective reach = impressions / frequency. Used in every
+        // narrative line in place of s.reach (which is summed across
+        // campaigns and double-counts users seen by more than one
+        // campaign in the family). With the corrected number the
+        // line reads internally consistently — reach x freq = imps,
+        // CPM x imps / 1000 = spend, clicks / imps = CTR — so an
+        // operator cross-checking the narrative against any one of
+        // the other metrics gets the same impressions back out.
+        // Falls back to summed reach when freq isn't available (rare,
+        // and only on legacy rows where impressions = 0 too).
+        var effectiveReach = (freq > 0 && s.impressions > 0)
+          ? Math.round(s.impressions / freq)
+          : s.reach;
+        var effectiveReachB = (freq > 0 && s.impressionsB > 0)
+          ? Math.round(s.impressionsB / freq)
+          : s.reachB;
         // Day-over-7d-avg deltas where the baseline is material.
-        var reachDelta = dailyB(s.reachB) > 0 ? ((s.reach - dailyB(s.reachB)) / dailyB(s.reachB) * 100) : null;
+        // Reach delta uses the same effective calc on both sides so
+        // the percentage is honest even though raw summed reach is
+        // inflated.
+        var reachDelta = dailyB(effectiveReachB) > 0 ? ((effectiveReach - dailyB(effectiveReachB)) / dailyB(effectiveReachB) * 100) : null;
         var resultsDelta = dailyB(s.resultsB) > 0 ? ((s.results - dailyB(s.resultsB)) / dailyB(s.resultsB) * 100) : null;
         var spendDelta = dailyB(s.spendB) > 0 ? ((s.spend - dailyB(s.spendB)) / dailyB(s.spendB) * 100) : null;
 
@@ -166,7 +185,7 @@ function buildHtml(opts) {
         var adjacentHtml = "";
         if (s.awareness) {
           // Lead with reach + CPM
-          leadHtml = '<strong style="color:' + P.cyan + ';">Reach ' + fmtNum(s.reach) + '</strong> at ' +
+          leadHtml = '<strong style="color:' + P.cyan + ';">Reach ' + fmtNum(effectiveReach) + '</strong> at ' +
             (cpm !== null ? fmtR(cpm) + ' CPM' : 'CPM n/a') + ' · freq ' + freq.toFixed(2) + 'x' + escapeHtml(deltaWord(reachDelta));
           adjacentHtml = fmtNum(s.impressions) + ' impressions · ' + fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
         } else if (s.kind === "Leads" || s.kind === "Clicks to App Store" || s.kind === "Follows + Likes") {
@@ -175,11 +194,11 @@ function buildHtml(opts) {
           leadHtml = '<strong style="color:' + P.cyan + ';">' + fmtNum(s.results) + ' ' + escapeHtml(resWord) + '</strong>' +
             (cpr !== null ? ' at ' + fmtR(cpr) + ' ' + escapeHtml(String(s.costLabel || "cost per result").toLowerCase()) : '') +
             escapeHtml(deltaWord(resultsDelta));
-          adjacentHtml = fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC') + ' · reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
+          adjacentHtml = fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC') + ' · reach ' + fmtNum(effectiveReach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
         } else {
           // Engagement / other: lead with CTR + CPC
           leadHtml = '<strong style="color:' + P.cyan + ';">' + fmtPct(ctr) + ' CTR</strong> on ' + fmtNum(s.clicks) + ' clicks at ' + (cpc !== null ? fmtR(cpc) + ' CPC' : 'n/a CPC');
-          adjacentHtml = 'Reach ' + fmtNum(s.reach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
+          adjacentHtml = 'Reach ' + fmtNum(effectiveReach) + ' at ' + (cpm !== null ? fmtR(cpm) + ' CPM' : 'n/a CPM') + ' · freq ' + freq.toFixed(2) + 'x · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
         }
         var familyLabel = s.isCommunityReach
           ? "Community Reach · reach into existing community"

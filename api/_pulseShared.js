@@ -491,7 +491,7 @@ export var ANOMALY_DEFS = {
     word: "Cost-Per-Result Spike",
     color: "orange",
     severity: 2,
-    caption: "Cost per Lead, Install, or Follow is 50%+ above the 7-day average. Each conversion is materially more expensive than yesterday.",
+    caption: "Cost per result (lead, store click for App Install, follow, profile visit, or page like) is 50%+ above the 7-day average. Each result is materially more expensive than yesterday.",
     procedure: [
       "Open the campaign and check CTR direction, if CTR also dropped, this is creative fatigue (rotate assets); if CTR held, this is a conversion-rate problem (audit landing page).",
       "Check ad-set frequency, if >3.5x, audience is saturated and CPC inflation is dragging up CPR.",
