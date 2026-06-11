@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v19-pagelike-namestrong-fallback";
+var CAMPAIGNS_CACHE_VERSION = "v20-follower-effective-clicks";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -1181,13 +1181,26 @@ export default async function handler(req, res) {
         if (authSpend && totalSpendPub > 0) spendForRow = authSpend * (r._sumSpend / totalSpendPub);
         if (authImps && totalImps > 0) impsForRow = Math.round(authImps * (r._sumImpressions / totalImps));
         if (authClicks && totalClicksPub > 0) clicksForRow = Math.round(authClicks * (r._sumClicks / totalClicksPub));
+        // Follower / Page-Like campaigns: Meta's `clicks` (link clicks)
+        // is 0 because the creative has no destination URL, the user
+        // taps "Like Page" or "Follow". Substitute pageLikes (the
+        // engagement event Meta does count) so CTR matches what Ads
+        // Manager UI shows. Mirrors the TikTok follower-CTR fix.
+        var metaCampObj = (r.objective || "").toLowerCase();
+        var metaIsFollower = metaCampObj === "followers" ||
+                             metaCampObj === "page_likes" ||
+                             /follower|page.?like|like.?follow|_like_|_follow_|paidsocial_like/.test((r.campaignName || "").toLowerCase());
+        var pageLikesForRow = parseInt(r.pageLikes || 0, 10) || 0;
+        var effectiveClicksForRow = metaIsFollower
+          ? Math.max(clicksForRow, pageLikesForRow)
+          : clicksForRow;
         var impsStr = impsForRow.toString();
         var spendStr = spendForRow.toFixed(2);
-        var clicksStr = clicksForRow.toString();
+        var clicksStr = effectiveClicksForRow.toString();
         var reachStr = reachForRow.toString();
         var cpm = impsForRow > 0 ? ((spendForRow / impsForRow) * 1000).toFixed(2) : "0";
-        var cpc = clicksForRow > 0 ? (spendForRow / clicksForRow).toFixed(2) : "0";
-        var ctr = impsForRow > 0 ? ((clicksForRow / impsForRow) * 100).toFixed(2) : "0";
+        var cpc = effectiveClicksForRow > 0 ? (spendForRow / effectiveClicksForRow).toFixed(2) : "0";
+        var ctr = impsForRow > 0 ? ((effectiveClicksForRow / impsForRow) * 100).toFixed(2) : "0";
         var freq = reachForRow > 0 ? (impsForRow / reachForRow).toFixed(2) : "0";
         var _info = campaignInfo[r.rawCampaignId] || {};
         allCampaigns.push({
@@ -1355,7 +1368,13 @@ export default async function handler(req, res) {
     }
 
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","reach","clicks","cpm","cpc","ctr","follows","likes","comments","shares"]));
+    // profile_visits is TikTok's "click into the profile" event and what
+    // their Ads Manager UI uses as the click denominator for Follower
+    // campaigns (which have no destination URL, so their `clicks` metric
+    // reads 0). Without this metric the dashboard reported 0 CTR on
+    // every follower campaign and dragged the blended TikTok CTR down
+    // ~2.5% vs the >6% the team sees in the platform UI.
+    var metrics = encodeURIComponent(JSON.stringify(["spend","impressions","reach","clicks","cpm","cpc","ctr","follows","likes","comments","shares","profile_visits"]));
     // Match ads.js's proven report URL shape (no `page` param).
     var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
     var ttRes = await fetch(ttUrl, {headers: {"Access-Token": ttToken}});
@@ -1372,7 +1391,25 @@ export default async function handler(req, res) {
             ttSeenIds[tc.dimensions.campaign_id] = true;
             var ttStatus = ttStatuses[tc.dimensions.campaign_id] === "ENABLE" ? "active" : ttStatuses[tc.dimensions.campaign_id] === "DISABLE" ? "paused" : "completed";
             var ttB = ttBudgets[tc.dimensions.campaign_id] || {};
-            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: ttObjectives[tc.dimensions.campaign_id] || objectiveFromName(ttNames[tc.dimensions.campaign_id] || ""), impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: tm.cpc || "0", ctr: (parseFloat(tm.impressions||0)>0?(parseFloat(tm.clicks||0)/parseFloat(tm.impressions)*100).toFixed(2):"0"), clicks: tm.clicks, follows: tm.follows || "0", likes: tm.likes || "0", leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: "", endDate: "", status: ttStatus, budgetAmount: ttB.budgetAmount || null, budgetDaily: ttB.budgetDaily || null, budgetMode: ttB.budgetMode || "unset", budgetFlightDays: ttB.budgetFlightDays || null });
+            // Follower-objective campaigns: TikTok's `clicks` returns 0
+            // because there is no URL destination, the engagement is
+            // a tap into the profile. profile_visits is what TikTok's
+            // Ads Manager UI uses as the click denominator for these
+            // campaigns. Fall through to max(profile_visits, follows)
+            // so the dashboard CTR matches the platform UI.
+            var ttRawClicks = parseInt(tm.clicks || 0, 10) || 0;
+            var ttProfileVisits = parseInt(tm.profile_visits || 0, 10) || 0;
+            var ttRawFollows = parseInt(tm.follows || 0, 10) || 0;
+            var ttObj = ttObjectives[tc.dimensions.campaign_id] || objectiveFromName(ttNames[tc.dimensions.campaign_id] || "");
+            var ttIsFollower = String(ttObj || "").toLowerCase().indexOf("follow") >= 0;
+            var ttEffClicks = ttIsFollower
+              ? Math.max(ttRawClicks, ttProfileVisits, ttRawFollows)
+              : ttRawClicks;
+            var ttImpsInt = parseInt(tm.impressions || 0, 10) || 0;
+            var ttSpendNum = parseFloat(tm.spend || 0) || 0;
+            var ttEffCtr = ttImpsInt > 0 ? ((ttEffClicks / ttImpsInt) * 100).toFixed(2) : "0";
+            var ttEffCpc = ttEffClicks > 0 ? (ttSpendNum / ttEffClicks).toFixed(2) : "0";
+            allCampaigns.push({ platform: "TikTok", metaPlatform: "tiktok", accountName: "MTN MoMo TikTok", accountId: ttAdvId, campaignId: tc.dimensions.campaign_id, rawCampaignId: tc.dimensions.campaign_id, campaignName: ttNames[tc.dimensions.campaign_id] || "TikTok Campaign " + tc.dimensions.campaign_id, objective: ttObj, impressions: tm.impressions, reach: tm.reach || "0", frequency: (parseFloat(tm.reach||0)>0?(parseFloat(tm.impressions)/parseFloat(tm.reach)).toFixed(2):"0"), spend: tm.spend, cpm: tm.cpm || "0", cpc: ttEffCpc, ctr: ttEffCtr, clicks: ttEffClicks.toString(), follows: tm.follows || "0", likes: tm.likes || "0", profileVisits: ttProfileVisits.toString(), leads: "0", appInstalls: "0", landingPageViews: "0", pageLikes: "0", costPerLead: "0", costPerInstall: "0", startDate: "", endDate: "", status: ttStatus, budgetAmount: ttB.budgetAmount || null, budgetDaily: ttB.budgetDaily || null, budgetMode: ttB.budgetMode || "unset", budgetFlightDays: ttB.budgetFlightDays || null });
           }
         }
       }
