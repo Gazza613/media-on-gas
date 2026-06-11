@@ -4937,6 +4937,31 @@ export default function MediaOnGas(){
     var sumP=function(arr){return arr.reduce(function(a,c){return{impressions:a.impressions+parseFloat(c.impressions||0),reach:a.reach+parseFloat(c.reach||0),spend:a.spend+parseFloat(c.spend||0),clicks:a.clicks+parseFloat(c.clicks||0),leads:a.leads+parseFloat(c.leads||0),appInstalls:a.appInstalls+parseFloat(c.appInstalls||0),landingPageViews:a.landingPageViews+parseFloat(c.landingPageViews||0),pageLikes:a.pageLikes+parseFloat(c.pageLikes||0),follows:a.follows+parseFloat(c.follows||0),likes:a.likes+parseFloat(c.likes||0)};},{impressions:0,reach:0,spend:0,clicks:0,leads:0,appInstalls:0,landingPageViews:0,pageLikes:0,follows:0,likes:0});};
     var calcD=function(d){d.cpm=d.impressions>0?(d.spend/d.impressions)*1000:0;d.cpc=d.clicks>0?d.spend/d.clicks:0;d.ctr=d.impressions>0?(d.clicks/d.impressions)*100:0;d.frequency=d.reach>0?d.impressions/d.reach:0;d.costPerLead=d.leads>0?d.spend/d.leads:0;d.costPerInstall=d.appInstalls>0?d.spend/d.appInstalls:0;return d;};
     var fb=calcD(sumP(fbC));var ig=calcD(sumP(igC));var mt=calcD(sumP(mc));var tt=calcD(sumP(tc));var gd=calcD(sumP(gdC));
+    // Engagement-only aggregates per platform. Community Reach and any
+    // explicitly-awareness campaign delivers high impressions at sub-
+    // 1% CTR by design, so blending them into the platform CTR bar in
+    // the Engagement section pulls the rate toward zero and stops the
+    // chart reflecting how well the engagement creative is actually
+    // performing. Compute a parallel set of CTR / Clicks / CPC values
+    // that exclude awareness campaigns, used by the Engagement section
+    // chart. Total-platform values (tt.ctr / fb.ctr / etc.) stay
+    // intact for narratives and tiles that need the all-campaigns read.
+    var isAwarenessCamp=function(c){
+      var obj=String(c.objective||"").toLowerCase();
+      if(obj==="community_reach"||obj==="reach"||obj==="awareness")return true;
+      var name=String(c.campaignName||"").toLowerCase();
+      if(/(^|[_\s|\-])reach([_\s|\-]|$)|awareness/.test(name))return true;
+      return false;
+    };
+    var engagementOnly=function(arr){return arr.filter(function(c){return !isAwarenessCamp(c);});};
+    var fbE=calcD(sumP(engagementOnly(fbC)));
+    var igE=calcD(sumP(engagementOnly(igC)));
+    var ttE=calcD(sumP(engagementOnly(tc)));
+    var gdE=calcD(sumP(engagementOnly(gdC)));
+    fb.engagementClicks=fbE.clicks;fb.engagementCpc=fbE.cpc;fb.engagementCtr=fbE.ctr;
+    ig.engagementClicks=igE.clicks;ig.engagementCpc=igE.cpc;ig.engagementCtr=igE.ctr;
+    tt.engagementClicks=ttE.clicks;tt.engagementCpc=ttE.cpc;tt.engagementCtr=ttE.ctr;
+    gd.engagementClicks=gdE.clicks;gd.engagementCpc=gdE.cpc;gd.engagementCtr=gdE.ctr;
     var ti=mt.impressions+tt.impressions+gd.impressions,ts2=mt.spend+tt.spend+gd.spend,tc2=mt.clicks+tt.clicks+gd.clicks;
     var grand={impressions:ti,spend:ts2,clicks:tc2,reach:mt.reach+tt.reach+gd.reach,leads:mt.leads+tt.leads+gd.leads,appInstalls:mt.appInstalls+tt.appInstalls+gd.appInstalls,follows:mt.follows+tt.follows+gd.follows,pageLikes:mt.pageLikes+tt.pageLikes+gd.pageLikes,likes:mt.likes+tt.likes+gd.likes,landingPageViews:mt.landingPageViews+tt.landingPageViews+gd.landingPageViews};
     grand.cpm=grand.impressions>0?(grand.spend/grand.impressions)*1000:0;grand.cpc=grand.clicks>0?grand.spend/grand.clicks:0;grand.ctr=grand.impressions>0?(grand.clicks/grand.impressions)*100:0;grand.frequency=grand.reach>0?grand.impressions/grand.reach:0;grand.costPerLead=grand.leads>0?grand.spend/grand.leads:0;
@@ -6738,6 +6763,24 @@ export default function MediaOnGas(){
             });
 
             var platBreak={};
+            // Engagement-only per-platform totals. Used ONLY by the
+            // CLICK THROUGH RATE BY PLATFORM chart so awareness /
+            // Community Reach campaigns (high impressions, sub-1% CTR
+            // by design) don't drag the engagement CTR read toward
+            // zero. Reach campaigns are still in platBreak for every
+            // other surface (spend, impressions, reach) where they
+            // belong. Definition of "awareness" matches the helper in
+            // the computed memo above: canonical objective community_
+            // reach / reach / awareness, OR a name carrying the same
+            // tokens with word boundaries.
+            var platBreakEng={};
+            var _isAwarenessCamp=function(c){
+              var obj=String(c.objective||"").toLowerCase();
+              if(obj==="community_reach"||obj==="reach"||obj==="awareness")return true;
+              var name=String(c.campaignName||"").toLowerCase();
+              if(/(^|[_\s|\-])reach([_\s|\-]|$)|awareness/.test(name))return true;
+              return false;
+            };
             // Track which platforms have configured-but-awaiting-delivery
             // rows so the "Spend by Platform" / "Ads Served by Platform"
             // charts can honestly label them. Without this, a Meta campaign
@@ -6748,6 +6791,10 @@ export default function MediaOnGas(){
             sel.forEach(function(camp){
               var pl=camp.platform;if(!platBreak[pl])platBreak[pl]={spend:0,clicks:0,imps:0,reach:0};
               platBreak[pl].spend+=parseFloat(camp.spend||0);platBreak[pl].clicks+=parseFloat(camp.clicks||0);platBreak[pl].imps+=parseFloat(camp.impressions||0);platBreak[pl].reach+=parseFloat(camp.reach||0);
+              if(!_isAwarenessCamp(camp)){
+                if(!platBreakEng[pl])platBreakEng[pl]={spend:0,clicks:0,imps:0,reach:0};
+                platBreakEng[pl].spend+=parseFloat(camp.spend||0);platBreakEng[pl].clicks+=parseFloat(camp.clicks||0);platBreakEng[pl].imps+=parseFloat(camp.impressions||0);platBreakEng[pl].reach+=parseFloat(camp.reach||0);
+              }
               if(camp.awaitingDelivery){if(!awaitingByPlatform[pl])awaitingByPlatform[pl]=[];if(awaitingByPlatform[pl].indexOf(camp.campaignName)<0)awaitingByPlatform[pl].push(camp.campaignName);}
             });
             // A campaign is truly "awaiting delivery" only if EVERY selected
@@ -6992,9 +7039,10 @@ export default function MediaOnGas(){
                     </ResponsiveContainer></ChartReveal>
                   </div>
                   <div style={{height:300}}>
-                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CLICK THROUGH RATE BY PLATFORM</div>
+                    <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:4,textAlign:"center"}}>CLICK THROUGH RATE BY PLATFORM</div>
+                    <div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1,marginBottom:6,textAlign:"center",fontStyle:"italic"}} title="Awareness / Community Reach campaigns are excluded so the rate reflects creative engagement performance rather than reach-buy dilution.">Engagement campaigns only · excludes Community Reach</div>
                     <ChartReveal><ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={sortedPlats.filter(function(pl){return platBreakEng[pl]&&platBreakEng[pl].clicks>0;}).map(function(pl){var pb=platBreakEng[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreakEng[pl]&&platBreakEng[pl].clicks>0;}).map(function(pl){var pb=platBreakEng[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer></ChartReveal>
                   </div>
                 </div>
@@ -9371,7 +9419,7 @@ export default function MediaOnGas(){
               </tbody>
             </table>
 
-            <Reveal minHeight={280}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:16}}><div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:14}}>Clicks, CPC & CTR by Platform</div><ChartReveal><ResponsiveContainer width="100%" height={220}><ComposedChart data={[{name:"Facebook",Clicks:computed.fb.clicks,CPC:computed.fb.cpc,CTR:computed.fb.ctr},{name:"Instagram",Clicks:computed.ig.clicks,CPC:computed.ig.cpc,CTR:computed.ig.ctr},{name:"TikTok",Clicks:t.clicks,CPC:t.cpc,CTR:t.ctr},{name:"Google",Clicks:computed.gd.clicks,CPC:computed.gd.cpc,CTR:computed.gd.ctr}]}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.ember,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return v<20?v.toFixed(2)+"%":"R"+v.toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar yAxisId="left" dataKey="Clicks" fill={P.mint} radius={[6,6,0,0]} barSize={30}/><Line yAxisId="right" type="monotone" dataKey="CPC" stroke={P.ember} strokeWidth={2.5} dot={{r:5,fill:P.ember}} activeDot={{r:7}}/><Line yAxisId="right" type="monotone" dataKey="CTR" stroke={P.cyan} strokeWidth={2.5} dot={{r:5,fill:P.cyan}} activeDot={{r:7}} strokeDasharray="5 5"/></ComposedChart></ResponsiveContainer></ChartReveal></div></Reveal>
+            <Reveal minHeight={280}><div style={{background:"rgba(0,0,0,0.15)",borderRadius:12,padding:20,marginBottom:16}}><div style={{fontSize:10,fontWeight:800,color:P.label,letterSpacing:3,fontFamily:fm,textTransform:"uppercase",marginBottom:4}}>Clicks, CPC & CTR by Platform</div><div style={{fontSize:9,color:P.caption,fontFamily:fm,letterSpacing:1,marginBottom:10,fontStyle:"italic"}} title="Awareness / Community Reach campaigns are excluded so the rate reflects creative engagement performance rather than reach-buy dilution.">Engagement campaigns only · excludes Community Reach</div><ChartReveal><ResponsiveContainer width="100%" height={220}><ComposedChart data={[{name:"Facebook",Clicks:computed.fb.engagementClicks,CPC:computed.fb.engagementCpc,CTR:computed.fb.engagementCtr},{name:"Instagram",Clicks:computed.ig.engagementClicks,CPC:computed.ig.engagementCpc,CTR:computed.ig.engagementCtr},{name:"TikTok",Clicks:t.engagementClicks,CPC:t.engagementCpc,CTR:t.engagementCtr},{name:"Google",Clicks:computed.gd.engagementClicks,CPC:computed.gd.engagementCpc,CTR:computed.gd.engagementCtr}]}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:"rgba(255,255,255,0.85)",fontFamily:fm}} stroke="transparent"/><YAxis yAxisId="left" tick={{fontSize:10,fill:"rgba(255,255,255,0.6)",fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return fmt(v);}}/><YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:P.ember,fontFamily:fm}} stroke="transparent" tickFormatter={function(v){return v<20?v.toFixed(2)+"%":"R"+v.toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Bar yAxisId="left" dataKey="Clicks" fill={P.mint} radius={[6,6,0,0]} barSize={30}/><Line yAxisId="right" type="monotone" dataKey="CPC" stroke={P.ember} strokeWidth={2.5} dot={{r:5,fill:P.ember}} activeDot={{r:7}}/><Line yAxisId="right" type="monotone" dataKey="CTR" stroke={P.cyan} strokeWidth={2.5} dot={{r:5,fill:P.cyan}} activeDot={{r:7}} strokeDasharray="5 5"/></ComposedChart></ResponsiveContainer></ChartReveal></div></Reveal>
 
             
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
