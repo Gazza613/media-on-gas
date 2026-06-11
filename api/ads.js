@@ -984,8 +984,18 @@ export default async function handler(req, res) {
             }
           }
         }
-        var ctr = ins.impressions > 0 ? (ins.clicks / ins.impressions * 100) : 0;
-        var cpc = ins.clicks > 0 ? (ins.spend / ins.clicks) : 0;
+        // Effective clicks substitution for follower-objective Meta
+        // ads (Like&Follow, Page Likes). Meta's ins.clicks is link
+        // clicks; follower ads have no URL destination so it reads 0
+        // and ad cards on the Creative tab show 0.00% CTR. Use
+        // pageLikes (FB row) / follows (IG row, when present) as the
+        // engagement-click denominator so the card CTR matches what
+        // Ads Manager UI reports. Mirrors the campaigns.js fix.
+        var effClicks = (objective === "followers")
+          ? Math.max(parseInt(ins.clicks || 0, 10) || 0, pageLikes, follows)
+          : (parseInt(ins.clicks || 0, 10) || 0);
+        var ctr = ins.impressions > 0 ? (effClicks / ins.impressions * 100) : 0;
+        var cpc = effClicks > 0 ? (ins.spend / effClicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;
         var resCount, resType;
         // For Lead Gen: ALWAYS show leads count (even 0). Never fall back to clicks.
@@ -1058,7 +1068,7 @@ export default async function handler(req, res) {
           })(),
           spend: ins.spend,
           impressions: ins.impressions,
-          clicks: ins.clicks,
+          clicks: effClicks,
           reach: ins.reach,
           ctr: ctr,
           cpc: cpc,
@@ -1210,7 +1220,12 @@ export default async function handler(req, res) {
 
       // Ad-level insights
       var ttDims = encodeURIComponent(JSON.stringify(["ad_id"]));
-      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "adgroup_name", "ad_name", "spend", "impressions", "clicks", "cpm", "cpc", "ctr", "reach", "follows", "likes", "video_views_p100", "video_play_actions", "average_video_play", "video_watched_6s"]));
+      // profile_visits is TikTok's click denominator for follower
+      // campaigns at the per-ad level (mirrors the same field added
+      // to api/campaigns.js). Without it ad cards for follower
+      // creative read 0.00% CTR and "COST PER CLICK -" because
+      // TikTok's `clicks` metric is link-clicks only.
+      var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_id", "campaign_name", "adgroup_name", "ad_name", "spend", "impressions", "clicks", "cpm", "cpc", "ctr", "reach", "follows", "likes", "video_views_p100", "video_play_actions", "average_video_play", "video_watched_6s", "profile_visits"]));
       var ttInsBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_AD&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=200";
       // Follow TikTok pagination via page_info.total_page. Single-page fetch
       // silently dropped ~20% of ads on accounts with >200 ad rows, showing
@@ -1305,6 +1320,20 @@ export default async function handler(req, res) {
           var ttApiObj = mapTikTokObjective(ttCampObjMap[String(mt.campaign_id || "")]);
           // Override → name → API → landingpage.
           var ttObjective = overrideFor(overridesMap, mt.campaign_id) || detectObjective(mt.campaign_name) || ttApiObj || "landingpage";
+          // Effective clicks substitution for follower-objective ads.
+          // TikTok's `clicks` metric only counts link-clicks; follower
+          // ads have no URL destination so it returns 0. profile_visits
+          // is the engagement event TikTok's Ads Manager UI uses as
+          // the click denominator. Mirrors the campaigns.js fix; the
+          // ad cards on Top Ads / Creative tab now show a non-zero
+          // CTR for follower creative, and the aggregated blended TT
+          // CTR reconciles closer to what the platform UI reports.
+          var ttProfileVisits = parseInt(mt.profile_visits || 0, 10) || 0;
+          var ttEffClicks = ttObjective === "followers"
+            ? Math.max(ttClicks, ttProfileVisits, follows)
+            : ttClicks;
+          var ttEffCtr = ttImps > 0 ? (ttEffClicks / ttImps * 100) : 0;
+          var ttEffCpc = ttEffClicks > 0 ? (ttSpend / ttEffClicks) : 0;
           var ttResCount, ttResType;
           // TikTok "likes" metric = video hearts (engagement), NOT follows.
           // Only count actual follows for the Followers objective. Bundling
@@ -1335,10 +1364,10 @@ export default async function handler(req, res) {
             })(),
             spend: ttSpend,
             impressions: ttImps,
-            clicks: ttClicks,
+            clicks: ttEffClicks,
             reach: parseInt(mt.reach || 0),
-            ctr: parseFloat(mt.ctr || 0),
-            cpc: parseFloat(mt.cpc || 0),
+            ctr: ttEffCtr,
+            cpc: ttEffCpc,
             cpm: parseFloat(mt.cpm || 0),
             objective: ttObjective,
             results: ttResCount,
@@ -1351,7 +1380,7 @@ export default async function handler(req, res) {
             videoThruplays: ttThruplays,
             videoPlays: ttPlays,
             videoId: ad.video_id || "",
-            placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttClicks } }
+            placements: { "FYP": { spend: ttSpend, impressions: ttImps, clicks: ttEffClicks } }
           });
         });
       }
