@@ -984,15 +984,18 @@ export default async function handler(req, res) {
             }
           }
         }
-        // Unconditional engagement floor for Meta ads. ins.clicks is
-        // link-clicks only; Page Like / Follow ads have no URL
-        // destination and come back with clicks=0. Take the max of
-        // (raw_clicks, pageLikes, follows) so the engagement event
-        // always feeds CTR / CPC. No-op for non-engagement rows
-        // because link-clicks naturally exceed pageLikes / follows
-        // there. Avoids missing rows whose objective upstream
-        // classifies as TRAFFIC / unknown.
-        var effClicks = Math.max(parseInt(ins.clicks || 0, 10) || 0, pageLikes, follows);
+        // Engagement floor for Meta ads, FB rows only. ins.clicks is
+        // link-clicks (= 0 for no-URL Page Like / Follow creative);
+        // pageLikes on FB rows is the real page-like attribution.
+        // On IG rows pageLikes can carry post-reaction (heart-tap)
+        // counts via the name-strong fallback, which would inflate
+        // IG CTR if used as the click denominator. Meta doesn't
+        // attribute IG follows per ad, so IG falls through to raw
+        // clicks (link clicks) as the honest engagement read.
+        var rawClicksInt = parseInt(ins.clicks || 0, 10) || 0;
+        var effClicks = (pub === "facebook")
+          ? Math.max(rawClicksInt, pageLikes)
+          : rawClicksInt;
         var ctr = ins.impressions > 0 ? (effClicks / ins.impressions * 100) : 0;
         var cpc = effClicks > 0 ? (ins.spend / effClicks) : 0;
         var cpm = ins.impressions > 0 ? (ins.spend / ins.impressions * 1000) : 0;

@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v21-engagement-floor-unconditional";
+var CAMPAIGNS_CACHE_VERSION = "v22-engagement-floor-fb-only";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -1183,15 +1183,21 @@ export default async function handler(req, res) {
         if (authClicks && totalClicksPub > 0) clicksForRow = Math.round(authClicks * (r._sumClicks / totalClicksPub));
         // Engagement-event floor for Meta. ins.clicks is link-clicks
         // only; Page Like / Follow ads have no URL destination and
-        // come back with clicks=0. Use max(clicks, pageLikes, follows)
-        // so the engagement signal always feeds CTR / CPC. Non-
-        // engagement campaigns naturally have clicks >> pageLikes /
-        // follows so it's a no-op for them. Unconditional max() avoids
-        // missing rows whose objective the upstream detection mis-
-        // classifies as TRAFFIC / unknown.
+        // come back with clicks=0. Use max(clicks, pageLikes) on FB
+        // rows so the page-like attribution feeds CTR / CPC for
+        // Like&Follow campaigns. Restricted to FB because on IG rows
+        // the pageLikes field can carry POST REACTIONS folded in via
+        // the name-strong fallback (Meta doesn't attribute IG follows
+        // per ad, so we don't have a clean engagement count on IG),
+        // and using post-reactions as the click denominator inflates
+        // IG CTR with heart-tap volume rather than reflecting actual
+        // engagement clicks.
         var pageLikesForRow = parseInt(r.pageLikes || 0, 10) || 0;
-        var followsForRow = parseInt(r.pageFollows || r.follows || 0, 10) || 0;
-        var effectiveClicksForRow = Math.max(clicksForRow, pageLikesForRow, followsForRow);
+        var pubLower = String(r.platform || r.metaPlatform || "").toLowerCase();
+        var isFbRow = pubLower === "facebook";
+        var effectiveClicksForRow = isFbRow
+          ? Math.max(clicksForRow, pageLikesForRow)
+          : clicksForRow;
         var impsStr = impsForRow.toString();
         var spendStr = spendForRow.toFixed(2);
         var clicksStr = effectiveClicksForRow.toString();
