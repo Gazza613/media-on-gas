@@ -4958,14 +4958,29 @@ export default function MediaOnGas(){
     var igE=calcD(sumP(engagementOnly(igC)));
     var ttE=calcD(sumP(engagementOnly(tc)));
     var gdE=calcD(sumP(engagementOnly(gdC)));
-    fb.engagementClicks=fbE.clicks;fb.engagementCpc=fbE.cpc;fb.engagementCtr=fbE.ctr;
-    ig.engagementClicks=igE.clicks;ig.engagementCpc=igE.cpc;ig.engagementCtr=igE.ctr;
-    tt.engagementClicks=ttE.clicks;tt.engagementCpc=ttE.cpc;tt.engagementCtr=ttE.ctr;
-    gd.engagementClicks=gdE.clicks;gd.engagementCpc=gdE.cpc;gd.engagementCtr=gdE.ctr;
+    fb.engagementClicks=fbE.clicks;fb.engagementCpc=fbE.cpc;fb.engagementCtr=fbE.ctr;fb.engagementImps=fbE.impressions;
+    ig.engagementClicks=igE.clicks;ig.engagementCpc=igE.cpc;ig.engagementCtr=igE.ctr;ig.engagementImps=igE.impressions;
+    tt.engagementClicks=ttE.clicks;tt.engagementCpc=ttE.cpc;tt.engagementCtr=ttE.ctr;tt.engagementImps=ttE.impressions;
+    gd.engagementClicks=gdE.clicks;gd.engagementCpc=gdE.cpc;gd.engagementCtr=gdE.ctr;gd.engagementImps=gdE.impressions;
+    // Blended engagement-only totals. Used by the BLENDED CLICK
+    // THROUGH RATE tile and the engagement narratives so the headline
+    // creative-engagement read isn't dragged down by Community Reach
+    // / awareness campaigns that intentionally buy cheap impressions.
+    // Built off the same engagementOnly() filter used for the per-
+    // platform CTR aggregates above, then summed over the meta/tt/gd
+    // mc filter (not fb+ig separately) so no Meta campaign double-
+    // counts when both a publisher-split row and a Meta-bundle row
+    // could match.
+    var mtE=calcD(sumP(engagementOnly(mc)));
+    var engagementImps=mtE.impressions+ttE.impressions+gdE.impressions;
+    var engagementClicks=mtE.clicks+ttE.clicks+gdE.clicks;
+    var engagementSpend=mtE.spend+ttE.spend+gdE.spend;
+    var blendedEngagementCtr=engagementImps>0?(engagementClicks/engagementImps*100):0;
+    var blendedEngagementCpc=engagementClicks>0?(engagementSpend/engagementClicks):0;
     var ti=mt.impressions+tt.impressions+gd.impressions,ts2=mt.spend+tt.spend+gd.spend,tc2=mt.clicks+tt.clicks+gd.clicks;
     var grand={impressions:ti,spend:ts2,clicks:tc2,reach:mt.reach+tt.reach+gd.reach,leads:mt.leads+tt.leads+gd.leads,appInstalls:mt.appInstalls+tt.appInstalls+gd.appInstalls,follows:mt.follows+tt.follows+gd.follows,pageLikes:mt.pageLikes+tt.pageLikes+gd.pageLikes,likes:mt.likes+tt.likes+gd.likes,landingPageViews:mt.landingPageViews+tt.landingPageViews+gd.landingPageViews};
     grand.cpm=grand.impressions>0?(grand.spend/grand.impressions)*1000:0;grand.cpc=grand.clicks>0?grand.spend/grand.clicks:0;grand.ctr=grand.impressions>0?(grand.clicks/grand.impressions)*100:0;grand.frequency=grand.reach>0?grand.impressions/grand.reach:0;grand.costPerLead=grand.leads>0?grand.spend/grand.leads:0;
-    return{fbCamps:fbC,igCamps:igC,metaCamps:mc,ttCamps:tc,gdCamps:gdC,gd:gd,fb:fb,ig:ig,meta:mt,tt:tt,grand:grand,totalImps:ti,totalSpend:ts2,totalClicks:tc2,blendedCpm:ti>0?(ts2/ti)*1000:0,allSelected:sel};
+    return{fbCamps:fbC,igCamps:igC,metaCamps:mc,ttCamps:tc,gdCamps:gdC,gd:gd,fb:fb,ig:ig,meta:mt,tt:tt,grand:grand,totalImps:ti,totalSpend:ts2,totalClicks:tc2,blendedCpm:ti>0?(ts2/ti)*1000:0,engagementImps:engagementImps,engagementClicks:engagementClicks,engagementSpend:engagementSpend,blendedEngagementCtr:blendedEngagementCtr,blendedEngagementCpc:blendedEngagementCpc,allSelected:sel};
   },[campaigns,selected]);
 
   useEffect(function(){if(computed.meta)setFlags(genFlags(computed.meta,computed.tt,computed.allSelected||[]));},[computed]);
@@ -6704,8 +6719,19 @@ export default function MediaOnGas(){
             var projSpend=dailySpend*totalDays2;
             var paceRatio=totalDays2>0?elapsedDays/totalDays2:1;
             var pacePct=Math.min(100,Math.round(paceRatio*100));
-            var blCpc=computed.totalClicks>0?computed.totalSpend/computed.totalClicks:0;
-            var blCtr=computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):0;
+            // blCpc + blCtr are the engagement-only blends used by the
+            // BLENDED COST PER CLICK + BLENDED CLICK THROUGH RATE tiles
+            // and every engagement narrative in this section. Excluding
+            // Community Reach / awareness here keeps the rate read
+            // honest, those campaigns deliver high impressions at sub-
+            // 1% CTR by design and would drag the engagement headline
+            // toward zero. Awareness narratives lower down read their
+            // own reach + CPM numbers directly and aren't affected.
+            // The executive summary's CPC (line ~6904 above) computes
+            // its own total-spend / total-clicks ratio inline so the
+            // "X impressions and Y clicks at Z CPC" math reconciles.
+            var blCpc=computed.blendedEngagementCpc||0;
+            var blCtr=computed.blendedEngagementCtr||0;
             // Blended frequency now includes Google's estimated 2x reach,
             // driven by api/campaigns.js which derives reach = imps/2 for
             // Google Display + YouTube. Keeps the blended number honest
@@ -6881,7 +6907,12 @@ export default function MediaOnGas(){
             var bestCpcPlat="";var bestCpcVal=Infinity;
             sortedPlats.forEach(function(pl){var pb=platBreak[pl];var cpm=pb.imps>0?pb.spend/pb.imps*1000:0;var cpc=pb.clicks>0?pb.spend/pb.clicks:0;if(cpm>0&&cpm<bestCpmVal){bestCpmVal=cpm;bestCpmPlat=pl;}if(cpm>worstCpmVal){worstCpmVal=cpm;worstCpmPlat=pl;}if(cpc>0&&cpc<bestCpcVal){bestCpcVal=cpc;bestCpcPlat=pl;}});
 
-            execLines.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms ("+sortedPlats.join(", ")+") over "+elapsedDays+" of "+totalDays2+" days, delivering "+fmt(computed.totalImps)+" impressions and "+fmt(computed.totalClicks)+" clicks at "+fR(blCpc)+" blended CPC ("+benchLabel(blCpc,benchmarks.meta.cpc)+") and "+fR(computed.blendedCpm)+" CPM.");
+            // Executive summary uses the TOTAL-spend / TOTAL-clicks
+            // CPC to stay internally consistent with the "X clicks"
+            // figure in the same sentence. blCpc above is the
+            // engagement-only blend used by the Engagement tile pair.
+            var execTotalCpc=computed.totalClicks>0?(computed.totalSpend/computed.totalClicks):0;
+            execLines.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms ("+sortedPlats.join(", ")+") over "+elapsedDays+" of "+totalDays2+" days, delivering "+fmt(computed.totalImps)+" impressions and "+fmt(computed.totalClicks)+" clicks at "+fR(execTotalCpc)+" blended CPC ("+benchLabel(execTotalCpc,benchmarks.meta.cpc)+") and "+fR(computed.blendedCpm)+" CPM.");
             execLines.push("Run rate: "+fR(dailySpend)+"/day, projecting "+fR(projSpend)+" by period end."+(pacePct>=90?" Flight nearing completion,consolidate learnings.":pacePct>=50?" Pacing on track,mid-flight optimisation window.":"  Early delivery,algorithms in learning phase."));
             var activeObj=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
             activeObj.forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?(objName==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:benchmarks.meta.cpc;var unitLabel=objName==="Community Reach"?" CPM":"/result";if(od.results>=10)execLines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+unitLabel+", "+benchLabel(cp,bm)+". Confirmed at scale.");else if(od.results>0)execLines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+unitLabel+". Below 10-result threshold for confirmed read.");});
@@ -7019,8 +7050,8 @@ export default function MediaOnGas(){
                 {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS (MIDDLE OF THE FUNNEL)",Ic.bolt(P.mint,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}{deltaChip(computed.totalClicks,compareComputed&&compareComputed.totalClicks,false)}</div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}}>{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
-                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}{deltaChip(blCpc,compareComputed&&compareComputed.blendedCpc,true)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}}>{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6,lineHeight:1.5}} title="Awareness / Community Reach campaigns excluded. They deliver high impressions at sub-1% CTR by design and would drag this number toward zero without telling you anything about creative engagement.">industry benchmark: 0.9\u20131.4%<br/><span style={{fontStyle:"italic",color:P.caption}}>engagement campaigns only</span></div></Glass>
+                  <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}{deltaChip(blCpc,compareComputed&&compareComputed.blendedCpc,true)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6,lineHeight:1.5}} title="Awareness / Community Reach campaigns excluded so the CPC reflects engagement-creative efficiency, not reach-buy averages.">{"industry benchmark: "+benchmarks.meta.cpc.label}<br/><span style={{fontStyle:"italic",color:P.caption}}>engagement campaigns only</span></div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                   <div style={{height:300}}>
