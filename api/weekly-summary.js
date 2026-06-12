@@ -351,11 +351,17 @@ function buildHtml(opts) {
     '</div></td></tr>'
     ) : '') +
 
-    // CTA button
+    // CTA button — Outlook-safe pattern matching the Daily Pulse:
+    // solid bgcolor attribute + inline background-color so Word's
+    // rendering engine (Outlook desktop) shows the fill, explicit
+    // border so the orange outline holds, mso-padding-alt as the
+    // Outlook-specific padding hook. Gmail / Apple Mail / mobile
+    // clients still respect the modern background-color + border-
+    // radius on the <a>.
     '<tr><td style="padding:28px 40px 8px;" align="center">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
-    '<tr><td align="center" style="background:linear-gradient(135deg,#FF3D00,#FF6B00);border-radius:12px;">' +
-    '<a href="' + origin + '" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;">Open Dashboard</a>' +
+    '<tr><td align="center" bgcolor="#F96203" style="background-color:#F96203;border-radius:12px;border:1px solid #FF6B00;mso-padding-alt:16px 42px;">' +
+    '<a href="' + origin + '" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background-color:#F96203;border-radius:12px;">Open Dashboard</a>' +
     '</td></tr></table></td></tr>' +
 
     // Signoff, same author as the daily Pulse so EXCO sees a consistent
