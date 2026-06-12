@@ -19,6 +19,23 @@ var SLA_DAYS = 7;
 var TEAM_DOMAIN = "gasmarketing.co.za";
 var ORIGIN = "https://media.gasmarketing.co.za";
 
+// Clients explicitly excluded from the Weekly Activity Summary
+// per user direction. Mirrors api/daily-report.js
+// DAILY_PULSE_EXCLUDED_PREFIXES, match by canonical slug PREFIX so
+// every name variant resolves to the same skip ("Simpson Properties",
+// "Simpson Properties - Arnie Berman", "Simpson Properties June
+// 2026" all canonicalise to a slug starting with "simpsonproperties"
+// and drop out of both reportRows and overdueRows below).
+var WEEKLY_SUMMARY_EXCLUDED_PREFIXES = ["simpsonproperties"];
+function isExcludedFromWeeklySummary(clientName) {
+  var s = canonicalClientSlug(clientName);
+  if (!s) return false;
+  for (var i = 0; i < WEEKLY_SUMMARY_EXCLUDED_PREFIXES.length; i++) {
+    if (s.indexOf(WEEKLY_SUMMARY_EXCLUDED_PREFIXES[i]) === 0) return true;
+  }
+  return false;
+}
+
 function isActiveStatus(s) {
   s = String(s || "").toLowerCase();
   return s === "active" || s === "enable" || s === "enabled";
@@ -475,6 +492,9 @@ export default async function handler(req, res) {
   };
   var reportRows = emailLog.filter(function(e) {
     if (!e.sentAt || e.sentAt < weekAgoIso) return false;
+    // Hide opted-out clients (Simpson Properties) from the weekly
+    // recap table, same skip the Daily Pulse honours.
+    if (isExcludedFromWeeklySummary(e.clientName || e.clientSlug || "")) return false;
     var to = Array.isArray(e.to) ? e.to : [];
     if (to.length === 0) return false;
     var hasExternal = false;
@@ -578,8 +598,14 @@ export default async function handler(req, res) {
   var overdueRows = Object.keys(byIdentity).map(function(id) { return byIdentity[id]; })
     .filter(function(c) {
       if ((now.getTime() - c.lastSentTs) <= slaMs) return false;
+      // Hide opted-out clients (Simpson Properties) from the SLA
+      // overdue alerts, same skip the Daily Pulse honours. Check the
+      // display name AND the slug since either form may carry the
+      // brand.
+      var displayCheck = displayNameFromIdentity(c.identity, c.lastSlug);
+      if (isExcludedFromWeeklySummary(c.lastSlug || "") || isExcludedFromWeeklySummary(displayCheck)) return false;
       if (!lifecycleBySlug) return true;
-      var slug = canonicalClientSlug(c.lastSlug || "") || canonicalClientSlug(displayNameFromIdentity(c.identity, c.lastSlug));
+      var slug = canonicalClientSlug(c.lastSlug || "") || canonicalClientSlug(displayCheck);
       if (!slug) return true;
       var state = lifecycleBySlug[slug];
       if (!state) return true;
