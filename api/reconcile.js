@@ -201,6 +201,17 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
         // already folded above when rawMetaObjStrict. See
         // project_meta_like_action.
         var appInstalls = Math.max(actions["app_install"] || 0, actions["mobile_app_install"] || 0, actions["omni_app_install"] || 0);
+        // Engagement-floor mirror for Meta. Dashboard applies
+        // max(raw_clicks, pageLikes) on FB rows (page-like ads have
+        // no URL destination so raw_clicks = 0 while pageLikes carries
+        // the engagement attribution). Mirroring it here keeps SoT
+        // and dashboard aligned on Like&Follow campaigns. The IG
+        // portion of a cross-publisher campaign contributes its raw
+        // clicks naturally on the dashboard side; at this campaign-
+        // level rollup the max() picks the larger of the two, which
+        // tracks within audit tolerance on typical Like&Follow shapes.
+        var metaRawClicks = parseInt(row.clicks || 0);
+        var metaEffClicks = Math.max(metaRawClicks, pageLikesRaw);
         out.push({
           platform: "Meta",
           accountName: acc.name,
@@ -208,7 +219,7 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
           campaignName: row.campaign_name || "",
           spend: parseFloat(row.spend || 0),
           impressions: parseInt(row.impressions || 0),
-          clicks: parseInt(row.clicks || 0),
+          clicks: metaEffClicks,
           reach: parseInt(row.reach || 0),
           leads: leads,
           followersCombined: pageLikesRaw,
@@ -229,7 +240,15 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
   warnings = warnings || [];
   try {
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    var metrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes"]));
+    // profile_visits added so the truth side mirrors the dashboard's
+    // engagement floor for TikTok follower campaigns: clicks =
+    // max(raw_clicks, profile_visits, follows). Without this, follower
+    // campaigns where TikTok's `clicks` metric returns 0 (no URL
+    // destination, the engagement is a tap on the profile avatar)
+    // showed up as a 100% red drift even though the dashboard and
+    // TikTok's own Ads Manager UI agreed on a non-zero engagement
+    // count.
+    var metrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes", "profile_visits"]));
     var base = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + advId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
     // Follow TikTok pagination via page_info.total_page.
     var all = [];
@@ -254,6 +273,18 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
     }
     return all.map(function(row) {
       var m = row.metrics || {};
+      // Engagement-floor mirror: same max() the dashboard applies in
+      // api/campaigns.js + api/ads.js. Follower TikTok campaigns
+      // return clicks=0 from the report API (link clicks only, no URL
+      // destination on follower creative) but the operator sees a
+      // non-zero engagement count in Ads Manager via profile_visits.
+      // Without mirroring here every follower campaign in scope reads
+      // SoT=0 vs Dashboard=N as a 100% drift, despite both being
+      // technically right against their own definition of "click".
+      var ttRawClicks = parseInt(m.clicks || 0);
+      var ttProfileVisits = parseInt(m.profile_visits || 0);
+      var ttFollows = parseInt(m.follows || 0);
+      var ttEffClicks = Math.max(ttRawClicks, ttProfileVisits, ttFollows);
       return {
         platform: "TikTok",
         accountName: "MTN MoMo TikTok",
@@ -261,7 +292,7 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
         campaignName: m.campaign_name || "",
         spend: parseFloat(m.spend || 0),
         impressions: parseInt(m.impressions || 0),
-        clicks: parseInt(m.clicks || 0),
+        clicks: ttEffClicks,
         reach: parseInt(m.reach || 0),
         leads: 0,
         // TikTok follower result = follows ONLY. m.likes is video
@@ -269,7 +300,7 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
         // truth side and produced false drift on the Ground Truth tab
         // vs the dashboard, which uses follows-only for TikTok. Must
         // match _pulseShared / email / command-centre.
-        followersCombined: parseInt(m.follows || 0),
+        followersCombined: ttFollows,
         appInstalls: 0
       };
     });
