@@ -64,10 +64,17 @@ function objectiveFromName(name) {
 // earlier. A 5-minute TTL is the same window share-email preview +
 // confirm-and-send + reconcile run happens in, covering them all.
 var campaignsResponseCache = {};
-var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
+// Cache TTL shortened from 5 min to 60 sec so new leads / installs /
+// conversions surfaced in Ads Manager sync to the dashboard within a
+// minute. Cost: ~5x more Meta API calls on the campaigns endpoint,
+// but /api/placements and /api/timeseries already hit Meta live on
+// every request, so the extra load is bounded and the operator no
+// longer sees Objective Highlights lag Placement Performance by a
+// few minutes when new leads land mid-window.
+var CAMPAIGNS_RESPONSE_TTL_MS = 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v26-lead-dedup-cross-endpoint";
+var CAMPAIGNS_CACHE_VERSION = "v27-60s-ttl";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"

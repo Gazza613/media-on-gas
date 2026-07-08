@@ -4508,7 +4508,7 @@ export default function MediaOnGas(){
       // rest of the session. Without the gate, a single 502 / 400
       // wrote the error JSON under summaryCache.campaigns[key] and
       // every subsequent visit short-circuited to that cached error.
-      fetch(API+"/api/campaigns?from="+df+"&to="+dt,{headers:h}).then(function(r){
+      fetch(API+"/api/campaigns?from="+df+"&to="+dt+((typeof window!=="undefined"&&window.location&&/[?&]fresh=1/.test(window.location.search))?"&fresh=1":""),{headers:h}).then(function(r){
         return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
       }).then(function(x){
         if(myGen!==fetchGenRef.current)return;
