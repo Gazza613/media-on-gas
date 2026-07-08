@@ -1554,7 +1554,8 @@ var AGENCY_NAMES={"gas agency":true,"gas":true};
 // of MoMo, not a separate identity), per project_objective_classification.
 var CLIENT_LOGOS={
   mtnmomo:"/clients/mtn-momo.png",
-  mtnmomopos:"/clients/mtn-momo.png"
+  mtnmomopos:"/clients/mtn-momo.png",
+  learnalot:"/clients/learnalot.png"
 };
 function clientLogoForName(name){
   var s=String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"");

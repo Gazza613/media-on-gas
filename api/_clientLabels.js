@@ -29,6 +29,7 @@ export var clientLabels = {
   PsychoBunnyZA: "Psycho Bunny",
   SeaStorm: "Sea Storm",
   SeaWeeds: "Sea Weeds",
+  Learnalot: "Learnalot",
   GAS: "GAS Agency",
   GASAgency: "GAS Agency"
 };

@@ -737,7 +737,11 @@ function buildEmailHtml(opts) {
     // preview panes; halved to 150px per user direction. POS shares
     // the same logo and the same width override.
     mtnmomo: 150,
-    mtnmomopos: 150
+    mtnmomopos: 150,
+    // Learnalot is a horizontal wordmark (icon + "Learnalot" text)
+    // at a ~4:1 aspect ratio, sized to read cleanly without
+    // dominating the header at 300px.
+    learnalot: 200
   };
   var canonSlug = canonicalClientSlug(opts.clientSlug);
   var logoWidth = 300;

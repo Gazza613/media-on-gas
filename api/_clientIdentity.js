@@ -108,6 +108,7 @@ var KNOWN_BRAND_DISPLAY = {
   concordcollege: "Concord College",
   edencollege: "Eden College",
   willowbrookvillage: "Willowbrook Village",
+  learnalot: "Learnalot",
   simpsonproperties: "Simpson Properties - Arnie Berman",
   gasagency: "GAS Agency"
 };
