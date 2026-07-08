@@ -191,8 +191,30 @@ export default async function handler(req, res) {
         // per-placement sum per campaign further down. Mirror pattern
         // from api/campaigns.js leadsNbMap. Non-fatal on error.
         var campaignLeadTruth = {};
+        // Which campaigns actually carry the Leads objective per the
+        // team's naming convention (project_objective_classification —
+        // name-tag wins over Meta API objective). Populated from the
+        // no-breakdown call so we don't pay a second campaigns fetch.
+        // Used below to ZERO OUT stray `lead` action rows on non-lead
+        // campaigns (awareness / community_reach etc. sometimes surface
+        // a phantom lead via cross-attribution). Matches Summary's
+        // tLeads gate (rows.filter(r.objective === "Leads")) so the
+        // placement sum reconciles to what the client sees on Summary.
+        var campIsLeadsCampaign = {};
+        var isLeadsName = function(n) {
+          n = String(n || "").toLowerCase();
+          return n.indexOf("lead_gen") >= 0
+              || n.indexOf("_lead_") >= 0
+              || n.indexOf("_lead ") >= 0
+              || n.indexOf(" lead ") >= 0
+              || n.indexOf("|lead") >= 0
+              || n.indexOf("_pos_") >= 0
+              || n.indexOf(" pos ") >= 0
+              || n.indexOf("|pos") >= 0
+              || n.indexOf("momo pos") >= 0;
+        };
         try {
-          var nbUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+          var nbUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
           var nbAll = [], nbNext = nbUrl, nbGuard = 0;
           while (nbNext && nbGuard < 10) {
             nbGuard++;
@@ -206,6 +228,7 @@ export default async function handler(req, res) {
             var cid = String(row.campaign_id || "");
             var truthLeads = extractLeadCount(row.actions || []);
             if (truthLeads > 0) campaignLeadTruth[cid] = truthLeads;
+            if (isLeadsName(row.campaign_name)) campIsLeadsCampaign[cid] = true;
           });
         } catch (_) { /* non-fatal */ }
         // Per-campaign, per-placement lead ledger. Populated as we walk
@@ -225,7 +248,15 @@ export default async function handler(req, res) {
           // onsite_conversion.lead_grouped value over the raw `lead`
           // variant. Otherwise placement rows summed to 13 while
           // Ads Manager UI + Objective Highlights read 6.
-          var leads = extractLeadCount(row.actions || []);
+          //
+          // Restrict lead attribution to lead-objective campaigns only.
+          // Summary's tLeads (dashboard/src/App.jsx) filters rows by
+          // objective==="Leads" before summing; a stray `lead` action
+          // on a non-lead campaign (cross-attribution ripple from
+          // awareness / traffic ads) otherwise inflated placement sum
+          // by 1 (14) vs Summary (13). Matches Summary semantics.
+          var cidLead = String(row.campaign_id || "");
+          var leads = campIsLeadsCampaign[cidLead] ? extractLeadCount(row.actions || []) : 0;
           (row.actions || []).forEach(function(a) {
             var at = String(a.action_type || "").toLowerCase();
             var v = parseInt(a.value || 0);
