@@ -182,6 +182,38 @@ export default async function handler(req, res) {
           if (d.data) allRows = allRows.concat(d.data);
           next = d.paging && d.paging.next ? d.paging.next : null;
         }
+        // No-breakdown campaign truth for leads. Meta's placement
+        // breakdown (publisher_platform + platform_position) attributes
+        // a single lead across multiple placement positions when the
+        // user was served the ad on more than one position before
+        // submitting, so summing per-placement leads over-counts. Fetch
+        // the campaign-level lead total once, use it to cap the
+        // per-placement sum per campaign further down. Mirror pattern
+        // from api/campaigns.js leadsNbMap. Non-fatal on error.
+        var campaignLeadTruth = {};
+        try {
+          var nbUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+          var nbAll = [], nbNext = nbUrl, nbGuard = 0;
+          while (nbNext && nbGuard < 10) {
+            nbGuard++;
+            var nbRes = await fetch(nbNext);
+            if (!nbRes.ok) break;
+            var nbJson = await nbRes.json();
+            if (nbJson.data) nbAll = nbAll.concat(nbJson.data);
+            nbNext = nbJson.paging && nbJson.paging.next ? nbJson.paging.next : null;
+          }
+          nbAll.forEach(function(row) {
+            var cid = String(row.campaign_id || "");
+            var truthLeads = extractLeadCount(row.actions || []);
+            if (truthLeads > 0) campaignLeadTruth[cid] = truthLeads;
+          });
+        } catch (_) { /* non-fatal */ }
+        // Per-campaign, per-placement lead ledger. Populated as we walk
+        // the breakdown rows; used below to cap the total to the
+        // no-breakdown truth. Aggregated back into `placements[key]`
+        // after the cap runs.
+        var campPlacementLeads = {};      // {campaign_id: {placement_key: leads}}
+        var campPlacementSpend = {};      // {campaign_id: {placement_key: spend}}
         allRows.forEach(function(row) {
           if (!idAllowed(row.campaign_id)) return;
           var pub = row.publisher_platform || "facebook";
@@ -205,13 +237,63 @@ export default async function handler(req, res) {
           // Fold "like" into page likes only for a page-like-optimised
           // campaign on a Facebook-family placement.
           if (campPageLikeOpt[row.campaign_id] === true && platformOf(pub) === "Facebook" && reactionLikes > pageLikes) pageLikes = reactionLikes;
+          // Track per-campaign per-placement leads so we can apply the
+          // no-breakdown cap. Spend + non-lead metrics still flow into
+          // `placements[key]` right away since those are additive
+          // across placements without over-counting.
+          var cid = String(row.campaign_id || "");
+          if (!campPlacementLeads[cid]) { campPlacementLeads[cid] = {}; campPlacementSpend[cid] = {}; }
+          campPlacementLeads[cid][key] = (campPlacementLeads[cid][key] || 0) + leads;
+          campPlacementSpend[cid][key] = (campPlacementSpend[cid][key] || 0) + parseFloat(row.spend || 0);
           addRow(key, {
             name: placementName(pub, pos),
             platform: platformOf(pub),
             color: placementColor(pub)
           }, {
             spend: row.spend, impressions: row.impressions, clicks: row.clicks,
-            leads: leads, appInstalls: installs, follows: follows, pageLikes: pageLikes
+            leads: 0, appInstalls: installs, follows: follows, pageLikes: pageLikes
+          });
+        });
+        // Apply the no-breakdown lead cap per campaign. Meta's placement
+        // breakdown can attribute the same lead to multiple positions
+        // (view-through on Feed then click-through on Reels = both
+        // rows +1), inflating the sum by up to the campaign's cross-
+        // placement attribution overlap. Cap by scaling down each
+        // placement's lead count proportional to spend, then aggregate
+        // capped values back into placements[key].leads.
+        Object.keys(campPlacementLeads).forEach(function(cid) {
+          var placementLeads = campPlacementLeads[cid];
+          var placementSpend = campPlacementSpend[cid];
+          var rawSum = Object.keys(placementLeads).reduce(function(s, k) { return s + placementLeads[k]; }, 0);
+          var truth = campaignLeadTruth[cid] || 0;
+          if (rawSum <= truth + 0.5 || truth <= 0) {
+            // No over-count OR no truth to cap against: use raw sums.
+            Object.keys(placementLeads).forEach(function(pk) {
+              if (placements[pk]) placements[pk].leads += placementLeads[pk];
+            });
+            return;
+          }
+          var totalSpend = Object.keys(placementSpend).reduce(function(s, k) { return s + placementSpend[k]; }, 0);
+          if (totalSpend <= 0) {
+            // Degenerate: no spend to weight by, dump entire truth on
+            // the first placement.
+            var firstKey = Object.keys(placementLeads)[0];
+            if (placements[firstKey]) placements[firstKey].leads += truth;
+            return;
+          }
+          // Spend-proportional split, floor + rounding remainder to
+          // largest-spend placement so the sum reconciles exactly.
+          var keys = Object.keys(placementLeads);
+          var floors = keys.map(function(pk) { return Math.floor(truth * (placementSpend[pk] / totalSpend)); });
+          var sumFloors = floors.reduce(function(x, y) { return x + y; }, 0);
+          var remainder = truth - sumFloors;
+          if (remainder > 0) {
+            var maxIdx = 0;
+            keys.forEach(function(pk, i) { if (placementSpend[pk] > placementSpend[keys[maxIdx]]) maxIdx = i; });
+            floors[maxIdx] += remainder;
+          }
+          keys.forEach(function(pk, i) {
+            if (placements[pk]) placements[pk].leads += floors[i];
           });
         });
       } catch (e) {
