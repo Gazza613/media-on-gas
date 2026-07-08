@@ -3892,6 +3892,14 @@ export default function MediaOnGas(){
   var ps=useState([]),pages=ps[0],setPages=ps[1];
   var as2=useState([]),adsets=as2[0],setAdsets=as2[1];
   var ad3=useState([]),adsList=ad3[0],setAdsList=ad3[1];
+  // Ads that exist in the ad set (currently active/paused/pending) but
+  // drew ZERO impressions in the selected date range. Meta's /insights
+  // endpoint only returns rows for delivered ads, so a freshly launched
+  // or still-in-review ad silently drops out of `adsList` and the
+  // Creative tile under-counts vs Ads Manager. Populated by /api/ads
+  // via an ad-universe reconcile call. Used to render a "N ads not
+  // yet delivered" chip beside the ADS VISIBLE tile.
+  var nimp=useState([]),noImpAds=nimp[0],setNoImpAds=nimp[1];
   useEffect(function(){
     if(adsList&&adsList.length>0)return;
     setAdLoaderQuip(pickQuirky(QUIRKY_AD_LOADERS));
@@ -4549,6 +4557,7 @@ export default function MediaOnGas(){
     }
     if(adsKey){
       if(adsKey.ads){setAdsList(adsKey.ads);}
+      if(Array.isArray(adsKey.noImpressionAds)){setNoImpAds(adsKey.noImpressionAds);}
     } else {
       fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){
         return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
@@ -4557,6 +4566,7 @@ export default function MediaOnGas(){
         if(x.ok&&x.d&&x.d.ads){
           summaryCache.ads[key]=x.d;
           setAdsList(x.d.ads);
+          setNoImpAds(Array.isArray(x.d.noImpressionAds)?x.d.noImpressionAds:[]);
         }
       }).catch(function(err){
         if(myGen!==fetchGenRef.current)return;
@@ -8947,9 +8957,28 @@ export default function MediaOnGas(){
                 var impsVal=filtered?totalImps:(computed.totalImps||totalImps);
                 var ctrVal=filtered?blendedCtr:(computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):blendedCtr);
                 var note=filtered?"FILTERED AD-LEVEL TOTALS":"MATCHES SUMMARY · ALL SELECTED CAMPAIGNS";
+                // Reconcile ADS VISIBLE against the ad-set universe:
+                // /api/ads reads Meta's Insights endpoint which only
+                // returns delivered ads, so a freshly published or
+                // still-in-review ad drops out. `noImpAds` carries the
+                // full ad universe (ACTIVE / PAUSED / PENDING_REVIEW
+                // etc.) minus what actually delivered — filter to the
+                // selected campaigns and show a chip so the client can
+                // see WHY the count is 12 not 15.
+                var zeroImpsForSel=0;
+                if(noImpAds&&noImpAds.length){
+                  for(var zi=0;zi<noImpAds.length;zi++){
+                    var zcid=String(noImpAds[zi].campaign_id||"");
+                    if(selCampIds[zcid])zeroImpsForSel++;
+                  }
+                }
                 return <div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:8}}>
-                    <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div><div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div></Glass>
+                    <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div>
+                      <div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div>
+                      {zeroImpsForSel>0&&<div title="These ads exist in the ad set but have not yet drawn impressions in the selected date range (usually still in review or freshly published). Meta's Insights endpoint only returns rows for delivered ads." style={{marginTop:8,display:"inline-block",padding:"3px 8px",background:P.warning+"22",border:"1px solid "+P.warning+"55",borderRadius:6,fontSize:9,fontWeight:800,color:P.warning,fontFamily:fm,letterSpacing:1.2,cursor:"help"}}>{"+"+zeroImpsForSel+" NOT YET DELIVERED"}</div>}
+                    </Glass>
                     <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:26,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(spendVal)}</div></Glass>
                     <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>IMPRESSIONS</div><div style={{fontSize:26,fontWeight:900,color:P.cyan,fontFamily:fm}}>{fmt(impsVal)}</div></Glass>
                     <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CTR</div><div style={{fontSize:26,fontWeight:900,color:P.mint,fontFamily:fm}}>{ctrVal.toFixed(2)+"%"}</div></Glass>

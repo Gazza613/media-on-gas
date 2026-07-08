@@ -184,7 +184,11 @@ export default async function handler(req, res) {
         var rawCid = cid.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
         return allowed[cid] === true || allowed[rawCid] === true;
       });
-      res.status(200).json({ ads: cFiltered, total: cFiltered.length });
+      var cFilteredNoImps = (cached.data.noImpressionAds || []).filter(function(a) {
+        var cid = String(a.campaign_id || "");
+        return allowed[cid] === true;
+      });
+      res.status(200).json({ ads: cFiltered, total: cFiltered.length, noImpressionAds: cFilteredNoImps });
     } else {
       res.status(200).json(cached.data);
     }
@@ -192,6 +196,16 @@ export default async function handler(req, res) {
   }
 
   var allAds = [];
+  // Reconciliation buffer: ads that exist in the account's ad universe
+  // (currently ACTIVE / PAUSED / PENDING_REVIEW / etc.) but drew zero
+  // impressions in the requested date range. Meta's Insights endpoint
+  // only returns rows for ads with delivery, so a freshly published or
+  // still-in-review ad is silently absent from `allAds` and the Creative
+  // tile under-counts vs what's in the ad set. Populated per-account
+  // inside the Meta Promise.all below, exposed on the response as
+  // `noImpressionAds` so the frontend can render a "N ads uploaded but
+  // no impressions yet" chip beside ADS VISIBLE.
+  var noImpressionAds = [];
 
   /* ═══ META (Facebook + Instagram) ═══ */
   // Parallelise all 6 ad accounts at once instead of serial for-loop. Each account's work
@@ -559,6 +573,55 @@ export default async function handler(req, res) {
         row.trueTotals = adTrueTotals[row.ad_id] || null;
         return row;
       });
+
+      // Ad-universe reconciliation for this account. Pull the ad list
+      // directly from /act_X/ads (NOT /insights) so freshly-published
+      // ads with 0 impressions in the window are counted. Then diff
+      // against the insights delivered-ad-id set. Filter to statuses
+      // that represent "an ad the client thinks is live" (excludes
+      // ARCHIVED / DELETED, keeps ACTIVE / PAUSED / PENDING_REVIEW /
+      // WITH_ISSUES / IN_PROCESS / CAMPAIGN_PAUSED / ADSET_PAUSED /
+      // PREAPPROVED / LEARNING_LIMITED). Non-fatal on error so a
+      // failure here never blocks the main ad rendering.
+      try {
+        var deliveredIds = {};
+        insights.forEach(function(x) { deliveredIds[x.ad_id] = true; });
+        var statusFilter = JSON.stringify([{
+          field: "ad.effective_status",
+          operator: "IN",
+          value: ["ACTIVE","PAUSED","PENDING_REVIEW","WITH_ISSUES","IN_PROCESS","CAMPAIGN_PAUSED","ADSET_PAUSED","PREAPPROVED","LEARNING_LIMITED"]
+        }]);
+        var univUrl = "https://graph.facebook.com/v25.0/" + account.id +
+          "/ads?fields=id,name,campaign_id,campaign{name},adset_id,effective_status" +
+          "&filtering=" + encodeURIComponent(statusFilter) +
+          "&limit=500&access_token=" + metaToken;
+        var univNext = univUrl;
+        var univGuard = 0;
+        while (univNext && univGuard < 10) {
+          univGuard++;
+          var univRes = await fetch(univNext);
+          if (!univRes.ok) break;
+          var univData = await univRes.json();
+          if (Array.isArray(univData.data)) {
+            univData.data.forEach(function(a) {
+              if (!a || !a.id || deliveredIds[a.id]) return;
+              noImpressionAds.push({
+                ad_id: a.id,
+                ad_name: a.name || "",
+                campaign_id: a.campaign_id || "",
+                campaign_name: (a.campaign && a.campaign.name) || "",
+                adset_id: a.adset_id || "",
+                effective_status: a.effective_status || "",
+                account: account.name,
+                platform: "Meta"
+              });
+            });
+          }
+          univNext = univData.paging && univData.paging.next ? univData.paging.next : null;
+        }
+      } catch (uErr) {
+        console.warn("[ads] universe reconcile failed for", account.name, String(uErr && uErr.message || uErr));
+      }
 
       // Unique ad IDs to fetch creative for
       var uniqAdIds = [];
@@ -1706,7 +1769,7 @@ export default async function handler(req, res) {
     console.error("Google ads error", gErr);
   }
 
-  var response = { ads: allAds, total: allAds.length };
+  var response = { ads: allAds, total: allAds.length, noImpressionAds: noImpressionAds };
   // Cache the unfiltered (admin) response keyed by date range. Client-scoped filtering
   // happens after the cache read on every request so tokens cannot see wider data.
   adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
@@ -1728,7 +1791,11 @@ export default async function handler(req, res) {
       var rawCid = cid.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
       return allowedSet[cid] === true || allowedSet[rawCid] === true;
     });
-    res.status(200).json({ ads: filtered, total: filtered.length });
+    var filteredNoImps = noImpressionAds.filter(function(a) {
+      var cid = String(a.campaign_id || "");
+      return allowedSet[cid] === true;
+    });
+    res.status(200).json({ ads: filtered, total: filtered.length, noImpressionAds: filteredNoImps });
     return;
   }
   res.status(200).json(response);
