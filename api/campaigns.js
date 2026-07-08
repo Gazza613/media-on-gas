@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v23-lead-install-lpv-nb-cap";
+var CAMPAIGNS_CACHE_VERSION = "v24-lead-cap-diag";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -445,6 +445,11 @@ export default async function handler(req, res) {
   // callers can verify whether Meta actually returned IG rows at the ad
   // level without having to dig through Vercel logs.
   var supplementDiag = [];
+  // Diagnostic capture for the leads / installs / LPV per-publisher
+  // cap. Populated inside each metaAccounts iteration and exposed on
+  // the response so operators can verify the cap fired for a specific
+  // campaign without needing Vercel logs.
+  var conversionCapDiag = {};
   var now = new Date();
   var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -1200,12 +1205,18 @@ export default async function handler(req, res) {
       // because it's the least ambiguous per-publisher signal (each
       // publisher's own delivery). Rounding lands the extra on the
       // largest-spend row so the sum reconciles exactly.
-      var _apportion = function(nbMap, field) {
+      // Diagnostic surface so we can verify the cap actually fires
+      // on each conversion-objective campaign. Written into the
+      // response as _conversionCapDiag alongside the campaign list so
+      // an operator can inspect via the Network tab without needing
+      // Vercel logs. Keyed by rawCampaignId.
+      var _conversionCapDiag = {};
+      var _apportion = function(nbMap, field, diagKey) {
         var perCampaign = {};
         Object.keys(rowMap).forEach(function(k) {
           var r = rowMap[k];
           var cid = String(r.rawCampaignId);
-          if (!perCampaign[cid]) perCampaign[cid] = { rows: [], sum: 0, spend: 0 };
+          if (!perCampaign[cid]) perCampaign[cid] = { rows: [], sum: 0, spend: 0, name: r.campaignName };
           perCampaign[cid].rows.push(r);
           perCampaign[cid].sum += r[field] || 0;
           perCampaign[cid].spend += r._sumSpend || 0;
@@ -1213,15 +1224,23 @@ export default async function handler(req, res) {
         Object.keys(perCampaign).forEach(function(cid) {
           var pc = perCampaign[cid];
           var truth = nbMap[cid] || 0;
+          if (!_conversionCapDiag[cid]) _conversionCapDiag[cid] = { name: pc.name };
+          _conversionCapDiag[cid][diagKey] = { rawSum: pc.sum, truth: truth, publisherCount: pc.rows.length, action: "" };
           // Nothing to cap when the no-breakdown total is missing OR
           // the per-publisher sum already agrees within 1 unit (real
           // per-placement attribution, no double-count).
-          if (truth <= 0) return;
-          if (pc.sum <= truth + 0.5) return;
+          if (truth <= 0) {
+            _conversionCapDiag[cid][diagKey].action = "skip_no_truth";
+            return;
+          }
+          if (pc.sum <= truth + 0.5) {
+            _conversionCapDiag[cid][diagKey].action = "skip_within_tolerance";
+            return;
+          }
           if (pc.spend <= 0) {
-            // Degenerate: no spend to weight by, dump everything on
-            // the first row.
             pc.rows.forEach(function(r, i) { r[field] = i === 0 ? truth : 0; });
+            _conversionCapDiag[cid][diagKey].action = "cap_no_spend";
+            _conversionCapDiag[cid][diagKey].finalSum = truth;
             return;
           }
           // Spend-proportional split, floor per row, remainder to the
@@ -1235,11 +1254,21 @@ export default async function handler(req, res) {
             floors[maxIdx] += remainder;
           }
           pc.rows.forEach(function(r, i) { r[field] = floors[i]; });
+          _conversionCapDiag[cid][diagKey].action = "cap_applied";
+          _conversionCapDiag[cid][diagKey].finalSum = truth;
+          _conversionCapDiag[cid][diagKey].split = floors;
         });
       };
-      _apportion(leadsNbMap, "leads");
-      _apportion(appInstallsNbMap, "appInstalls");
-      _apportion(landingPageViewsNbMap, "landingPageViews");
+      _apportion(leadsNbMap, "leads", "leads");
+      _apportion(appInstallsNbMap, "appInstalls", "appInstalls");
+      _apportion(landingPageViewsNbMap, "landingPageViews", "landingPageViews");
+      // Merge into the request-scoped diag map declared at handler
+      // level, so the outer response builder can include it in the
+      // JSON payload. rawCampaignId is unique across accounts so no
+      // cross-account collision.
+      Object.keys(_conversionCapDiag).forEach(function(cid) {
+        conversionCapDiag[cid] = _conversionCapDiag[cid];
+      });
 
       Object.keys(rowMap).forEach(function(k) {
         var r = rowMap[k];
@@ -1834,7 +1863,7 @@ export default async function handler(req, res) {
     _objDiag[plat][obj].spend += parseFloat(c.spend || 0);
     if (_objDiag[plat][obj].names.length < 8) _objDiag[plat][obj].names.push(c.campaignName);
   });
-  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings, objectiveDiagnostic: _objDiag, metaSupplementDiag: supplementDiag };
+  var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings, objectiveDiagnostic: _objDiag, metaSupplementDiag: supplementDiag, conversionCapDiag: conversionCapDiag };
   campaignsResponseCache[cacheKey] = { data: fullResponse, ts: Date.now() };
 
   var principal = req.authPrincipal || { role: "admin" };
