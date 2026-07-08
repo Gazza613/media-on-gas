@@ -1,7 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, isCampaignAllowed } from "./_auth.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
-import { redisGetJson, redisSetJson } from "./_pulseShared.js";
+import { redisGetJson, redisSetJson, extractLeadCount } from "./_pulseShared.js";
 
 // Demographics endpoint. Returns age × gender, province (region), device
 // and Google-only city breakdowns across Meta, TikTok and Google. The
@@ -38,12 +38,10 @@ function extractResults(actions, pageLikeOpt) {
   var pl = Math.max(map["page_like"] || 0, map["onsite_conversion.page_like"] || 0);
   if (pageLikeOpt === true) pl = Math.max(pl, map["like"] || 0);
   return {
-    leads: Math.max(
-      map["lead"] || 0,
-      map["onsite_conversion.lead_grouped"] || 0,
-      map["offsite_conversion.fb_pixel_lead"] || 0,
-      map["offsite_complete_registration_add_meta_leads"] || 0
-    ),
+    // Dedup via shared helper so demographic leads honour Meta's own
+    // onsite_conversion.lead_grouped over the raw `lead` variant for
+    // CAPI-configured campaigns.
+    leads: extractLeadCount(map),
     appInstalls: Math.max(
       map["app_install"] || 0,
       map["mobile_app_install"] || 0,

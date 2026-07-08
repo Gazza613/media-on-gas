@@ -3,6 +3,7 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
+import { extractLeadCount } from "./_pulseShared.js";
 
 function overrideFor(overridesMap, campaignId) {
   if (!overridesMap || !campaignId) return null;
@@ -459,9 +460,12 @@ export default async function handler(req, res) {
               // pass shows IG rows with high follows via this field we'd
               // revisit. In practice the IG follow count comes via ig_follow.
               if (at === "follow" || at === "onsite_conversion.follow") totals.fbFollow = Math.max(totals.fbFollow, v);
-              if (at === "lead" || at.indexOf("fb_pixel_lead") >= 0 || at === "onsite_conversion.lead_grouped") totals.lead = Math.max(totals.lead, v);
               if (at === "app_install" || at === "mobile_app_install" || at === "omni_app_install") totals.app_install = Math.max(totals.app_install, v);
             });
+            // Dedup lead extraction via the shared helper so this
+            // secondary breakdown pass agrees with the primary path
+            // and with campaigns.js on CAPI-configured lead campaigns.
+            totals.lead = extractLeadCount(row.actions || []);
             // Fold the ambiguous "like" into FB page_likes ONLY for a
             // strictly PAGE_LIKES campaign (the legacy objective where Meta
             // genuinely returns page likes under the "like" key). For
@@ -889,23 +893,17 @@ export default async function handler(req, res) {
         var objective = overrideFor(overridesMap, ins.campaign_id) || detectObjective(ins.campaign_name) || apiObj || "landingpage";
         var isFbPlacement = pub === "facebook" || pub === "audience_network" || pub === "messenger" || pub === "oculus";
 
-        var leads = 0, installs = 0, pageLikes = 0, reactionLikes = 0, follows = 0;
+        var installs = 0, pageLikes = 0, reactionLikes = 0, follows = 0;
+        // Lead extraction via the shared helper: CAPI-configured
+        // campaigns prefer onsite_conversion.lead_grouped (Meta's own
+        // deduped) over raw `lead` variant. Otherwise ad-level cards
+        // for a Learnalot-style campaign double-counted every
+        // submission. actionsAgg is a plain map so pass it through
+        // the map-aware helper directly.
+        var leads = extractLeadCount(ins.actionsAgg || {});
         Object.keys(ins.actionsAgg || {}).forEach(function(at) {
           var v = ins.actionsAgg[at];
           var atLow = at.toLowerCase();
-          // Lead detection: catch all lead-like actions, exclude installs and irrelevant
-          var isLead = (atLow === "lead" ||
-                        atLow === "onsite_web_lead" ||
-                        atLow === "offsite_conversion.fb_pixel_lead" ||
-                        atLow === "onsite_conversion.lead_grouped" ||
-                        atLow === "onsite_conversion.flow_complete" ||
-                        atLow === "offsite_complete_registration_add_meta_leads" ||
-                        atLow === "offsite_conversion.fb_pixel_complete_registration" ||
-                        atLow === "complete_registration" ||
-                        (atLow.indexOf("lead") >= 0 && atLow.indexOf("install") < 0 && atLow.indexOf("video") < 0 && atLow.indexOf("post") < 0));
-          if (isLead) {
-            leads = Math.max(leads, v);
-          }
           // App install: catch FB + IG + omni variants
           var isInstall = (at === "app_install" ||
                            at === "mobile_app_install" ||

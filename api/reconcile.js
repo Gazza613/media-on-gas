@@ -5,6 +5,7 @@ import { fetchWithTimeout } from "./_fetchTimeout.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
+import { extractLeadCount } from "./_pulseShared.js";
 
 // Admin-only reconciliation endpoint. For a given date range, it pulls the
 // ground-truth campaign-level aggregate from each platform's API directly
@@ -151,11 +152,10 @@ async function fetchMetaTruth(token, from, to, warnings, overridesMap) {
       allRows.forEach(function(row) {
         var actions = {};
         (row.actions || []).forEach(function(a) { actions[a.action_type] = parseInt(a.value || 0); });
-        var leads = Math.max(
-          actions["lead"] || 0,
-          actions["onsite_conversion.lead_grouped"] || 0,
-          actions["offsite_conversion.fb_pixel_lead"] || 0
-        );
+        // Dedup via shared helper so the SoT side mirrors the dashboard
+        // when Meta returns onsite_conversion.lead_grouped alongside
+        // the raw `lead` variant for CAPI-configured campaigns.
+        var leads = extractLeadCount(actions);
         // "like" is POST REACTIONS, not page joins. Fold it into the
         // followers count ONLY for a strictly legacy PAGE_LIKES campaign
         // (the pre-ODAX objective where Meta returned page likes under

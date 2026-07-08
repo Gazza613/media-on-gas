@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v25-lead-grouped-dedup";
+var CAMPAIGNS_CACHE_VERSION = "v26-lead-dedup-cross-endpoint";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"

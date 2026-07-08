@@ -79,6 +79,44 @@ export function isLeadAction(actionType) {
   if (t.indexOf("post") >= 0) return false;
   return true;
 }
+// Meta-friendly lead-count extractor. Walks a row's `actions` array
+// once and returns the deduped lead total that matches Ads Manager
+// UI. Meta's Marketing API surfaces the SAME submission under
+// multiple action_type variants when a campaign has CAPI Gateway
+// configured, and a plain Math.max across every lead-family key
+// picks the RAW, un-deduped value:
+//
+//   action_type=lead                            = 12  (raw)
+//   action_type=onsite_conversion.lead_grouped  = 6   (Meta's dedup)
+//
+// Ads Manager UI displays 6. Prefer the grouped value when Meta
+// returns it, fall back to the max of all other lead-family
+// variants when it doesn't (older campaigns / pure Pixel setups).
+// Use this helper wherever a Meta-side lead total flows into a
+// dashboard tile so Objective Highlights, Trendlines, Placements,
+// Ads-level cards, adsets, campaigns-daily and the reconcile audit
+// all agree. Accepts either a raw actions array or a pre-built
+// action_type -> value map.
+export function extractLeadCount(actionsOrMap) {
+  if (!actionsOrMap) return 0;
+  var grouped = 0;
+  var maxOther = 0;
+  var isMap = !Array.isArray(actionsOrMap) && typeof actionsOrMap === "object";
+  var iter = isMap
+    ? Object.keys(actionsOrMap).map(function(k) { return { action_type: k, value: actionsOrMap[k] }; })
+    : actionsOrMap;
+  iter.forEach(function(a) {
+    var t = String((a && a.action_type) || "").toLowerCase();
+    var v = parseInt((a && a.value) || 0, 10) || 0;
+    if (t === "onsite_conversion.lead_grouped") {
+      if (v > grouped) grouped = v;
+      return;
+    }
+    if (isLeadAction(t) && v > maxOther) maxOther = v;
+  });
+  return grouped > 0 ? grouped : maxOther;
+}
+
 export function isAppInstallAction(actionType) {
   var t = String(actionType || "").toLowerCase();
   if (!t) return false;
@@ -103,12 +141,14 @@ export function isLandingPageViewAction(actionType) {
 // Returns the per-row totals. Callers that aggregate across rows
 // should then += these per-row values (per-row max → cross-row sum).
 export function extractMetaCounts(actions) {
-  var leads = 0, installs = 0, pageLikes = 0, landingPageViews = 0, reactionLikes = 0, postReactions = 0;
+  var installs = 0, pageLikes = 0, landingPageViews = 0, reactionLikes = 0, postReactions = 0;
+  // Lead dedup via the shared helper so CAPI-configured campaigns
+  // prefer onsite_conversion.lead_grouped over the raw `lead`.
+  var leads = extractLeadCount(actions || []);
   (actions || []).forEach(function(a) {
     var t = String(a && a.action_type || "").toLowerCase();
     var v = parseInt(a && a.value || 0, 10) || 0;
-    if (isLeadAction(t)) leads = Math.max(leads, v);
-    else if (isAppInstallAction(t)) installs = Math.max(installs, v);
+    if (isAppInstallAction(t)) installs = Math.max(installs, v);
     else if (isPageLikeAction(t)) pageLikes = Math.max(pageLikes, v);
     else if (isLandingPageViewAction(t)) landingPageViews = Math.max(landingPageViews, v);
     else if (t === "like") reactionLikes = Math.max(reactionLikes, v);

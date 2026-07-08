@@ -1,7 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
-import { isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
+import { isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction, extractLeadCount } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
@@ -59,16 +59,17 @@ export default async function handler(req, res) {
           var pub = d.publisher_platform || "facebook";
           var platform = mapPubToPlat(pub);
           if (!platform) continue;
-          var leads = 0, appInstalls = 0, pageLikes = 0, landingPageViews = 0, follows = 0, reactionLikes = 0;
+          var appInstalls = 0, pageLikes = 0, landingPageViews = 0, follows = 0, reactionLikes = 0;
+          // Lead extraction via the shared helper so CAPI-configured
+          // campaigns prefer the deduped onsite_conversion.lead_grouped
+          // over the raw `lead` variant. See _pulseShared.js
+          // extractLeadCount for the CAPI double-attribution rationale.
+          var leads = extractLeadCount(d.actions || []);
           if (d.actions) {
-            // Per-row Math.max across alias action_types via shared
-            // helpers — new Meta lead variants are picked up automatically
-            // by isLeadAction (canonical list + catch-all heuristic).
             for (var k = 0; k < d.actions.length; k++) {
               var a = d.actions[k];
               var at = String(a.action_type || "").toLowerCase();
               var av = parseInt(a.value || 0);
-              if (isLeadAction(at)) leads = Math.max(leads, av);
               if (isAppInstallAction(at)) appInstalls = Math.max(appInstalls, av);
               // "page_like" and the modern "onsite_conversion.page_like"
               // are the unambiguous page-follow actions. "like" is post

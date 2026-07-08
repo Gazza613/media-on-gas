@@ -3,7 +3,7 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
-import { isLeadAction } from "./_pulseShared.js";
+import { isLeadAction, extractLeadCount } from "./_pulseShared.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -205,19 +205,16 @@ export default async function handler(req, res) {
           var rawLike = 0;       // FB action_type=like value, captured for name-strong fallback below
           var rawPageLike = 0;   // FB action_type=page_like / onsite_conversion.page_like
           if (row.actions) {
+            // Lead objective: use the shared extractLeadCount helper so
+            // Meta's onsite_conversion.lead_grouped dedup value is
+            // preferred over the raw un-deduped `lead` variant for
+            // CAPI-configured campaigns (Learnalot pattern). Otherwise
+            // Trendlines showed FB 9 + IG 4 = 13 while Ads Manager
+            // and Objective Highlights read 6.
+            if (objective === "leads") results = extractLeadCount(row.actions);
             row.actions.forEach(function(a) {
               var at = String(a.action_type || "").toLowerCase();
               var v = parseInt(a.value || 0);
-              // Lead-Gen action-type list mirrors api/campaigns.js exactly
-              // so the Trendlines lead totals reconcile with Summary's
-              // Objective Highlights. Earlier the timeseries route only
-              // matched a subset (lead, fb_pixel_lead, onsite_conversion
-              // .lead* via prefix), missing onsite_web_lead and
-              // offsite_complete_registration_add_meta_leads, which
-              // undercounted lead campaigns that fired those events.
-              // Lead detection via shared isLeadAction so new Meta lead
-              // variants are caught automatically across every aggregator.
-              if (objective === "leads" && isLeadAction(at)) results = Math.max(results, v);
               // FB follower-objective: page_like / onsite_conversion.page_like
               // / follow are unambiguous and always count. "like" is post
               // reactions EXCEPT on a page-like-optimised campaign, where
@@ -225,7 +222,7 @@ export default async function handler(req, res) {
               // page_like row). Gate "like" on optimization_goal so the
               // profile-visit twin doesn't over-report the Trendline.
               // Matches api/ads.js / campaigns.js / adsets.js.
-              else if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "onsite_conversion.page_like" || at === "follow" || at === "onsite_conversion.follow")) {
+              if (objective === "followers" && platform === "Facebook" && (at === "page_like" || at === "onsite_conversion.page_like" || at === "follow" || at === "onsite_conversion.follow")) {
                 if (at === "page_like" || at === "onsite_conversion.page_like") rawPageLike = Math.max(rawPageLike, v);
                 results = Math.max(results, v);
               }

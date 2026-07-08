@@ -33,7 +33,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
-import { isLeadAction, isAppInstallAction, isPageLikeAction } from "./_pulseShared.js";
+import { isLeadAction, isAppInstallAction, isPageLikeAction, extractLeadCount } from "./_pulseShared.js";
 
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },
@@ -59,12 +59,15 @@ function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
 // isAppInstallAction / isPageLikeAction helpers so any new Meta variant
 // is picked up everywhere at once.
 function metaActionCounts(actions) {
-  var leads = 0, appInstalls = 0, pageLikes = 0, reactionLikes = 0;
+  var appInstalls = 0, pageLikes = 0, reactionLikes = 0;
+  // Lead dedup via the shared helper. Prefers Meta's own
+  // onsite_conversion.lead_grouped over the raw `lead` variant for
+  // CAPI-configured campaigns, matches Ads Manager UI.
+  var leads = extractLeadCount(actions || []);
   (actions || []).forEach(function(a) {
     var t = String(a.action_type || "").toLowerCase();
     var v = num(a.value);
-    if (isLeadAction(t)) leads = Math.max(leads, v);
-    else if (isAppInstallAction(t)) appInstalls = Math.max(appInstalls, v);
+    if (isAppInstallAction(t)) appInstalls = Math.max(appInstalls, v);
     else if (isPageLikeAction(t)) pageLikes = Math.max(pageLikes, v);
     else if (t === "like") reactionLikes = Math.max(reactionLikes, v);
   });

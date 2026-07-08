@@ -2,6 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
+import { extractLeadCount } from "./_pulseShared.js";
 
 // Placement-level performance breakdown. Pulls Meta insights with the
 // publisher_platform + platform_position breakdown so we can attribute
@@ -186,11 +187,16 @@ export default async function handler(req, res) {
           var pub = row.publisher_platform || "facebook";
           var pos = row.platform_position || "";
           var key = pub + "::" + pos;
-          var leads = 0, installs = 0, follows = 0, pageLikes = 0, reactionLikes = 0;
+          var installs = 0, follows = 0, pageLikes = 0, reactionLikes = 0;
+          // Lead extraction via the shared helper so CAPI-configured
+          // campaigns (Learnalot pattern) prefer Meta's own deduped
+          // onsite_conversion.lead_grouped value over the raw `lead`
+          // variant. Otherwise placement rows summed to 13 while
+          // Ads Manager UI + Objective Highlights read 6.
+          var leads = extractLeadCount(row.actions || []);
           (row.actions || []).forEach(function(a) {
             var at = String(a.action_type || "").toLowerCase();
             var v = parseInt(a.value || 0);
-            if (at === "lead" || at === "onsite_web_lead" || at === "offsite_conversion.fb_pixel_lead" || at === "onsite_conversion.lead_grouped" || at === "offsite_complete_registration_add_meta_leads") leads = Math.max(leads, v);
             if (at.indexOf("app_install") >= 0 || at === "mobile_app_install" || at === "omni_app_install") installs = Math.max(installs, v);
             if (at === "page_like" || at === "onsite_conversion.page_like") pageLikes = Math.max(pageLikes, v);
             if (at === "like") reactionLikes = Math.max(reactionLikes, v);
