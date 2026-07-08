@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v22-engagement-floor-fb-only";
+var CAMPAIGNS_CACHE_VERSION = "v23-lead-install-lpv-nb-cap";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -619,6 +619,19 @@ export default async function handler(req, res) {
       // floor on the FB row's pageLikes downstream so Summary's
       // followers tile reconciles with Ground Truth Audit.
       var pageLikesNbMap = {};
+      // Same no-breakdown floor pattern for lead-form conversions.
+      // Meta returns campaign-total lead attribution on EACH publisher
+      // row when we query with breakdowns=publisher_platform (leads
+      // are attributed at the campaign level, not per-placement), so
+      // summing per-publisher rows downstream doubles the count for
+      // any lead-form campaign delivering to both FB + IG. Capture
+      // the true campaign total here from the no-breakdown fetch and
+      // use it as the authoritative cap when apportioning leads
+      // across the per-publisher rows. Same treatment for app
+      // installs and landing-page views which have the same quirk.
+      var leadsNbMap = {};
+      var appInstallsNbMap = {};
+      var landingPageViewsNbMap = {};
       try {
         var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
         var rAll = [];
@@ -640,13 +653,24 @@ export default async function handler(req, res) {
           clicksMap[cid] = parseInt(row.clicks || 0);
           var pl = 0;
           var likeRaw = 0;
+          var nbLeads = 0;
+          var nbInstalls = 0;
+          var nbLpv = 0;
           (row.actions || []).forEach(function(a) {
             var t = String(a.action_type || "").toLowerCase();
+            var v = parseInt(a.value || 0, 10) || 0;
             if (t === "page_like" || t === "onsite_conversion.page_like") {
-              pl = Math.max(pl, parseInt(a.value || 0, 10) || 0);
+              pl = Math.max(pl, v);
             } else if (t === "like") {
-              likeRaw = Math.max(likeRaw, parseInt(a.value || 0, 10) || 0);
+              likeRaw = Math.max(likeRaw, v);
             }
+            // Alias-max across the lead action_type variants Meta
+            // surfaces for a single form submission (lead /
+            // onsite_conversion.lead_grouped / offsite_conversion.
+            // fb_pixel_lead). Same helpers used everywhere else.
+            if (isLeadAction(t)) nbLeads = Math.max(nbLeads, v);
+            if (isAppInstallAction(t)) nbInstalls = Math.max(nbInstalls, v);
+            if (isLandingPageViewAction(t)) nbLpv = Math.max(nbLpv, v);
           });
           // Strict PAGE_LIKES gate (mirrors reconcile.js rawMetaObjStrict
           // and the per-publisher fold-in above). Pre-ODAX PAGE_LIKES and
@@ -682,6 +706,9 @@ export default async function handler(req, res) {
             if (nameStrongPageLike) pl = likeRaw;
           }
           if (pl > 0) pageLikesNbMap[cid] = pl;
+          if (nbLeads > 0) leadsNbMap[cid] = nbLeads;
+          if (nbInstalls > 0) appInstallsNbMap[cid] = nbInstalls;
+          if (nbLpv > 0) landingPageViewsNbMap[cid] = nbLpv;
         });
       } catch (_) { /* non-fatal */ }
 
@@ -1156,6 +1183,63 @@ export default async function handler(req, res) {
         var floor = pageLikesNbMap[cid] || 0;
         if (floor > r.pageLikes) r.pageLikes = floor;
       });
+
+      // Lead / install / landing-page-view cap. Meta returns the
+      // campaign-total on EACH publisher row for these action types
+      // (Instant-Form lead ads, App-Install ads, LP view attribution)
+      // because the conversion is attributed to the campaign, not the
+      // placement view. Without a cap the frontend's per-platform sum
+      // doubles (or triples with 3 publishers) the true total, which
+      // is why Learnalot's dashboard read 10 leads while Meta Ads
+      // Manager showed 5.
+      //
+      // Grouping strategy: sum per-publisher per-campaign values, and
+      // if the sum exceeds the no-breakdown campaign total by more
+      // than a rounding tolerance, redistribute the true total across
+      // the publisher rows PROPORTIONAL TO SPEND. Spend is used
+      // because it's the least ambiguous per-publisher signal (each
+      // publisher's own delivery). Rounding lands the extra on the
+      // largest-spend row so the sum reconciles exactly.
+      var _apportion = function(nbMap, field) {
+        var perCampaign = {};
+        Object.keys(rowMap).forEach(function(k) {
+          var r = rowMap[k];
+          var cid = String(r.rawCampaignId);
+          if (!perCampaign[cid]) perCampaign[cid] = { rows: [], sum: 0, spend: 0 };
+          perCampaign[cid].rows.push(r);
+          perCampaign[cid].sum += r[field] || 0;
+          perCampaign[cid].spend += r._sumSpend || 0;
+        });
+        Object.keys(perCampaign).forEach(function(cid) {
+          var pc = perCampaign[cid];
+          var truth = nbMap[cid] || 0;
+          // Nothing to cap when the no-breakdown total is missing OR
+          // the per-publisher sum already agrees within 1 unit (real
+          // per-placement attribution, no double-count).
+          if (truth <= 0) return;
+          if (pc.sum <= truth + 0.5) return;
+          if (pc.spend <= 0) {
+            // Degenerate: no spend to weight by, dump everything on
+            // the first row.
+            pc.rows.forEach(function(r, i) { r[field] = i === 0 ? truth : 0; });
+            return;
+          }
+          // Spend-proportional split, floor per row, remainder to the
+          // largest-spend row so the total equals truth exactly.
+          var floors = pc.rows.map(function(r) { return Math.floor(truth * (r._sumSpend / pc.spend)); });
+          var sumFloors = floors.reduce(function(x, y) { return x + y; }, 0);
+          var remainder = truth - sumFloors;
+          if (remainder > 0) {
+            var maxIdx = 0;
+            pc.rows.forEach(function(r, i) { if (r._sumSpend > pc.rows[maxIdx]._sumSpend) maxIdx = i; });
+            floors[maxIdx] += remainder;
+          }
+          pc.rows.forEach(function(r, i) { r[field] = floors[i]; });
+        });
+      };
+      _apportion(leadsNbMap, "leads");
+      _apportion(appInstallsNbMap, "appInstalls");
+      _apportion(landingPageViewsNbMap, "landingPageViews");
 
       Object.keys(rowMap).forEach(function(k) {
         var r = rowMap[k];
