@@ -67,7 +67,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 5 * 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v24-lead-cap-diag";
+var CAMPAIGNS_CACHE_VERSION = "v25-lead-grouped-dedup";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -661,6 +661,7 @@ export default async function handler(req, res) {
           var nbLeads = 0;
           var nbInstalls = 0;
           var nbLpv = 0;
+          var nbLeadGrouped = 0;
           (row.actions || []).forEach(function(a) {
             var t = String(a.action_type || "").toLowerCase();
             var v = parseInt(a.value || 0, 10) || 0;
@@ -669,6 +670,9 @@ export default async function handler(req, res) {
             } else if (t === "like") {
               likeRaw = Math.max(likeRaw, v);
             }
+            // Meta's own deduped Instant-Form value. See per-publisher
+            // comment above for the CAPI double-attribution rationale.
+            if (t === "onsite_conversion.lead_grouped") nbLeadGrouped = Math.max(nbLeadGrouped, v);
             // Alias-max across the lead action_type variants Meta
             // surfaces for a single form submission (lead /
             // onsite_conversion.lead_grouped / offsite_conversion.
@@ -677,6 +681,8 @@ export default async function handler(req, res) {
             if (isAppInstallAction(t)) nbInstalls = Math.max(nbInstalls, v);
             if (isLandingPageViewAction(t)) nbLpv = Math.max(nbLpv, v);
           });
+          // Prefer the deduped Meta-provided grouped-lead value.
+          if (nbLeadGrouped > 0) nbLeads = nbLeadGrouped;
           // Strict PAGE_LIKES gate (mirrors reconcile.js rawMetaObjStrict
           // and the per-publisher fold-in above). Pre-ODAX PAGE_LIKES and
           // ad-sets explicitly optimised for PAGE_LIKES surface the
@@ -791,11 +797,22 @@ export default async function handler(req, res) {
           })();
 
           var leads = 0, appInstalls = 0, landingPageViews = 0, pageLikes = 0, reactionLikes = 0, pageFollows = 0, reactionsTotal = 0;
+          // Prefer Meta's own deduped variant when present (used by Ads
+          // Manager UI to display the "Leads" column). Learnalot's
+          // Instant-Form + CAPI setup returned lead=12 (raw, includes
+          // in-app form + CAPI's separate event count) and
+          // onsite_conversion.lead_grouped=6 (Meta's deduped) for the
+          // same 6 submissions. A plain Math.max across all lead
+          // variants picked the raw 12; UI reads 6. Use the grouped
+          // value when Meta returns it, fall back to the max of raw
+          // variants when it doesn't.
+          var leadGrouped = 0;
           if (c.actions) {
             for (var a = 0; a < c.actions.length; a++) {
               var act = c.actions[a];
               var t = String(act.action_type || "").toLowerCase();
               var v = parseInt(act.value || 0, 10) || 0;
+              if (t === "onsite_conversion.lead_grouped") leadGrouped = Math.max(leadGrouped, v);
               // Per-row Math.max via shared isLeadAction so new Meta lead
               // variants are picked up automatically; same pattern for
               // installs, page-likes, landing-page-views.
@@ -815,6 +832,9 @@ export default async function handler(req, res) {
               if (t === "post_reaction") reactionsTotal = Math.max(reactionsTotal, v);
             }
           }
+          // Prefer the deduped grouped-lead value when Meta returns it.
+          // See comment above the loop for why.
+          if (leadGrouped > 0) leads = leadGrouped;
           // Fold reactions into page likes ONLY for a strictly legacy
           // PAGE_LIKES campaign (the pre-ODAX objective where Meta returned
           // page likes under "like"). A campaign merely NAMED Like&Follow
