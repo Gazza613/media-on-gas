@@ -8957,14 +8957,21 @@ export default function MediaOnGas(){
                 var impsVal=filtered?totalImps:(computed.totalImps||totalImps);
                 var ctrVal=filtered?blendedCtr:(computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):blendedCtr);
                 var note=filtered?"FILTERED AD-LEVEL TOTALS":"MATCHES SUMMARY · ALL SELECTED CAMPAIGNS";
-                // Reconcile ADS VISIBLE against the ad-set universe:
-                // /api/ads reads Meta's Insights endpoint which only
-                // returns delivered ads, so a freshly published or
-                // still-in-review ad drops out. `noImpAds` carries the
-                // full ad universe (ACTIVE / PAUSED / PENDING_REVIEW
-                // etc.) minus what actually delivered — filter to the
-                // selected campaigns and show a chip so the client can
-                // see WHY the count is 12 not 15.
+                // ADS VISIBLE = distinct ad_ids in filteredAds. Meta's
+                // /insights returns one row per (ad_id, publisher_platform),
+                // so a Meta ad delivered on BOTH Facebook AND Instagram is
+                // TWO rows with the same adId. Counting rows over-inflated
+                // by cross-post factor (5 ads on FB+IG read as 10). Distinct
+                // adId matches "ads uploaded" — what the client actually
+                // asked about ("we ran 10 static + 5 mp4, why 12?").
+                var distinctVisible={};
+                filteredAds.forEach(function(a){if(a&&a.adId)distinctVisible[a.adId]=true;});
+                var visibleCount=Object.keys(distinctVisible).length;
+                // Zero-impressions reconcile: ads present in the ad-set
+                // universe (ACTIVE / PAUSED / PENDING_REVIEW etc.) that
+                // drew no delivery in the selected window. Filter to the
+                // currently selected campaigns; render as a chip beside
+                // the tile so visible + not-delivered = ads uploaded.
                 var zeroImpsForSel=0;
                 if(noImpAds&&noImpAds.length){
                   for(var zi=0;zi<noImpAds.length;zi++){
@@ -8976,7 +8983,7 @@ export default function MediaOnGas(){
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:8}}>
                     <Glass accent={P.blaze} hv={true} st={{padding:18,textAlign:"center"}}>
                       <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>ADS VISIBLE</div>
-                      <div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{filteredAds.length}</div>
+                      <div style={{fontSize:26,fontWeight:900,color:P.blaze,fontFamily:fm}}>{visibleCount}</div>
                       {zeroImpsForSel>0&&<div title="These ads exist in the ad set but have not yet drawn impressions in the selected date range (usually still in review or freshly published). Meta's Insights endpoint only returns rows for delivered ads." style={{marginTop:8,display:"inline-block",padding:"3px 8px",background:P.warning+"22",border:"1px solid "+P.warning+"55",borderRadius:6,fontSize:9,fontWeight:800,color:P.warning,fontFamily:fm,letterSpacing:1.2,cursor:"help"}}>{"+"+zeroImpsForSel+" NOT YET DELIVERED"}</div>}
                     </Glass>
                     <Glass accent={P.ember} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL SPEND</div><div style={{fontSize:26,fontWeight:900,color:P.ember,fontFamily:fm}}>{fR(spendVal)}</div></Glass>
