@@ -7610,13 +7610,12 @@ export default function MediaOnGas(){
                   {secHead(P.mint,"BRAND PULSE",Ic.pulse(P.mint,18))}
                   <style>{"@keyframes pulseBar{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 1px currentColor}}@keyframes barFill{from{width:0}}"}</style>
                   <div style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1,marginBottom:14,textAlign:"right"}}>{fmt(totalAll)} total interactions</div>
-                  {(reactionSum>0||totals.other>0)&&<SentimentTruthCard totals={totals}/>}
                   {/* Text + container for every row renders unconditionally
                       so the section reads as static. GrowBar gates only
                       the bar fill width, with a 60 ms per-row stagger so
                       the bars cascade in top-to-bottom as the team
                       scrolls to Brand Pulse. */}
-                  {splitUnavailable&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginBottom:12,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8,border:"1px solid "+P.rule}}>Per-type reaction split (Love, Haha, Wow, Sad, Angry) is not exposed by Meta for paid ads without the Page engagement permission, so these reactions are counted within Other Reactions, not a measured zero. The sentiment band above already treats every unclassified reaction conservatively (worst case = negative for the floor).</div>}
+                  {splitUnavailable&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginBottom:12,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8,border:"1px solid "+P.rule}}>Per-type reaction split (Love, Haha, Wow, Sad, Angry) is not exposed by Meta for paid ads without the Page engagement permission, so these reactions are counted within Other Reactions, not a measured zero.</div>}
                   {rows.map(function(r,idx){
                     var pct=maxVal>0?(r.value/maxVal*100):0;
                     var ppParts=[];
@@ -10485,12 +10484,11 @@ export default function MediaOnGas(){
                       <div style={{flex:1,height:1,background:"linear-gradient(90deg,"+P.mint+"40, transparent)"}}></div>
                       <span style={{fontSize:10,color:P.label,fontFamily:fm,letterSpacing:1}}>{fmt(totalAll)} total interactions</span>
                     </div>
-                    {(reactionSum>0||totals.other>0)&&<SentimentTruthCard totals={totals}/>}
                     {/* Text + container renders unconditionally; only the
                         bar fill width gates on intersection via GrowBar
                         so the row's labels and counts are static and
                         only the bars cascade in as the team scrolls. */}
-                    {splitUnavailable&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginBottom:12,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8,border:"1px solid "+P.rule}}>Per-type reaction split (Love, Haha, Wow, Sad, Angry) is not exposed by Meta for paid ads without the Page engagement permission, so these reactions are counted within Other Reactions, not a measured zero. The sentiment band above already treats every unclassified reaction conservatively (worst case = negative for the floor).</div>}
+                    {splitUnavailable&&<div style={{fontSize:9.5,color:P.caption,fontFamily:ff,fontStyle:"italic",lineHeight:1.5,marginBottom:12,padding:"8px 10px",background:"rgba(0,0,0,0.2)",borderRadius:8,border:"1px solid "+P.rule}}>Per-type reaction split (Love, Haha, Wow, Sad, Angry) is not exposed by Meta for paid ads without the Page engagement permission, so these reactions are counted within Other Reactions, not a measured zero.</div>}
                     {rows.map(function(r,idx){
                       var pct=maxVal>0?(r.value/maxVal*100):0;
                       var ppParts=[];

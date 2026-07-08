@@ -746,13 +746,22 @@ function buildEmailHtml(opts) {
   var canonSlug = canonicalClientSlug(opts.clientSlug);
   var logoWidth = 300;
   if (canonSlug) {
-    if (LOGO_WIDTH_BY_SLUG[canonSlug]) {
-      logoWidth = LOGO_WIDTH_BY_SLUG[canonSlug];
-    } else {
+    // Try the raw canonical slug first, then a "gas"-prefix-stripped
+    // variant so a GAS_<Client>_... campaign name (agency naming
+    // convention, project_naming_convention) still matches the brand
+    // key. Without the strip Learnalot rendered at the default 300px
+    // and dominated the email header.
+    var lwCandidates = [canonSlug];
+    if (canonSlug.indexOf("gas") === 0 && canonSlug.length > 3) lwCandidates.push(canonSlug.slice(3));
+    var matched = false;
+    for (var lwC = 0; lwC < lwCandidates.length && !matched; lwC++) {
+      var cand = lwCandidates[lwC];
+      if (LOGO_WIDTH_BY_SLUG[cand]) { logoWidth = LOGO_WIDTH_BY_SLUG[cand]; matched = true; break; }
       var lwKeys = Object.keys(LOGO_WIDTH_BY_SLUG).sort(function(a, b) { return b.length - a.length; });
       for (var lwI = 0; lwI < lwKeys.length; lwI++) {
-        if (canonSlug.indexOf(lwKeys[lwI]) === 0 && lwKeys[lwI].length >= 5) {
+        if (cand.indexOf(lwKeys[lwI]) === 0 && lwKeys[lwI].length >= 5) {
           logoWidth = LOGO_WIDTH_BY_SLUG[lwKeys[lwI]];
+          matched = true;
           break;
         }
       }
@@ -989,9 +998,40 @@ export default async function handler(req, res) {
     // if it actually resolves to an image, otherwise fall back to the
     // GAS emblem. Prevents a broken-image logo in the client's inbox
     // (e.g. the file not yet committed at the configured path).
-    var clientLogo = "";
+    //
+    // Logo source order: (1) KPI profile logoUrl (superadmin-configured
+    // per-client, e.g. Sea Weeds / Sea Storm / Psycho Bunny), then
+    // (2) the code-level slug→file map below so clients without a KPI
+    // profile (Learnalot uses the default objective layout, no profile
+    // record) still get their branded logo in the email header.
+    // Mirrors dashboard/src/App.jsx CLIENT_LOGOS.
+    var FALLBACK_CLIENT_LOGOS = {
+      mtnmomo: "/clients/mtn-momo.png",
+      mtnmomopos: "/clients/mtn-momo.png",
+      learnalot: "/clients/learnalot.png"
+    };
+    var _resolvedLogoPath = "";
     if (kpiProfile && kpiProfile.logoUrl) {
-      var _lu = String(kpiProfile.logoUrl);
+      _resolvedLogoPath = String(kpiProfile.logoUrl);
+    } else if (canonicalClientSlug(clientSlug)) {
+      var _cs = canonicalClientSlug(clientSlug);
+      var _flCandidates = [_cs];
+      if (_cs.indexOf("gas") === 0 && _cs.length > 3) _flCandidates.push(_cs.slice(3));
+      for (var _fc = 0; _fc < _flCandidates.length && !_resolvedLogoPath; _fc++) {
+        var _fcs = _flCandidates[_fc];
+        if (FALLBACK_CLIENT_LOGOS[_fcs]) { _resolvedLogoPath = FALLBACK_CLIENT_LOGOS[_fcs]; break; }
+        var _flKeys = Object.keys(FALLBACK_CLIENT_LOGOS).sort(function(a, b) { return b.length - a.length; });
+        for (var _fki = 0; _fki < _flKeys.length; _fki++) {
+          if (_fcs.indexOf(_flKeys[_fki]) === 0 && _flKeys[_fki].length >= 5) {
+            _resolvedLogoPath = FALLBACK_CLIENT_LOGOS[_flKeys[_fki]];
+            break;
+          }
+        }
+      }
+    }
+    var clientLogo = "";
+    if (_resolvedLogoPath) {
+      var _lu = _resolvedLogoPath;
       var _abs = _lu.indexOf("http") === 0 ? _lu : (origin + _lu);
       try {
         var _lr = await fetch(_abs, { method: "GET" });

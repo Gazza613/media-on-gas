@@ -125,9 +125,20 @@ export function brandDisplayForSlug(raw) {
   var s = canonicalClientSlug(rawStr);
   if (s && KNOWN_BRAND_DISPLAY[s]) return KNOWN_BRAND_DISPLAY[s];
   if (s) {
+    // Client-tagged campaigns follow the agency convention
+    // GAS_<Client>_<Objective>_... (see project_naming_convention),
+    // so the canonicalised slug is "gas<client>..." — the leading "gas"
+    // prefix has to be stripped before the brand-key prefix match, else
+    // brand resolution falls through to a raw-slug echo (Learnalot
+    // campaign showed "GASLEARNALOTMETALEADSFORMPSIJULY2026" in the
+    // email header).
+    var candidates = [s];
+    if (s.indexOf("gas") === 0 && s.length > 3) candidates.push(s.slice(3));
     var keys = Object.keys(KNOWN_BRAND_DISPLAY).sort(function(a, b) { return b.length - a.length; });
-    for (var i = 0; i < keys.length; i++) {
-      if (s.indexOf(keys[i]) === 0 && keys[i].length >= 5) return KNOWN_BRAND_DISPLAY[keys[i]];
+    for (var c = 0; c < candidates.length; c++) {
+      for (var i = 0; i < keys.length; i++) {
+        if (candidates[c].indexOf(keys[i]) === 0 && keys[i].length >= 5) return KNOWN_BRAND_DISPLAY[keys[i]];
+      }
     }
   }
   // Title-cased fallback. Replace hyphens / underscores with spaces and
@@ -148,9 +159,13 @@ export function knownBrandForSlug(raw) {
   var s = canonicalClientSlug(rawStr);
   if (!s) return "";
   if (KNOWN_BRAND_DISPLAY[s]) return KNOWN_BRAND_DISPLAY[s];
+  var candidates = [s];
+  if (s.indexOf("gas") === 0 && s.length > 3) candidates.push(s.slice(3));
   var keys = Object.keys(KNOWN_BRAND_DISPLAY).sort(function(a, b) { return b.length - a.length; });
-  for (var i = 0; i < keys.length; i++) {
-    if (s.indexOf(keys[i]) === 0 && keys[i].length >= 5) return KNOWN_BRAND_DISPLAY[keys[i]];
+  for (var c = 0; c < candidates.length; c++) {
+    for (var i = 0; i < keys.length; i++) {
+      if (candidates[c].indexOf(keys[i]) === 0 && keys[i].length >= 5) return KNOWN_BRAND_DISPLAY[keys[i]];
+    }
   }
   return "";
 }
