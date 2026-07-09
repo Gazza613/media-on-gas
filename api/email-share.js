@@ -739,9 +739,9 @@ function buildEmailHtml(opts) {
     mtnmomo: 150,
     mtnmomopos: 150,
     // Learnalot is a horizontal wordmark (icon + "Learnalot" text)
-    // at a ~4:1 aspect ratio, sized to read cleanly without
-    // dominating the header at 300px.
-    learnalot: 200
+    // at a ~4:1 aspect ratio; at 200px it still read heavy per
+    // owner feedback. Matched to the MTN MoMo override at 150px.
+    learnalot: 150
   };
   var canonSlug = canonicalClientSlug(opts.clientSlug);
   var logoWidth = 300;
