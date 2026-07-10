@@ -1688,6 +1688,22 @@ function ShareModal(props){
   var downloadPdf=function(){
     if(!validateForm(false))return;
     err[1]("");pdfBusy[1](true);
+    // Open the target window SYNCHRONOUSLY as part of the click
+    // gesture. Chrome/Safari popup blockers reject window.open() that
+    // fires from an async continuation (i.e. after fetch resolves),
+    // so we open it immediately with a loading placeholder and swap in
+    // the rendered report once the /api/email-share response lands.
+    var w=window.open("","_blank","noopener,noreferrer,width=1100,height=820");
+    if(!w){
+      pdfBusy[1](false);
+      err[1]("Popup blocked. Allow pop-ups for this site (URL bar icon) and retry.");
+      return;
+    }
+    try{
+      w.document.open();
+      w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Preparing report...</title><style>@keyframes gasSpin{to{transform:rotate(360deg)}}html,body{margin:0;padding:0;background:linear-gradient(170deg,#0F1820 0%,#13202C 100%);color:#FFFBF8;font-family:Helvetica,Arial,sans-serif;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;text-align:center;padding:24px;box-sizing:border-box;}.ring{width:56px;height:56px;border:4px solid rgba(249,98,3,0.18);border-top-color:#F96203;border-radius:50%;animation:gasSpin 1s linear infinite;}.brand{font-size:11px;letter-spacing:5px;color:#F96203;font-weight:800;text-transform:uppercase;}.title{font-size:20px;font-weight:900;color:#FFFBF8;letter-spacing:1px;}.sub{font-size:13px;color:rgba(255,251,248,0.62);line-height:1.6;max-width:420px;}</style></head><body><div class="ring"></div><div class="brand">GAS Marketing Automation</div><div class="title">Building your branded report...</div><div class="sub">Pulling live campaign, placement and community data. This window will refresh into the PDF-ready report and open the Save-as-PDF dialog in a moment.</div></body></html>');
+      w.document.close();
+    }catch(_){/* if the placeholder write fails we still try to swap html below */}
     var payload=buildCampaignPayload();
     payload.emailTo=emailTo[0].trim();
     payload.emailCc=emailCc[0].trim();
@@ -1704,7 +1720,7 @@ function ShareModal(props){
       body:JSON.stringify(payload)
     }).then(function(r){return r.json();}).then(function(d){
       pdfBusy[1](false);
-      if(!(d&&d.ok&&d.html)){err[1]((d&&d.error)||"Could not build PDF");return;}
+      if(!(d&&d.ok&&d.html)){try{w.close();}catch(_){}err[1]((d&&d.error)||"Could not build PDF");return;}
       if(d.shareUrl){shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt||"");}
       var printCss='\n<style id="gas-print-style">\n@page{size:A4;margin:12mm;}\nhtml,body{background:#ffffff !important;margin:0 !important;padding:0 !important;}\nbody{-webkit-print-color-adjust:exact;print-color-adjust:exact;}\na[href]{word-break:break-word;}\n</style>\n';
       var printScript='\n<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},250);});<\\/script>\n';
@@ -1713,12 +1729,14 @@ function ShareModal(props){
       else html='<!doctype html><html><head><meta charset="utf-8">'+printCss+'</head><body>'+html+'</body></html>';
       if(html.indexOf("</body>")>=0)html=html.replace("</body>",printScript+"</body>");
       else html+=printScript;
-      var w=window.open("","_blank","noopener,noreferrer,width=1100,height=820");
-      if(!w){err[1]("Popup blocked. Allow pop-ups to download PDF.");return;}
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-    }).catch(function(){pdfBusy[1](false);err[1]("Connection error");});
+      try{
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+      }catch(e){
+        err[1]("Could not write report into new window: "+(e&&e.message||"unknown"));
+      }
+    }).catch(function(){pdfBusy[1](false);try{w.close();}catch(_){}err[1]("Connection error");});
   };
   var confirmSend=function(){
     err[1]("");busy[1](true);emailSent[1](false);
