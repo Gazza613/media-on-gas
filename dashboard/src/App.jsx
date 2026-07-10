@@ -1693,7 +1693,12 @@ function ShareModal(props){
     // fires from an async continuation (i.e. after fetch resolves),
     // so we open it immediately with a loading placeholder and swap in
     // the rendered report once the /api/email-share response lands.
-    var w=window.open("","_blank","noopener,noreferrer,width=1100,height=820");
+    // NB: no `noopener,noreferrer`. Chrome silently disables document
+    // write to the child when those flags are set, which is why the
+    // popup was landing blank white. We are writing our own trusted
+    // HTML into an about:blank window we just opened, so opener access
+    // is fine here.
+    var w=window.open("","_blank","width=1100,height=820");
     if(!w){
       pdfBusy[1](false);
       err[1]("Popup blocked. Allow pop-ups for this site (URL bar icon) and retry.");
