@@ -1581,6 +1581,7 @@ function ShareModal(props){
   var emailDiagnostic=useState("");
   var previewHtml=useState("");
   var previewLoading=useState(false);
+  var pdfBusy=useState(false);
   // Rotating quirky quip while the email preview is being built
   // server-side. Keeps the user engaged during the 10-30s render
   // window without making a time promise we can't keep.
@@ -1681,6 +1682,43 @@ function ShareModal(props){
       if(d.ok&&d.html){previewHtml[1](d.html);}
       else{err[1](d.error||"Could not build preview");}
     }).catch(function(){previewLoading[1](false);err[1]("Connection error");});
+  };
+  // Build a print-friendly shell around the rendered email HTML and launch
+  // the browser print dialog so the operator can save as PDF.
+  var downloadPdf=function(){
+    if(!validateForm(false))return;
+    err[1]("");pdfBusy[1](true);
+    var payload=buildCampaignPayload();
+    payload.emailTo=emailTo[0].trim();
+    payload.emailCc=emailCc[0].trim();
+    payload.emailBcc=emailBcc[0].trim();
+    payload.preview=true;
+    // Ask the server for the PDF-enriched HTML (adds Community Growth,
+    // Placement Performance, and Per-Campaign tables that the inbox
+    // email intentionally omits). Same endpoint short-circuits on
+    // preview: true so no email is sent.
+    payload.pdf=true;
+    fetch(props.apiBase+"/api/email-share",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-session-token":props.session||""},
+      body:JSON.stringify(payload)
+    }).then(function(r){return r.json();}).then(function(d){
+      pdfBusy[1](false);
+      if(!(d&&d.ok&&d.html)){err[1]((d&&d.error)||"Could not build PDF");return;}
+      if(d.shareUrl){shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt||"");}
+      var printCss='\n<style id="gas-print-style">\n@page{size:A4;margin:12mm;}\nhtml,body{background:#ffffff !important;margin:0 !important;padding:0 !important;}\nbody{-webkit-print-color-adjust:exact;print-color-adjust:exact;}\na[href]{word-break:break-word;}\n</style>\n';
+      var printScript='\n<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},250);});<\\/script>\n';
+      var html=String(d.html||"");
+      if(html.indexOf("</head>")>=0)html=html.replace("</head>",printCss+"</head>");
+      else html='<!doctype html><html><head><meta charset="utf-8">'+printCss+'</head><body>'+html+'</body></html>';
+      if(html.indexOf("</body>")>=0)html=html.replace("</body>",printScript+"</body>");
+      else html+=printScript;
+      var w=window.open("","_blank","noopener,noreferrer,width=1100,height=820");
+      if(!w){err[1]("Popup blocked. Allow pop-ups to download PDF.");return;}
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    }).catch(function(){pdfBusy[1](false);err[1]("Connection error");});
   };
   var confirmSend=function(){
     err[1]("");busy[1](true);emailSent[1](false);
@@ -1896,10 +1934,12 @@ function ShareModal(props){
 
       {err[0]&&<div style={{color:P.critical,fontSize:11,fontFamily:fm,marginBottom:12}}>{err[0]}</div>}
 
-      {!shareUrl[0]&&<div style={{display:"flex",gap:10}}>
-        <button onClick={generate} disabled={busy[0]||previewLoading[0]} style={{flex:1,background:busy[0]?"#555":"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>{busy[0]?"WORKING...":"LINK ONLY"}</button>
-        <button onClick={requestPreview} disabled={busy[0]||previewLoading[0]} style={{flex:2,background:(busy[0]||previewLoading[0])?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:(busy[0]||previewLoading[0])?"wait":"pointer",letterSpacing:2}}>{previewLoading[0]?"BUILDING PREVIEW...":busy[0]?"SENDING...":"PREVIEW + SEND"}</button>
+      {!shareUrl[0]&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.5fr",gap:10}}>
+        <button onClick={generate} disabled={busy[0]||previewLoading[0]||pdfBusy[0]} style={{background:busy[0]?"#555":"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"12px 20px",color:P.txt,fontSize:11,fontWeight:800,fontFamily:fm,cursor:busy[0]?"wait":"pointer",letterSpacing:1.5}}>{busy[0]?"WORKING...":"LINK ONLY"}</button>
+        <button onClick={downloadPdf} disabled={busy[0]||previewLoading[0]||pdfBusy[0]} style={{background:(busy[0]||previewLoading[0]||pdfBusy[0])?"#555":"transparent",border:"1px solid "+P.ember+"70",borderRadius:10,padding:"12px 20px",color:(busy[0]||previewLoading[0]||pdfBusy[0])?"#ddd":P.ember,fontSize:11,fontWeight:900,fontFamily:fm,cursor:(busy[0]||previewLoading[0]||pdfBusy[0])?"wait":"pointer",letterSpacing:1.5}}>{pdfBusy[0]?"BUILDING PDF...":"DOWNLOAD PDF"}</button>
+        <button onClick={requestPreview} disabled={busy[0]||previewLoading[0]||pdfBusy[0]} style={{background:(busy[0]||previewLoading[0]||pdfBusy[0])?"#555":gEmber,border:"none",borderRadius:10,padding:"12px 20px",color:"#fff",fontSize:12,fontWeight:900,fontFamily:fm,cursor:(busy[0]||previewLoading[0]||pdfBusy[0])?"wait":"pointer",letterSpacing:2}}>{previewLoading[0]?"BUILDING PREVIEW...":busy[0]?"SENDING...":"PREVIEW + SEND"}</button>
       </div>}
+      {!shareUrl[0]&&<div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:8,lineHeight:1.5}}>Download PDF opens your browser print dialog using the same branded report. Choose <span style={{color:P.txt}}>Save as PDF</span> to export.</div>}
 
       {shareUrl[0]&&<div style={{marginTop:4}}>
         {emailSent[0]&&<div style={{background:P.mint+"12",border:"1px solid "+P.mint+"40",borderRadius:10,padding:"12px 14px",marginBottom:14}}>

@@ -241,7 +241,12 @@ async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
     return {
       grand: grand,
       platforms: platforms,
-      campaignCount: filtered.length
+      campaignCount: filtered.length,
+      // Keep the raw filtered campaign rows so the PDF-only per-
+      // campaign table can be rendered without a second fetch. The
+      // inbox email doesn't use this field so payload stays lean when
+      // opts.pdf !== true (renderCampaignsBlockPdf is a no-op).
+      campaigns: filtered
     };
   } catch (err) {
     console.error("Email summary fetch error", err);
@@ -272,6 +277,199 @@ async function fetchEcommerce(req, from, to, clientSlug) {
     console.error("Email ecommerce fetch error", err);
     return null;
   }
+}
+
+// PDF-only extra: pull the placements + campaigns list so the
+// downloadable report can render tables that the inbox email
+// intentionally omits (kept lean for scrollability). Only called when
+// body.pdf === true. Non-fatal on error — the PDF still ships without
+// the extra sections rather than 500ing the whole request.
+async function fetchPlacementsData(req, from, to, campaignIds) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return null;
+    var internalHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    // Placements takes a single comma-joined campaignIds param, not
+    // one query per id — mirror what the dashboard's frontend sends.
+    var idsQs = (campaignIds || []).length ? "&campaignIds=" + encodeURIComponent((campaignIds || []).map(String).join(",")) : "";
+    var url = "https://" + internalHost + "/api/placements?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + idsQs;
+    var r = await fetch(url, { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d && Array.isArray(d.placements) ? d.placements : null;
+  } catch (err) {
+    console.error("[email-share] placements PDF fetch error", err);
+    return null;
+  }
+}
+
+// PDF-only: dense per-placement performance table. Sorted by spend
+// (matches the dashboard's Placement Performance section), top 10 rows
+// with impressions/CTR/spend + the section-appropriate result column
+// (leads, follows, clicks). Skipped entirely if placements array is
+// empty.
+function renderPlacementsBlockPdf(placements) {
+  if (!Array.isArray(placements) || placements.length === 0) return "";
+  var fmtNum = function(n) { var v = parseFloat(n); return isNaN(v) ? "0" : Math.round(v).toLocaleString("en-ZA"); };
+  var fmtR = function(n) { var v = parseFloat(n); if (isNaN(v)) return "R0.00"; return "R" + v.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var totalSpend = placements.reduce(function(s, p) { return s + parseFloat(p.spend || 0); }, 0);
+  var rows = placements.slice(0, 10);
+  var rowsHtml = rows.map(function(p, i) {
+    var spend = parseFloat(p.spend || 0);
+    var imps = parseInt(p.impressions || 0, 10) || 0;
+    var clicks = parseInt(p.clicks || 0, 10) || 0;
+    var leads = parseInt(p.leads || 0, 10) || 0;
+    var follows = parseInt(p.follows || 0, 10) || 0;
+    var pageLikes = parseInt(p.pageLikes || 0, 10) || 0;
+    var ctr = imps > 0 ? (clicks / imps * 100) : 0;
+    var share = totalSpend > 0 ? (spend / totalSpend * 100) : 0;
+    var result = leads > 0 ? leads : (follows + pageLikes > 0 ? (follows + pageLikes) : clicks);
+    var resultLabel = leads > 0 ? "Leads" : (follows + pageLikes > 0 ? "Follows" : "Clicks");
+    var costPer = result > 0 ? (spend / result) : 0;
+    return `<tr style="background:${i % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent"};">
+      <td style="padding:9px 10px;font-size:11px;color:#8B7FA3;font-weight:800;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">${i + 1}</td>
+      <td style="padding:9px 12px;font-size:12px;color:#FFFBF8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${escapeHtml(p.color || "#8B7FA3")};margin-right:8px;vertical-align:middle;"></span>${escapeHtml(p.name || "Unknown")}
+        <div style="font-size:9px;color:#8B7FA3;font-weight:500;margin-top:2px;letter-spacing:1px;text-transform:uppercase;">${escapeHtml(p.platform || "")}</div>
+      </td>
+      <td style="padding:9px 10px;font-size:11px;color:#FFFBF8;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${share.toFixed(2)}%</td>
+      <td style="padding:9px 10px;font-size:11px;color:#FF6B00;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${fmtR(spend)}</td>
+      <td style="padding:9px 10px;font-size:11px;color:#FFFBF8;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${fmtNum(imps)}</td>
+      <td style="padding:9px 10px;font-size:11px;color:${ctr >= 1.2 ? "#34D399" : "#FFFBF8"};font-weight:700;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${ctr.toFixed(2)}%</td>
+      <td style="padding:9px 10px;font-size:11px;color:#FFFBF8;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${result > 0 ? fmtNum(result) : "-"}</td>
+      <td style="padding:9px 10px;font-size:10px;color:#8B7FA3;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${result > 0 ? fmtR(costPer) + " / " + resultLabel.toLowerCase() : "-"}</td>
+    </tr>`;
+  }).join("");
+  return `<tr><td style="padding:34px 40px 8px;page-break-inside:avoid;">
+    <div style="border-top:1px solid rgba(168,85,247,0.16);padding-top:22px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="font-size:11px;color:#F96203;letter-spacing:3px;text-transform:uppercase;font-weight:800;">Placement Performance</div>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(249,98,3,0.5),transparent);"></div>
+        <div style="font-size:9px;color:#8B7FA3;letter-spacing:1px;">${placements.length} placements active${placements.length > 10 ? ", top 10 shown" : ""}</div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,251,248,0.72);line-height:1.6;margin-bottom:14px;">
+        Where the invested budget is delivering, ranked by share of spend. This shows which platform surfaces are carrying the campaign forward and their efficiency at converting that spend.
+      </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background:rgba(0,0,0,0.24);border-radius:12px;overflow:hidden;">
+        <thead>
+          <tr style="background:rgba(249,98,3,0.08);">
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:center;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">#</th>
+            <th style="padding:10px 12px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:left;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Placement</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Share</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Spend</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Impressions</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">CTR</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Results</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Efficiency</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  </td></tr>`;
+}
+
+// PDF-only: per-campaign performance table. Uses the already-fetched
+// campaign summary rows, so no extra network hop.
+function renderCampaignsBlockPdf(campaigns) {
+  if (!Array.isArray(campaigns) || campaigns.length === 0) return "";
+  var fmtNum = function(n) { var v = parseFloat(n); return isNaN(v) ? "0" : Math.round(v).toLocaleString("en-ZA"); };
+  var fmtR = function(n) { var v = parseFloat(n); if (isNaN(v)) return "R0.00"; return "R" + v.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var pickResult = function(c) {
+    var n = String(c.campaignName || "").toLowerCase();
+    var obj = String(c.objective || "").toLowerCase();
+    var leads = parseFloat(c.leads || 0);
+    var follows = parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0);
+    var lp = parseFloat(c.landingPageViews || c.clicks || 0);
+    if (leads > 0 && (obj.indexOf("lead") >= 0 || n.indexOf("lead") >= 0 || n.indexOf("_pos_") >= 0)) return { v: leads, label: "leads" };
+    if (follows > 0 && (obj.indexOf("follow") >= 0 || n.indexOf("follow") >= 0 || n.indexOf("_like_") >= 0)) return { v: follows, label: "follows" };
+    if (parseFloat(c.impressions || 0) > 0 && (obj.indexOf("aware") >= 0 || n.indexOf("aware") >= 0 || n.indexOf("_reach_") >= 0)) return { v: parseFloat(c.impressions || 0), label: "imps" };
+    return { v: lp, label: "clicks" };
+  };
+  var rows = campaigns.slice().sort(function(a, b) { return parseFloat(b.spend || 0) - parseFloat(a.spend || 0); });
+  var rowsHtml = rows.map(function(c, i) {
+    var spend = parseFloat(c.spend || 0);
+    var imps = parseFloat(c.impressions || 0);
+    var clicks = parseFloat(c.clicks || 0);
+    var ctr = imps > 0 ? (clicks / imps * 100) : 0;
+    var r = pickResult(c);
+    var costPer = r.v > 0 ? (spend / r.v) : 0;
+    var platC = c.platform === "Facebook" ? "#1877F2" : c.platform === "Instagram" ? "#E1306C" : c.platform === "TikTok" ? "#00F2EA" : c.platform === "Google Ads" ? "#34A853" : "#8B7FA3";
+    return `<tr style="background:${i % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent"};">
+      <td style="padding:9px 12px;font-size:11px;color:#FFFBF8;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.06);word-break:break-word;">
+        <span style="display:inline-block;padding:2px 7px;font-size:8px;font-weight:900;color:#fff;background:${platC};border-radius:4px;letter-spacing:1px;margin-right:8px;vertical-align:middle;">${escapeHtml(c.platform || "-")}</span>
+        <span style="vertical-align:middle;">${escapeHtml(c.campaignName || "Untitled")}</span>
+      </td>
+      <td style="padding:9px 10px;font-size:11px;color:#FF6B00;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${fmtR(spend)}</td>
+      <td style="padding:9px 10px;font-size:11px;color:#FFFBF8;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${fmtNum(imps)}</td>
+      <td style="padding:9px 10px;font-size:11px;color:${ctr >= 1.2 ? "#34D399" : "#FFFBF8"};font-weight:700;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${ctr.toFixed(2)}%</td>
+      <td style="padding:9px 10px;font-size:11px;color:#FFFBF8;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${r.v > 0 ? fmtNum(r.v) + " " + r.label : "-"}</td>
+      <td style="padding:9px 10px;font-size:10px;color:#8B7FA3;text-align:right;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(255,255,255,0.06);">${r.v > 0 ? fmtR(costPer) : "-"}</td>
+    </tr>`;
+  }).join("");
+  return `<tr><td style="padding:32px 40px 8px;page-break-inside:avoid;">
+    <div style="border-top:1px solid rgba(168,85,247,0.16);padding-top:22px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="font-size:11px;color:#F96203;letter-spacing:3px;text-transform:uppercase;font-weight:800;">Campaigns In This Report</div>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(249,98,3,0.5),transparent);"></div>
+        <div style="font-size:9px;color:#8B7FA3;letter-spacing:1px;">${campaigns.length} campaigns</div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,251,248,0.72);line-height:1.6;margin-bottom:14px;">
+        Every campaign contributing to this report, ranked by spend. Result column shows the objective-appropriate outcome (leads, follows, impressions or clicks) so you can compare each campaign to its own goal, not a blanket click count.
+      </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background:rgba(0,0,0,0.24);border-radius:12px;overflow:hidden;">
+        <thead>
+          <tr style="background:rgba(249,98,3,0.08);">
+            <th style="padding:10px 12px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:left;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Campaign</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Spend</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Impressions</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">CTR</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Results</th>
+            <th style="padding:10px;font-size:9px;color:#8B7FA3;font-weight:800;text-align:right;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(249,98,3,0.2);">Cost / Result</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  </td></tr>`;
+}
+
+// PDF-only: community growth headline. Reuses aggregate() totals so
+// no extra fetch — just a cleaner presentation of follower / like data
+// that the inbox email hides deep in the KPI grid.
+function renderCommunityBlockPdf(summary) {
+  if (!summary || !summary.grand) return "";
+  var g = summary.grand;
+  var earned = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
+  if (earned <= 0) return "";
+  var fmtNum = function(n) { var v = parseFloat(n); return isNaN(v) ? "0" : Math.round(v).toLocaleString("en-ZA"); };
+  var fmtR = function(n) { var v = parseFloat(n); if (isNaN(v)) return "R0.00"; return "R" + v.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var cpm = earned > 0 ? (parseFloat(g.followersSpend || 0) / earned) : 0;
+  return `<tr><td style="padding:32px 40px 8px;page-break-inside:avoid;">
+    <div style="border-top:1px solid rgba(168,85,247,0.16);padding-top:22px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="font-size:11px;color:#F96203;letter-spacing:3px;text-transform:uppercase;font-weight:800;">Community Growth</div>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(249,98,3,0.5),transparent);"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div style="background:rgba(0,0,0,0.24);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:9px;color:#8B7FA3;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">New Followers &amp; Likes</div>
+          <div style="font-size:22px;color:#FF6B00;font-weight:900;font-variant-numeric:tabular-nums;">+${fmtNum(earned)}</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.24);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:9px;color:#8B7FA3;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Spend On Community Objectives</div>
+          <div style="font-size:22px;color:#FFFBF8;font-weight:900;font-variant-numeric:tabular-nums;">${fmtR(g.followersSpend || 0)}</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.24);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:14px 16px;">
+          <div style="font-size:9px;color:#8B7FA3;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:4px;">Cost Per New Member</div>
+          <div style="font-size:22px;color:#34D399;font-weight:900;font-variant-numeric:tabular-nums;">${cpm > 0 ? fmtR(cpm) : "-"}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,251,248,0.72);line-height:1.6;">
+        Every new follower or page like earned during this period compounds. Unlike ad impressions which reset when the budget stops, community members remain a permanent audience for organic content delivery long after the campaign ends.
+      </div>
+    </div>
+  </td></tr>`;
 }
 
 // Condensed ecommerce block for the client report email. Total-site
@@ -777,13 +975,21 @@ function buildEmailHtml(opts) {
   var shareTok = String(opts.shareUrl || "").split("token=")[1] || "";
   var topAdsBlock = renderTopAdsBlock(opts.topAds, origin, shareTok);
   var ecommerceBlock = renderEcommerceBlock(opts.ecommerce);
+  // PDF-only extras. Rendered ONLY when opts.pdf === true so the inbox
+  // email stays lean (email is inbox-scrollable; PDF is print-oriented
+  // and can carry the extra sections client and account manager both
+  // want as a leave-behind).
+  var isPdf = opts.pdf === true;
+  var communityBlockPdf = isPdf ? renderCommunityBlockPdf(opts.summary) : "";
+  var campaignsBlockPdf = isPdf ? renderCampaignsBlockPdf(opts.campaigns) : "";
+  var placementsBlockPdf = isPdf ? renderPlacementsBlockPdf(opts.placements) : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Your Performance Metrics That Matter</title>
+<title>${isPdf ? `${clientName.replace(/[^A-Za-z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "Client"}_${dateRange.replace(/[^A-Za-z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "")}_Report` : "Your Performance Metrics That Matter"}</title>
 <style>
 @keyframes gasGlow {
   0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }
@@ -835,6 +1041,9 @@ function buildEmailHtml(opts) {
       ${summaryBlock}
       ${commentaryBlock}
       ${topAdsBlock}
+      ${communityBlockPdf}
+      ${placementsBlockPdf}
+      ${campaignsBlockPdf}
 
       <tr><td style="padding:34px 40px 8px;" align="center">
         <div style="font-size:11px;color:#8B7FA3;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:14px;">Want the full interactive view?</div>
@@ -977,14 +1186,23 @@ export default async function handler(req, res) {
     // nominates reach as the primary KPI. Other fetches are still
     // parallelised below so the email isn't sequential-slow.
     var kpiProfile = await getKpiProfile(clientSlug).catch(function(){ return null; });
-    var results = await Promise.all([
+    // PDF-only flag. When true (Share modal's DOWNLOAD PDF button) we
+    // additionally pull placements data so the PDF-only sections can
+    // render. Kept off the email path so a normal send stays fast.
+    var wantPdfExtras = body.pdf === true;
+    var extraFetches = [
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
       fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile),
       fetchEcommerce(req, from, to, clientSlug)
-    ]);
+    ];
+    if (wantPdfExtras) {
+      extraFetches.push(fetchPlacementsData(req, from, to, campaignIds));
+    }
+    var results = await Promise.all(extraFetches);
     var summary = results[0];
     var topAds = results[1];
     var ecommerce = results[2];
+    var placements = wantPdfExtras ? (results[3] || []) : [];
 
     // The per-creative breakdown is intentionally NOT precomputed for
     // the email anymore: it is whole-ad / all-placements and cannot
@@ -1056,7 +1274,14 @@ export default async function handler(req, res) {
       topAds: topAds,
       ecommerce: ecommerce,
       profile: kpiProfile,
-      clientLogo: clientLogo
+      clientLogo: clientLogo,
+      // PDF-only enrichment. buildEmailHtml renders three additional
+      // blocks (Community Growth, Placement Performance, Campaigns In
+      // This Report) when pdf === true. The inbox email skips them so
+      // day-to-day sends stay lean.
+      pdf: wantPdfExtras,
+      campaigns: (summary && summary.campaigns) || [],
+      placements: placements
     });
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
