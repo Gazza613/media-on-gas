@@ -830,14 +830,22 @@ function aggregateAgeGender(rows, campaignObjType) {
   var ageClicksAll = {}, ageObjAll = {};
   var genderClicksAll = { male: 0, female: 0 };
   var genderObjAll = { male: 0, female: 0 };
-  var initMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
+  var initAllowedMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
   ALLOWED_AGES.forEach(function(a) { ageClicksAll[a] = 0; ageObjAll[a] = 0; });
   (rows || []).forEach(function(r) {
     var age = String(r.age || "");
-    if (EXCLUDED_AGES[age]) return;
+    if (EXCLUDED_AGES[age]) return; // 13-17 hard-drop, owner rule
     var p = platformFamily(r.platform || "Other");
     if (!byPlat[p]) byPlat[p] = {
-      ageClicks: initMap(), ageObj: initMap(),
+      // Persona-scope age tallies — INCLUDE any non-13-17 age string
+      // ("unknown", "13-17"-excluded, everything else) so dominant age
+      // matches dashboard buildPersona (App.jsx ~6306) exactly. Empty
+      // maps not seeded here; keys added on first hit.
+      ageClicksPersona: {}, ageObjPersona: {},
+      // Age-breakdown-scope tallies — CLASSIFIED bands only. Matches
+      // dashboard's Demographics OBJECTIVE stage which iterates
+      // ageOrder only (App.jsx ~5831 topAgeFor).
+      ageClicks: initAllowedMap(), ageObj: initAllowedMap(),
       genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 },
       segMapClicks: {}, segMapObj: {},
       impressions: 0, clicks: 0, spend: 0, weight: 0
@@ -848,6 +856,14 @@ function aggregateAgeGender(rows, campaignObjType) {
     var w = campaignObjType ? objectiveWeight(r, campaignObjType) : clicks;
     var rawGender = String(r.gender || "").toLowerCase();
     var g = rawGender === "male" || rawGender === "m" ? "male" : rawGender === "female" || rawGender === "f" ? "female" : "";
+    // Persona tally — dashboard buildPersona logic: include ALL ages
+    // except the 13-17 exclusion already applied above. Skip empty
+    // string (uncoded).
+    if (age) {
+      bp.ageClicksPersona[age] = (bp.ageClicksPersona[age] || 0) + clicks;
+      bp.ageObjPersona[age] = (bp.ageObjPersona[age] || 0) + w;
+    }
+    // Breakdown tally — classified bands only.
     if (ALLOWED_AGES.indexOf(age) >= 0) {
       ageClicksAll[age] += clicks;
       ageObjAll[age] += w;
@@ -930,15 +946,25 @@ function renderAudienceSection(opts) {
   }).map(function(p) {
     var pb = agAgg.byPlatform[p];
     var accent = platformAccent(p);
-    // Persona is CLICK-WEIGHTED per dashboard TargetingPersonaCard
-    // (App.jsx ~723 uses stageDef.engagement.field = r.clicks). Was
-    // previously reading the objective-weighted maps which overweighted
-    // 65+ for MoMo (Community Reach objective indexes heavily on
-    // that band).
+    // Persona dominant age reads the PERSONA-SCOPE tally which
+    // matches dashboard buildPersona (App.jsx ~6306): every non-13-17
+    // age string contributes to the click sum, including "unknown".
+    // Denominator includes those too so the % is honest.
+    var personaMap = pb.ageClicksPersona || {};
     var topAgeKey = "", topAgeVal = 0;
-    ALLOWED_AGES.forEach(function(k) { var v = pb.ageClicks[k] || 0; if (v > topAgeVal) { topAgeVal = v; topAgeKey = k; } });
-    var ageDenom = ALLOWED_AGES.reduce(function(s, k) { return s + (pb.ageClicks[k] || 0); }, 0);
+    Object.keys(personaMap).forEach(function(k) { if (personaMap[k] > topAgeVal) { topAgeVal = personaMap[k]; topAgeKey = k; } });
+    var ageDenom = Object.keys(personaMap).reduce(function(s, k) { return s + personaMap[k]; }, 0);
     var topAgeShare = ageDenom > 0 ? (topAgeVal / ageDenom * 100) : 0;
+    // If the dominant band is "unknown" or any non-standard key, fall
+    // through to the strongest classified band so the client-facing
+    // hero doesn't read "unknown 45%". % stays relative to the same
+    // denominator (persona map) so it stays comparable to what the
+    // dashboard would show.
+    if (topAgeKey && ALLOWED_AGES.indexOf(topAgeKey) < 0) {
+      var altKey = "", altVal = 0;
+      ALLOWED_AGES.forEach(function(k) { if ((personaMap[k] || 0) > altVal) { altVal = personaMap[k]; altKey = k; } });
+      if (altKey) { topAgeKey = altKey; topAgeVal = altVal; topAgeShare = ageDenom > 0 ? (altVal / ageDenom * 100) : 0; }
+    }
     var gSum = pb.genderClicks.male + pb.genderClicks.female;
     var femaleShare = gSum > 0 ? (pb.genderClicks.female / gSum * 100) : 0;
     var maleShare = gSum > 0 ? (pb.genderClicks.male / gSum * 100) : 0;
@@ -1126,6 +1152,10 @@ function renderTopAdsSection(opts) {
     var result = adResult(a, section);
     var spend = parseFloat(a.spend || 0);
     var ctr = parseFloat(a.ctr || 0);
+    // Per-ad label override for IG follower rows (dashboard shows
+    // "clicks to follow" / "profile visits" because Meta doesn't
+    // attribute the follow action to the ad itself).
+    var label = a._igFollower ? "clicks to follow" : section.resultLabel;
     return `<div class="rp-creative-card">
       <div class="rp-creative-thumb" style="background:linear-gradient(135deg,${pAccent}55,${pAccent}15);">
         ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : `<div class="rp-creative-fallback">${escapeHtmlLocal(a.platform || "AD")}</div>`}
@@ -1135,7 +1165,7 @@ function renderTopAdsSection(opts) {
         <div class="rp-creative-name">${escapeHtmlLocal(a.adName || "Untitled")}</div>
         <div class="rp-creative-metrics">
           <div><strong>${fmtR(spend)}</strong> spent</div>
-          <div><strong>${result > 0 ? fmtNum(result) : "-"}</strong> ${escapeHtmlLocal(section.resultLabel)}</div>
+          <div><strong>${result > 0 ? fmtNum(result) : "-"}</strong> ${escapeHtmlLocal(label)}</div>
           <div><strong>${fmtPct(ctr)}</strong> CTR</div>
         </div>
       </div>
@@ -1157,6 +1187,18 @@ function renderTopAdsSection(opts) {
     if (!bucket[obj][plat]) bucket[obj][plat] = [];
     bucket[obj][plat].push(a);
   });
+  // Followers on Instagram — Meta does not attribute the follow to
+  // the ad (the follow happens on the profile AFTER a click), so the
+  // dashboard swaps IG follower rows to show link clicks with the
+  // "profile visits" label (App.jsx ~8634). Rewrite the metric here
+  // in place so the sort function and the card render both see the
+  // corrected values.
+  if (bucket.followers && bucket.followers.Instagram) {
+    bucket.followers.Instagram = bucket.followers.Instagram.map(function(a) {
+      var ck = parseFloat(a.clicks || 0);
+      return Object.assign({}, a, { results: ck, resultType: "profile_visits", _igFollower: true });
+    });
+  }
 
   var sections = objSections.filter(function(sec) {
     return bucket[sec.key] && Object.keys(bucket[sec.key]).some(function(p) { return bucket[sec.key][p].length > 0; });
