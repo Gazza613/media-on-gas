@@ -986,12 +986,14 @@ function renderAudienceSection(opts) {
     </div>`;
   }).join("");
 
-  // Global age breakdown. Click-weighted, 13-17 excluded at ingest so
-  // ageOrder here is display-only.
+  // Global age breakdown reads the OBJECTIVE-weighted rollup so the
+  // bars match the dashboard's Demographics OBJECTIVE stage. 13-17
+  // is excluded at ingest so ageOrder here is display-only.
   var ageOrder = ["18-24","25-34","35-44","45-54","55-64","65+"];
-  var ageTotal = ageOrder.reduce(function(s, k) { return s + (agAgg.ageBuckets[k] || 0); }, 0);
-  var ageBars = ageOrder.filter(function(k) { return (agAgg.ageBuckets[k] || 0) > 0; }).map(function(k) {
-    var v = agAgg.ageBuckets[k] || 0;
+  var ageMap = agAgg.ageObjAll || agAgg.ageClicksAll || {};
+  var ageTotal = ageOrder.reduce(function(s, k) { return s + (ageMap[k] || 0); }, 0);
+  var ageBars = ageOrder.filter(function(k) { return (ageMap[k] || 0) > 0; }).map(function(k) {
+    var v = ageMap[k] || 0;
     var pct = ageTotal > 0 ? (v / ageTotal * 100) : 0;
     return `<div class="rp-bar-row">
       <div class="rp-bar-label">${escapeHtmlLocal(k)}</div>
@@ -1000,9 +1002,8 @@ function renderAudienceSection(opts) {
     </div>`;
   }).join("");
 
-  // Region breakdown (top 8). Click-weighted.
-  // Sort + total on the OBJECTIVE-STAGE weight so region bars match
-  // the dashboard's OBJECTIVE stage view line-for-line.
+  // Region breakdown (top 8). Objective-weighted to match the
+  // dashboard's Demographics OBJECTIVE stage.
   var regionKeys = Object.keys(regAgg.byRegion).sort(function(a, b) { return (regAgg.byRegion[b].weight || 0) - (regAgg.byRegion[a].weight || 0); }).slice(0, 8);
   var regionTotal = regionKeys.reduce(function(s, k) { return s + (regAgg.byRegion[k].weight || 0); }, 0);
   var regionBars = regionKeys.map(function(k) {
@@ -1016,11 +1017,11 @@ function renderAudienceSection(opts) {
   }).join("");
 
   var insight = "";
-  if (regionKeys.length && ageOrder.some(function(k) { return agAgg.ageBuckets[k] > 0; })) {
+  if (regionKeys.length && ageOrder.some(function(k) { return (ageMap[k] || 0) > 0; })) {
     var topRegion = regionKeys[0];
-    var topRegionPct = regionTotal > 0 ? (regAgg.byRegion[topRegion].clicks / regionTotal * 100) : 0;
+    var topRegionPct = regionTotal > 0 ? ((regAgg.byRegion[topRegion].weight || 0) / regionTotal * 100) : 0;
     var topAgeKeyG = "", topAgeValG = 0;
-    ageOrder.forEach(function(k) { if ((agAgg.ageBuckets[k] || 0) > topAgeValG) { topAgeValG = agAgg.ageBuckets[k]; topAgeKeyG = k; } });
+    ageOrder.forEach(function(k) { if ((ageMap[k] || 0) > topAgeValG) { topAgeValG = ageMap[k]; topAgeKeyG = k; } });
     insight = "The perfect target audience for this window is anchored in " + escapeHtmlLocal(topRegion) + " (" + topRegionPct.toFixed(2) + "% of objective results) with the " + escapeHtmlLocal(topAgeKeyG) + " age band the most engaged demographic. Refining lookalikes and interest layers to reinforce this signal is likely to compound efficiency in the next window.";
   }
 
