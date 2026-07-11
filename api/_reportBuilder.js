@@ -752,44 +752,109 @@ function renderBofuSection(opts) {
 var EXCLUDED_AGES = { "13-17": true };
 var ALLOWED_AGES = ["18-24","25-34","35-44","45-54","55-64","65+"];
 
-// Click-weighted age/gender aggregation, mirrors the dashboard's
-// buildPersona (App.jsx ~6295): every metric is weighted by clicks
-// rather than impressions so the persona reads as "who leaned in",
-// not "who was shown ads". Fixes TikTok reading "Results Attributed:
-// 0" — clicks is the reliable click-through weight even on platforms
-// where the demographics endpoint doesn't split results by age/gender.
-function aggregateAgeGender(rows) {
+// Dashboard's classifyObjective (App.jsx ~5397) — ported verbatim.
+// Returns "Leads" | "Followers" | "CommunityReach" | "Traffic". Used
+// to weight demographic rows by the objective-appropriate metric so
+// AGE BREAKDOWN / REGION BREAKDOWN reconcile with the dashboard's
+// Demographics tab OBJECTIVE stage block, not raw clicks.
+function classifyObjectiveDb(camp) {
+  var canon = String((camp && camp.objective) || "").toLowerCase();
+  var n = String((camp && camp.campaignName) || "").toLowerCase();
+  if (n.indexOf("follow/like-audience") >= 0 || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)) return "CommunityReach";
+  if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "Traffic";
+  if (n.indexOf("follower") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "Followers";
+  if (n.indexOf("lead") >= 0 || n.indexOf("pos") >= 0) return "Leads";
+  if (canon === "leads") return "Leads";
+  if (canon === "followers") return "Followers";
+  if (canon === "community_reach") return "CommunityReach";
+  if (canon === "appinstall" || canon === "landingpage") return "Traffic";
+  return "Traffic";
+}
+
+// Build the campaign-id → objective-type lookup used by the objective
+// weighter. Registers both the suffixed and raw form (Meta strips the
+// _facebook / _instagram suffix on its breakdown rows so a demographic
+// row's campaignId may or may not carry the suffix). Mirrors dashboard
+// App.jsx ~5437.
+function buildCampaignObjType(campaigns) {
+  var map = {};
+  (campaigns || []).forEach(function(c) {
+    var type = classifyObjectiveDb(c);
+    var cid = String(c.campaignId || "");
+    if (cid) map[cid] = type;
+    var raw = c.rawCampaignId || cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+    if (raw) map[raw] = type;
+  });
+  return map;
+}
+
+// Row weight for the OBJECTIVE stage (App.jsx ~5455 stageDef.objective.field).
+// Leads → r.results.leads, Followers → follows+pageLikes, everything
+// else → r.clicks. Used by both aggregateAgeGender and aggregateRegion
+// so age / region breakdowns weight the same way the dashboard's
+// Demographics OBJECTIVE stage does.
+function objectiveWeight(row, campaignObjType) {
+  var cid = String((row && row.campaignId) || "");
+  var type = campaignObjType[cid]
+    || campaignObjType[cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "")]
+    || "Traffic";
+  var rs = (row && row.results) || {};
+  if (type === "Leads") return parseFloat(rs.leads || 0);
+  if (type === "Followers") return parseFloat(rs.follows || 0) + parseFloat(rs.pageLikes || 0);
+  return parseFloat((row && row.clicks) || 0);
+}
+
+// Objective-weighted age/gender aggregation. Mirrors the dashboard's
+// Demographics OBJECTIVE stage (App.jsx ~5455). Each row is weighted
+// by its campaign's objective-appropriate metric (Leads → lead count,
+// Followers → follows+pageLikes, else → clicks) so the AGE BREAKDOWN
+// and REGION BREAKDOWN reconcile with the dashboard's Objective
+// stage block. Age tally seeds ONLY with ALLOWED_AGES so the dominant
+// age can never be "unknown" (Google GAQL returns UNKNOWN for
+// privacy-blocked users). Gender tally seeds with only female/male.
+function aggregateAgeGender(rows, campaignObjType) {
   var byPlat = {};
   var ageBuckets = {};
-  var genderBuckets = { male: 0, female: 0, unknown: 0 };
+  var genderBuckets = { male: 0, female: 0 };
+  var initAgeMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
+  ALLOWED_AGES.forEach(function(a) { ageBuckets[a] = 0; });
   (rows || []).forEach(function(r) {
-    var age = String(r.age || "unknown");
-    if (EXCLUDED_AGES[age]) return; // hard-drop 13-17 at ingest
+    var age = String(r.age || "");
+    if (EXCLUDED_AGES[age]) return;
     var p = platformFamily(r.platform || "Other");
-    if (!byPlat[p]) byPlat[p] = { age: {}, gender: { male: 0, female: 0, unknown: 0 }, segMap: {}, impressions: 0, clicks: 0, spend: 0 };
+    if (!byPlat[p]) byPlat[p] = { age: initAgeMap(), gender: { male: 0, female: 0 }, segMap: {}, impressions: 0, clicks: 0, spend: 0, weight: 0 };
     var bp = byPlat[p];
     var clicks = parseInt(r.clicks || 0, 10);
     var imps = parseInt(r.impressions || 0, 10);
-    var rawGender = String(r.gender || "unknown").toLowerCase();
-    var g = rawGender === "male" || rawGender === "m" ? "male" : rawGender === "female" || rawGender === "f" ? "female" : "unknown";
-    ageBuckets[age] = (ageBuckets[age] || 0) + clicks;
-    genderBuckets[g] += clicks;
-    bp.age[age] = (bp.age[age] || 0) + clicks;
-    bp.gender[g] += clicks;
+    // OBJECTIVE-STAGE weight (matches dashboard App.jsx ~5455). For a
+    // Leads campaign row this is r.results.leads, for Followers it is
+    // follows+pageLikes, everything else is r.clicks. This is the
+    // number the dashboard's OBJECTIVE stage tallies into age /
+    // region bars.
+    var w = campaignObjType ? objectiveWeight(r, campaignObjType) : clicks;
+    var rawGender = String(r.gender || "").toLowerCase();
+    var g = rawGender === "male" || rawGender === "m" ? "male" : rawGender === "female" || rawGender === "f" ? "female" : "";
+    if (ALLOWED_AGES.indexOf(age) >= 0) {
+      ageBuckets[age] += w;
+      bp.age[age] += w;
+    }
+    if (g === "male" || g === "female") {
+      genderBuckets[g] += w;
+      bp.gender[g] += w;
+    }
     bp.impressions += imps;
     bp.clicks += clicks;
     bp.spend += parseFloat(r.spend || 0);
-    // Age x Gender segment map for the "Best Personas" list. Only
-    // classified cells (real age + real gender) contribute.
+    bp.weight += w;
     if (ALLOWED_AGES.indexOf(age) >= 0 && (g === "male" || g === "female")) {
       var k = age + "|" + g;
-      bp.segMap[k] = (bp.segMap[k] || 0) + clicks;
+      bp.segMap[k] = (bp.segMap[k] || 0) + w;
     }
   });
   return { byPlatform: byPlat, ageBuckets: ageBuckets, genderBuckets: genderBuckets };
 }
 
-function aggregateRegion(rows) {
+function aggregateRegion(rows, campaignObjType) {
   var byRegion = {};
   var byPlatformRegion = {};
   (rows || []).forEach(function(r) {
@@ -798,12 +863,14 @@ function aggregateRegion(rows) {
     var p = platformFamily(r.platform || "Other");
     var clicks = parseInt(r.clicks || 0, 10);
     var imps = parseInt(r.impressions || 0, 10);
-    if (!byRegion[reg]) byRegion[reg] = { impressions: 0, clicks: 0, spend: 0 };
+    var w = campaignObjType ? objectiveWeight(r, campaignObjType) : clicks;
+    if (!byRegion[reg]) byRegion[reg] = { impressions: 0, clicks: 0, spend: 0, weight: 0 };
     byRegion[reg].impressions += imps;
     byRegion[reg].clicks += clicks;
     byRegion[reg].spend += parseFloat(r.spend || 0);
+    byRegion[reg].weight += w;
     if (!byPlatformRegion[p]) byPlatformRegion[p] = {};
-    byPlatformRegion[p][reg] = (byPlatformRegion[p][reg] || 0) + clicks;
+    byPlatformRegion[p][reg] = (byPlatformRegion[p][reg] || 0) + w;
   });
   return { byRegion: byRegion, byPlatformRegion: byPlatformRegion };
 }
@@ -815,8 +882,12 @@ function aggregateRegion(rows) {
 function renderAudienceSection(opts) {
   var demo = opts.demographics;
   if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
-  var agAgg = aggregateAgeGender(demo.ageGender || []);
-  var regAgg = aggregateRegion(demo.region || []);
+  // Objective-weight the aggregation with the shared campaignObjType
+  // map so AGE / REGION breakdowns tally the same way as the
+  // dashboard's Demographics OBJECTIVE stage.
+  var cot = opts.campaignObjType || {};
+  var agAgg = aggregateAgeGender(demo.ageGender || [], cot);
+  var regAgg = aggregateRegion(demo.region || [], cot);
 
   // Persona per platform. Match dashboard's persona keys: only render
   // Facebook, Instagram, TikTok, Google Ads (in that order) and skip
@@ -824,14 +895,16 @@ function renderAudienceSection(opts) {
   // doesn't produce a hollow card.
   var personaOrder = ["Facebook", "Instagram", "TikTok", "Google Ads"];
   var personaCards = personaOrder.filter(function(p) {
-    return agAgg.byPlatform[p] && agAgg.byPlatform[p].clicks > 0;
+    return agAgg.byPlatform[p] && (agAgg.byPlatform[p].weight > 0 || agAgg.byPlatform[p].clicks > 0);
   }).map(function(p) {
     var pb = agAgg.byPlatform[p];
     var accent = platformAccent(p);
-    // Dominant age (click-weighted). Already 13-17 free at ingest.
+    // Dominant age is picked only from the six known bands (matches
+    // dashboard's topAgeFor which only iterates ageOrder). pb.age was
+    // also seeded with only ALLOWED_AGES so this is belt+braces.
     var topAgeKey = "", topAgeVal = 0;
-    Object.keys(pb.age).forEach(function(k) { if (pb.age[k] > topAgeVal) { topAgeVal = pb.age[k]; topAgeKey = k; } });
-    var ageDenom = Object.keys(pb.age).reduce(function(s, k) { return s + pb.age[k]; }, 0);
+    ALLOWED_AGES.forEach(function(k) { var v = pb.age[k] || 0; if (v > topAgeVal) { topAgeVal = v; topAgeKey = k; } });
+    var ageDenom = ALLOWED_AGES.reduce(function(s, k) { return s + (pb.age[k] || 0); }, 0);
     var topAgeShare = ageDenom > 0 ? (topAgeVal / ageDenom * 100) : 0;
     // Gender lead: female vs male share of classified gender.
     var gSum = pb.gender.male + pb.gender.female;
@@ -870,9 +943,9 @@ function renderAudienceSection(opts) {
           <div class="rp-persona-strip-sub" style="color:${accent};">${genderLead ? genderShare.toFixed(2) + "%" : ""}</div>
         </div>
         <div class="rp-persona-strip-tile">
-          <div class="rp-persona-strip-label">Total Clicks</div>
-          <div class="rp-persona-strip-value">${fmtNum(pb.clicks)}</div>
-          <div class="rp-persona-strip-sub">click-weighted</div>
+          <div class="rp-persona-strip-label">Results</div>
+          <div class="rp-persona-strip-value">${fmtNum(pb.weight || pb.clicks)}</div>
+          <div class="rp-persona-strip-sub">objective-weighted</div>
         </div>
       </div>
       ${regionRows ? `<div class="rp-persona-block-title">Top Regions</div><div class="rp-persona-regions">${regionRows}</div>` : ""}
@@ -895,10 +968,12 @@ function renderAudienceSection(opts) {
   }).join("");
 
   // Region breakdown (top 8). Click-weighted.
-  var regionKeys = Object.keys(regAgg.byRegion).sort(function(a, b) { return regAgg.byRegion[b].clicks - regAgg.byRegion[a].clicks; }).slice(0, 8);
-  var regionTotal = regionKeys.reduce(function(s, k) { return s + regAgg.byRegion[k].clicks; }, 0);
+  // Sort + total on the OBJECTIVE-STAGE weight so region bars match
+  // the dashboard's OBJECTIVE stage view line-for-line.
+  var regionKeys = Object.keys(regAgg.byRegion).sort(function(a, b) { return (regAgg.byRegion[b].weight || 0) - (regAgg.byRegion[a].weight || 0); }).slice(0, 8);
+  var regionTotal = regionKeys.reduce(function(s, k) { return s + (regAgg.byRegion[k].weight || 0); }, 0);
   var regionBars = regionKeys.map(function(k) {
-    var v = regAgg.byRegion[k].clicks;
+    var v = regAgg.byRegion[k].weight || 0;
     var pct = regionTotal > 0 ? (v / regionTotal * 100) : 0;
     return `<div class="rp-bar-row">
       <div class="rp-bar-label">${escapeHtmlLocal(k)}</div>
@@ -913,7 +988,7 @@ function renderAudienceSection(opts) {
     var topRegionPct = regionTotal > 0 ? (regAgg.byRegion[topRegion].clicks / regionTotal * 100) : 0;
     var topAgeKeyG = "", topAgeValG = 0;
     ageOrder.forEach(function(k) { if ((agAgg.ageBuckets[k] || 0) > topAgeValG) { topAgeValG = agAgg.ageBuckets[k]; topAgeKeyG = k; } });
-    insight = "The perfect target audience for this window is anchored in " + escapeHtmlLocal(topRegion) + " (" + topRegionPct.toFixed(2) + "% of clicks) with the " + escapeHtmlLocal(topAgeKeyG) + " age band the most engaged demographic. Refining lookalikes and interest layers to reinforce this signal is likely to compound efficiency in the next window.";
+    insight = "The perfect target audience for this window is anchored in " + escapeHtmlLocal(topRegion) + " (" + topRegionPct.toFixed(2) + "% of objective results) with the " + escapeHtmlLocal(topAgeKeyG) + " age band the most engaged demographic. Refining lookalikes and interest layers to reinforce this signal is likely to compound efficiency in the next window.";
   }
 
   return `<section class="rp-page">
@@ -932,7 +1007,7 @@ function renderAudienceSection(opts) {
         <div class="rp-bars">${regionBars || `<div class="rp-empty">No region data available.</div>`}</div>
       </div>
     </div>
-    ${renderInsight("Audience Read", insight)}
+    ${renderInsight("Performance Insights", insight)}
   </section>`;
 }
 
@@ -990,7 +1065,7 @@ function renderTopAdsSection(opts) {
       var ar = adResult(a, obj), br = adResult(b, obj);
       if (br !== ar) return br - ar;
       return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
-    }).slice(0, 5);
+    }).slice(0, 6); // 2 rows of 3 in the objective grid
     var cards = ads.map(function(a, i) {
       var thumb = resolveThumb(a, origin, shareToken, 120);
       var pAccent = platformAccent(platformFamily(a.platform));
@@ -1019,7 +1094,7 @@ function renderTopAdsSection(opts) {
     </div>`;
   }).join("");
   return `<section class="rp-page">
-    ${renderSectionHeader("05", "Creative Read", "Best Performing Ads", "The top 5 ads per campaign objective this window, ranked by their objective-appropriate outcome. Grouping by outcome rather than by platform surfaces the ads that actually moved each business metric.")}
+    ${renderSectionHeader("05", "Creative Read", "Best Performing Ads", "The top 6 ads per campaign objective this window, ranked by their objective-appropriate outcome. Grouping by outcome rather than by platform surfaces the ads that actually moved each business metric.")}
     ${objBlocks}
   </section>`;
 }
@@ -1047,7 +1122,7 @@ function renderExecutiveSummary(opts) {
   // awareness / community reach excluded per project semantics).
   var eng = book.engagement || { impressions: 0, clicks: 0, spend: 0 };
   var kpis = [
-    { label: "Total Investment", value: fmtR(g.spend), primary: true },
+    { label: "Media Spend", value: fmtR(g.spend), primary: true },
     { label: "Impressions", value: fmtNum(g.impressions), sub: fmtNumDec(frequencyOf(g), 2) + "x frequency" },
     { label: "Reach", value: fmtNum(g.reach), sub: "unique users" },
     { label: "Blended CTR", value: fmtPct(engagementCtrOf(eng)), sub: "awareness excluded" }
@@ -1201,12 +1276,18 @@ export function buildReportHtml(opts) {
   // Matches dashboard's ovEarnedTotal override so Summary and Report
   // agree on the community number.
   var earnedTotal = computeEarnedTotal(campaignsList, pagesList);
+  // campaign_id → objective-type lookup for the demographics section.
+  // Threaded so age / region bars weight rows the dashboard's
+  // Demographics OBJECTIVE stage way (Leads → lead count, Followers →
+  // follows+pageLikes, else → clicks).
+  var campaignObjType = buildCampaignObjType(campaignsList);
 
   var contentOpts = Object.assign({}, opts, {
     clientName: clientName,
     periodDisplay: periodDisplay,
     book: book,
-    earnedTotal: earnedTotal
+    earnedTotal: earnedTotal,
+    campaignObjType: campaignObjType
   });
 
   var pages = [
@@ -1437,7 +1518,7 @@ img { max-width: 100%; display: block; }
 /* ─────────────── CREATIVE ─────────────── */
 .rp-platform-block { margin-bottom: 10mm; page-break-inside: avoid; }
 .rp-platform-head { border-left: 3px solid; padding-left: 4mm; font-size: 12pt; font-weight: 900; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 5mm; }
-.rp-creative-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; }
+.rp-creative-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
 .rp-creative-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 3mm; overflow: hidden; display: flex; flex-direction: column; }
 .rp-creative-thumb { position: relative; width: 100%; padding-top: 100%; }
 .rp-creative-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -1452,7 +1533,10 @@ img { max-width: 100%; display: block; }
    room. Earlier the max-height on the name squashed the ad-title on
    longer names. */
 .rp-creative-body { padding: 3.5mm 3.5mm 3.5mm; display: flex; flex-direction: column; gap: 3mm; min-height: 24mm; }
-.rp-creative-name { font-size: 9pt; font-weight: 800; color: var(--rp-fg); line-height: 1.4; word-break: break-word; overflow-wrap: anywhere; }
+/* Ad name capped at exactly 3 lines so every card in the 3-column
+   grid has an identical height and the row reads clean. -webkit
+   line-clamp works in Chrome print-to-PDF and Firefox's PDF export. */
+.rp-creative-name { font-size: 9pt; font-weight: 800; color: var(--rp-fg); line-height: 1.4; word-break: break-word; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-height: 13.5mm; }
 .rp-creative-metrics { display: flex; flex-direction: column; gap: 1.4mm; font-size: 8pt; color: var(--rp-fg-dim); margin-top: auto; }
 .rp-creative-metrics strong { color: var(--rp-accent); font-weight: 900; font-variant-numeric: tabular-nums; }
 
