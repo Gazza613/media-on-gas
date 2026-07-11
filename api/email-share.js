@@ -251,7 +251,12 @@ async function fetchCampaignSummary(req, from, to, campaignIds, campaignNames) {
       // campaign table can be rendered without a second fetch. The
       // inbox email doesn't use this field so payload stays lean when
       // opts.pdf !== true (renderCampaignsBlockPdf is a no-op).
-      campaigns: filtered
+      campaigns: filtered,
+      // FB Pages payload (with follower_growth + IG BA growth) needed
+      // for the deep-insights report to reconcile Followers & Likes
+      // against the dashboard's whole-account earnedTotal. Kept off
+      // the email path since buildEmailHtml never reads it.
+      pages: Array.isArray(d.pages) ? d.pages : []
     };
   } catch (err) {
     console.error("Email summary fetch error", err);
@@ -1166,6 +1171,11 @@ export default async function handler(req, res) {
   var expiresInDays = parseInt(body.expiresInDays || 30, 10);
   if (!expiresInDays || expiresInDays < 1) expiresInDays = 30;
   if (expiresInDays > 365) expiresInDays = 365;
+  // Deep-insights PDF report always issues a 90-day link for the
+  // "Proceed to your Dashboard" CTA on the closing page so the token
+  // outlives typical management review cycles. Only overrides upward,
+  // never shortens what the operator explicitly asked for.
+  if (body.mode === "report" && expiresInDays < 90) expiresInDays = 90;
 
   var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   var parseList = function(raw) {
@@ -1331,7 +1341,17 @@ export default async function handler(req, res) {
         clientLogo: clientLogo,
         placements: placements,
         demographics: demographics,
-        shareToken: shareTokForReport
+        // FB Pages with follower_growth + IG BA growth. Report uses
+        // this to reconcile the Followers & Likes total with the
+        // dashboard's ovEarnedTotal (whole-account) rather than the
+        // raw follows + pageLikes sum which under-counts IG.
+        pages: (summary && summary.pages) || [],
+        shareToken: shareTokForReport,
+        // 90-day dashboard URL for the closing-page "Proceed to your
+        // Dashboard" CTA. expiresInDays was force-bumped to >= 90
+        // above when mode === "report".
+        dashboardUrl: shareUrl,
+        expiresAt: expiresAt
       });
     } else {
       html = buildEmailHtml({
