@@ -1096,17 +1096,19 @@ img { max-width: 100%; display: block; }
 
 /* ─────────────── KPI GRID ─────────────── */
 .rp-kpi-grid { display: grid; gap: 3mm; margin-bottom: 4mm; page-break-inside: avoid; }
-.rp-kpi { padding: 5mm 4mm; background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 3mm; page-break-inside: avoid; min-width: 0; overflow: hidden; }
+.rp-kpi { padding: 5mm 3mm; background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 3mm; page-break-inside: avoid; min-width: 0; overflow: hidden; }
 .rp-kpi-primary { border-color: var(--rp-line-strong); background: linear-gradient(140deg, rgba(249,98,3,0.14), var(--rp-card-strong)); }
-.rp-kpi-label { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; margin-bottom: 3mm; }
-/* Values MUST stay on a single line. Word-wrap on hero figures reads
-   broken (e.g. "6 349 5\n91" on the Total Impressions tile). Nowrap
-   + shrink the font enough that 10-character amounts fit inside the
-   tile, letter-spacing tuned tighter to buy space, and letter-spacing
-   negative to pull the glyphs closer without hurting readability. */
-.rp-kpi-value { font-family: var(--rp-font); font-size: 15pt; font-weight: 900; color: var(--rp-fg); line-height: 1.1; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.rp-kpi-label { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; margin-bottom: 3mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Values MUST stay on a single line. Owner has had it wrap TWICE now
+   ("6 349 5\n91" and "R62 54\n0,85"). Belt-and-braces here — nowrap
+   with !important so no cascade or inline style can override, shrink
+   font to 13pt so worst-case currency like "R1 234 567,89" fits the
+   32mm tile content width, negative letter-spacing pulls glyphs
+   closer, and container overflow hidden means the tile boundary
+   truly acts as a clip so no rogue character can push the layout. */
+.rp-kpi-value { font-family: var(--rp-font); font-size: 13pt; font-weight: 900; color: var(--rp-fg); line-height: 1.1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; white-space: nowrap !important; word-break: keep-all !important; overflow-wrap: normal !important; overflow: hidden; text-overflow: clip; max-width: 100%; }
 .rp-kpi-primary .rp-kpi-value { color: var(--rp-accent); }
-.rp-kpi-sub { font-size: 8.5pt; color: var(--rp-fg-mute); margin-top: 3mm; letter-spacing: 0.5px; font-weight: 500; }
+.rp-kpi-sub { font-size: 8.5pt; color: var(--rp-fg-mute); margin-top: 3mm; letter-spacing: 0.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ─────────────── INSIGHT / NARRATIVE ─────────────── */
 .rp-insight { margin-top: 6mm; padding: 5mm 6mm; background: linear-gradient(140deg, rgba(249,98,3,0.06), var(--rp-card)); border-left: 3px solid var(--rp-accent); border-radius: 0 3mm 3mm 0; page-break-inside: avoid; }
