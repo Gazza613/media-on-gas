@@ -250,9 +250,16 @@ function aggregateBook(campaigns, pages) {
     }
     var obj = getObj(c);
     var result = getResult(c, obj, pages);
-    if (!book.byObjective[obj]) book.byObjective[obj] = { global: empty(), byPlatform: {} };
-    if (!book.byObjective[obj].byPlatform[p]) book.byObjective[obj].byPlatform[p] = empty();
-    [book.byObjective[obj].global, book.byObjective[obj].byPlatform[p]].forEach(function(b) {
+    // Fold "Traffic" fallback rows into the "Landing Page Clicks"
+    // bucket to match dashboard's tLp filter (App.jsx ~9566 keeps
+    // both objective === "Landing Page Clicks" and === "Traffic"
+    // in the same sum). Any campaign whose getObj hits the Traffic
+    // default was previously silently missing from LP totals in the
+    // report.
+    var bookKey = obj === "Traffic" ? "Landing Page Clicks" : obj;
+    if (!book.byObjective[bookKey]) book.byObjective[bookKey] = { global: empty(), byPlatform: {} };
+    if (!book.byObjective[bookKey].byPlatform[p]) book.byObjective[bookKey].byPlatform[p] = empty();
+    [book.byObjective[bookKey].global, book.byObjective[bookKey].byPlatform[p]].forEach(function(b) {
       b.spend += parseFloat(c.spend || 0);
       b.impressions += parseFloat(c.impressions || 0);
       b.clicks += parseFloat(c.clicks || 0);
@@ -1187,6 +1194,24 @@ function renderTopAdsSection(opts) {
     if (!bucket[obj][plat]) bucket[obj][plat] = [];
     bucket[obj][plat].push(a);
   });
+  // Followers bucket dedupe — dashboard collapses same-ad rows that
+  // came in as separate FB and IG publisher-split rows down to one
+  // entry (App.jsx ~8624), keeping the row with the highest
+  // impressions so a single ad isn't double-listed in the Follower
+  // section. Applied per-platform so the FB row and IG row for one
+  // creative both survive (different platforms), but two rows of
+  // the same ad on the same platform collapse to one.
+  if (bucket.followers) {
+    Object.keys(bucket.followers).forEach(function(pl) {
+      var seen = {};
+      bucket.followers[pl].forEach(function(a) {
+        var k = a.adId || a.adName;
+        if (!k) return;
+        if (!seen[k] || parseFloat(a.impressions || 0) > parseFloat(seen[k].impressions || 0)) seen[k] = a;
+      });
+      bucket.followers[pl] = Object.keys(seen).map(function(k) { return seen[k]; });
+    });
+  }
   // Followers on Instagram — Meta does not attribute the follow to
   // the ad (the follow happens on the profile AFTER a click), so the
   // dashboard swaps IG follower rows to show link clicks with the
@@ -1283,26 +1308,42 @@ function renderExecutiveSummary(opts) {
           <div class="rp-outcome-value" style="color:#FF6B00;">${fmtNum(g.clicks)}</div>
           <div class="rp-outcome-sub">at ${g.impressions > 0 ? (g.clicks / g.impressions * 100).toFixed(2) + "% blended CTR" : "n/a"}</div>
         </div>
-        ${totalLeads > 0 ? `<div class="rp-outcome-tile">
-          <div class="rp-outcome-label">Leads Captured</div>
-          <div class="rp-outcome-value" style="color:#F43F5E;">${fmtNum(totalLeads)}</div>
-          <div class="rp-outcome-sub">${fmtR(g.spend / totalLeads)} per lead</div>
-        </div>` : ""}
-        ${totalFollows > 0 ? `<div class="rp-outcome-tile">
-          <div class="rp-outcome-label">Community Growth</div>
-          <div class="rp-outcome-value" style="color:#34D399;">+${fmtNum(totalFollows)}</div>
-          <div class="rp-outcome-sub">new followers &amp; likes</div>
-        </div>` : ""}
-        ${totalApp > 0 ? `<div class="rp-outcome-tile">
-          <div class="rp-outcome-label">Clicks to App Store</div>
-          <div class="rp-outcome-value" style="color:#4599FF;">${fmtNum(totalApp)}</div>
-          <div class="rp-outcome-sub">${fmtR(g.spend / totalApp)} per click</div>
-        </div>` : ""}
-        ${totalLp > 0 ? `<div class="rp-outcome-tile">
-          <div class="rp-outcome-label">Landing Page Clicks</div>
-          <div class="rp-outcome-value" style="color:#00F2EA;">${fmtNum(totalLp)}</div>
-          <div class="rp-outcome-sub">${fmtR(g.spend / totalLp)} per click</div>
-        </div>` : ""}
+        ${(function(){
+          // Cost-per figures use PER-OBJECTIVE spend, matching Summary
+          // tile formulas sLeads/tLeads etc. (App.jsx ~9582). Previous
+          // version divided by g.spend, over-stating cost per outcome
+          // by the awareness-share ratio.
+          var sLeads = byObj["Leads"] ? byObj["Leads"].global.spend : 0;
+          var sFollows = byObj["Followers & Likes"] ? byObj["Followers & Likes"].global.spend : 0;
+          var sApp = byObj["Clicks to App Store"] ? byObj["Clicks to App Store"].global.spend : 0;
+          var sLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.spend : 0;
+          var out = "";
+          if (totalLeads > 0) out += `<div class="rp-outcome-tile">
+            <div class="rp-outcome-label">Leads Captured</div>
+            <div class="rp-outcome-value" style="color:#F43F5E;">${fmtNum(totalLeads)}</div>
+            <div class="rp-outcome-sub">${fmtR(sLeads / totalLeads)} per lead</div>
+          </div>`;
+          if (totalFollows > 0) out += `<div class="rp-outcome-tile">
+            <div class="rp-outcome-label">Community Growth</div>
+            <div class="rp-outcome-value" style="color:#34D399;">+${fmtNum(totalFollows)}</div>
+            <div class="rp-outcome-sub">${sFollows > 0 ? fmtR(sFollows / totalFollows) + " per member" : "new followers & likes"}</div>
+          </div>`;
+          if (totalApp > 0) out += `<div class="rp-outcome-tile">
+            <div class="rp-outcome-label">Clicks to App Store</div>
+            <div class="rp-outcome-value" style="color:#4599FF;">${fmtNum(totalApp)}</div>
+            <div class="rp-outcome-sub">${fmtR(sApp / totalApp)} per click</div>
+          </div>`;
+          return out;
+        })()}
+        ${(function(){
+          if (totalLp <= 0) return "";
+          var sLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.spend : 0;
+          return `<div class="rp-outcome-tile">
+            <div class="rp-outcome-label">Landing Page Clicks</div>
+            <div class="rp-outcome-value" style="color:#00F2EA;">${fmtNum(totalLp)}</div>
+            <div class="rp-outcome-sub">${fmtR(sLp / totalLp)} per click</div>
+          </div>`;
+        })()}
         ${(function(){var cr = (byObj["Community Reach"] && byObj["Community Reach"].global.result) || 0; return cr > 0 ? `<div class="rp-outcome-tile">
           <div class="rp-outcome-label">Community Reach</div>
           <div class="rp-outcome-value" style="color:#FFAA00;">${fmtNum(cr)}</div>
@@ -1343,7 +1384,12 @@ function renderClosingNote(opts) {
   var book = opts.book;
   var g = book.global;
   var earnedTotal = opts.earnedTotal || 0;
-  var totalFollows = earnedTotal > 0 ? earnedTotal : (g.follows || 0) + (g.pageLikes || 0);
+  // Fallback totalFollows matches dashboard tFollows semantics
+  // (App.jsx ~9560) — sums only follower-objective bucket, not the
+  // raw global follows+pageLikes which would over-count with page-
+  // like reactions from non-follower campaigns.
+  var followersBucket = book.byObjective && book.byObjective["Followers & Likes"] && book.byObjective["Followers & Likes"].global;
+  var totalFollows = earnedTotal > 0 ? earnedTotal : (followersBucket ? followersBucket.result : 0);
   var quickRecap = [];
   if (parseFloat(g.leads || 0) > 0) quickRecap.push(fmtNum(g.leads) + " leads");
   if (totalFollows > 0) quickRecap.push("+" + fmtNum(totalFollows) + " community");
