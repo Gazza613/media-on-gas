@@ -528,12 +528,16 @@ function renderMofuSection(opts) {
   var g = book.global;
   // Blended CTR + CPC use ENGAGEMENT-ONLY totals (exclude Awareness /
   // Community Reach campaigns) to match the dashboard's Summary tab
-  // exactly. Total Clicks and Total Spend stay as the full grand.
+  // BLENDED CLICK THROUGH RATE tile. Total Clicks + Total Spend stay
+  // as the FULL grand totals to match the dashboard's TOTAL CLICKS
+  // tile (App.jsx computed.totalClicks = tc2 = mt+tt+gd, all camps).
+  // Reading engagement-only here made the report tile under-count by
+  // ~3k clicks vs the dashboard on windows with awareness spend.
   var eng = book.engagement || { impressions: 0, clicks: 0, spend: 0 };
   var globalKpis = [
-    { label: "Total Clicks", value: fmtNum(eng.clicks || g.clicks), primary: true, sub: "engagement campaigns" },
-    { label: "Blended CTR", value: fmtPct(engagementCtrOf(eng)), sub: "awareness excluded" },
-    { label: "Blended CPC", value: fmtR(engagementCpcOf(eng)), sub: "awareness excluded" },
+    { label: "Total Clicks", value: fmtNum(g.clicks), primary: true, sub: "all campaigns" },
+    { label: "Blended CTR", value: fmtPct(engagementCtrOf(eng)), sub: "awareness excl." },
+    { label: "Blended CPC", value: fmtR(engagementCpcOf(eng)), sub: "awareness excl." },
     { label: "Total Spend", value: fmtR(g.spend), sub: "all campaigns" }
   ];
   // Per-platform table reads engagement-only clicks / CTR / CPC to
