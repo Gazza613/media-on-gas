@@ -309,18 +309,22 @@ function resolveThumb(ad, origin, shareToken, size) {
   if (!ad) return "";
   var pl = String(ad.platform || "").toLowerCase();
   var pk = (pl.indexOf("facebook") >= 0 || pl.indexOf("instagram") >= 0) ? "meta" : (pl.indexOf("tiktok") >= 0 ? "tiktok" : "");
-  // Non-Meta/TikTok (Google Ads variants). Only the raw URL is
-  // available; proxy doesn't handle them.
   if (!pk || !ad.adId) return ad.thumbnail || "";
   var isMixed = pk === "meta" && (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative);
-  // Fast path: fresh raw thumbnail, no winner re-selection needed.
-  // Matches dashboard thumbFor line ~4228.
+  // Fast path: raw thumbnail is present and the ad is not a MIXED
+  // DCO ad — use the raw signed CDN URL directly, matches dashboard's
+  // thumbFor line ~4228.
   if (ad.thumbnail && !isMixed) return ad.thumbnail;
-  // Proxy fallback. Requires shareToken to authenticate at open time.
   if (!origin || !shareToken) return ad.thumbnail || "";
   var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
   var win = isMixed ? "&winner=1" : "";
-  return origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&raw=1&token=" + shareToken;
+  // URL format IDENTICAL to dashboard thumbFor (App.jsx ~4236). No
+  // &raw=1 (that was the email-only byte-streaming flag that made the
+  // proxy return application/octet-stream inside the PDF popup and
+  // some images silently failed). Plain token auth lets the endpoint
+  // 302-redirect to the real CDN URL, which is what the dashboard
+  // relies on and displays reliably.
+  return origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&token=" + shareToken;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -812,35 +816,49 @@ function objectiveWeight(row, campaignObjType) {
 // stage block. Age tally seeds ONLY with ALLOWED_AGES so the dominant
 // age can never be "unknown" (Google GAQL returns UNKNOWN for
 // privacy-blocked users). Gender tally seeds with only female/male.
+// Aggregates BOTH click-weighted and objective-weighted views in a
+// single pass. Persona cards (mirror dashboard TargetingPersonaCard
+// which uses stageDef.engagement = clicks) read from ageClicks /
+// genderClicks / segMapClicks. Age & Region bar charts (mirror the
+// dashboard Demographics OBJECTIVE stage) read from ageObj /
+// genderObj / segMapObj / byRegionObj. This split fixes the
+// "Facebook dominant age 65+" persona mis-match where every reader
+// was using objective-weight and elders were overweighted because
+// Community Reach objective heavily indexes on the 65+ band.
 function aggregateAgeGender(rows, campaignObjType) {
   var byPlat = {};
-  var ageBuckets = {};
-  var genderBuckets = { male: 0, female: 0 };
-  var initAgeMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
-  ALLOWED_AGES.forEach(function(a) { ageBuckets[a] = 0; });
+  var ageClicksAll = {}, ageObjAll = {};
+  var genderClicksAll = { male: 0, female: 0 };
+  var genderObjAll = { male: 0, female: 0 };
+  var initMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
+  ALLOWED_AGES.forEach(function(a) { ageClicksAll[a] = 0; ageObjAll[a] = 0; });
   (rows || []).forEach(function(r) {
     var age = String(r.age || "");
     if (EXCLUDED_AGES[age]) return;
     var p = platformFamily(r.platform || "Other");
-    if (!byPlat[p]) byPlat[p] = { age: initAgeMap(), gender: { male: 0, female: 0 }, segMap: {}, impressions: 0, clicks: 0, spend: 0, weight: 0 };
+    if (!byPlat[p]) byPlat[p] = {
+      ageClicks: initMap(), ageObj: initMap(),
+      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 },
+      segMapClicks: {}, segMapObj: {},
+      impressions: 0, clicks: 0, spend: 0, weight: 0
+    };
     var bp = byPlat[p];
     var clicks = parseInt(r.clicks || 0, 10);
     var imps = parseInt(r.impressions || 0, 10);
-    // OBJECTIVE-STAGE weight (matches dashboard App.jsx ~5455). For a
-    // Leads campaign row this is r.results.leads, for Followers it is
-    // follows+pageLikes, everything else is r.clicks. This is the
-    // number the dashboard's OBJECTIVE stage tallies into age /
-    // region bars.
     var w = campaignObjType ? objectiveWeight(r, campaignObjType) : clicks;
     var rawGender = String(r.gender || "").toLowerCase();
     var g = rawGender === "male" || rawGender === "m" ? "male" : rawGender === "female" || rawGender === "f" ? "female" : "";
     if (ALLOWED_AGES.indexOf(age) >= 0) {
-      ageBuckets[age] += w;
-      bp.age[age] += w;
+      ageClicksAll[age] += clicks;
+      ageObjAll[age] += w;
+      bp.ageClicks[age] += clicks;
+      bp.ageObj[age] += w;
     }
     if (g === "male" || g === "female") {
-      genderBuckets[g] += w;
-      bp.gender[g] += w;
+      genderClicksAll[g] += clicks;
+      genderObjAll[g] += w;
+      bp.genderClicks[g] += clicks;
+      bp.genderObj[g] += w;
     }
     bp.impressions += imps;
     bp.clicks += clicks;
@@ -848,15 +866,22 @@ function aggregateAgeGender(rows, campaignObjType) {
     bp.weight += w;
     if (ALLOWED_AGES.indexOf(age) >= 0 && (g === "male" || g === "female")) {
       var k = age + "|" + g;
-      bp.segMap[k] = (bp.segMap[k] || 0) + w;
+      bp.segMapClicks[k] = (bp.segMapClicks[k] || 0) + clicks;
+      bp.segMapObj[k] = (bp.segMapObj[k] || 0) + w;
     }
   });
-  return { byPlatform: byPlat, ageBuckets: ageBuckets, genderBuckets: genderBuckets };
+  return {
+    byPlatform: byPlat,
+    ageClicksAll: ageClicksAll, ageObjAll: ageObjAll,
+    genderClicksAll: genderClicksAll, genderObjAll: genderObjAll
+  };
 }
 
+// Both click-weighted (persona/targeting) and objective-weighted
+// (Demographics OBJECTIVE) region rollups in one pass.
 function aggregateRegion(rows, campaignObjType) {
   var byRegion = {};
-  var byPlatformRegion = {};
+  var byPlatformRegionClicks = {}, byPlatformRegionObj = {};
   (rows || []).forEach(function(r) {
     var reg = String(r.region || "").trim();
     if (!reg || reg.toLowerCase() === "unknown") return;
@@ -869,10 +894,16 @@ function aggregateRegion(rows, campaignObjType) {
     byRegion[reg].clicks += clicks;
     byRegion[reg].spend += parseFloat(r.spend || 0);
     byRegion[reg].weight += w;
-    if (!byPlatformRegion[p]) byPlatformRegion[p] = {};
-    byPlatformRegion[p][reg] = (byPlatformRegion[p][reg] || 0) + w;
+    if (!byPlatformRegionClicks[p]) byPlatformRegionClicks[p] = {};
+    if (!byPlatformRegionObj[p]) byPlatformRegionObj[p] = {};
+    byPlatformRegionClicks[p][reg] = (byPlatformRegionClicks[p][reg] || 0) + clicks;
+    byPlatformRegionObj[p][reg] = (byPlatformRegionObj[p][reg] || 0) + w;
   });
-  return { byRegion: byRegion, byPlatformRegion: byPlatformRegion };
+  return {
+    byRegion: byRegion,
+    byPlatformRegionClicks: byPlatformRegionClicks,
+    byPlatformRegionObj: byPlatformRegionObj
+  };
 }
 
 // Render the audience/demographics section. Persona cards mirror the
@@ -895,36 +926,38 @@ function renderAudienceSection(opts) {
   // doesn't produce a hollow card.
   var personaOrder = ["Facebook", "Instagram", "TikTok", "Google Ads"];
   var personaCards = personaOrder.filter(function(p) {
-    return agAgg.byPlatform[p] && (agAgg.byPlatform[p].weight > 0 || agAgg.byPlatform[p].clicks > 0);
+    return agAgg.byPlatform[p] && agAgg.byPlatform[p].clicks > 0;
   }).map(function(p) {
     var pb = agAgg.byPlatform[p];
     var accent = platformAccent(p);
-    // Dominant age is picked only from the six known bands (matches
-    // dashboard's topAgeFor which only iterates ageOrder). pb.age was
-    // also seeded with only ALLOWED_AGES so this is belt+braces.
+    // Persona is CLICK-WEIGHTED per dashboard TargetingPersonaCard
+    // (App.jsx ~723 uses stageDef.engagement.field = r.clicks). Was
+    // previously reading the objective-weighted maps which overweighted
+    // 65+ for MoMo (Community Reach objective indexes heavily on
+    // that band).
     var topAgeKey = "", topAgeVal = 0;
-    ALLOWED_AGES.forEach(function(k) { var v = pb.age[k] || 0; if (v > topAgeVal) { topAgeVal = v; topAgeKey = k; } });
-    var ageDenom = ALLOWED_AGES.reduce(function(s, k) { return s + (pb.age[k] || 0); }, 0);
+    ALLOWED_AGES.forEach(function(k) { var v = pb.ageClicks[k] || 0; if (v > topAgeVal) { topAgeVal = v; topAgeKey = k; } });
+    var ageDenom = ALLOWED_AGES.reduce(function(s, k) { return s + (pb.ageClicks[k] || 0); }, 0);
     var topAgeShare = ageDenom > 0 ? (topAgeVal / ageDenom * 100) : 0;
-    // Gender lead: female vs male share of classified gender.
-    var gSum = pb.gender.male + pb.gender.female;
-    var femaleShare = gSum > 0 ? (pb.gender.female / gSum * 100) : 0;
-    var maleShare = gSum > 0 ? (pb.gender.male / gSum * 100) : 0;
+    var gSum = pb.genderClicks.male + pb.genderClicks.female;
+    var femaleShare = gSum > 0 ? (pb.genderClicks.female / gSum * 100) : 0;
+    var maleShare = gSum > 0 ? (pb.genderClicks.male / gSum * 100) : 0;
     var genderLead = femaleShare > maleShare ? "Female" : (maleShare > 0 ? "Male" : "");
     var genderShare = Math.max(femaleShare, maleShare);
-    // Top 2 regions for this platform.
-    var pRegs = (regAgg.byPlatformRegion && regAgg.byPlatformRegion[p]) || {};
+    // Region rollup for this platform, click-weighted to match
+    // TargetingPersonaCard.
+    var pRegs = (regAgg.byPlatformRegionClicks && regAgg.byPlatformRegionClicks[p]) || {};
     var pRegKeys = Object.keys(pRegs).sort(function(a, b) { return pRegs[b] - pRegs[a]; }).slice(0, 3);
     var pRegDenom = Object.keys(pRegs).reduce(function(s, k) { return s + pRegs[k]; }, 0);
     var regionRows = pRegKeys.map(function(rk) {
       var share = pRegDenom > 0 ? (pRegs[rk] / pRegDenom * 100) : 0;
       return `<div class="rp-persona-region"><span class="rp-persona-region-name">${escapeHtmlLocal(rk)}</span><span class="rp-persona-region-share">${share.toFixed(2)}%</span></div>`;
     }).join("");
-    // Top 3 age x gender segments (Best Personas).
-    var segTotal = Object.keys(pb.segMap).reduce(function(s, k) { return s + pb.segMap[k]; }, 0);
-    var segments = Object.keys(pb.segMap).map(function(k) {
+    // Best Personas — top 3 age × gender segments, click-weighted.
+    var segTotal = Object.keys(pb.segMapClicks).reduce(function(s, k) { return s + pb.segMapClicks[k]; }, 0);
+    var segments = Object.keys(pb.segMapClicks).map(function(k) {
       var parts = k.split("|");
-      return { age: parts[0], gen: parts[1], val: pb.segMap[k], share: segTotal > 0 ? (pb.segMap[k] / segTotal * 100) : 0 };
+      return { age: parts[0], gen: parts[1], val: pb.segMapClicks[k], share: segTotal > 0 ? (pb.segMapClicks[k] / segTotal * 100) : 0 };
     }).sort(function(a, b) { return b.val - a.val; }).slice(0, 3);
     var segRows = segments.map(function(s, i) {
       var label = s.age + " " + (s.gen === "female" ? "Female" : "Male");
@@ -933,19 +966,19 @@ function renderAudienceSection(opts) {
     return `<div class="rp-persona" style="border-color:${accent}55;">
       <div class="rp-persona-plat" style="background:${accent};">${escapeHtmlLocal(p)}</div>
       <div class="rp-persona-hero">
-        <div class="rp-persona-hero-age" style="color:${accent};">${escapeHtmlLocal(topAgeKey || "—")}</div>
+        <div class="rp-persona-hero-age" style="color:${accent};">${escapeHtmlLocal(topAgeKey || "-")}</div>
         <div class="rp-persona-hero-caption">Dominant Age${topAgeKey ? " &middot; " + topAgeShare.toFixed(2) + "%" : ""}</div>
       </div>
       <div class="rp-persona-strip">
         <div class="rp-persona-strip-tile">
           <div class="rp-persona-strip-label">Gender Lead</div>
-          <div class="rp-persona-strip-value">${escapeHtmlLocal(genderLead || "—")}</div>
+          <div class="rp-persona-strip-value">${escapeHtmlLocal(genderLead || "-")}</div>
           <div class="rp-persona-strip-sub" style="color:${accent};">${genderLead ? genderShare.toFixed(2) + "%" : ""}</div>
         </div>
         <div class="rp-persona-strip-tile">
-          <div class="rp-persona-strip-label">Results</div>
-          <div class="rp-persona-strip-value">${fmtNum(pb.weight || pb.clicks)}</div>
-          <div class="rp-persona-strip-sub">objective-weighted</div>
+          <div class="rp-persona-strip-label">Total Clicks</div>
+          <div class="rp-persona-strip-value">${fmtNum(pb.clicks)}</div>
+          <div class="rp-persona-strip-sub">click-weighted</div>
         </div>
       </div>
       ${regionRows ? `<div class="rp-persona-block-title">Top Regions</div><div class="rp-persona-regions">${regionRows}</div>` : ""}
@@ -1016,11 +1049,11 @@ function renderAudienceSection(opts) {
 // ═══════════════════════════════════════════════════════════════════
 
 // Best Performing Ads — mirrors dashboard's TOP ADS PER OBJECTIVE
-// (BY PLATFORM) layout (App.jsx ~7620): one section per objective,
-// within each section one sub-block per platform with the platform's
-// Top 3 ads underneath. Sort rules per objective are ported verbatim
-// from the dashboard's leadSort / engagementSort / landingPageSort /
-// communityReachSort so ranking is identical.
+// (BY PLATFORM) (App.jsx ~8598 objSections + ~7620 platGroups + the
+// per-objective sort fns). Buckets by a.objective (the canonical
+// key set by /api/ads.js), NOT by name inference, so ads land in
+// the same section on both surfaces. Uses a.results (also set by
+// /api/ads.js) as the primary rank field, matching dashboard sorts.
 function renderTopAdsSection(opts) {
   var top = opts.topAds;
   var raw = (top && Array.isArray(top.raw) && top.raw.length) ? top.raw
@@ -1029,55 +1062,44 @@ function renderTopAdsSection(opts) {
   var origin = opts.origin;
   var shareToken = opts.shareToken;
 
-  // Objective config, one row per section. Dashboard's leadSort etc.
-  // ported below into per-obj sort fns.
+  // Sort fns ported verbatim from dashboard (App.jsx ~7639 leadSort,
+  // ~7646 engagementSort, ~7655 landingPageSort, ~7663 communityReachSort).
   var IMP_FLOOR = 5000;
   var leadSort = function(a, b) {
-    var ar = parseFloat(a.leads || a.results || 0), br = parseFloat(b.leads || b.results || 0);
-    if (br !== ar) return br - ar;
-    var ac = ar > 0 ? parseFloat(a.spend || 0) / ar : Infinity;
-    var bc = br > 0 ? parseFloat(b.spend || 0) / br : Infinity;
+    if (b.results !== a.results) return b.results - a.results;
+    var ac = a.results > 0 ? a.spend / a.results : Infinity;
+    var bc = b.results > 0 ? b.spend / b.results : Infinity;
     if (ac !== bc) return ac - bc;
-    return parseFloat(b.impressions || 0) - parseFloat(a.impressions || 0);
-  };
-  var followerSort = function(a, b) {
-    var ar = parseFloat(a.follows || 0) + parseFloat(a.pageLikes || 0);
-    var br = parseFloat(b.follows || 0) + parseFloat(b.pageLikes || 0);
-    if (br !== ar) return br - ar;
-    var ac = ar > 0 ? parseFloat(a.spend || 0) / ar : Infinity;
-    var bc = br > 0 ? parseFloat(b.spend || 0) / br : Infinity;
-    return ac - bc;
+    return b.impressions - a.impressions;
   };
   var engagementSort = function(a, b) {
-    // 5k impression floor sinks low-volume ads to the bottom, then
-    // rank by clicks then CTR (dashboard engagementSort).
-    var aQ = parseFloat(a.impressions || 0) >= IMP_FLOOR ? 0 : 1;
-    var bQ = parseFloat(b.impressions || 0) >= IMP_FLOOR ? 0 : 1;
+    var aQ = a.impressions >= IMP_FLOOR ? 0 : 1;
+    var bQ = b.impressions >= IMP_FLOOR ? 0 : 1;
     if (aQ !== bQ) return aQ - bQ;
-    var ac = parseFloat(a.clicks || 0), bc = parseFloat(b.clicks || 0);
-    if (bc !== ac) return bc - ac;
-    return parseFloat(b.ctr || 0) - parseFloat(a.ctr || 0);
+    if (b.clicks !== a.clicks) return b.clicks - a.clicks;
+    return b.ctr - a.ctr;
   };
   var landingPageSort = function(a, b) {
-    var ac = parseFloat(a.clicks || 0), bc = parseFloat(b.clicks || 0);
-    if (bc !== ac) return bc - ac;
-    return parseFloat(b.ctr || 0) - parseFloat(a.ctr || 0);
+    if (b.clicks !== a.clicks) return b.clicks - a.clicks;
+    return b.ctr - a.ctr;
   };
   var communityReachSort = function(a, b) {
-    var ar = parseFloat(a.reach || a.impressions || 0), br = parseFloat(b.reach || b.impressions || 0);
-    if (br !== ar) return br - ar;
-    var acpm = ar > 0 && a.impressions > 0 ? parseFloat(a.spend || 0) / a.impressions * 1000 : Infinity;
-    var bcpm = br > 0 && b.impressions > 0 ? parseFloat(b.spend || 0) / b.impressions * 1000 : Infinity;
+    var aR = parseFloat(a.results || a.reach || 0), bR = parseFloat(b.results || b.reach || 0);
+    if (bR !== aR) return bR - aR;
+    var acpm = a.impressions > 0 ? (a.spend / a.impressions * 1000) : Infinity;
+    var bcpm = b.impressions > 0 ? (b.spend / b.impressions * 1000) : Infinity;
     return acpm - bcpm;
   };
 
+  // Section config keyed by CANONICAL objective ("leads" / "appinstall"
+  // / "followers" / "landingpage" / "community_reach"), matching
+  // dashboard's a.objective bucketing.
   var objSections = [
-    { key: "Leads",                title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,           resultKey: "leads",       resultLabel: "leads",       criterion: "Ranked by leads captured and cost per lead." },
-    { key: "Clicks to App Store",  title: "Clicks to App Store", accent: "#4599FF", sort: engagementSort,     resultKey: "clicks",      resultLabel: "store clicks", criterion: "Ranked by clicks and CTR (minimum 5,000 impressions)." },
-    { key: "Followers & Likes",    title: "Followers",           accent: "#34D399", sort: followerSort,       resultKey: "follows",     resultLabel: "follows",     criterion: "Ranked by community earned and cost per follow." },
-    { key: "Landing Page Clicks",  title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,    resultKey: "clicks",      resultLabel: "LP clicks",   criterion: "Ranked by clicks to the landing page." },
-    { key: "Community Reach",      title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultKey: "reach",       resultLabel: "reached",     criterion: "Ranked by unique users reached at the most efficient CPM." },
-    { key: "Traffic",              title: "General Traffic",     accent: "#F96203", sort: landingPageSort,    resultKey: "clicks",      resultLabel: "clicks",      criterion: "Ranked by clicks captured." }
+    { key: "leads",           title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,           resultLabel: "leads",        criterion: "Ranked by leads captured and cost per lead." },
+    { key: "appinstall",      title: "Clicks to App Store", accent: "#4599FF", sort: engagementSort,     resultLabel: "store clicks", criterion: "Ranked by clicks and CTR (minimum 5,000 impressions)." },
+    { key: "followers",       title: "Followers",           accent: "#34D399", sort: leadSort,           resultLabel: "follows",      criterion: "Ranked by community earned and cost per follow." },
+    { key: "landingpage",     title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,    resultLabel: "LP clicks",    criterion: "Ranked by clicks to the landing page." },
+    { key: "community_reach", title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultLabel: "reached",      criterion: "Ranked by unique users reached at the most efficient CPM." }
   ];
   var platGroups = [
     { key: "Facebook",   label: "Facebook",   accent: "#4599FF" },
@@ -1085,12 +1107,15 @@ function renderTopAdsSection(opts) {
     { key: "TikTok",     label: "TikTok",     accent: "#00F2EA" },
     { key: "Google Ads", label: "Google Ads", accent: "#34A853" }
   ];
-  // Objective-appropriate result value for a single ad (used in the
-  // card's metric line).
+  // Per-card result value. Uses a.results (dashboard's objective-
+  // appropriate result count already set by /api/ads.js), fallback to
+  // objective-specific fields only if results is zero.
   var adResult = function(a, section) {
-    if (section.resultKey === "leads")   return parseFloat(a.leads || a.results || 0);
-    if (section.resultKey === "follows") return parseFloat(a.follows || 0) + parseFloat(a.pageLikes || 0);
-    if (section.resultKey === "reach")   return parseFloat(a.reach || a.impressions || 0);
+    var res = parseFloat(a.results || 0);
+    if (res > 0) return res;
+    if (section.key === "leads")           return parseFloat(a.leads || 0);
+    if (section.key === "followers")       return parseFloat(a.follows || 0) + parseFloat(a.pageLikes || 0);
+    if (section.key === "community_reach") return parseFloat(a.reach || 0);
     return parseFloat(a.clicks || 0);
   };
 
@@ -1116,10 +1141,16 @@ function renderTopAdsSection(opts) {
     </div>`;
   };
 
-  // Bucket raw ads by (objective, platform).
+  // Bucket by CANONICAL objective (a.objective) then platform.
+  // Matches dashboard's byObj construction (App.jsx ~8611) so the same
+  // ads land in the same sections here as they do on the Summary tab.
   var bucket = {};
   raw.forEach(function(a) {
-    var obj = getObj(a);
+    var obj = String(a.objective || "landingpage").toLowerCase();
+    // Fold any awareness objective flavour into community_reach so
+    // reach-tagged awareness ads still show up on the Community
+    // Reach section.
+    if (obj === "awareness") obj = "community_reach";
     var plat = platformFamily(a.platform);
     if (!bucket[obj]) bucket[obj] = {};
     if (!bucket[obj][plat]) bucket[obj][plat] = [];
@@ -1196,49 +1227,44 @@ function renderExecutiveSummary(opts) {
       ${renderKpiRow(kpis)}
     </div>
     <div class="rp-block">
-      <div class="rp-block-title">Funnel Performance</div>
-      <div class="rp-block-caption">Every rand of media spend flows through this funnel. The top of the funnel captures 100 percent of that spend delivering ads, and each subsequent stage measures the share that carried through to the next action.</div>
-      <div class="rp-funnel-cards">
-        <div class="rp-funnel-card" style="border-color:#F96203;">
-          <div class="rp-funnel-card-eyebrow" style="color:#F96203;">Stage 01 &middot; Top of Funnel</div>
-          <div class="rp-funnel-card-title">Awareness &amp; Reach</div>
-          <div class="rp-funnel-card-role">Puts the brand in front of new eyes. Every rand of media spend contributed to this stage.</div>
-          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#F96203;">100%</span><span class="rp-funnel-card-of">media delivered</span></div>
-          <div class="rp-funnel-card-spend">${fmtR(g.spend)}</div>
-          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:100%;background:linear-gradient(90deg,#F96203,#FF6B00);"></div></div>
-          <div class="rp-funnel-card-result">Delivered <strong>${fmtNum(g.impressions)}</strong> impressions${g.reach > 0 ? " to " + fmtNum(g.reach) + " unique users" : ""}.</div>
+      <div class="rp-block-title">Outcomes Delivered</div>
+      <div class="rp-block-caption">A summary of every measurable outcome the campaigns achieved in this window, alongside the media investment behind them.</div>
+      <div class="rp-outcomes-grid">
+        <div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Media Spend</div>
+          <div class="rp-outcome-value" style="color:#F96203;">${fmtR(g.spend)}</div>
+          <div class="rp-outcome-sub">delivering ${fmtNum(g.impressions)} impressions</div>
         </div>
-        <div class="rp-funnel-card" style="border-color:#FF6B00;">
-          <div class="rp-funnel-card-eyebrow" style="color:#FF6B00;">Stage 02 &middot; Middle of Funnel</div>
-          <div class="rp-funnel-card-title">Clicks &amp; Consideration</div>
-          <div class="rp-funnel-card-role">Turns awareness into intent, measured by the share of impressions that clicked through.</div>
-          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF6B00;">${g.impressions > 0 ? (g.clicks / g.impressions * 100).toFixed(2) + "%" : "n/a"}</span><span class="rp-funnel-card-of">click through rate</span></div>
-          <div class="rp-funnel-card-spend">${fmtNum(g.clicks)} clicks captured</div>
-          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${g.impressions > 0 ? Math.min(100, g.clicks / g.impressions * 100 * 20).toFixed(1) : 0}%;background:linear-gradient(90deg,#FF6B00,#FF3D00);"></div></div>
-          <div class="rp-funnel-card-result">${fmtNum(g.clicks)} users leaned in and clicked through${(function(){var e = book.engagement || {}; return e.impressions > 0 ? " at a blended " + fmtPct(e.clicks / e.impressions * 100) + " engagement CTR" : "";})()}.</div>
+        <div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Clicks Captured</div>
+          <div class="rp-outcome-value" style="color:#FF6B00;">${fmtNum(g.clicks)}</div>
+          <div class="rp-outcome-sub">at ${g.impressions > 0 ? (g.clicks / g.impressions * 100).toFixed(2) + "% blended CTR" : "n/a"}</div>
         </div>
-        <div class="rp-funnel-card" style="border-color:#FF3D00;">
-          <div class="rp-funnel-card-eyebrow" style="color:#FF3D00;">Stage 03 &middot; Bottom of Funnel</div>
-          <div class="rp-funnel-card-title">Conversions &amp; Growth</div>
-          <div class="rp-funnel-card-role">Turns intent into measurable business outcomes: leads captured, app store clicks, followers gained, community reached.</div>
-          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF3D00;">${(function(){var out = totalLeads + totalFollows + totalApp + totalLp; return g.clicks > 0 ? (out / g.clicks * 100).toFixed(2) + "%" : "n/a";})()}</span><span class="rp-funnel-card-of">result through rate</span></div>
-          <div class="rp-funnel-card-spend">${(function(){var out = totalLeads + totalFollows + totalApp + totalLp; return fmtNum(out) + " total outcomes";})()}</div>
-          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${(function(){var out = totalLeads + totalFollows + totalApp + totalLp; return g.clicks > 0 ? Math.min(100, out / g.clicks * 100).toFixed(1) : 0;})()}%;background:linear-gradient(90deg,#FF3D00,#F96203);"></div></div>
-          <div class="rp-funnel-card-result">${(function(){
-            var parts=[];
-            if(totalLeads>0)parts.push(fmtNum(totalLeads)+" leads");
-            if(totalFollows>0)parts.push("+"+fmtNum(totalFollows)+" community");
-            if(totalApp>0)parts.push(fmtNum(totalApp)+" app store clicks");
-            if(totalLp>0)parts.push(fmtNum(totalLp)+" landing page clicks");
-            var totalCR = (byObj["Community Reach"] && byObj["Community Reach"].global.result) || 0;
-            if(totalCR>0)parts.push(fmtNum(totalCR)+" community reach");
-            return parts.length?("Delivered <strong>"+parts.join("</strong>, <strong>")+"</strong>."):"No conversion outcomes recorded this window.";
-          })()}</div>
-        </div>
-      </div>
-      <div class="rp-funnel-callout">
-        <div class="rp-funnel-callout-eyebrow">How To Read This</div>
-        <p class="rp-body">Every rand of the media spend is at the top of the funnel because every rand delivered impressions. The click through rate at Stage 02 measures how many of those impressions became an active click. The result through rate at Stage 03 measures how many of those clicks turned into a business outcome, leads captured, app store clicks, community members gained, or landing page visits. A healthy funnel converts at every stage without the pool at any level running dry.</p>
+        ${totalLeads > 0 ? `<div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Leads Captured</div>
+          <div class="rp-outcome-value" style="color:#F43F5E;">${fmtNum(totalLeads)}</div>
+          <div class="rp-outcome-sub">${fmtR(g.spend / totalLeads)} per lead</div>
+        </div>` : ""}
+        ${totalFollows > 0 ? `<div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Community Growth</div>
+          <div class="rp-outcome-value" style="color:#34D399;">+${fmtNum(totalFollows)}</div>
+          <div class="rp-outcome-sub">new followers &amp; likes</div>
+        </div>` : ""}
+        ${totalApp > 0 ? `<div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Clicks to App Store</div>
+          <div class="rp-outcome-value" style="color:#4599FF;">${fmtNum(totalApp)}</div>
+          <div class="rp-outcome-sub">${fmtR(g.spend / totalApp)} per click</div>
+        </div>` : ""}
+        ${totalLp > 0 ? `<div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Landing Page Clicks</div>
+          <div class="rp-outcome-value" style="color:#00F2EA;">${fmtNum(totalLp)}</div>
+          <div class="rp-outcome-sub">${fmtR(g.spend / totalLp)} per click</div>
+        </div>` : ""}
+        ${(function(){var cr = (byObj["Community Reach"] && byObj["Community Reach"].global.result) || 0; return cr > 0 ? `<div class="rp-outcome-tile">
+          <div class="rp-outcome-label">Community Reach</div>
+          <div class="rp-outcome-value" style="color:#FFAA00;">${fmtNum(cr)}</div>
+          <div class="rp-outcome-sub">unique members reached</div>
+        </div>` : "";})()}
       </div>
     </div>
     <div class="rp-narrative">
@@ -1607,9 +1633,12 @@ img { max-width: 100%; display: block; }
 .rp-obj-section-head { padding: 4mm 5mm; border-left: 4px solid; }
 .rp-obj-section-title { font-size: 12pt; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 1.5mm; }
 .rp-obj-section-crit { font-size: 8.5pt; color: var(--rp-fg-mute); font-style: italic; letter-spacing: 0.3px; }
-.rp-obj-plat-block { display: grid; grid-template-columns: 24mm 1fr; gap: 3mm; padding: 3mm 4mm; align-items: stretch; border-top: 1px dashed var(--rp-line); page-break-inside: avoid; }
-.rp-obj-plat-head { display: flex; align-items: center; justify-content: center; text-align: center; color: #fff; font-size: 9pt; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 2mm; padding: 3mm 2mm; }
-.rp-obj-plat-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; }
+/* Platform label promoted to a top banner (was a side pill). Cards
+   below now use the full section width so each ad tile reads bigger,
+   per owner feedback. */
+.rp-obj-plat-block { padding: 3mm 4mm 4mm; border-top: 1px dashed var(--rp-line); page-break-inside: avoid; }
+.rp-obj-plat-head { color: #fff; font-size: 10pt; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; border-radius: 2mm; padding: 2.5mm 4mm; margin-bottom: 3mm; text-align: left; }
+.rp-obj-plat-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
 /* Card body must give the ad name enough room to render on two lines
    without being clipped, plus the metrics stack below with breathing
    room. Earlier the max-height on the name squashed the ad-title on
@@ -1699,6 +1728,17 @@ img { max-width: 100%; display: block; }
 /* Closing-page emblem band. Pulled out of the contact column and pinned
    near the physical bottom of the page, larger + more presence per
    owner spec. Sits below the sender/contact foot with breathing room. */
+/* Outcomes grid replaces the earlier funnel-performance visual on
+   the Executive Summary page. Simpler and factually correct: one
+   tile per measurable outcome the campaigns achieved this window
+   (media spend, clicks, leads, community, app store, LP, community
+   reach) with a compact cost or efficiency sub-line. */
+.rp-outcomes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-bottom: 5mm; page-break-inside: avoid; }
+.rp-outcome-tile { padding: 5mm 5mm; background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 3mm; overflow: hidden; }
+.rp-outcome-label { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; margin-bottom: 3mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-outcome-value { font-size: 18pt; font-weight: 900; line-height: 1.1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.rp-outcome-sub { font-size: 8.5pt; color: var(--rp-fg-mute); margin-top: 3mm; letter-spacing: 0.3px; font-weight: 500; }
+
 /* Emblem band. 14pt / 8px letter-spacing was wrapping across two
    lines at A4 width. 10pt / 4px keeps it a single-line strip that
    still reads as a proper closing emblem, plus nowrap so overflow
