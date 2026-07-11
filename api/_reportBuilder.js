@@ -1930,30 +1930,26 @@ ${pages}
       img.addEventListener("load", tick, { once: true });
       img.addEventListener("error", tick, { once: true });
     });
-    setTimeout(function(){ if (!done) { done = true; cb(); } }, timeoutMs || 4000);
+    setTimeout(function(){ if (!done) { done = true; cb(); } }, timeoutMs || 6000);
   }
   function start(){
-    whenImagesReady(function(){ setTimeout(doPrint, 300); }, 4000);
+    // Longer settle so layout metrics, custom fonts, and image sizing
+    // are all done before Chrome's print snapshot fires. Empty-PDF
+    // reports on Windows traced back to a 300ms settle that fired
+    // before some rp-obj-plat blocks had finished laying out.
+    whenImagesReady(function(){ setTimeout(doPrint, 1500); }, 6000);
   }
   if (document.readyState === "complete") start();
   else window.addEventListener("load", start);
 
-  // Auto-close the popup after the print dialog resolves so no lingering
-  // browser file handle blocks Adobe Acrobat from opening the saved PDF
-  // ("This file is already open or in use by another application" on
-  // Windows). Delay a beat so Chrome finishes writing the file, then
-  // close. Fires whether the operator saved OR cancelled.
-  var closed = false;
-  function closePopup(){
-    if (closed) return;
-    closed = true;
-    setTimeout(function(){ try { window.close(); } catch(_) {} }, 800);
-  }
-  window.addEventListener("afterprint", closePopup);
-  // Some browsers do not fire afterprint reliably; also close if the
-  // window blurs after print was triggered (print dialog dismissed).
-  window.addEventListener("focus", function(){
-    if (printed && !closed) setTimeout(closePopup, 1200);
+  // Auto-close popup after print dialog resolves so no lingering
+  // Chrome file handle blocks Adobe Acrobat from opening the saved
+  // PDF on Windows. 3 seconds so Chrome definitely finishes writing
+  // to disk before we release the tab. Removed the focus-listener
+  // fallback because it was closing the tab BEFORE the PDF write
+  // completed on some machines, producing a 0-byte / empty PDF.
+  window.addEventListener("afterprint", function(){
+    setTimeout(function(){ try { window.close(); } catch(_) {} }, 3000);
   });
 })();
 </script>
