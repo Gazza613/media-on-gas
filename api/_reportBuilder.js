@@ -1930,16 +1930,31 @@ ${pages}
       img.addEventListener("load", tick, { once: true });
       img.addEventListener("error", tick, { once: true });
     });
-    // Hard ceiling: even if a thumbnail never resolves, print anyway.
     setTimeout(function(){ if (!done) { done = true; cb(); } }, timeoutMs || 4000);
   }
   function start(){
-    // Small settle delay for layout + font metrics before the print
-    // dialog snapshots the document.
     whenImagesReady(function(){ setTimeout(doPrint, 300); }, 4000);
   }
   if (document.readyState === "complete") start();
   else window.addEventListener("load", start);
+
+  // Auto-close the popup after the print dialog resolves so no lingering
+  // browser file handle blocks Adobe Acrobat from opening the saved PDF
+  // ("This file is already open or in use by another application" on
+  // Windows). Delay a beat so Chrome finishes writing the file, then
+  // close. Fires whether the operator saved OR cancelled.
+  var closed = false;
+  function closePopup(){
+    if (closed) return;
+    closed = true;
+    setTimeout(function(){ try { window.close(); } catch(_) {} }, 800);
+  }
+  window.addEventListener("afterprint", closePopup);
+  // Some browsers do not fire afterprint reliably; also close if the
+  // window blurs after print was triggered (print dialog dismissed).
+  window.addEventListener("focus", function(){
+    if (printed && !closed) setTimeout(closePopup, 1200);
+  });
 })();
 </script>
 </body>
