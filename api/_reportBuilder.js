@@ -1870,10 +1870,34 @@ img { max-width: 100%; display: block; }
 .rp-cta-btn:hover { background: linear-gradient(135deg, rgba(249,98,3,0.22), rgba(255,61,0,0.10)); }
 .rp-cta-note { margin-top: 4mm; font-size: 9pt; color: var(--rp-fg-mute); letter-spacing: 1px; font-weight: 500; }
 
-/* Print rules */
+/* Print rules — make the layout resilient to whatever margin the
+   operator selects in Chrome's print dialog. Force @page to no
+   margin so .rp-page controls its own padding, force .rp-page to
+   width:100% so it adapts if Chrome's "Default" margin was chosen
+   and the printable area is smaller than 210mm. */
 @media print {
-  html, body { background: var(--rp-bg) !important; }
-  .rp-page { margin: 0; box-shadow: none; }
+  @page { size: A4; margin: 0 !important; }
+  html, body { background: var(--rp-bg) !important; margin: 0 !important; padding: 0 !important; width: 210mm !important; }
+  .rp-page {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 297mm !important;
+    height: 297mm !important;
+    padding: 13mm 15mm !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .rp-page:last-child { page-break-after: auto !important; break-after: auto !important; }
+  /* Cover + closing pages reach edge-to-edge. Their internal .rp-cover-frame
+     / .rp-signoff-frame carries the padding. */
+  .rp-cover, .rp-signoff { padding: 0 !important; }
+  .rp-page * { max-width: 100% !important; }
+  /* Guarantee no horizontal overflow on wide tables. */
+  .rp-table, .rp-obj-plat-cards, .rp-creative-grid, .rp-kpi-grid, .rp-outcomes-grid { max-width: 100% !important; }
 }
 </style>
 </head>
