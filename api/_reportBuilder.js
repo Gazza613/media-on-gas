@@ -1544,7 +1544,9 @@ img { max-width: 100%; display: block; }
 .rp-page {
   width: 210mm;
   min-height: 297mm;
-  padding: 20mm 20mm;
+  /* Tighter top/bottom padding buys ~10mm content height per page so
+     Performance Insights fits on the same page as its section. */
+  padding: 15mm 20mm;
   background: linear-gradient(170deg, var(--rp-bg) 0%, var(--rp-bg2) 100%);
   page-break-after: always;
   break-after: page;
@@ -1605,17 +1607,17 @@ img { max-width: 100%; display: block; }
 .rp-cover-agency-sub { font-size: 8pt; letter-spacing: 3px; color: var(--rp-accent); font-weight: 800; text-transform: uppercase; }
 
 /* ─────────────── SECTION HEADER ─────────────── */
-.rp-section-head { display: flex; gap: 6mm; align-items: flex-start; margin-bottom: 8mm; padding-bottom: 6mm; border-bottom: 1px solid var(--rp-line); }
+.rp-section-head { display: flex; gap: 6mm; align-items: flex-start; margin-bottom: 5mm; padding-bottom: 4mm; border-bottom: 1px solid var(--rp-line); }
 .rp-section-num { font-family: var(--rp-font); font-size: 32pt; font-weight: 700; color: var(--rp-accent); line-height: 1; letter-spacing: -1px; min-width: 20mm; }
 .rp-section-headline { flex: 1; }
 .rp-section-eyebrow { font-size: 8pt; letter-spacing: 4px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
-.rp-h1 { font-family: var(--rp-font); font-size: 26pt; font-weight: 700; letter-spacing: -0.8px; line-height: 1.1; color: var(--rp-fg); margin: 0 0 4mm 0; }
-.rp-lede { font-size: 10.5pt; color: var(--rp-fg-dim); line-height: 1.6; max-width: 155mm; font-style: italic; }
+.rp-h1 { font-family: var(--rp-font); font-size: 22pt; font-weight: 900; letter-spacing: -0.6px; line-height: 1.1; color: var(--rp-fg); margin: 0 0 3mm 0; }
+.rp-lede { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.5; max-width: 155mm; font-style: italic; }
 
 /* ─────────────── BLOCKS ─────────────── */
-.rp-block { margin-bottom: 8mm; page-break-inside: avoid; }
-.rp-block-title { font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 4mm; }
-.rp-block-double { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 8mm; }
+.rp-block { margin-bottom: 6mm; page-break-inside: avoid; }
+.rp-block-title { font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
+.rp-block-double { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 6mm; }
 
 /* ─────────────── KPI GRID ─────────────── */
 .rp-kpi-grid { display: grid; gap: 3mm; margin-bottom: 4mm; page-break-inside: avoid; }
@@ -1634,11 +1636,14 @@ img { max-width: 100%; display: block; }
 .rp-kpi-sub { font-size: 8.5pt; color: var(--rp-fg-mute); margin-top: 3mm; letter-spacing: 0.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ─────────────── INSIGHT / NARRATIVE ─────────────── */
-.rp-insight { margin-top: 6mm; padding: 5mm 6mm; background: linear-gradient(140deg, rgba(249,98,3,0.06), var(--rp-card)); border-left: 3px solid var(--rp-accent); border-radius: 0 3mm 3mm 0; page-break-inside: avoid; }
-.rp-insight-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
-.rp-narrative { margin-top: 6mm; padding: 5mm 6mm; background: var(--rp-card-strong); border-radius: 3mm; border-left: 3px solid var(--rp-accent); page-break-inside: avoid; }
-.rp-narrative-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
-.rp-body { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.7; margin: 0; }
+/* Performance Insights box — page-break-before: avoid keeps it on
+   the same page as the table above (was rolling to next page and
+   looking odd). Tighter padding so the box footprint is smaller. */
+.rp-insight { margin-top: 4mm; padding: 4mm 5mm; background: linear-gradient(140deg, rgba(249,98,3,0.06), var(--rp-card)); border-left: 3px solid var(--rp-accent); border-radius: 0 3mm 3mm 0; page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid; }
+.rp-insight-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 2mm; }
+.rp-narrative { margin-top: 4mm; padding: 4mm 5mm; background: var(--rp-card-strong); border-radius: 3mm; border-left: 3px solid var(--rp-accent); page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid; }
+.rp-narrative-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 2mm; }
+.rp-body { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.55; margin: 0; orphans: 3; widows: 3; }
 
 /* ─────────────── TABLES ─────────────── */
 /* table-layout: fixed guarantees the table can NEVER exceed 100%
