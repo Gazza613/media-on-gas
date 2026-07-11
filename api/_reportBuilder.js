@@ -1141,40 +1141,49 @@ function renderExecutiveSummary(opts) {
       ${renderKpiRow(kpis)}
     </div>
     <div class="rp-block">
-      <div class="rp-block-title">Funnel Investment Split</div>
-      <div class="rp-block-caption">Where the budget was invested across the three stages of the customer journey and what each stage was structured to deliver.</div>
+      <div class="rp-block-title">Funnel Performance</div>
+      <div class="rp-block-caption">Every rand of media spend flows through this funnel. The top of the funnel captures 100 percent of that spend delivering ads, and each subsequent stage measures the share that carried through to the next action.</div>
       <div class="rp-funnel-cards">
         <div class="rp-funnel-card" style="border-color:#F96203;">
           <div class="rp-funnel-card-eyebrow" style="color:#F96203;">Stage 01 &middot; Top of Funnel</div>
           <div class="rp-funnel-card-title">Awareness &amp; Reach</div>
-          <div class="rp-funnel-card-role">Puts the brand in front of new eyes. Measured in impressions, reach, and cost of getting seen.</div>
-          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#F96203;">${stagePcts.tofu.toFixed(1)}%</span><span class="rp-funnel-card-of">of budget</span></div>
-          <div class="rp-funnel-card-spend">${fmtR(book.byStage.tofu.spend)}</div>
-          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${stagePcts.tofu.toFixed(1)}%;background:linear-gradient(90deg,#F96203,#FF6B00);"></div></div>
-          <div class="rp-funnel-card-result">Delivered <strong>${fmtNum(book.byStage.tofu.impressions)}</strong> impressions${book.byStage.tofu.reach > 0 ? " to " + fmtNum(book.byStage.tofu.reach) + " unique users" : ""}.</div>
+          <div class="rp-funnel-card-role">Puts the brand in front of new eyes. Every rand of media spend contributed to this stage.</div>
+          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#F96203;">100%</span><span class="rp-funnel-card-of">media delivered</span></div>
+          <div class="rp-funnel-card-spend">${fmtR(g.spend)}</div>
+          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:100%;background:linear-gradient(90deg,#F96203,#FF6B00);"></div></div>
+          <div class="rp-funnel-card-result">Delivered <strong>${fmtNum(g.impressions)}</strong> impressions${g.reach > 0 ? " to " + fmtNum(g.reach) + " unique users" : ""}.</div>
         </div>
         <div class="rp-funnel-card" style="border-color:#FF6B00;">
           <div class="rp-funnel-card-eyebrow" style="color:#FF6B00;">Stage 02 &middot; Middle of Funnel</div>
           <div class="rp-funnel-card-title">Clicks &amp; Consideration</div>
-          <div class="rp-funnel-card-role">Turns awareness into intent. Measured in click through rate, cost per click, and content engagement.</div>
-          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF6B00;">${stagePcts.mofu.toFixed(1)}%</span><span class="rp-funnel-card-of">of budget</span></div>
-          <div class="rp-funnel-card-spend">${fmtR(book.byStage.mofu.spend)}</div>
-          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${stagePcts.mofu.toFixed(1)}%;background:linear-gradient(90deg,#FF6B00,#FF3D00);"></div></div>
-          <div class="rp-funnel-card-result">Delivered <strong>${fmtNum(book.byStage.mofu.clicks)}</strong> clicks${book.byStage.mofu.impressions > 0 ? " at " + fmtPct(book.byStage.mofu.clicks / book.byStage.mofu.impressions * 100) + " CTR" : ""}.</div>
+          <div class="rp-funnel-card-role">Turns awareness into intent, measured by the share of impressions that clicked through.</div>
+          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF6B00;">${g.impressions > 0 ? (g.clicks / g.impressions * 100).toFixed(2) + "%" : "n/a"}</span><span class="rp-funnel-card-of">click through rate</span></div>
+          <div class="rp-funnel-card-spend">${fmtNum(g.clicks)} clicks captured</div>
+          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${g.impressions > 0 ? Math.min(100, g.clicks / g.impressions * 100 * 20).toFixed(1) : 0}%;background:linear-gradient(90deg,#FF6B00,#FF3D00);"></div></div>
+          <div class="rp-funnel-card-result">${fmtNum(g.clicks)} users leaned in and clicked through${(function(){var e = book.engagement || {}; return e.impressions > 0 ? " at a blended " + fmtPct(e.clicks / e.impressions * 100) + " engagement CTR" : "";})()}.</div>
         </div>
         <div class="rp-funnel-card" style="border-color:#FF3D00;">
           <div class="rp-funnel-card-eyebrow" style="color:#FF3D00;">Stage 03 &middot; Bottom of Funnel</div>
           <div class="rp-funnel-card-title">Conversions &amp; Growth</div>
-          <div class="rp-funnel-card-role">Turns intent into measurable business outcomes. Leads captured, app store clicks, followers gained, community reached.</div>
-          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF3D00;">${stagePcts.bofu.toFixed(1)}%</span><span class="rp-funnel-card-of">of budget</span></div>
-          <div class="rp-funnel-card-spend">${fmtR(book.byStage.bofu.spend)}</div>
-          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${stagePcts.bofu.toFixed(1)}%;background:linear-gradient(90deg,#FF3D00,#F96203);"></div></div>
-          <div class="rp-funnel-card-result">${(function(){var parts=[];if(totalLeads>0)parts.push(fmtNum(totalLeads)+" leads");if(totalFollows>0)parts.push("+"+fmtNum(totalFollows)+" community");if(totalApp>0)parts.push(fmtNum(totalApp)+" app store clicks");if(totalLp>0)parts.push(fmtNum(totalLp)+" landing page clicks");return parts.length?("Delivered <strong>"+parts.join("</strong>, <strong>")+"</strong>."):"No conversion outcomes recorded this window.";})()}</div>
+          <div class="rp-funnel-card-role">Turns intent into measurable business outcomes: leads captured, app store clicks, followers gained, community reached.</div>
+          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF3D00;">${(function(){var out = totalLeads + totalFollows + totalApp + totalLp; return g.clicks > 0 ? (out / g.clicks * 100).toFixed(2) + "%" : "n/a";})()}</span><span class="rp-funnel-card-of">result through rate</span></div>
+          <div class="rp-funnel-card-spend">${(function(){var out = totalLeads + totalFollows + totalApp + totalLp; return fmtNum(out) + " total outcomes";})()}</div>
+          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${(function(){var out = totalLeads + totalFollows + totalApp + totalLp; return g.clicks > 0 ? Math.min(100, out / g.clicks * 100).toFixed(1) : 0;})()}%;background:linear-gradient(90deg,#FF3D00,#F96203);"></div></div>
+          <div class="rp-funnel-card-result">${(function(){
+            var parts=[];
+            if(totalLeads>0)parts.push(fmtNum(totalLeads)+" leads");
+            if(totalFollows>0)parts.push("+"+fmtNum(totalFollows)+" community");
+            if(totalApp>0)parts.push(fmtNum(totalApp)+" app store clicks");
+            if(totalLp>0)parts.push(fmtNum(totalLp)+" landing page clicks");
+            var totalCR = (byObj["Community Reach"] && byObj["Community Reach"].global.result) || 0;
+            if(totalCR>0)parts.push(fmtNum(totalCR)+" community reach");
+            return parts.length?("Delivered <strong>"+parts.join("</strong>, <strong>")+"</strong>."):"No conversion outcomes recorded this window.";
+          })()}</div>
         </div>
       </div>
       <div class="rp-funnel-callout">
         <div class="rp-funnel-callout-eyebrow">How To Read This</div>
-        <p class="rp-body">A well balanced funnel keeps every stage healthy. Overweight the top and there is nowhere for the audience to convert. Overweight the bottom and the pool exhausts because there is no fresh awareness feeding it. The percentages above are the strategic ratio of the reporting window. The rand amounts and outcomes below each bar show what that ratio actually delivered on the ground.</p>
+        <p class="rp-body">Every rand of the media spend is at the top of the funnel because every rand delivered impressions. The click through rate at Stage 02 measures how many of those impressions became an active click. The result through rate at Stage 03 measures how many of those clicks turned into a business outcome, leads captured, app store clicks, community members gained, or landing page visits. A healthy funnel converts at every stage without the pool at any level running dry.</p>
       </div>
     </div>
     <div class="rp-narrative">
@@ -1219,6 +1228,12 @@ function renderClosingNote(opts) {
   if (appClicks > 0) quickRecap.push(fmtNum(appClicks) + " app store clicks");
   var lpClicks = (book.byObjective && book.byObjective["Landing Page Clicks"] && book.byObjective["Landing Page Clicks"].global.result) || 0;
   if (lpClicks > 0) quickRecap.push(fmtNum(lpClicks) + " landing page clicks");
+  // Community Reach — MoMo runs paid Reach campaigns into existing
+  // community audiences to accelerate app utilisation. Owner asked
+  // for this outcome to be surfaced in the recap alongside the
+  // conversion metrics.
+  var crReach = (book.byObjective && book.byObjective["Community Reach"] && book.byObjective["Community Reach"].global.result) || 0;
+  if (crReach > 0) quickRecap.push(fmtNum(crReach) + " community reach");
   if (!quickRecap.length) quickRecap.push(fmtNum(g.impressions) + " impressions");
   // "Proceed to your Dashboard" CTA. Subtle button with 90-day token.
   // Only renders when a dashboard URL is available.
@@ -1617,7 +1632,11 @@ img { max-width: 100%; display: block; }
 /* Closing-page emblem band. Pulled out of the contact column and pinned
    near the physical bottom of the page, larger + more presence per
    owner spec. Sits below the sender/contact foot with breathing room. */
-.rp-signoff-bottom-band { margin-top: 10mm; padding: 6mm 0 0; border-top: 1px solid var(--rp-line); font-size: 14pt; letter-spacing: 8px; text-transform: uppercase; color: var(--rp-accent); font-weight: 900; text-align: center; }
+/* Emblem band. 14pt / 8px letter-spacing was wrapping across two
+   lines at A4 width. 10pt / 4px keeps it a single-line strip that
+   still reads as a proper closing emblem, plus nowrap so overflow
+   clips rather than wraps if a future edit adds text to the string. */
+.rp-signoff-bottom-band { margin-top: 10mm; padding: 6mm 0 0; border-top: 1px solid var(--rp-line); font-size: 10pt; letter-spacing: 4px; text-transform: uppercase; color: var(--rp-accent); font-weight: 900; text-align: center; white-space: nowrap; overflow: hidden; }
 
 /* Closing-page CTA. Subtle glass button with a warm accent border and
    an underline-style caption so it reads corporate, not marketing. */
