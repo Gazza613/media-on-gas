@@ -209,6 +209,13 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile
       var bSpend = b.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
       return bSpend - aSpend;
     }).slice(0, platformCap);
+    // Report mode: attach the full pre-groupBy list so the deep-
+    // insights PDF can render Top 5 per OBJECTIVE. Non-enumerable so
+    // it doesn't disturb any existing iteration over the returned
+    // array (buildEmailHtml still treats it as [{platform, ads}]).
+    if (wantRaw) {
+      try { Object.defineProperty(platforms, "raw", { value: filtered, enumerable: false }); } catch (_) { platforms.raw = filtered; }
+    }
     return platforms;
   } catch (err) {
     console.error("Email top ads fetch error", err);
@@ -1237,7 +1244,12 @@ export default async function handler(req, res) {
     // cap), so the "Best Performing Ads" section can carry Facebook,
     // Instagram, TikTok AND Google. The inbox email keeps the compact
     // 3 per platform / cap 3 platforms defaults.
-    var topAdsOpts = wantReportData ? { perPlatform: 8, platformCap: 8 } : undefined;
+    // Report groups Best Performing Ads by OBJECTIVE (Top 5 per
+    // objective), not by platform, so raw:true asks the fetcher to
+    // ALSO include the unfiltered pre-groupBy list. perPlatform is
+    // kept generous only as a safety net for legacy platform-grouped
+    // access; report reads the .raw array.
+    var topAdsOpts = wantReportData ? { perPlatform: 8, platformCap: 8, raw: true } : undefined;
     var extraFetches = [
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
       fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile, topAdsOpts),
