@@ -390,14 +390,16 @@ function renderTofuSection(opts) {
     { label: "Frequency", value: fmtNumDec(frequencyOf(g), 2) + "x", sub: "per user" },
     { label: "Blended CPM", value: fmtR(cpmOf(g)), sub: "cost per 1,000" }
   ];
+  // 6 columns is the max that fits inside A4 content width without the
+  // header overflowing. CPM already IS cost per 1,000 ads served so
+  // the earlier "Cost / 1K Served" column was pure duplication.
   var columns = [
     { key: "platform", label: "Platform", align: "left" },
     { key: "impressions", label: "Impressions", format: "int" },
     { key: "reach", label: "Reach", format: "int" },
     { key: "freq", label: "Frequency", format: "freq", compute: frequencyOf },
     { key: "cpm", label: "CPM", format: "R", compute: cpmOf },
-    { key: "spend", label: "Spend", format: "R" },
-    { key: "cpad", label: "Cost / 1K Served", format: "R", compute: cpmOf }
+    { key: "spend", label: "Spend", format: "R" }
   ];
   // Two-paragraph Performance Insights.
   var platforms = Object.keys(book.byPlatform).sort(function(a, b) { return book.byPlatform[b].spend - book.byPlatform[a].spend; });
@@ -1114,12 +1116,19 @@ img { max-width: 100%; display: block; }
 .rp-body { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.7; margin: 0; }
 
 /* ─────────────── TABLES ─────────────── */
-.rp-table { width: 100%; border-collapse: collapse; background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; font-size: 10.5pt; table-layout: auto; }
+/* table-layout: fixed guarantees the table can NEVER exceed 100%
+   of the page width, so a long header cannot push a column off the
+   page (Section 01 "COST / 1K SERV" bug). Header cells wrap to two
+   lines rather than clipping when they truly cannot fit. */
+.rp-table { width: 100%; max-width: 100%; border-collapse: collapse; background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; font-size: 10.5pt; table-layout: fixed; }
 .rp-table-wide { font-size: 10pt; }
-.rp-table th { padding: 3.2mm 3mm; text-align: center; font-size: 8pt; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; border-bottom: 1px solid rgba(249,98,3,0.24); background: rgba(249,98,3,0.08); vertical-align: middle; white-space: nowrap; }
+.rp-table th { padding: 3.2mm 2mm; text-align: center; font-size: 8pt; letter-spacing: 1px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; border-bottom: 1px solid rgba(249,98,3,0.24); background: rgba(249,98,3,0.08); vertical-align: middle; white-space: normal; word-break: break-word; }
 /* Column 1 (platform / campaign) is left-aligned; every other column
-   centre-aligns per owner style spec so the table reads corporate. */
-.rp-table th.rp-th-name { text-align: left; }
+   centre-aligns per owner style spec so the table reads corporate.
+   With table-layout: fixed above, the platform column gets an explicit
+   26mm width so it fits the pill without being forced to equal-share
+   with the numeric columns. */
+.rp-table th.rp-th-name { text-align: left; width: 26mm; }
 .rp-th-num, .rp-th-center { text-align: center; }
 .rp-th-rank { text-align: center; width: 8mm; }
 .rp-table td { padding: 3.5mm 3mm; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--rp-fg); vertical-align: middle; font-variant-numeric: tabular-nums; text-align: center; font-weight: 500; }
