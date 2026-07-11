@@ -258,22 +258,34 @@ function formatPeriod(from, to) {
   return MONTHS[fM] + " " + fD + ", " + fY + " to " + MONTHS[tM] + " " + tD + ", " + tY;
 }
 
-// Ad thumbnail resolver. Uses /api/ad-image proxy for Meta + TikTok
-// so signed CDN URL expiry (~1hr for Meta, unpredictable for TikTok)
-// doesn't produce broken images when the PDF is opened. Requires a
-// shareToken; without one, falls back to raw thumbnail (which may
-// break for TikTok but still displays for Meta if URL is fresh).
+// Ad thumbnail resolver. Mirrors dashboard/src/App.jsx thumbFor() so
+// what the operator sees on the Summary tab is what the PDF renders.
+// The dashboard's fast path is: if ad.thumbnail is present AND the ad
+// isn't a Meta MIXED DCO ad, use the raw signed CDN URL directly. The
+// proxy runs only for MIXED (needs winner re-selection) or when the
+// ads payload had no thumbnail (proxy resolves from image_hash /
+// video_id server-side). Previous "always proxy" approach on the PDF
+// stalled or 404'd on the same tiles the dashboard shows fine.
+// Signed Meta / TikTok CDN URLs live ~1 hour so a freshly generated
+// PDF viewed within the window renders every raw thumbnail identical
+// to the dashboard. Older PDFs may miss thumbnails that expired since
+// the proxy also cannot recover a truly gone signed URL.
 function resolveThumb(ad, origin, shareToken, size) {
-  var w = size || 120;
-  var pl = String((ad && ad.platform) || "").toLowerCase();
+  if (!ad) return "";
+  var pl = String(ad.platform || "").toLowerCase();
   var pk = (pl.indexOf("facebook") >= 0 || pl.indexOf("instagram") >= 0) ? "meta" : (pl.indexOf("tiktok") >= 0 ? "tiktok" : "");
-  if (pk && ad && ad.adId && origin && shareToken) {
-    var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
-    var win = (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative) ? "&winner=1" : "";
-    return origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&raw=1&token=" + shareToken;
-  }
-  if (ad && ad.thumbnail && String(ad.thumbnail).indexOf("http") === 0) return ad.thumbnail;
-  return "";
+  // Non-Meta/TikTok (Google Ads variants). Only the raw URL is
+  // available; proxy doesn't handle them.
+  if (!pk || !ad.adId) return ad.thumbnail || "";
+  var isMixed = pk === "meta" && (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative);
+  // Fast path: fresh raw thumbnail, no winner re-selection needed.
+  // Matches dashboard thumbFor line ~4228.
+  if (ad.thumbnail && !isMixed) return ad.thumbnail;
+  // Proxy fallback. Requires shareToken to authenticate at open time.
+  if (!origin || !shareToken) return ad.thumbnail || "";
+  var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+  var win = isMixed ? "&winner=1" : "";
+  return origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&raw=1&token=" + shareToken;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -419,12 +431,51 @@ function renderTofuSection(opts) {
     p2 = freqRead + " Efficient delivery at this stage compounds every subsequent layer of the funnel, warm audiences convert faster and cheaper because the awareness work has already been done.";
   }
   var insight = p1 ? (p1 + "</p><p class=\"rp-body\">" + p2) : p2;
+  // Investment & Pacing block. Uses the dashboard's exact pacing math
+  // (App.jsx ~5196-5205): totalDays / elapsed / pctElapsed /
+  // dailySpendRate / projectedSpend, "today" in Africa/Johannesburg
+  // so the % elapsed doesn't shift at UTC roll-over. When the
+  // reporting window is entirely in the past (to < today), pacing
+  // reads 100% elapsed with a "period closed" caption so the tiles
+  // don't read as mid-flight when they aren't.
+  var pacingHtml = "";
+  if (opts.from && opts.to) {
+    var daysBetween = function(a, b) {
+      var d = Math.round((new Date(b) - new Date(a)) / 86400000) + 1;
+      return d < 1 ? 1 : d;
+    };
+    var todayLocal = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" });
+    var totalDays = daysBetween(opts.from, opts.to);
+    var elapsedRaw = daysBetween(opts.from, todayLocal < opts.to ? todayLocal : opts.to);
+    var elapsed = elapsedRaw > totalDays ? totalDays : elapsedRaw;
+    var pctElapsed = Math.min(100, elapsed / totalDays * 100);
+    var dailyRate = elapsed > 0 ? g.spend / elapsed : 0;
+    var projectedSpend = dailyRate * totalDays;
+    var periodClosed = todayLocal >= opts.to;
+    var elapsedCaption = periodClosed
+      ? "Period closed"
+      : "Day " + elapsed + " of " + totalDays;
+    var projectionCaption = periodClosed
+      ? "Final total"
+      : "At current daily rate";
+    var pacingKpis = [
+      { label: "Media Spend to Date", value: fmtR(g.spend), primary: true, sub: fmtR(dailyRate) + " per day" },
+      { label: "Pacing to Month End", value: fmtR(projectedSpend), sub: projectionCaption },
+      { label: "% of Period Elapsed", value: pctElapsed.toFixed(1) + "%", sub: elapsedCaption }
+    ];
+    pacingHtml = `<div class="rp-block">
+      <div class="rp-block-title">Investment &amp; Pacing</div>
+      <div class="rp-block-caption">Where the budget sits today and where the current daily spend rate is projected to land by period end.</div>
+      ${renderKpiRow(pacingKpis)}
+    </div>`;
+  }
   return `<section class="rp-page">
     ${renderSectionHeader("01", "Top of the Funnel", "Ads Served", "Awareness delivery. This is the layer that plants the brand in the audience's memory ahead of a decision moment. Success is measured in efficient reach and controlled frequency, not clicks.")}
     <div class="rp-block">
       <div class="rp-block-title">Global Delivery Headlines</div>
       ${renderKpiRow(globalKpis)}
     </div>
+    ${pacingHtml}
     <div class="rp-block">
       <div class="rp-block-title">Per Platform Delivery Breakdown</div>
       ${renderPlatformTable(book.byPlatform, columns)}
