@@ -1015,87 +1015,142 @@ function renderAudienceSection(opts) {
 // SECTION: BEST PERFORMING ADS
 // ═══════════════════════════════════════════════════════════════════
 
-// Best Performing Ads — Top 5 per objective. Reads the raw (pre-
-// platform-group) ad list attached by fetchTopAds(raw:true) so ads
-// group by outcome (Leads / Clicks to App Store / Landing Page
-// Clicks / Followers & Likes / Community Reach) rather than by
-// platform. Matches the dashboard's Creative tab which lists best
-// ads by objective, not by platform.
+// Best Performing Ads — mirrors dashboard's TOP ADS PER OBJECTIVE
+// (BY PLATFORM) layout (App.jsx ~7620): one section per objective,
+// within each section one sub-block per platform with the platform's
+// Top 3 ads underneath. Sort rules per objective are ported verbatim
+// from the dashboard's leadSort / engagementSort / landingPageSort /
+// communityReachSort so ranking is identical.
 function renderTopAdsSection(opts) {
   var top = opts.topAds;
-  // Prefer the raw list; fall back to flattening the legacy platform-
-  // grouped shape if raw wasn't attached.
   var raw = (top && Array.isArray(top.raw) && top.raw.length) ? top.raw
     : (Array.isArray(top) ? top.reduce(function(acc, pl) { return acc.concat((pl && pl.ads) || []); }, []) : []);
   if (!raw.length) return "";
   var origin = opts.origin;
   var shareToken = opts.shareToken;
-  // Group by DASHBOARD display objective (Leads / Followers & Likes /
-  // Clicks to App Store / Landing Page Clicks / Community Reach)
-  // using the same getObj() classifier the report uses everywhere.
-  var buckets = {};
-  raw.forEach(function(a) {
-    var obj = getObj(a);
-    if (!buckets[obj]) buckets[obj] = [];
-    buckets[obj].push(a);
-  });
-  // Objective-appropriate result for ranking an ad. Community Reach
-  // ranks on reach (unique users), Followers on follows+pageLikes,
-  // App Store / LP on link clicks, Leads on lead count. Matches
-  // getResult() semantics but at the ad level.
-  var adResult = function(a, obj) {
-    if (obj === "Leads") return parseFloat(a.leads || a.results || 0);
-    if (obj === "Followers & Likes") return parseFloat(a.follows || 0) + parseFloat(a.pageLikes || 0);
-    if (obj === "Community Reach") return parseFloat(a.reach || a.impressions || 0);
+
+  // Objective config, one row per section. Dashboard's leadSort etc.
+  // ported below into per-obj sort fns.
+  var IMP_FLOOR = 5000;
+  var leadSort = function(a, b) {
+    var ar = parseFloat(a.leads || a.results || 0), br = parseFloat(b.leads || b.results || 0);
+    if (br !== ar) return br - ar;
+    var ac = ar > 0 ? parseFloat(a.spend || 0) / ar : Infinity;
+    var bc = br > 0 ? parseFloat(b.spend || 0) / br : Infinity;
+    if (ac !== bc) return ac - bc;
+    return parseFloat(b.impressions || 0) - parseFloat(a.impressions || 0);
+  };
+  var followerSort = function(a, b) {
+    var ar = parseFloat(a.follows || 0) + parseFloat(a.pageLikes || 0);
+    var br = parseFloat(b.follows || 0) + parseFloat(b.pageLikes || 0);
+    if (br !== ar) return br - ar;
+    var ac = ar > 0 ? parseFloat(a.spend || 0) / ar : Infinity;
+    var bc = br > 0 ? parseFloat(b.spend || 0) / br : Infinity;
+    return ac - bc;
+  };
+  var engagementSort = function(a, b) {
+    // 5k impression floor sinks low-volume ads to the bottom, then
+    // rank by clicks then CTR (dashboard engagementSort).
+    var aQ = parseFloat(a.impressions || 0) >= IMP_FLOOR ? 0 : 1;
+    var bQ = parseFloat(b.impressions || 0) >= IMP_FLOOR ? 0 : 1;
+    if (aQ !== bQ) return aQ - bQ;
+    var ac = parseFloat(a.clicks || 0), bc = parseFloat(b.clicks || 0);
+    if (bc !== ac) return bc - ac;
+    return parseFloat(b.ctr || 0) - parseFloat(a.ctr || 0);
+  };
+  var landingPageSort = function(a, b) {
+    var ac = parseFloat(a.clicks || 0), bc = parseFloat(b.clicks || 0);
+    if (bc !== ac) return bc - ac;
+    return parseFloat(b.ctr || 0) - parseFloat(a.ctr || 0);
+  };
+  var communityReachSort = function(a, b) {
+    var ar = parseFloat(a.reach || a.impressions || 0), br = parseFloat(b.reach || b.impressions || 0);
+    if (br !== ar) return br - ar;
+    var acpm = ar > 0 && a.impressions > 0 ? parseFloat(a.spend || 0) / a.impressions * 1000 : Infinity;
+    var bcpm = br > 0 && b.impressions > 0 ? parseFloat(b.spend || 0) / b.impressions * 1000 : Infinity;
+    return acpm - bcpm;
+  };
+
+  var objSections = [
+    { key: "Leads",                title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,           resultKey: "leads",       resultLabel: "leads",       criterion: "Ranked by leads captured and cost per lead." },
+    { key: "Clicks to App Store",  title: "Clicks to App Store", accent: "#4599FF", sort: engagementSort,     resultKey: "clicks",      resultLabel: "store clicks", criterion: "Ranked by clicks and CTR (minimum 5,000 impressions)." },
+    { key: "Followers & Likes",    title: "Followers",           accent: "#34D399", sort: followerSort,       resultKey: "follows",     resultLabel: "follows",     criterion: "Ranked by community earned and cost per follow." },
+    { key: "Landing Page Clicks",  title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,    resultKey: "clicks",      resultLabel: "LP clicks",   criterion: "Ranked by clicks to the landing page." },
+    { key: "Community Reach",      title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultKey: "reach",       resultLabel: "reached",     criterion: "Ranked by unique users reached at the most efficient CPM." },
+    { key: "Traffic",              title: "General Traffic",     accent: "#F96203", sort: landingPageSort,    resultKey: "clicks",      resultLabel: "clicks",      criterion: "Ranked by clicks captured." }
+  ];
+  var platGroups = [
+    { key: "Facebook",   label: "Facebook",   accent: "#4599FF" },
+    { key: "Instagram",  label: "Instagram",  accent: "#E1306C" },
+    { key: "TikTok",     label: "TikTok",     accent: "#00F2EA" },
+    { key: "Google Ads", label: "Google Ads", accent: "#34A853" }
+  ];
+  // Objective-appropriate result value for a single ad (used in the
+  // card's metric line).
+  var adResult = function(a, section) {
+    if (section.resultKey === "leads")   return parseFloat(a.leads || a.results || 0);
+    if (section.resultKey === "follows") return parseFloat(a.follows || 0) + parseFloat(a.pageLikes || 0);
+    if (section.resultKey === "reach")   return parseFloat(a.reach || a.impressions || 0);
     return parseFloat(a.clicks || 0);
   };
-  var resLabel = function(obj) {
-    if (obj === "Leads") return "leads";
-    if (obj === "Followers & Likes") return "follows";
-    if (obj === "Community Reach") return "reached";
-    if (obj === "Clicks to App Store") return "store clicks";
-    if (obj === "Landing Page Clicks") return "LP clicks";
-    return "clicks";
+
+  var renderAdCard = function(a, rank, section) {
+    var thumb = resolveThumb(a, origin, shareToken, 100);
+    var pAccent = platformAccent(platformFamily(a.platform));
+    var result = adResult(a, section);
+    var spend = parseFloat(a.spend || 0);
+    var ctr = parseFloat(a.ctr || 0);
+    return `<div class="rp-creative-card">
+      <div class="rp-creative-thumb" style="background:linear-gradient(135deg,${pAccent}55,${pAccent}15);">
+        ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : `<div class="rp-creative-fallback">${escapeHtmlLocal(a.platform || "AD")}</div>`}
+        <div class="rp-creative-rank" style="background:${section.accent};">#${rank}</div>
+      </div>
+      <div class="rp-creative-body">
+        <div class="rp-creative-name">${escapeHtmlLocal(a.adName || "Untitled")}</div>
+        <div class="rp-creative-metrics">
+          <div><strong>${fmtR(spend)}</strong> spent</div>
+          <div><strong>${result > 0 ? fmtNum(result) : "-"}</strong> ${escapeHtmlLocal(section.resultLabel)}</div>
+          <div><strong>${fmtPct(ctr)}</strong> CTR</div>
+        </div>
+      </div>
+    </div>`;
   };
-  // Order objectives client-friendly: Leads > App Store > LP > Followers > Community Reach > Traffic (fallback).
-  var displayOrder = ["Leads", "Clicks to App Store", "Landing Page Clicks", "Followers & Likes", "Community Reach", "Traffic"];
-  var objBlocks = displayOrder.filter(function(obj) { return buckets[obj] && buckets[obj].length; }).map(function(obj) {
-    var accent = obj === "Leads" ? "#F43F5E" : obj === "Clicks to App Store" ? "#4599FF" : obj === "Landing Page Clicks" ? "#00F2EA" : obj === "Followers & Likes" ? "#34D399" : obj === "Community Reach" ? "#FFAA00" : "#F96203";
-    var ads = buckets[obj].slice().sort(function(a, b) {
-      var ar = adResult(a, obj), br = adResult(b, obj);
-      if (br !== ar) return br - ar;
-      return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
-    }).slice(0, 6); // 2 rows of 3 in the objective grid
-    var cards = ads.map(function(a, i) {
-      var thumb = resolveThumb(a, origin, shareToken, 120);
-      var pAccent = platformAccent(platformFamily(a.platform));
-      var result = adResult(a, obj);
-      var spend = parseFloat(a.spend || 0);
-      var ctr = parseFloat(a.ctr || 0);
-      return `<div class="rp-creative-card">
-        <div class="rp-creative-thumb" style="background:linear-gradient(135deg,${pAccent}55,${pAccent}15);">
-          ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : `<div class="rp-creative-fallback">${escapeHtmlLocal(a.platform || "AD")}</div>`}
-          <div class="rp-creative-rank" style="background:${accent};">#${i + 1}</div>
-          <div class="rp-creative-plat" style="background:${pAccent};">${escapeHtmlLocal(a.platform || "")}</div>
-        </div>
-        <div class="rp-creative-body">
-          <div class="rp-creative-name">${escapeHtmlLocal(a.adName || "Untitled")}</div>
-          <div class="rp-creative-metrics">
-            <div><strong>${fmtR(spend)}</strong> spent</div>
-            <div><strong>${result > 0 ? fmtNum(result) : "-"}</strong> ${escapeHtmlLocal(resLabel(obj))}</div>
-            <div><strong>${fmtPct(ctr)}</strong> CTR</div>
-          </div>
-        </div>
+
+  // Bucket raw ads by (objective, platform).
+  var bucket = {};
+  raw.forEach(function(a) {
+    var obj = getObj(a);
+    var plat = platformFamily(a.platform);
+    if (!bucket[obj]) bucket[obj] = {};
+    if (!bucket[obj][plat]) bucket[obj][plat] = [];
+    bucket[obj][plat].push(a);
+  });
+
+  var sections = objSections.filter(function(sec) {
+    return bucket[sec.key] && Object.keys(bucket[sec.key]).some(function(p) { return bucket[sec.key][p].length > 0; });
+  }).map(function(sec) {
+    var platBlocks = platGroups.filter(function(pg) {
+      return bucket[sec.key][pg.key] && bucket[sec.key][pg.key].length > 0;
+    }).map(function(pg) {
+      var ads = bucket[sec.key][pg.key].slice().sort(sec.sort).slice(0, 3);
+      var cards = ads.map(function(a, i) { return renderAdCard(a, i + 1, sec); }).join("");
+      return `<div class="rp-obj-plat-block">
+        <div class="rp-obj-plat-head" style="background:${pg.accent};">${escapeHtmlLocal(pg.label)}</div>
+        <div class="rp-obj-plat-cards">${cards}</div>
       </div>`;
     }).join("");
-    return `<div class="rp-platform-block">
-      <div class="rp-platform-head" style="border-left-color:${accent};color:${accent};">${escapeHtmlLocal(obj)}</div>
-      <div class="rp-creative-grid">${cards}</div>
+    return `<div class="rp-obj-section" style="border-color:${sec.accent}55;">
+      <div class="rp-obj-section-head" style="border-left-color:${sec.accent};">
+        <div class="rp-obj-section-title" style="color:${sec.accent};">${escapeHtmlLocal(sec.title)}</div>
+        <div class="rp-obj-section-crit">${escapeHtmlLocal(sec.criterion)}</div>
+      </div>
+      ${platBlocks}
     </div>`;
   }).join("");
+
   return `<section class="rp-page">
-    ${renderSectionHeader("05", "Creative Read", "Best Performing Ads", "The top 6 ads per campaign objective this window, ranked by their objective-appropriate outcome. Grouping by outcome rather than by platform surfaces the ads that actually moved each business metric.")}
-    ${objBlocks}
+    ${renderSectionHeader("05", "Creative Read", "Best Performing Ads", "Top 3 ads per platform for every campaign objective this window. Layout and ranking rules mirror the Summary tab's Top Ads Per Objective (By Platform) section on the live dashboard exactly, so the same ads appear in the same order on both surfaces.")}
+    ${sections}
   </section>`;
 }
 
@@ -1539,10 +1594,22 @@ img { max-width: 100%; display: block; }
 .rp-creative-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .rp-creative-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 8pt; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
 .rp-creative-rank { position: absolute; top: 2mm; left: 2mm; padding: 1mm 2.5mm; color: #fff; font-size: 7.5pt; font-weight: 900; border-radius: 2mm; letter-spacing: 0.5px; }
-/* Platform badge, top-right of thumbnail. Objective grouping shows
-   ads from any platform in the same block, so per-card platform
-   label makes it obvious at a glance. */
+/* Platform badge, top-right of thumbnail. Kept for backwards compat
+   but no longer emitted by the new by-objective-by-platform layout. */
 .rp-creative-plat { position: absolute; top: 2mm; right: 2mm; padding: 1mm 2.5mm; color: #fff; font-size: 6.5pt; font-weight: 900; border-radius: 2mm; letter-spacing: 1px; text-transform: uppercase; }
+
+/* Top Ads Per Objective (By Platform) block — mirrors dashboard's
+   layout at App.jsx ~7620. One section per objective, each with a
+   header + criterion caption, then one horizontal platform strip per
+   platform that ran ads for that objective. Each strip carries a
+   platform label chip on the left and three ad cards to its right. */
+.rp-obj-section { margin-bottom: 8mm; border: 1px solid; border-radius: 4mm; overflow: hidden; page-break-inside: avoid; background: rgba(0,0,0,0.12); }
+.rp-obj-section-head { padding: 4mm 5mm; border-left: 4px solid; }
+.rp-obj-section-title { font-size: 12pt; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 1.5mm; }
+.rp-obj-section-crit { font-size: 8.5pt; color: var(--rp-fg-mute); font-style: italic; letter-spacing: 0.3px; }
+.rp-obj-plat-block { display: grid; grid-template-columns: 24mm 1fr; gap: 3mm; padding: 3mm 4mm; align-items: stretch; border-top: 1px dashed var(--rp-line); page-break-inside: avoid; }
+.rp-obj-plat-head { display: flex; align-items: center; justify-content: center; text-align: center; color: #fff; font-size: 9pt; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 2mm; padding: 3mm 2mm; }
+.rp-obj-plat-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; }
 /* Card body must give the ad name enough room to render on two lines
    without being clipped, plus the metrics stack below with breathing
    room. Earlier the max-height on the name squashed the ad-title on
