@@ -1353,13 +1353,19 @@ img { max-width: 100%; display: block; }
    lines rather than clipping when they truly cannot fit. */
 .rp-table { width: 100%; max-width: 100%; border-collapse: collapse; background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; font-size: 10.5pt; table-layout: fixed; }
 .rp-table-wide { font-size: 10pt; }
-.rp-table th { padding: 3.2mm 2mm; text-align: center; font-size: 8pt; letter-spacing: 1px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; border-bottom: 1px solid rgba(249,98,3,0.24); background: rgba(249,98,3,0.08); vertical-align: middle; white-space: normal; word-break: break-word; }
+/* Header font compressed slightly and letter-spacing tightened so
+   "IMPRESSIONS" (the longest column label) fits on a single line in
+   a five-column data grid. word-break: keep-all guarantees no mid-
+   word break (previous "break-word" split it into "IMPRESSION\nS"),
+   nowrap makes wrapping visible if a header genuinely can't fit so
+   the layout hits a clean fail rather than a two-line mid-word wrap. */
+.rp-table th { padding: 3mm 1.5mm; text-align: center; font-size: 7pt; letter-spacing: 0.6px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; border-bottom: 1px solid rgba(249,98,3,0.24); background: rgba(249,98,3,0.08); vertical-align: middle; white-space: nowrap; word-break: keep-all; overflow: hidden; text-overflow: clip; }
 /* Column 1 (platform / campaign) is left-aligned; every other column
    centre-aligns per owner style spec so the table reads corporate.
    With table-layout: fixed above, the platform column gets an explicit
    26mm width so it fits the pill without being forced to equal-share
    with the numeric columns. */
-.rp-table th.rp-th-name { text-align: left; width: 26mm; }
+.rp-table th.rp-th-name { text-align: left; width: 22mm; }
 .rp-th-num, .rp-th-center { text-align: center; }
 .rp-th-rank { text-align: center; width: 8mm; }
 .rp-table td { padding: 3.5mm 3mm; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--rp-fg); vertical-align: middle; font-variant-numeric: tabular-nums; text-align: center; font-weight: 500; }
