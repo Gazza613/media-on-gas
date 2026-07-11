@@ -117,8 +117,12 @@ function aggregate(arr) {
   return s;
 }
 
-// Pull live top creative ads for the allowed campaigns. Top 3 per platform by spend.
-async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile) {
+// Pull live top creative ads for the allowed campaigns.
+// opts.perPlatform (default 3) — top N per platform.
+// opts.platformCap (default 3) — cap platforms shown.
+async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile, opts) {
+  var perPlatform = (opts && opts.perPlatform) || 3;
+  var platformCap = (opts && opts.platformCap) || 3;
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, top ads skipped"); return null; }
@@ -194,13 +198,13 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile
         var br = parseFloat(b.results || 0);
         if (br !== ar) return br - ar;
         return parseFloat(b.spend || 0) - parseFloat(a.spend || 0);
-      }).slice(0, 3);
+      }).slice(0, perPlatform);
       return { platform: p, ads: arr };
     }).sort(function(a, b) {
       var aSpend = a.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
       var bSpend = b.ads.reduce(function(s, x) { return s + parseFloat(x.spend || 0); }, 0);
       return bSpend - aSpend;
-    }).slice(0, 3); // cap at 3 platforms to keep email scannable
+    }).slice(0, platformCap);
     return platforms;
   } catch (err) {
     console.error("Email top ads fetch error", err);
@@ -276,6 +280,26 @@ async function fetchEcommerce(req, from, to, clientSlug) {
     return d;
   } catch (err) {
     console.error("Email ecommerce fetch error", err);
+    return null;
+  }
+}
+
+// Report-only extra: pull demographics (age/gender/region/device
+// rollups per platform) for the deep-insights PDF Audience section.
+// Non-fatal on error so the PDF still ships without the section.
+async function fetchDemographicsData(req, from, to, campaignIds) {
+  try {
+    var apiKey = process.env.DASHBOARD_API_KEY;
+    if (!apiKey) return null;
+    var internalHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "media-on-gas.vercel.app";
+    var idsQs = (campaignIds || []).length ? "&campaignIds=" + encodeURIComponent((campaignIds || []).map(String).join(",")) : "";
+    var url = "https://" + internalHost + "/api/demographics?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + idsQs;
+    var r = await fetch(url, { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d || null;
+  } catch (err) {
+    console.error("[email-share] demographics PDF fetch error", err);
     return null;
   }
 }
@@ -1195,19 +1219,28 @@ export default async function handler(req, res) {
     var wantPdfExtras = body.pdf === true;
     var wantReportData = body.mode === "report";
     var needPlacementsFetch = wantPdfExtras || wantReportData;
+    // Report needs 8 ads per platform, not 3. Every platform stays (no
+    // cap), so the "Best Performing Ads" section can carry Facebook,
+    // Instagram, TikTok AND Google. The inbox email keeps the compact
+    // 3 per platform / cap 3 platforms defaults.
+    var topAdsOpts = wantReportData ? { perPlatform: 8, platformCap: 8 } : undefined;
     var extraFetches = [
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
-      fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile),
+      fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile, topAdsOpts),
       fetchEcommerce(req, from, to, clientSlug)
     ];
     if (needPlacementsFetch) {
       extraFetches.push(fetchPlacementsData(req, from, to, campaignIds));
+    }
+    if (wantReportData) {
+      extraFetches.push(fetchDemographicsData(req, from, to, campaignIds));
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
     var topAds = results[1];
     var ecommerce = results[2];
     var placements = needPlacementsFetch ? (results[3] || []) : [];
+    var demographics = wantReportData ? (results[needPlacementsFetch ? 4 : 3] || null) : null;
 
     // The per-creative breakdown is intentionally NOT precomputed for
     // the email anymore: it is whole-ad / all-placements and cannot
@@ -1278,6 +1311,11 @@ export default async function handler(req, res) {
     var html;
     if (wantReport) {
       var clientNameForReport = (brandDisplayForSlug(clientSlug) || String(clientSlug || "")).replace(/[_-]+/g, " ").trim() || "Client";
+      // shareTok lets the report builder route TikTok / Meta thumbnails
+      // through the /api/ad-image proxy (which returns a valid image
+      // regardless of Meta CDN URL expiry). Without it, TikTok thumbs
+      // silently fail to load in the PDF popup.
+      var shareTokForReport = String(shareUrl || "").split("token=")[1] || "";
       html = buildReportHtml({
         clientSlug: clientSlug,
         clientName: clientNameForReport,
@@ -1291,7 +1329,9 @@ export default async function handler(req, res) {
         ecommerce: ecommerce,
         profile: kpiProfile,
         clientLogo: clientLogo,
-        placements: placements
+        placements: placements,
+        demographics: demographics,
+        shareToken: shareTokForReport
       });
     } else {
       html = buildEmailHtml({

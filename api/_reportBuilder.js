@@ -1,15 +1,22 @@
-// Deep-insights PDF report builder. Distinct from api/email-share.js's
-// buildEmailHtml (which is a scroll-friendly INBOX layout). This
-// produces a multi-page A4 document — cover page, executive summary,
-// funnel model (ToFu / MoFu / BoFu), per-stage sections, detail tables,
-// creative highlights, recommendations, sign-off. All content is
-// inline-styled so it survives the browser Save-as-PDF conversion
-// without a bundler.
+// Deep-insights PDF report builder. Multi-page A4 document with a
+// corporate/elegant aesthetic, structured around the ToFu / MoFu /
+// BoFu media model. Called from api/email-share.js when body.mode
+// === "report" (Share modal DOWNLOAD PDF button). Distinct from the
+// scroll-friendly buildEmailHtml inbox layout.
 //
-// Called from api/email-share.js when body.mode === "report". Data
-// inputs (summary, topAds, ecommerce, placements, kpiProfile,
-// clientLogo, dateRange, clientName, etc.) come from the same
-// internal fetches the email path uses.
+// Structure:
+//   1. Cover
+//   2. Top of Funnel — Ads Served
+//   3. Middle of Funnel — Clicks
+//   4. Bottom of Funnel — Result Objectives (one subsection per
+//      objective that has data)
+//   5. Perfect Target Audience — Demographics
+//   6. Best Performing Ads — Top 8 per platform
+//   7. Executive Summary (comprehensive, moved to end)
+//   8. A Note From Our Team — closing page
+//
+// All content is inline-styled so it survives the browser Save-as-PDF
+// conversion without a bundler.
 
 function escapeHtmlLocal(s) {
   return String(s == null ? "" : s)
@@ -26,6 +33,12 @@ function fmtNum(n) {
   return Math.round(v).toLocaleString("en-ZA");
 }
 
+function fmtNumDec(n, dp) {
+  var v = parseFloat(n);
+  if (isNaN(v)) return (0).toFixed(dp || 2);
+  return v.toLocaleString("en-ZA", { minimumFractionDigits: dp || 2, maximumFractionDigits: dp || 2 });
+}
+
 function fmtR(n) {
   var v = parseFloat(n);
   if (isNaN(v)) return "R0.00";
@@ -38,55 +51,79 @@ function fmtPct(n) {
   return v.toFixed(2) + "%";
 }
 
-// ToFu / MoFu / BoFu classification. Uses the canonical objective key
-// already set on each campaign by /api/campaigns (name-detection wins
-// per project_objective_classification.md). Falls back to name-based
-// hints if objective is missing.
+// Canonical platform grouping. Google sub-channels collapse to one
+// "Google Ads" bucket so per-platform breakdowns don't fragment.
+function platformFamily(p) {
+  var pl = String(p || "").toLowerCase();
+  if (pl.indexOf("facebook") >= 0) return "Facebook";
+  if (pl.indexOf("instagram") >= 0) return "Instagram";
+  if (pl.indexOf("tiktok") >= 0) return "TikTok";
+  if (pl.indexOf("google") >= 0 || pl.indexOf("youtube") >= 0 || pl.indexOf("search") >= 0 || pl.indexOf("perf") >= 0 || pl.indexOf("demand") >= 0 || pl.indexOf("display") >= 0) return "Google Ads";
+  return p || "Other";
+}
+
+function platformAccent(p) {
+  switch (p) {
+    case "Facebook":  return "#4599FF";
+    case "Instagram": return "#E1306C";
+    case "TikTok":    return "#00F2EA";
+    case "Google Ads": return "#34A853";
+    default: return "#F96203";
+  }
+}
+
+// ToFu / MoFu / BoFu classification via canonical objective key
+// (name-detection is authoritative per project_objective_classification).
 function funnelStageFor(camp) {
   var obj = String((camp && camp.objective) || "").toLowerCase();
   var name = String((camp && camp.campaignName) || "").toLowerCase();
-  var stage = null;
-  if (obj === "awareness" || obj === "community_reach") stage = "tofu";
-  else if (obj === "landingpage" || obj === "followers") stage = "mofu";
-  else if (obj === "leads" || obj === "appinstall") stage = "bofu";
-  else {
-    // Name-based hints for the "unknown" objective
-    if (/(^|[_\s|\-])reach([_\s|\-]|$)/.test(name) || name.indexOf("aware") >= 0) stage = "tofu";
-    else if (name.indexOf("traffic") >= 0 || name.indexOf("engage") >= 0 || name.indexOf("follow") >= 0) stage = "mofu";
-    else if (name.indexOf("lead") >= 0 || name.indexOf("conversion") >= 0 || name.indexOf("install") >= 0 || name.indexOf("purchase") >= 0) stage = "bofu";
-    else stage = "mofu"; // safe default: consideration
-  }
-  return stage;
+  if (obj === "awareness" || obj === "community_reach") return "tofu";
+  if (obj === "landingpage" || obj === "followers") return "mofu";
+  if (obj === "leads" || obj === "appinstall") return "bofu";
+  if (/(^|[_\s|\-])reach([_\s|\-]|$)/.test(name) || name.indexOf("aware") >= 0) return "tofu";
+  if (name.indexOf("traffic") >= 0 || name.indexOf("engage") >= 0 || name.indexOf("follow") >= 0) return "mofu";
+  if (name.indexOf("lead") >= 0 || name.indexOf("install") >= 0 || name.indexOf("purchase") >= 0) return "bofu";
+  return "mofu";
 }
 
-// Split campaigns list into the three funnel stages, aggregating
-// stage-level metrics along the way.
-function partitionByFunnel(campaigns) {
-  var tofu = [], mofu = [], bofu = [];
-  var totals = {
-    tofu: { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, follows: 0, pageLikes: 0, appInstalls: 0, landingPageViews: 0 },
-    mofu: { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, follows: 0, pageLikes: 0, appInstalls: 0, landingPageViews: 0 },
-    bofu: { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, follows: 0, pageLikes: 0, appInstalls: 0, landingPageViews: 0 }
+// Aggregate metrics across a list of campaigns into a global + per-
+// platform breakdown, plus per-funnel-stage totals.
+function aggregateBook(campaigns) {
+  var empty = function() {
+    return { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, follows: 0, pageLikes: 0, appInstalls: 0, landingPageViews: 0, campaignCount: 0 };
   };
+  var book = { global: empty(), byPlatform: {}, byStage: { tofu: empty(), mofu: empty(), bofu: empty() } };
+  book.byPlatformStage = { tofu: {}, mofu: {}, bofu: {} };
   (campaigns || []).forEach(function(c) {
-    var s = funnelStageFor(c);
-    var bucket = s === "tofu" ? tofu : (s === "bofu" ? bofu : mofu);
-    bucket.push(c);
-    var t = totals[s];
-    t.spend += parseFloat(c.spend || 0);
-    t.impressions += parseFloat(c.impressions || 0);
-    t.clicks += parseFloat(c.clicks || 0);
-    t.reach += parseFloat(c.reach || 0);
-    t.leads += parseFloat(c.leads || 0);
-    t.follows += parseFloat(c.follows || 0);
-    t.pageLikes += parseFloat(c.pageLikes || 0);
-    t.appInstalls += parseFloat(c.appStoreClicks || c.appInstalls || 0);
-    t.landingPageViews += parseFloat(c.landingPageViews || 0);
+    var p = platformFamily(c.platform);
+    var stage = funnelStageFor(c);
+    if (!book.byPlatform[p]) book.byPlatform[p] = empty();
+    if (!book.byPlatformStage[stage][p]) book.byPlatformStage[stage][p] = empty();
+    var acc = [book.global, book.byPlatform[p], book.byStage[stage], book.byPlatformStage[stage][p]];
+    acc.forEach(function(b) {
+      b.spend += parseFloat(c.spend || 0);
+      b.impressions += parseFloat(c.impressions || 0);
+      b.clicks += parseFloat(c.clicks || 0);
+      b.reach += parseFloat(c.reach || 0);
+      b.leads += parseFloat(c.leads || 0);
+      b.follows += parseFloat(c.follows || 0);
+      b.pageLikes += parseFloat(c.pageLikes || 0);
+      b.appInstalls += parseFloat(c.appStoreClicks || c.appInstalls || 0);
+      b.landingPageViews += parseFloat(c.landingPageViews || 0);
+      b.campaignCount += 1;
+    });
   });
-  return { tofu: tofu, mofu: mofu, bofu: bofu, totals: totals };
+  return book;
 }
 
-// Format a period string. Prefer month name(s), fall back to raw range.
+// Derived per-row metrics.
+function ctrOf(row) { return row.impressions > 0 ? (row.clicks / row.impressions * 100) : 0; }
+function cpmOf(row) { return row.impressions > 0 ? (row.spend / row.impressions * 1000) : 0; }
+function cpcOf(row) { return row.clicks > 0 ? (row.spend / row.clicks) : 0; }
+function frequencyOf(row) { return row.reach > 0 ? (row.impressions / row.reach) : 0; }
+function cpaOf(row, res) { return res > 0 ? (row.spend / res) : 0; }
+
+// Format a period string. Elegant display for cover / closing pages.
 function formatPeriod(from, to) {
   var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ""))) {
@@ -98,17 +135,78 @@ function formatPeriod(from, to) {
   var tY = parseInt(to.slice(0, 4), 10);
   var tM = parseInt(to.slice(5, 7), 10) - 1;
   var tD = parseInt(to.slice(8, 10), 10);
-  var same = fY === tY && fM === tM;
-  if (same) return MONTHS[fM] + " " + fY;
-  if (fY === tY) return MONTHS[fM] + " " + fD + " to " + MONTHS[tM] + " " + tD + ", " + fY;
-  return MONTHS[fM] + " " + fD + ", " + fY + " to " + MONTHS[tM] + " " + tD + ", " + tY;
+  if (fY === tY && fM === tM) return MONTHS[fM] + " " + fY;
+  if (fY === tY) return MONTHS[fM] + " " + fD + " – " + MONTHS[tM] + " " + tD + ", " + fY;
+  return MONTHS[fM] + " " + fD + ", " + fY + " – " + MONTHS[tM] + " " + tD + ", " + tY;
+}
+
+// Ad thumbnail resolver. Uses /api/ad-image proxy for Meta + TikTok
+// so signed CDN URL expiry (~1hr for Meta, unpredictable for TikTok)
+// doesn't produce broken images when the PDF is opened. Requires a
+// shareToken; without one, falls back to raw thumbnail (which may
+// break for TikTok but still displays for Meta if URL is fresh).
+function resolveThumb(ad, origin, shareToken, size) {
+  var w = size || 120;
+  var pl = String((ad && ad.platform) || "").toLowerCase();
+  var pk = (pl.indexOf("facebook") >= 0 || pl.indexOf("instagram") >= 0) ? "meta" : (pl.indexOf("tiktok") >= 0 ? "tiktok" : "");
+  if (pk && ad && ad.adId && origin && shareToken) {
+    var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+    var win = (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative) ? "&winner=1" : "";
+    return origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&raw=1&token=" + shareToken;
+  }
+  if (ad && ad.thumbnail && String(ad.thumbnail).indexOf("http") === 0) return ad.thumbnail;
+  return "";
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SECTION RENDERERS
+// KPI TILE + PLATFORM TABLE PRIMITIVES
 // ═══════════════════════════════════════════════════════════════════
 
-// PAGE 1: Cover page. Client logo dominant, agency co-branding at foot.
+function renderKpiRow(kpis) {
+  var kHtml = kpis.map(function(k) {
+    return `<div class="rp-kpi ${k.primary ? "rp-kpi-primary" : ""}">
+      <div class="rp-kpi-label">${escapeHtmlLocal(k.label)}</div>
+      <div class="rp-kpi-value">${escapeHtmlLocal(k.value)}</div>
+      ${k.sub ? `<div class="rp-kpi-sub">${escapeHtmlLocal(k.sub)}</div>` : ""}
+    </div>`;
+  }).join("");
+  var cols = Math.min(kpis.length, 4);
+  return `<div class="rp-kpi-grid" style="grid-template-columns:repeat(${cols},1fr);">${kHtml}</div>`;
+}
+
+// Per-platform table. `columns` is an array of { key, label, format }.
+function renderPlatformTable(byPlatform, columns) {
+  var platforms = Object.keys(byPlatform).sort(function(a, b) { return byPlatform[b].spend - byPlatform[a].spend; });
+  if (!platforms.length) return `<div class="rp-empty">No platform delivery data for the selected period.</div>`;
+  var head = columns.map(function(c) { return `<th class="${c.align === "left" ? "rp-th-name" : "rp-th-num"}">${escapeHtmlLocal(c.label)}</th>`; }).join("");
+  var rows = platforms.map(function(p) {
+    var b = byPlatform[p];
+    var cells = columns.map(function(c) {
+      if (c.key === "platform") {
+        var accent = platformAccent(p);
+        return `<td class="rp-td-name"><span class="rp-plat-chip" style="background:${accent};">${escapeHtmlLocal(p)}</span></td>`;
+      }
+      var v = c.compute ? c.compute(b) : (b[c.key] || 0);
+      var display = c.format === "R" ? fmtR(v) : c.format === "%" ? fmtPct(v) : c.format === "freq" ? fmtNumDec(v, 2) + "×" : c.format === "int" ? fmtNum(v) : String(v);
+      return `<td class="rp-td-num">${escapeHtmlLocal(display)}</td>`;
+    }).join("");
+    return `<tr>${cells}</tr>`;
+  }).join("");
+  return `<table class="rp-table rp-table-wide"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderInsight(title, text) {
+  if (!text) return "";
+  return `<div class="rp-insight">
+    <div class="rp-insight-eyebrow">${escapeHtmlLocal(title || "Insight")}</div>
+    <p class="rp-body">${text}</p>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// COVER PAGE
+// ═══════════════════════════════════════════════════════════════════
+
 function renderCoverPage(opts) {
   var clientLogo = opts.clientLogo || "";
   var clientName = escapeHtmlLocal(opts.clientName || "Client");
@@ -118,16 +216,19 @@ function renderCoverPage(opts) {
   var origin = opts.origin || "https://media.gasmarketing.co.za";
   var agencyLogo = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
   return `<section class="rp-page rp-cover">
-    <div class="rp-cover-inner">
-      <div class="rp-cover-brand">
+    <div class="rp-cover-frame">
+      <div class="rp-cover-top">
         ${clientLogo
-          ? `<img src="${clientLogo}" alt="${clientName}" class="rp-cover-logo"/>`
-          : `<div class="rp-cover-name">${clientName}</div>`}
+          ? `<img src="${escapeHtmlLocal(clientLogo)}" alt="${clientName}" class="rp-cover-logo"/>`
+          : `<div class="rp-cover-fallback-name">${clientName}</div>`}
+        <div class="rp-cover-rule"></div>
       </div>
-      <div class="rp-cover-eyebrow">Performance Insights Report</div>
-      <div class="rp-cover-title">${clientName}</div>
-      <div class="rp-cover-period">${period}</div>
-      <div class="rp-cover-divider"></div>
+      <div class="rp-cover-heart">
+        <div class="rp-cover-eyebrow">Performance Insights</div>
+        <div class="rp-cover-title">${clientName}</div>
+        <div class="rp-cover-title-sub">Media Report</div>
+        <div class="rp-cover-period">${period}</div>
+      </div>
       <div class="rp-cover-foot">
         <div class="rp-cover-foot-left">
           <div class="rp-cover-label">Prepared by</div>
@@ -136,457 +237,537 @@ function renderCoverPage(opts) {
         </div>
         <div class="rp-cover-foot-right">
           <img src="${agencyLogo}" alt="GAS Marketing" class="rp-cover-agency-logo"/>
-          <div class="rp-cover-label">Media On GAS</div>
-          <div class="rp-cover-sender-title">Metrics That Matter</div>
+          <div class="rp-cover-agency-label">GAS Marketing</div>
+          <div class="rp-cover-agency-sub">Metrics That Matter</div>
         </div>
       </div>
     </div>
   </section>`;
 }
 
-// PAGE 2: Executive summary. Big headline KPIs, one paragraph narrative.
-function renderExecutiveSummary(opts) {
-  var s = opts.summary;
-  if (!s || !s.grand) {
-    return `<section class="rp-page">
-      <h1 class="rp-h1">Executive Summary</h1>
-      <p class="rp-body">No campaign data returned for the selected period.</p>
-    </section>`;
-  }
-  var g = s.grand;
-  var totalFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
-  var kpis = [];
-  kpis.push({ label: "Total Investment", value: fmtR(g.spend || 0), tone: "primary" });
-  kpis.push({ label: "Reach", value: fmtNum(g.reach || 0), sub: "unique users" });
-  kpis.push({ label: "Impressions", value: fmtNum(g.impressions || 0), sub: g.frequency ? fmtNum(g.frequency).replace(/,/g, ".") + " frequency" : "" });
-  kpis.push({ label: "Click Through Rate", value: fmtPct(g.ctr || 0), sub: fmtNum(g.clicks || 0) + " clicks" });
-  if (parseFloat(g.leads || 0) > 0) kpis.push({ label: "Leads Generated", value: fmtNum(g.leads), sub: fmtR(g.costPerLead || (g.spend / (g.leads || 1))) + " per lead" });
-  if (totalFollows > 0) kpis.push({ label: "Community Growth", value: "+" + fmtNum(totalFollows), sub: g.costPerFollower ? fmtR(g.costPerFollower) + " per member" : "" });
-  if (parseFloat(g.appStoreClicks || 0) > 0) kpis.push({ label: "App Store Clicks", value: fmtNum(g.appStoreClicks), sub: fmtR(g.spend / (g.appStoreClicks || 1)) + " per click" });
-  if (parseFloat(g.landingPageViews || 0) > 0) kpis.push({ label: "Landing Page Views", value: fmtNum(g.landingPageViews), sub: fmtR(g.spend / (g.landingPageViews || 1)) + " per view" });
+// ═══════════════════════════════════════════════════════════════════
+// SECTION HEADER
+// ═══════════════════════════════════════════════════════════════════
 
-  // Truncate to first 6 so the grid stays clean at 3x2.
-  kpis = kpis.slice(0, 6);
-  var kpiHtml = kpis.map(function(k) {
-    return `<div class="rp-kpi ${k.tone === "primary" ? "rp-kpi-primary" : ""}">
-      <div class="rp-kpi-label">${escapeHtmlLocal(k.label)}</div>
-      <div class="rp-kpi-value">${escapeHtmlLocal(k.value)}</div>
-      ${k.sub ? `<div class="rp-kpi-sub">${escapeHtmlLocal(k.sub)}</div>` : ""}
-    </div>`;
-  }).join("");
-
-  // One-paragraph narrative
-  var narrativeParts = [];
-  narrativeParts.push("During " + escapeHtmlLocal(opts.periodDisplay || "the period under review") + ", " + fmtR(g.spend || 0) + " was invested across " + (s.campaignCount || 0) + " active campaign" + ((s.campaignCount || 0) === 1 ? "" : "s") + ", generating " + fmtNum(g.impressions || 0) + " impressions and " + fmtNum(g.reach || 0) + " unique users reached.");
-  if (parseFloat(g.leads || 0) > 0) narrativeParts.push(fmtNum(g.leads) + " qualified lead" + (g.leads === 1 ? "" : "s") + " were captured at " + fmtR(g.costPerLead || (g.spend / g.leads)) + " per lead.");
-  if (totalFollows > 0) narrativeParts.push("The community earned " + fmtNum(totalFollows) + " new follower" + (totalFollows === 1 ? "" : "s") + " and page like" + (totalFollows === 1 ? "" : "s") + ", each representing a permanent organic distribution channel that continues to compound beyond the paid window.");
-  if (parseFloat(g.ctr || 0) > 0) narrativeParts.push("A blended click-through rate of " + fmtPct(g.ctr) + " indicates " + (parseFloat(g.ctr) >= 1.2 ? "strong" : parseFloat(g.ctr) >= 0.8 ? "healthy" : "opportunity for creative refinement in") + " audience-message resonance.");
-
-  return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 01</div>
-    <h1 class="rp-h1">Executive Summary</h1>
-    <div class="rp-lede">A concise view of the period's investment, delivery and outcomes. Deeper stage-by-stage breakdowns follow.</div>
-    <div class="rp-kpi-grid">${kpiHtml}</div>
-    <div class="rp-narrative">
-      <div class="rp-narrative-eyebrow">Period Read</div>
-      <p class="rp-body">${narrativeParts.join(" ")}</p>
+function renderSectionHeader(number, eyebrow, title, subtitle) {
+  return `<div class="rp-section-head">
+    <div class="rp-section-num">${escapeHtmlLocal(number)}</div>
+    <div class="rp-section-headline">
+      <div class="rp-section-eyebrow">${escapeHtmlLocal(eyebrow)}</div>
+      <h1 class="rp-h1">${title}</h1>
+      ${subtitle ? `<div class="rp-lede">${subtitle}</div>` : ""}
     </div>
-  </section>`;
+  </div>`;
 }
 
-// PAGE 3: The Funnel. Visual bar-chart of spend and results per stage.
-function renderFunnelOverview(opts) {
-  var partition = opts.funnel;
-  if (!partition) return "";
-  var stages = [
-    { key: "tofu", label: "Top of Funnel", subtitle: "Awareness &amp; Reach", role: "Grow audience recognition, build memory structures.", color: "#F96203" },
-    { key: "mofu", label: "Middle of Funnel", subtitle: "Consideration &amp; Engagement", role: "Deepen intent, capture engaged audiences, drive site traffic.", color: "#FF6B00" },
-    { key: "bofu", label: "Bottom of Funnel", subtitle: "Conversion &amp; Growth", role: "Convert intent into action — leads, installs, sales, community.", color: "#FF3D00" }
-  ];
-  var totalSpend = partition.totals.tofu.spend + partition.totals.mofu.spend + partition.totals.bofu.spend;
-  var stageBars = stages.map(function(st) {
-    var t = partition.totals[st.key];
-    var pct = totalSpend > 0 ? (t.spend / totalSpend * 100) : 0;
-    var count = partition[st.key].length;
-    var primaryMetric;
-    if (st.key === "tofu") primaryMetric = fmtNum(t.reach || t.impressions) + " " + (t.reach > 0 ? "reached" : "impressions");
-    else if (st.key === "mofu") primaryMetric = fmtNum(t.clicks + t.landingPageViews + t.follows + t.pageLikes) + " engaged actions";
-    else primaryMetric = fmtNum(t.leads + t.appInstalls) + " conversions" + ((t.follows + t.pageLikes) > 0 ? " + " + fmtNum(t.follows + t.pageLikes) + " community" : "");
-    return `<div class="rp-funnel-stage">
-      <div class="rp-funnel-stage-head">
-        <div class="rp-funnel-stage-label">
-          <div class="rp-funnel-stage-name" style="color:${st.color};">${st.label}</div>
-          <div class="rp-funnel-stage-sub">${st.subtitle}</div>
-        </div>
-        <div class="rp-funnel-stage-share">${pct.toFixed(1)}%</div>
-      </div>
-      <div class="rp-funnel-bar-track">
-        <div class="rp-funnel-bar-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,${st.color},${st.color}cc);"></div>
-      </div>
-      <div class="rp-funnel-stage-foot">
-        <span>${count} campaign${count === 1 ? "" : "s"}</span>
-        <span>${fmtR(t.spend)}</span>
-        <span>${primaryMetric}</span>
-      </div>
-      <div class="rp-funnel-stage-role">${st.role}</div>
-    </div>`;
-  }).join("");
-  return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 02</div>
-    <h1 class="rp-h1">The Funnel</h1>
-    <div class="rp-lede">Every campaign in this report is classified by its role in the customer journey. This overview shows how investment and outcomes are distributed across awareness, consideration and conversion stages before the section deep-dives that follow.</div>
-    <div class="rp-funnel">${stageBars}</div>
-    <div class="rp-narrative">
-      <div class="rp-narrative-eyebrow">Why This Matters</div>
-      <p class="rp-body">A balanced funnel keeps the pipeline healthy: too much bottom-of-funnel starves future demand as the audience is exhausted, too much top-of-funnel builds recognition without measurable action. The section-by-section reads that follow identify where each stage is over-, under-, or well-served for the outcome the brand needs next.</p>
-    </div>
-  </section>`;
-}
-
-// Shared: render a stage-specific KPI strip.
-function renderStageKpis(t, stage) {
-  var kpis = [];
-  kpis.push({ label: "Investment", value: fmtR(t.spend), primary: true });
-  if (stage === "tofu") {
-    kpis.push({ label: "Reach", value: fmtNum(t.reach || 0), sub: "unique" });
-    kpis.push({ label: "Impressions", value: fmtNum(t.impressions || 0) });
-    kpis.push({ label: "CPM", value: fmtR(t.impressions > 0 ? (t.spend / t.impressions * 1000) : 0), sub: "cost per 1,000" });
-  } else if (stage === "mofu") {
-    kpis.push({ label: "Clicks", value: fmtNum(t.clicks || 0) });
-    kpis.push({ label: "CTR", value: t.impressions > 0 ? fmtPct(t.clicks / t.impressions * 100) : "0.00%" });
-    kpis.push({ label: "Cost Per Click", value: fmtR(t.clicks > 0 ? t.spend / t.clicks : 0) });
-    if (t.landingPageViews > 0) kpis.push({ label: "Landing Page Views", value: fmtNum(t.landingPageViews) });
-    if (t.follows + t.pageLikes > 0) kpis.push({ label: "New Community", value: "+" + fmtNum(t.follows + t.pageLikes) });
-  } else {
-    if (t.leads > 0) {
-      kpis.push({ label: "Leads", value: fmtNum(t.leads) });
-      kpis.push({ label: "Cost Per Lead", value: fmtR(t.leads > 0 ? t.spend / t.leads : 0) });
-      var convRate = t.clicks > 0 ? (t.leads / t.clicks * 100) : 0;
-      if (convRate > 0) kpis.push({ label: "Conversion Rate", value: fmtPct(convRate), sub: "clicks to leads" });
-    }
-    if (t.appInstalls > 0) {
-      kpis.push({ label: "App Store Clicks", value: fmtNum(t.appInstalls) });
-      kpis.push({ label: "Cost Per Click", value: fmtR(t.appInstalls > 0 ? t.spend / t.appInstalls : 0) });
-    }
-    if (t.follows + t.pageLikes > 0) {
-      kpis.push({ label: "New Community", value: "+" + fmtNum(t.follows + t.pageLikes) });
-      kpis.push({ label: "Cost Per Member", value: fmtR((t.follows + t.pageLikes) > 0 ? t.spend / (t.follows + t.pageLikes) : 0) });
-    }
-  }
-  return kpis.slice(0, 6).map(function(k) {
-    return `<div class="rp-kpi ${k.primary ? "rp-kpi-primary" : ""}">
-      <div class="rp-kpi-label">${escapeHtmlLocal(k.label)}</div>
-      <div class="rp-kpi-value">${escapeHtmlLocal(k.value)}</div>
-      ${k.sub ? `<div class="rp-kpi-sub">${escapeHtmlLocal(k.sub)}</div>` : ""}
-    </div>`;
-  }).join("");
-}
-
-// Render a compact per-campaign list inside a funnel stage.
-function renderStageCampaignList(campaigns) {
-  if (!campaigns || !campaigns.length) return `<div class="rp-empty">No campaigns in this stage for the selected period.</div>`;
-  var sorted = campaigns.slice().sort(function(a, b) { return parseFloat(b.spend || 0) - parseFloat(a.spend || 0); });
-  var rows = sorted.map(function(c) {
-    var plat = c.platform || "-";
-    var platC = plat === "Facebook" ? "#1877F2" : plat === "Instagram" ? "#E1306C" : plat === "TikTok" ? "#00F2EA" : plat === "Google Ads" ? "#34A853" : "#8B7FA3";
-    var stage = funnelStageFor(c);
-    var primary;
-    if (stage === "tofu") primary = fmtNum(c.reach || c.impressions || 0) + (c.reach > 0 ? " reached" : " imps");
-    else if (stage === "mofu") primary = fmtNum(parseFloat(c.clicks || 0)) + " clicks";
-    else primary = parseFloat(c.leads || 0) > 0 ? fmtNum(c.leads) + " leads" : (parseFloat(c.appStoreClicks || 0) > 0 ? fmtNum(c.appStoreClicks) + " app clicks" : ((parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0)) > 0 ? "+" + fmtNum(parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0)) + " community" : "-"));
-    return `<tr>
-      <td class="rp-td-name">
-        <span class="rp-plat-chip" style="background:${platC};">${escapeHtmlLocal(plat)}</span>
-        <span>${escapeHtmlLocal(c.campaignName || "Untitled")}</span>
-      </td>
-      <td class="rp-td-num">${fmtR(c.spend || 0)}</td>
-      <td class="rp-td-num">${fmtNum(c.impressions || 0)}</td>
-      <td class="rp-td-num">${fmtPct(c.ctr || 0)}</td>
-      <td class="rp-td-num">${primary}</td>
-    </tr>`;
-  }).join("");
-  return `<table class="rp-table">
-    <thead><tr>
-      <th class="rp-th-name">Campaign</th>
-      <th class="rp-th-num">Spend</th>
-      <th class="rp-th-num">Impressions</th>
-      <th class="rp-th-num">CTR</th>
-      <th class="rp-th-num">Primary Result</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-}
+// ═══════════════════════════════════════════════════════════════════
+// SECTION: TOP OF FUNNEL — ADS SERVED
+// ═══════════════════════════════════════════════════════════════════
 
 function renderTofuSection(opts) {
-  var camps = opts.funnel.tofu;
-  var t = opts.funnel.totals.tofu;
+  var book = opts.book;
+  var g = book.global;
+  var globalKpis = [
+    { label: "Total Impressions", value: fmtNum(g.impressions), primary: true },
+    { label: "Total Reach", value: fmtNum(g.reach), sub: "unique users" },
+    { label: "Frequency", value: fmtNumDec(frequencyOf(g), 2) + "×", sub: "per user" },
+    { label: "Blended CPM", value: fmtR(cpmOf(g)), sub: "cost per 1,000" }
+  ];
+  var columns = [
+    { key: "platform", label: "Platform", align: "left" },
+    { key: "impressions", label: "Impressions", format: "int" },
+    { key: "reach", label: "Reach", format: "int" },
+    { key: "freq", label: "Frequency", format: "freq", compute: frequencyOf },
+    { key: "cpm", label: "CPM", format: "R", compute: cpmOf },
+    { key: "spend", label: "Spend", format: "R" },
+    { key: "cpad", label: "Cost / 1K Ads Served", format: "R", compute: cpmOf }
+  ];
+  // Auto-insight
+  var insight = "";
+  var platforms = Object.keys(book.byPlatform).sort(function(a, b) { return book.byPlatform[b].spend - book.byPlatform[a].spend; });
+  if (platforms.length) {
+    var lead = platforms[0];
+    var leadImps = book.byPlatform[lead].impressions;
+    var leadReach = book.byPlatform[lead].reach;
+    var globalFreq = frequencyOf(g);
+    var freqNote = globalFreq > 4 ? " Global frequency at " + fmtNumDec(globalFreq, 2) + "× has crossed the 4× fatigue ceiling; audience expansion is recommended before the next window." : globalFreq > 3 ? " Global frequency of " + fmtNumDec(globalFreq, 2) + "× sits in the healthy recall band, balancing memory building with efficient reach." : globalFreq > 0 ? " Global frequency at " + fmtNumDec(globalFreq, 2) + "× suggests headroom in the audience — expanded reach investment can compound recognition without saturation." : "";
+    insight = `${escapeHtmlLocal(lead)} carried the largest share of ad delivery this period with ${fmtNum(leadImps)} impressions reaching ${fmtNum(leadReach)} unique users at ${fmtR(cpmOf(book.byPlatform[lead]))} CPM.${freqNote}`;
+  }
   return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 03 &middot; Top of Funnel</div>
-    <h1 class="rp-h1">Awareness &amp; Reach</h1>
-    <div class="rp-lede">The audience-building layer. Awareness campaigns exist to plant the brand in memory ahead of a decision moment. Success is measured in reach and cost efficiency of that reach, not clicks.</div>
-    <div class="rp-kpi-grid">${renderStageKpis(t, "tofu")}</div>
-    <div class="rp-narrative">
-      <div class="rp-narrative-eyebrow">Campaigns In This Stage</div>
-      ${renderStageCampaignList(camps)}
-      <p class="rp-body rp-body-note">${camps.length === 0 ? "No awareness campaigns ran during this window. If the brand is entering a growth phase, consider a paid reach layer to seed future demand." : "Awareness campaigns compound: every impression today reduces the cost of every click and lead tomorrow. Read the CPM column above as the price of introducing the brand to one thousand people."}</p>
+    ${renderSectionHeader("01", "Top of the Funnel", "Ads Served", "Awareness delivery. This is the layer that plants the brand in the audience's memory ahead of a decision moment. Success is measured in efficient reach and controlled frequency, not clicks.")}
+    <div class="rp-block">
+      <div class="rp-block-title">Global Delivery Headlines</div>
+      ${renderKpiRow(globalKpis)}
     </div>
+    <div class="rp-block">
+      <div class="rp-block-title">Per Platform Delivery Breakdown</div>
+      ${renderPlatformTable(book.byPlatform, columns)}
+    </div>
+    ${renderInsight("Delivery Read", insight)}
   </section>`;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SECTION: MIDDLE OF FUNNEL — CLICKS
+// ═══════════════════════════════════════════════════════════════════
+
 function renderMofuSection(opts) {
-  var camps = opts.funnel.mofu;
-  var t = opts.funnel.totals.mofu;
+  var book = opts.book;
+  var g = book.global;
+  var globalKpis = [
+    { label: "Total Clicks", value: fmtNum(g.clicks), primary: true },
+    { label: "Blended CTR", value: fmtPct(ctrOf(g)) },
+    { label: "Blended CPC", value: fmtR(cpcOf(g)) },
+    { label: "Total Spend", value: fmtR(g.spend), sub: "invested in clicks" }
+  ];
+  var columns = [
+    { key: "platform", label: "Platform", align: "left" },
+    { key: "impressions", label: "Impressions", format: "int" },
+    { key: "clicks", label: "Clicks", format: "int" },
+    { key: "ctr", label: "CTR", format: "%", compute: ctrOf },
+    { key: "cpc", label: "CPC", format: "R", compute: cpcOf },
+    { key: "freq", label: "Frequency", format: "freq", compute: frequencyOf },
+    { key: "spend", label: "Spend", format: "R" }
+  ];
+  // Auto-insight
+  var insight = "";
+  var platforms = Object.keys(book.byPlatform).sort(function(a, b) { return ctrOf(book.byPlatform[b]) - ctrOf(book.byPlatform[a]); });
+  var best = platforms[0];
+  if (best) {
+    var bestCtr = ctrOf(book.byPlatform[best]);
+    var gCtr = ctrOf(g);
+    var readCtr = gCtr >= 1.2 ? "strong" : gCtr >= 0.8 ? "healthy" : "below the 0.8% consideration benchmark, suggesting creative refresh is warranted";
+    insight = `Blended click-through rate of ${fmtPct(gCtr)} reads as ${readCtr}. ${escapeHtmlLocal(best)} led the platforms at ${fmtPct(bestCtr)} CTR, indicating strongest creative-audience resonance in this window.`;
+  }
   return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 04 &middot; Middle of Funnel</div>
-    <h1 class="rp-h1">Consideration &amp; Engagement</h1>
-    <div class="rp-lede">The intent-capture layer. This stage takes audiences who now recognise the brand and gives them a low-friction next step: a click through to a landing page, a follow, a video watched to completion.</div>
-    <div class="rp-kpi-grid">${renderStageKpis(t, "mofu")}</div>
-    <div class="rp-narrative">
-      <div class="rp-narrative-eyebrow">Campaigns In This Stage</div>
-      ${renderStageCampaignList(camps)}
-      <p class="rp-body rp-body-note">${camps.length === 0 ? "No consideration-layer campaigns ran during this window. Awareness without a consideration layer risks impressions that never translate into pipeline." : "CTR above the 1.2% benchmark suggests the creative and audience combination is resonating. A stage this size deepens intent for the conversion campaigns below and lowers their acquisition cost."}</p>
+    ${renderSectionHeader("02", "Middle of the Funnel", "Clicks &amp; Consideration", "The intent-capture layer. This stage takes audiences who now recognise the brand and gives them a low-friction next action: a click through to a landing page, a video watched to completion, an interaction with a post.")}
+    <div class="rp-block">
+      <div class="rp-block-title">Global Click Headlines</div>
+      ${renderKpiRow(globalKpis)}
     </div>
+    <div class="rp-block">
+      <div class="rp-block-title">Per Platform Click Breakdown</div>
+      ${renderPlatformTable(book.byPlatform, columns)}
+    </div>
+    ${renderInsight("Consideration Read", insight)}
   </section>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION: BOTTOM OF FUNNEL — OBJECTIVE-DRIVEN
+// ═══════════════════════════════════════════════════════════════════
+
+// Each objective subsection: global tiles + per-platform table.
+function renderBofuSubsection(title, description, book, valueFn, columnLabel, resultKey, symbol) {
+  var g = book.global;
+  var total = valueFn(g);
+  if (!total) return "";
+  var platforms = Object.keys(book.byPlatform).sort(function(a, b) { return valueFn(book.byPlatform[b]) - valueFn(book.byPlatform[a]); });
+  var perPlatformHtml = platforms.map(function(p) {
+    var v = valueFn(book.byPlatform[p]);
+    if (!v && v !== 0) return "";
+    var accent = platformAccent(p);
+    var spend = book.byPlatform[p].spend;
+    var costPer = v > 0 ? spend / v : 0;
+    return `<tr>
+      <td class="rp-td-name"><span class="rp-plat-chip" style="background:${accent};">${escapeHtmlLocal(p)}</span></td>
+      <td class="rp-td-num">${(symbol || "") + fmtNum(v)}</td>
+      <td class="rp-td-num">${fmtR(spend)}</td>
+      <td class="rp-td-num rp-td-sub">${v > 0 ? fmtR(costPer) : "-"}</td>
+    </tr>`;
+  }).join("");
+  var overallCost = book.global.spend > 0 && total > 0 ? book.global.spend / total : 0;
+  return `<div class="rp-bofu-sub">
+    <div class="rp-bofu-sub-head">
+      <div class="rp-bofu-sub-title">${escapeHtmlLocal(title)}</div>
+      <div class="rp-bofu-sub-total">${(symbol || "") + fmtNum(total)}</div>
+    </div>
+    <div class="rp-bofu-sub-desc">${escapeHtmlLocal(description)}</div>
+    <div class="rp-bofu-sub-costline">Overall cost per ${escapeHtmlLocal(resultKey)}: <strong>${overallCost > 0 ? fmtR(overallCost) : "-"}</strong></div>
+    <table class="rp-table">
+      <thead><tr>
+        <th class="rp-th-name">Platform</th>
+        <th class="rp-th-num">${escapeHtmlLocal(columnLabel)}</th>
+        <th class="rp-th-num">Spend</th>
+        <th class="rp-th-num">Cost / ${escapeHtmlLocal(resultKey)}</th>
+      </tr></thead>
+      <tbody>${perPlatformHtml}</tbody>
+    </table>
+  </div>`;
 }
 
 function renderBofuSection(opts) {
-  var camps = opts.funnel.bofu;
-  var t = opts.funnel.totals.bofu;
-  var ecoBlock = "";
+  var book = opts.book;
+  var subs = [];
+  // Leads / conversions
+  subs.push(renderBofuSubsection(
+    "Leads Captured",
+    "Direct-response leads captured from in-platform forms or landing-page submissions during the reporting period.",
+    book,
+    function(r) { return r.leads || 0; },
+    "Leads",
+    "lead"
+  ));
+  // Clicks to landing page (traffic objective)
+  subs.push(renderBofuSubsection(
+    "Clicks to Landing Page",
+    "Users who accepted the offer to visit an owned landing page or website destination. The warmest traffic layer of the funnel.",
+    book,
+    function(r) { return r.landingPageViews || 0; },
+    "LP Clicks",
+    "click"
+  ));
+  // App store clicks
+  subs.push(renderBofuSubsection(
+    "Clicks to App Store",
+    "Users routed from the ad to their platform's app store to download the app. The measurable last-mile touchpoint before install.",
+    book,
+    function(r) { return r.appInstalls || 0; },
+    "Store Clicks",
+    "click"
+  ));
+  // Community: followers + likes
+  var communityFn = function(r) { return (r.follows || 0) + (r.pageLikes || 0); };
+  subs.push(renderBofuSubsection(
+    "Followers &amp; Likes",
+    "New followers and page likes earned across paid and cross-attributed organic delivery. Each new community member is a permanent organic distribution channel.",
+    book,
+    communityFn,
+    "New Members",
+    "member",
+    "+"
+  ));
+  // Community reach (awareness objective / ToFu-adjacent, kept in BoFu per user spec — client narrative reads reach as an outcome to celebrate)
+  subs.push(renderBofuSubsection(
+    "Community Reach",
+    "Unique users reached through community reach objectives — awareness delivery treated as an outcome in its own right for brand-building windows.",
+    book,
+    function(r) { return r.reach || 0; },
+    "Reach",
+    "person"
+  ));
+  var subsHtml = subs.filter(Boolean).join("");
+  if (!subsHtml) {
+    subsHtml = `<div class="rp-empty">No bottom-of-funnel objectives ran during this window.</div>`;
+  }
+  // Ecommerce block (if applicable)
   var eco = opts.ecommerce && opts.ecommerce.ecommerce;
+  var ecoBlock = "";
   if (eco) {
     var rev = parseFloat(eco.revenue || 0);
     var tx = parseFloat(eco.transactions || 0);
-    ecoBlock = `<div class="rp-eco-block">
-      <div class="rp-narrative-eyebrow">Site Ecommerce Performance</div>
+    ecoBlock = `<div class="rp-bofu-sub rp-bofu-eco">
+      <div class="rp-bofu-sub-head">
+        <div class="rp-bofu-sub-title">Site Ecommerce</div>
+        <div class="rp-bofu-sub-total">${fmtR(rev)}</div>
+      </div>
+      <div class="rp-bofu-sub-desc">Total-site revenue reflects the entire commercial picture, not only paid-social contribution. It is included as the ultimate outcome the funnel is optimising toward.</div>
       <div class="rp-eco-row">
-        <div class="rp-eco-tile"><div class="rp-eco-label">Revenue</div><div class="rp-eco-value">${fmtR(rev)}</div></div>
         <div class="rp-eco-tile"><div class="rp-eco-label">Transactions</div><div class="rp-eco-value">${fmtNum(tx)}</div></div>
         <div class="rp-eco-tile"><div class="rp-eco-label">Average Order</div><div class="rp-eco-value">${fmtR(tx > 0 ? rev / tx : 0)}</div></div>
         ${eco.sessions ? `<div class="rp-eco-tile"><div class="rp-eco-label">Sessions</div><div class="rp-eco-value">${fmtNum(eco.sessions)}</div></div>` : ""}
       </div>
-      <p class="rp-body rp-body-note">Total-site revenue reflects the whole business, not only paid-social contribution. It is included in the bottom-of-funnel section as the ultimate outcome the funnel is optimising toward.</p>
     </div>`;
   }
+  // Insight
+  var bofuG = book.byStage.bofu;
+  var insight = "";
+  if (bofuG && bofuG.spend > 0) {
+    var costPerLead = bofuG.leads > 0 ? bofuG.spend / bofuG.leads : 0;
+    var community = (bofuG.follows || 0) + (bofuG.pageLikes || 0);
+    var pts = [];
+    if (bofuG.leads > 0) pts.push(fmtNum(bofuG.leads) + " lead" + (bofuG.leads === 1 ? "" : "s") + " at " + fmtR(costPerLead) + " per lead");
+    if (community > 0) pts.push("+" + fmtNum(community) + " new community members");
+    if (bofuG.appInstalls > 0) pts.push(fmtNum(bofuG.appInstalls) + " app store clicks");
+    if (pts.length) insight = "The bottom-of-funnel layer delivered " + pts.join(", ") + " on " + fmtR(bofuG.spend) + " of investment. Each of these outcomes represents a measurable commercial action attributable directly to the campaign structure above.";
+  }
   return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 05 &middot; Bottom of Funnel</div>
-    <h1 class="rp-h1">Conversion &amp; Growth</h1>
-    <div class="rp-lede">The action layer. This stage converts warm audiences into measurable business outcomes: qualified leads, app installs, purchases, or a new community member.</div>
-    <div class="rp-kpi-grid">${renderStageKpis(t, "bofu")}</div>
-    <div class="rp-narrative">
-      <div class="rp-narrative-eyebrow">Campaigns In This Stage</div>
-      ${renderStageCampaignList(camps)}
-      <p class="rp-body rp-body-note">${camps.length === 0 ? "No conversion-layer campaigns ran during this window. The awareness and consideration built above needs a paid mechanism to convert." : "Conversion cost is the diagnostic metric here. A stable or declining cost per outcome relative to prior windows confirms the funnel above is doing its job."}</p>
-    </div>
+    ${renderSectionHeader("03", "Bottom of the Funnel", "Result Objectives", "The action layer. This is where warm audiences convert into measurable business outcomes: leads, clicks to a landing page, app downloads, new community members, and reach into the audiences the brand wants to grow.")}
+    ${subsHtml}
     ${ecoBlock}
+    ${renderInsight("Conversion Read", insight)}
   </section>`;
 }
 
-// Detail section: placement performance table.
-function renderPlacementsSection(opts) {
-  var placements = (opts.placements || []).slice(0, 10);
-  if (!placements.length) return "";
-  var totalSpend = placements.reduce(function(s, p) { return s + parseFloat(p.spend || 0); }, 0);
-  var rows = placements.map(function(p, i) {
-    var spend = parseFloat(p.spend || 0);
-    var imps = parseFloat(p.impressions || 0);
-    var clicks = parseFloat(p.clicks || 0);
-    var leads = parseFloat(p.leads || 0);
-    var follows = parseFloat(p.follows || 0);
-    var pageLikes = parseFloat(p.pageLikes || 0);
-    var ctr = imps > 0 ? (clicks / imps * 100) : 0;
-    var share = totalSpend > 0 ? (spend / totalSpend * 100) : 0;
-    var result = leads > 0 ? leads : (follows + pageLikes > 0 ? (follows + pageLikes) : clicks);
-    var resLabel = leads > 0 ? "leads" : (follows + pageLikes > 0 ? "follows" : "clicks");
-    return `<tr>
-      <td class="rp-td-rank">${i + 1}</td>
-      <td class="rp-td-name">
-        <span class="rp-dot" style="background:${escapeHtmlLocal(p.color || "#8B7FA3")};"></span>
-        ${escapeHtmlLocal(p.name || "Unknown")}
-        <div class="rp-td-name-sub">${escapeHtmlLocal(p.platform || "")}</div>
-      </td>
-      <td class="rp-td-num">${share.toFixed(1)}%</td>
-      <td class="rp-td-num">${fmtR(spend)}</td>
-      <td class="rp-td-num">${fmtNum(imps)}</td>
-      <td class="rp-td-num">${fmtPct(ctr)}</td>
-      <td class="rp-td-num">${result > 0 ? fmtNum(result) + " " + resLabel : "-"}</td>
-      <td class="rp-td-num rp-td-sub">${result > 0 ? fmtR(spend / result) : "-"}</td>
-    </tr>`;
+// ═══════════════════════════════════════════════════════════════════
+// SECTION: AUDIENCE (DEMOGRAPHICS)
+// ═══════════════════════════════════════════════════════════════════
+
+function aggregateAgeGender(rows) {
+  var byPlat = {};
+  var ageBuckets = {};
+  var genderBuckets = { male: 0, female: 0, unknown: 0 };
+  (rows || []).forEach(function(r) {
+    var p = r.platform || "Other";
+    if (!byPlat[p]) byPlat[p] = { age: {}, gender: { male: 0, female: 0, unknown: 0 }, impressions: 0, clicks: 0, spend: 0, results: 0 };
+    var bp = byPlat[p];
+    var imps = parseInt(r.impressions || 0, 10);
+    var age = String(r.age || "unknown");
+    var gender = String(r.gender || "unknown").toLowerCase();
+    var g = gender === "male" || gender === "m" ? "male" : gender === "female" || gender === "f" ? "female" : "unknown";
+    ageBuckets[age] = (ageBuckets[age] || 0) + imps;
+    genderBuckets[g] += imps;
+    bp.age[age] = (bp.age[age] || 0) + imps;
+    bp.gender[g] += imps;
+    bp.impressions += imps;
+    bp.clicks += parseInt(r.clicks || 0, 10);
+    bp.spend += parseFloat(r.spend || 0);
+    // Results object → sum leads + follows + landingPageViews + appInstalls + pageLikes
+    var res = r.results || {};
+    bp.results += parseFloat(res.leads || 0) + parseFloat(res.follows || 0) + parseFloat(res.landingPageViews || 0) + parseFloat(res.appInstalls || 0) + parseFloat(res.pageLikes || 0);
+  });
+  return { byPlatform: byPlat, ageBuckets: ageBuckets, genderBuckets: genderBuckets };
+}
+
+function aggregateRegion(rows) {
+  var byRegion = {};
+  (rows || []).forEach(function(r) {
+    var reg = String(r.region || "Unknown");
+    if (!byRegion[reg]) byRegion[reg] = { impressions: 0, clicks: 0, spend: 0, results: 0 };
+    byRegion[reg].impressions += parseInt(r.impressions || 0, 10);
+    byRegion[reg].clicks += parseInt(r.clicks || 0, 10);
+    byRegion[reg].spend += parseFloat(r.spend || 0);
+    var res = r.results || {};
+    byRegion[reg].results += parseFloat(res.leads || 0) + parseFloat(res.follows || 0) + parseFloat(res.landingPageViews || 0) + parseFloat(res.appInstalls || 0) + parseFloat(res.pageLikes || 0);
+  });
+  return byRegion;
+}
+
+// Render the audience/demographics section.
+function renderAudienceSection(opts) {
+  var demo = opts.demographics;
+  if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
+  var agAgg = aggregateAgeGender(demo.ageGender || []);
+  var regAgg = aggregateRegion(demo.region || []);
+
+  // Persona per platform
+  var platforms = Object.keys(agAgg.byPlatform).filter(function(p) { return agAgg.byPlatform[p].impressions > 0; });
+  var personaCards = platforms.map(function(p) {
+    var pb = agAgg.byPlatform[p];
+    // Top age
+    var topAgeKey = "", topAgeVal = 0;
+    Object.keys(pb.age).forEach(function(k) { if (pb.age[k] > topAgeVal) { topAgeVal = pb.age[k]; topAgeKey = k; } });
+    var totalAge = Object.keys(pb.age).reduce(function(s, k) { return s + pb.age[k]; }, 0);
+    var agePct = totalAge > 0 ? (topAgeVal / totalAge * 100) : 0;
+    // Dominant gender
+    var g = pb.gender;
+    var gTotal = g.male + g.female + g.unknown;
+    var dominantGender = g.female > g.male && g.female > g.unknown ? "female" : g.male > g.female && g.male > g.unknown ? "male" : "mixed";
+    var dominantPct = gTotal > 0 ? Math.max(g.male, g.female, g.unknown) / gTotal * 100 : 0;
+    var accent = platformAccent(p);
+    return `<div class="rp-persona">
+      <div class="rp-persona-plat" style="background:${accent};">${escapeHtmlLocal(p)}</div>
+      <div class="rp-persona-body">
+        <div class="rp-persona-line"><span class="rp-persona-label">Dominant Age Group</span> <span class="rp-persona-value">${escapeHtmlLocal(topAgeKey || "-")} <span class="rp-persona-pct">${agePct.toFixed(1)}%</span></span></div>
+        <div class="rp-persona-line"><span class="rp-persona-label">Gender Skew</span> <span class="rp-persona-value">${escapeHtmlLocal(dominantGender)} <span class="rp-persona-pct">${dominantPct.toFixed(1)}%</span></span></div>
+        <div class="rp-persona-line"><span class="rp-persona-label">Impressions Served</span> <span class="rp-persona-value">${fmtNum(pb.impressions)}</span></div>
+        <div class="rp-persona-line"><span class="rp-persona-label">Results Attributed</span> <span class="rp-persona-value">${fmtNum(pb.results)}</span></div>
+      </div>
+    </div>`;
   }).join("");
-  return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 06 &middot; Delivery Detail</div>
-    <h1 class="rp-h1">Placement Performance</h1>
-    <div class="rp-lede">Where the budget is delivering, ranked by share of spend. Placement analysis identifies the specific surfaces (feeds, reels, stories, search, YouTube) driving the funnel outcomes above.</div>
-    <table class="rp-table rp-table-wide">
-      <thead><tr>
-        <th class="rp-th-rank">#</th>
-        <th class="rp-th-name">Placement</th>
-        <th class="rp-th-num">Share</th>
-        <th class="rp-th-num">Spend</th>
-        <th class="rp-th-num">Impressions</th>
-        <th class="rp-th-num">CTR</th>
-        <th class="rp-th-num">Results</th>
-        <th class="rp-th-num">Cost / Result</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </section>`;
-}
 
-// Detail section: full per-campaign table.
-function renderCampaignsSection(opts) {
-  var campaigns = opts.summary && opts.summary.campaigns;
-  if (!campaigns || !campaigns.length) return "";
-  var sorted = campaigns.slice().sort(function(a, b) { return parseFloat(b.spend || 0) - parseFloat(a.spend || 0); });
-  var rows = sorted.map(function(c) {
-    var plat = c.platform || "-";
-    var platC = plat === "Facebook" ? "#1877F2" : plat === "Instagram" ? "#E1306C" : plat === "TikTok" ? "#00F2EA" : plat === "Google Ads" ? "#34A853" : "#8B7FA3";
-    var stage = funnelStageFor(c);
-    var stageLbl = stage === "tofu" ? "ToFu" : stage === "mofu" ? "MoFu" : "BoFu";
-    var stageC = stage === "tofu" ? "#F96203" : stage === "mofu" ? "#FF6B00" : "#FF3D00";
-    var leads = parseFloat(c.leads || 0);
-    var follows = parseFloat(c.follows || 0) + parseFloat(c.pageLikes || 0);
-    var clicks = parseFloat(c.clicks || 0);
-    var result, resLbl;
-    if (leads > 0) { result = leads; resLbl = "leads"; }
-    else if (follows > 0) { result = follows; resLbl = "follows"; }
-    else { result = clicks; resLbl = "clicks"; }
-    return `<tr>
-      <td class="rp-td-name">
-        <span class="rp-plat-chip" style="background:${platC};">${escapeHtmlLocal(plat)}</span>
-        <span>${escapeHtmlLocal(c.campaignName || "Untitled")}</span>
-      </td>
-      <td><span class="rp-stage-chip" style="border-color:${stageC};color:${stageC};">${stageLbl}</span></td>
-      <td class="rp-td-num">${fmtR(c.spend || 0)}</td>
-      <td class="rp-td-num">${fmtNum(c.impressions || 0)}</td>
-      <td class="rp-td-num">${fmtPct(c.ctr || 0)}</td>
-      <td class="rp-td-num">${result > 0 ? fmtNum(result) + " " + resLbl : "-"}</td>
-      <td class="rp-td-num rp-td-sub">${result > 0 ? fmtR(parseFloat(c.spend || 0) / result) : "-"}</td>
-    </tr>`;
+  // Age breakdown (global)
+  var ageOrder = ["13-17","18-24","25-34","35-44","45-54","55-64","65+","unknown"];
+  var ageTotal = Object.keys(agAgg.ageBuckets).reduce(function(s, k) { return s + agAgg.ageBuckets[k]; }, 0);
+  var ageBars = ageOrder.filter(function(k) { return (agAgg.ageBuckets[k] || 0) > 0; }).map(function(k) {
+    var v = agAgg.ageBuckets[k] || 0;
+    var pct = ageTotal > 0 ? (v / ageTotal * 100) : 0;
+    return `<div class="rp-bar-row">
+      <div class="rp-bar-label">${escapeHtmlLocal(k)}</div>
+      <div class="rp-bar-track"><div class="rp-bar-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#F96203,#FF3D00);"></div></div>
+      <div class="rp-bar-value">${fmtNum(v)} <span class="rp-bar-pct">${pct.toFixed(1)}%</span></div>
+    </div>`;
   }).join("");
+
+  // Region breakdown (top 8)
+  var regionKeys = Object.keys(regAgg).sort(function(a, b) { return regAgg[b].impressions - regAgg[a].impressions; }).slice(0, 8);
+  var regionTotal = regionKeys.reduce(function(s, k) { return s + regAgg[k].impressions; }, 0);
+  var regionBars = regionKeys.map(function(k) {
+    var v = regAgg[k].impressions;
+    var pct = regionTotal > 0 ? (v / regionTotal * 100) : 0;
+    return `<div class="rp-bar-row">
+      <div class="rp-bar-label">${escapeHtmlLocal(k)}</div>
+      <div class="rp-bar-track"><div class="rp-bar-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#4599FF,#00F2EA);"></div></div>
+      <div class="rp-bar-value">${fmtNum(v)} <span class="rp-bar-pct">${pct.toFixed(1)}%</span></div>
+    </div>`;
+  }).join("");
+
+  var insight = "";
+  if (regionKeys.length && ageOrder.some(function(k) { return agAgg.ageBuckets[k] > 0; })) {
+    var topRegion = regionKeys[0];
+    var topRegionPct = regionTotal > 0 ? (regAgg[topRegion].impressions / regionTotal * 100) : 0;
+    var topAgeKeyG = "", topAgeValG = 0;
+    Object.keys(agAgg.ageBuckets).forEach(function(k) { if (agAgg.ageBuckets[k] > topAgeValG) { topAgeValG = agAgg.ageBuckets[k]; topAgeKeyG = k; } });
+    insight = "The perfect target audience for this window is anchored in " + escapeHtmlLocal(topRegion) + " (" + topRegionPct.toFixed(1) + "% of impressions) with the " + escapeHtmlLocal(topAgeKeyG) + " age band the most-served demographic. Refining lookalikes and interest layers to reinforce this signal is likely to compound efficiency in the next window.";
+  }
+
   return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 07 &middot; Campaign Detail</div>
-    <h1 class="rp-h1">Every Campaign In This Report</h1>
-    <div class="rp-lede">Complete campaign roster ranked by spend, tagged with the funnel stage each is optimised for. Result column reads the objective-appropriate outcome so each row is compared against its own goal, not a blanket click count.</div>
-    <table class="rp-table rp-table-wide">
-      <thead><tr>
-        <th class="rp-th-name">Campaign</th>
-        <th class="rp-th-num">Stage</th>
-        <th class="rp-th-num">Spend</th>
-        <th class="rp-th-num">Impressions</th>
-        <th class="rp-th-num">CTR</th>
-        <th class="rp-th-num">Result</th>
-        <th class="rp-th-num">Cost / Result</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    ${renderSectionHeader("04", "Perfect Target Audience", "Demographics &amp; Persona", "Who the campaigns actually reached, mapped per platform. The demographic signature below is the profile the algorithm has learned to serve — use it to sharpen creative, refine audience layers, and identify look-alike growth pools.")}
+    <div class="rp-block">
+      <div class="rp-block-title">Persona Per Platform</div>
+      <div class="rp-persona-grid">${personaCards || `<div class="rp-empty">No per-platform demographic data returned for this window.</div>`}</div>
+    </div>
+    <div class="rp-block-double">
+      <div class="rp-block">
+        <div class="rp-block-title">Age Breakdown</div>
+        <div class="rp-bars">${ageBars || `<div class="rp-empty">No age data available.</div>`}</div>
+      </div>
+      <div class="rp-block">
+        <div class="rp-block-title">Region Breakdown (Top 8)</div>
+        <div class="rp-bars">${regionBars || `<div class="rp-empty">No region data available.</div>`}</div>
+      </div>
+    </div>
+    ${renderInsight("Audience Read", insight)}
   </section>`;
 }
 
-// Detail section: top creatives per platform.
-function renderCreativeSection(opts) {
-  // topAds arrives as [{platform: "Facebook", ads: [...]}, ...] per
-  // fetchTopAds in email-share.js.
+// ═══════════════════════════════════════════════════════════════════
+// SECTION: BEST PERFORMING ADS
+// ═══════════════════════════════════════════════════════════════════
+
+function renderTopAdsSection(opts) {
   var top = opts.topAds;
   if (!Array.isArray(top) || !top.length) return "";
+  var origin = opts.origin;
+  var shareToken = opts.shareToken;
   var pBlocks = top.filter(function(pl) { return pl && Array.isArray(pl.ads) && pl.ads.length; }).map(function(pl) {
     var p = pl.platform || "-";
-    var arr = pl.ads.slice(0, 3);
-    var color = p === "Facebook" ? "#1877F2" : p === "Instagram" ? "#E1306C" : p === "TikTok" ? "#00F2EA" : "#34A853";
-    var cards = arr.map(function(a, i) {
-      var thumb = a.thumbnail || "";
-      var resLabel = a.resultType === "leads" ? "leads" : a.resultType === "follows" ? "follows" : a.resultType === "installs" ? "app clicks" : a.resultType === "impressions" ? "impressions" : "clicks";
+    var accent = platformAccent(platformFamily(p));
+    var cards = pl.ads.slice(0, 8).map(function(a, i) {
+      var thumb = resolveThumb(a, origin, shareToken, 120);
+      var results = parseFloat(a.results || 0);
+      var spend = parseFloat(a.spend || 0);
+      var ctr = parseFloat(a.ctr || 0);
+      var resLabel = a.resultType === "leads" ? "leads" : a.resultType === "follows" ? "follows" : a.resultType === "installs" ? "app clicks" : a.resultType === "impressions" ? "imps" : a.resultType === "reach" ? "reach" : "clicks";
       return `<div class="rp-creative-card">
-        <div class="rp-creative-thumb">
-          ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : ""}
-          <div class="rp-creative-rank">#${i + 1}</div>
+        <div class="rp-creative-thumb" style="background:linear-gradient(135deg,${accent}55,${accent}15);">
+          ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : `<div class="rp-creative-fallback">${escapeHtmlLocal(p)}</div>`}
+          <div class="rp-creative-rank" style="background:${accent};">#${i + 1}</div>
         </div>
         <div class="rp-creative-body">
           <div class="rp-creative-name">${escapeHtmlLocal(a.adName || "Untitled")}</div>
-          <div class="rp-creative-camp">${escapeHtmlLocal(a.campaignName || "")}</div>
           <div class="rp-creative-metrics">
-            <span><strong>${fmtR(a.spend || 0)}</strong> spent</span>
-            <span><strong>${fmtNum(a.results || 0)}</strong> ${resLabel}</span>
-            <span><strong>${fmtPct(a.ctr || 0)}</strong> CTR</span>
+            <div><strong>${fmtR(spend)}</strong> spent</div>
+            <div><strong>${results > 0 ? fmtNum(results) : "-"}</strong> ${escapeHtmlLocal(resLabel)}</div>
+            <div><strong>${fmtPct(ctr)}</strong> CTR</div>
           </div>
         </div>
       </div>`;
     }).join("");
     return `<div class="rp-platform-block">
-      <div class="rp-platform-head" style="border-left-color:${color};color:${color};">${escapeHtmlLocal(p)}</div>
+      <div class="rp-platform-head" style="border-left-color:${accent};color:${accent};">${escapeHtmlLocal(p)}</div>
       <div class="rp-creative-grid">${cards}</div>
     </div>`;
   }).join("");
-  if (!pBlocks) return "";
   return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 08 &middot; Creative Read</div>
-    <h1 class="rp-h1">Top Performing Creatives</h1>
-    <div class="rp-lede">The three highest-performing ads per platform. Rankings honour each ad's objective — awareness ads are ranked on impressions and reach efficiency, conversion ads on outcome volume and cost.</div>
+    ${renderSectionHeader("05", "Creative Read", "Best Performing Ads", "The top 8 ads per platform this window, ranked by their objective-appropriate outcome. Awareness ads are ranked on reach and CPM efficiency; direct-response ads on results and cost per outcome.")}
     ${pBlocks}
   </section>`;
 }
 
-// Recommendations — auto-generated from the data.
-function renderRecommendations(opts) {
-  var recs = [];
-  var g = opts.summary && opts.summary.grand;
-  var f = opts.funnel && opts.funnel.totals;
-  if (g && f) {
-    var totalSpend = f.tofu.spend + f.mofu.spend + f.bofu.spend;
-    if (totalSpend > 0) {
-      var tofuPct = f.tofu.spend / totalSpend * 100;
-      var mofuPct = f.mofu.spend / totalSpend * 100;
-      var bofuPct = f.bofu.spend / totalSpend * 100;
-      if (tofuPct < 15 && bofuPct > 60) recs.push({ title: "Rebalance The Funnel Toward Awareness", body: "Awareness carries only " + tofuPct.toFixed(1) + "% of investment while conversion carries " + bofuPct.toFixed(1) + "%. Sustained conversion volume needs a warm audience above it, otherwise CPL will rise as the pool exhausts. Recommend shifting 10-15% of BoFu budget into a persistent awareness layer for the next window." });
-      if (bofuPct < 10 && tofuPct > 50) recs.push({ title: "Introduce A Conversion Layer", body: "The current investment is heavily weighted to awareness (" + tofuPct.toFixed(1) + "%). Awareness only converts when followed by a low-friction ask. Recommend adding a lead-generation or landing-page layer at 15-20% of budget to capture the demand being generated." });
-    }
-    var ctr = parseFloat(g.ctr || 0);
-    if (ctr < 0.8 && f.mofu.impressions > 10000) recs.push({ title: "Refresh Consideration Creative", body: "The blended click-through rate of " + fmtPct(ctr) + " is below the 0.8% benchmark for consideration-stage delivery, suggesting creative fatigue or a message-audience mismatch. Recommend introducing 2-3 new creative variants and running a two-week A/B against the current top performers." });
-    if (parseFloat(g.frequency || 0) > 4.0) recs.push({ title: "Reduce Frequency Ceiling", body: "Meta frequency at " + parseFloat(g.frequency).toFixed(2) + "x has crossed the 4.0x fatigue ceiling. Diminishing returns accelerate above this threshold. Recommend expanding audience with lookalikes or shifting spend to an interest-based cold layer to reset delivery." });
-    var leadCost = f.bofu.leads > 0 ? f.bofu.spend / f.bofu.leads : 0;
-    if (leadCost > 0 && leadCost < 50) recs.push({ title: "Scale The Lead Generation Layer", body: "Cost per lead at " + fmtR(leadCost) + " sits well inside industry benchmarks. This is a scale signal: recommend a 20-30% budget increase for the highest-performing lead campaigns while monitoring frequency and quality." });
-    if (f.tofu.reach === 0 && f.tofu.impressions > 0) recs.push({ title: "Enable Reach Reporting", body: "Awareness delivery is measured only in impressions this period. Reach reporting via TikTok or older-format Meta objectives would unlock frequency and unique-user metrics that are critical for judging awareness efficiency." });
-  }
-  // If no data-driven recs surfaced, provide one balanced default so the section isn't empty.
-  if (recs.length === 0) {
-    recs.push({ title: "Review Cadence", body: "Continue current campaign structure into next window; monitor CTR and frequency for early signals of creative fatigue. Full report review recommended on a monthly cadence." });
-  }
-  var recsHtml = recs.slice(0, 5).map(function(r, i) {
-    return `<div class="rp-rec">
-      <div class="rp-rec-num">${(i + 1).toString().padStart(2, "0")}</div>
-      <div class="rp-rec-body">
-        <div class="rp-rec-title">${escapeHtmlLocal(r.title)}</div>
-        <div class="rp-rec-text">${escapeHtmlLocal(r.body)}</div>
-      </div>
-    </div>`;
-  }).join("");
+// ═══════════════════════════════════════════════════════════════════
+// SECTION: EXECUTIVE SUMMARY (moved to end, comprehensive)
+// ═══════════════════════════════════════════════════════════════════
+
+function renderExecutiveSummary(opts) {
+  var book = opts.book;
+  var g = book.global;
+  var totalFollows = (g.follows || 0) + (g.pageLikes || 0);
+  var totalSpend = book.byStage.tofu.spend + book.byStage.mofu.spend + book.byStage.bofu.spend;
+  var stagePcts = {
+    tofu: totalSpend > 0 ? (book.byStage.tofu.spend / totalSpend * 100) : 0,
+    mofu: totalSpend > 0 ? (book.byStage.mofu.spend / totalSpend * 100) : 0,
+    bofu: totalSpend > 0 ? (book.byStage.bofu.spend / totalSpend * 100) : 0
+  };
+  var kpis = [
+    { label: "Total Investment", value: fmtR(g.spend), primary: true },
+    { label: "Impressions", value: fmtNum(g.impressions), sub: fmtNumDec(frequencyOf(g), 2) + "× frequency" },
+    { label: "Reach", value: fmtNum(g.reach), sub: "unique users" },
+    { label: "Blended CTR", value: fmtPct(ctrOf(g)) }
+  ];
+  var narrative = [];
+  narrative.push("Across " + fmtNum(g.campaignCount) + " campaign" + (g.campaignCount === 1 ? "" : "s") + ", " + fmtR(g.spend) + " was invested during " + escapeHtmlLocal(opts.periodDisplay) + ", generating " + fmtNum(g.impressions) + " impressions and " + fmtNum(g.reach) + " unique users reached at a blended " + fmtR(cpmOf(g)) + " CPM.");
+  if (parseFloat(g.leads || 0) > 0) narrative.push(fmtNum(g.leads) + " qualified lead" + (g.leads === 1 ? "" : "s") + " were captured at " + fmtR(g.spend > 0 && g.leads > 0 ? g.spend / g.leads : 0) + " per lead.");
+  if (totalFollows > 0) narrative.push("The community earned " + fmtNum(totalFollows) + " new follower" + (totalFollows === 1 ? "" : "s") + " and page like" + (totalFollows === 1 ? "" : "s") + ", each representing a permanent organic distribution channel that compounds beyond the paid window.");
+  if (parseFloat(g.appStoreClicks || g.appInstalls || 0) > 0) narrative.push(fmtNum(g.appInstalls) + " users clicked through to their app store to download the app.");
+  if (parseFloat(g.landingPageViews || 0) > 0) narrative.push(fmtNum(g.landingPageViews) + " users landed on the destination page after clicking a traffic ad.");
+  if (totalSpend > 0) narrative.push("The funnel investment split ran " + stagePcts.tofu.toFixed(1) + "% top of funnel (awareness), " + stagePcts.mofu.toFixed(1) + "% middle (consideration), and " + stagePcts.bofu.toFixed(1) + "% bottom (conversion).");
   return `<section class="rp-page">
-    <div class="rp-section-eyebrow">Section 09 &middot; Action Plan</div>
-    <h1 class="rp-h1">Recommendations For Next Window</h1>
-    <div class="rp-lede">Data-driven recommendations derived from the performance patterns in this report. Prioritised by expected impact on the next window's results.</div>
-    <div class="rp-recs">${recsHtml}</div>
+    ${renderSectionHeader("06", "Executive Summary", "Period In Review", "A comprehensive read of the reporting window, the investment split across the funnel, and the measurable outcomes each stage delivered.")}
+    <div class="rp-block">
+      <div class="rp-block-title">Headline Metrics</div>
+      ${renderKpiRow(kpis)}
+    </div>
+    <div class="rp-block">
+      <div class="rp-block-title">Funnel Investment Split</div>
+      <div class="rp-funnel-splits">
+        <div class="rp-funnel-splits-row">
+          <div class="rp-funnel-splits-label">Top of Funnel (Awareness)</div>
+          <div class="rp-funnel-splits-track"><div class="rp-funnel-splits-fill" style="width:${stagePcts.tofu.toFixed(1)}%;background:linear-gradient(90deg,#F96203,#FF6B00);"></div></div>
+          <div class="rp-funnel-splits-value">${stagePcts.tofu.toFixed(1)}% <span class="rp-funnel-splits-sub">${fmtR(book.byStage.tofu.spend)}</span></div>
+        </div>
+        <div class="rp-funnel-splits-row">
+          <div class="rp-funnel-splits-label">Middle of Funnel (Clicks)</div>
+          <div class="rp-funnel-splits-track"><div class="rp-funnel-splits-fill" style="width:${stagePcts.mofu.toFixed(1)}%;background:linear-gradient(90deg,#FF6B00,#FF3D00);"></div></div>
+          <div class="rp-funnel-splits-value">${stagePcts.mofu.toFixed(1)}% <span class="rp-funnel-splits-sub">${fmtR(book.byStage.mofu.spend)}</span></div>
+        </div>
+        <div class="rp-funnel-splits-row">
+          <div class="rp-funnel-splits-label">Bottom of Funnel (Results)</div>
+          <div class="rp-funnel-splits-track"><div class="rp-funnel-splits-fill" style="width:${stagePcts.bofu.toFixed(1)}%;background:linear-gradient(90deg,#FF3D00,#F96203);"></div></div>
+          <div class="rp-funnel-splits-value">${stagePcts.bofu.toFixed(1)}% <span class="rp-funnel-splits-sub">${fmtR(book.byStage.bofu.spend)}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="rp-narrative">
+      <div class="rp-narrative-eyebrow">Period Read</div>
+      <p class="rp-body">${narrative.join(" ")}</p>
+    </div>
   </section>`;
 }
 
-// Sign-off / closing page.
-function renderSignOff(opts) {
+// ═══════════════════════════════════════════════════════════════════
+// CLOSING PAGE: A NOTE FROM OUR TEAM
+// ═══════════════════════════════════════════════════════════════════
+
+function renderClosingNote(opts) {
+  var clientName = escapeHtmlLocal(opts.clientName || "Client");
   var senderName = escapeHtmlLocal(opts.senderName || "");
   var senderTitle = escapeHtmlLocal(opts.senderTitle || "");
   var origin = opts.origin || "https://media.gasmarketing.co.za";
+  var agencyLogo = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var period = escapeHtmlLocal(opts.periodDisplay || "");
+  var book = opts.book;
+  var g = book.global;
+  var totalFollows = (g.follows || 0) + (g.pageLikes || 0);
+  var quickRecap = [];
+  if (parseFloat(g.leads || 0) > 0) quickRecap.push(fmtNum(g.leads) + " leads");
+  if (totalFollows > 0) quickRecap.push("+" + fmtNum(totalFollows) + " community");
+  if (parseFloat(g.appInstalls || 0) > 0) quickRecap.push(fmtNum(g.appInstalls) + " app store clicks");
+  if (parseFloat(g.landingPageViews || 0) > 0) quickRecap.push(fmtNum(g.landingPageViews) + " landing page views");
+  if (!quickRecap.length) quickRecap.push(fmtNum(g.impressions) + " impressions");
   return `<section class="rp-page rp-signoff">
-    <div class="rp-signoff-inner">
-      <div class="rp-signoff-eyebrow">Thank You</div>
-      <div class="rp-signoff-title">A note from your team</div>
-      <p class="rp-signoff-body">This report reflects the data captured directly from the ad platforms at the moment it was generated. For live figures, deeper deep-dives, or bespoke cuts of this data, the full interactive dashboard is available at any time via your team's shared link.</p>
-      <div class="rp-signoff-sign">
-        <div class="rp-signoff-sender">${senderName || "GAS Marketing"}</div>
-        ${senderTitle ? `<div class="rp-signoff-sender-title">${senderTitle}</div>` : ""}
+    <div class="rp-signoff-frame">
+      <div class="rp-signoff-top">
+        <img src="${agencyLogo}" alt="GAS Marketing" class="rp-signoff-emblem-logo"/>
+        <div class="rp-signoff-eyebrow">A Note From Our Team</div>
       </div>
-      <div class="rp-signoff-contact">
-        <div>grow@gasmarketing.co.za</div>
-        <div>${escapeHtmlLocal(origin.replace(/^https?:\/\//, ""))}</div>
+      <div class="rp-signoff-heart">
+        <div class="rp-signoff-title">Thank You, ${clientName}</div>
+        <p class="rp-signoff-body">This report reflects the data captured directly from the ad platforms at the moment it was generated. During <strong>${period}</strong>, together we delivered <strong>${quickRecap.join(", ")}</strong> on <strong>${fmtR(g.spend)}</strong> of media investment.</p>
+        <p class="rp-signoff-body">Every metric in these pages is a signal — of what worked, where the audience leaned in, and where the next window can compound. If you would like to explore any section deeper, the full interactive dashboard remains available to your team, or reach out directly and we will walk you through the read together.</p>
       </div>
-      <div class="rp-signoff-emblem">Media On GAS &middot; Metrics That Matter</div>
+      <div class="rp-signoff-foot">
+        <div class="rp-signoff-sender-block">
+          <div class="rp-signoff-sender">${senderName || "The GAS Team"}</div>
+          ${senderTitle ? `<div class="rp-signoff-sender-title">${senderTitle}</div>` : ""}
+          <div class="rp-signoff-agency">GAS Marketing Automation</div>
+        </div>
+        <div class="rp-signoff-contact">
+          <div>grow@gasmarketing.co.za</div>
+          <div>${escapeHtmlLocal(origin.replace(/^https?:\/\//, ""))}</div>
+          <div class="rp-signoff-emblem">Media On GAS · Metrics That Matter</div>
+        </div>
+      </div>
     </div>
   </section>`;
 }
@@ -602,27 +783,24 @@ export function buildReportHtml(opts) {
   var filenameSafePeriod = periodDisplay.replace(/[^A-Za-z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
   var docTitle = filenameSafeClient + "_" + filenameSafePeriod + "_Report";
 
-  // Precompute the funnel partition ONCE so every section reuses it.
-  var funnel = partitionByFunnel((opts.summary && opts.summary.campaigns) || []);
+  // Precompute the aggregation once — every section reads from `book`.
+  var book = aggregateBook((opts.summary && opts.summary.campaigns) || []);
 
   var contentOpts = Object.assign({}, opts, {
     clientName: clientName,
     periodDisplay: periodDisplay,
-    funnel: funnel
+    book: book
   });
 
   var pages = [
     renderCoverPage(contentOpts),
-    renderExecutiveSummary(contentOpts),
-    renderFunnelOverview(contentOpts),
     renderTofuSection(contentOpts),
     renderMofuSection(contentOpts),
     renderBofuSection(contentOpts),
-    renderPlacementsSection(contentOpts),
-    renderCampaignsSection(contentOpts),
-    renderCreativeSection(contentOpts),
-    renderRecommendations(contentOpts),
-    renderSignOff(contentOpts)
+    renderAudienceSection(contentOpts),
+    renderTopAdsSection(contentOpts),
+    renderExecutiveSummary(contentOpts),
+    renderClosingNote(contentOpts)
   ].filter(Boolean).join("\n");
 
   return `<!DOCTYPE html>
@@ -632,155 +810,228 @@ export function buildReportHtml(opts) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtmlLocal(docTitle)}</title>
 <style>
-/* Print-first document. Screen preview uses the same styles so what
-   the operator sees on screen is what saves to PDF. */
 :root {
-  --rp-bg: #0F1820;
-  --rp-bg2: #13202C;
+  --rp-bg: #0B121C;
+  --rp-bg2: #101C2A;
   --rp-fg: #FFFBF8;
-  --rp-fg-dim: rgba(255,251,248,0.72);
-  --rp-fg-mute: rgba(255,251,248,0.5);
+  --rp-fg-dim: rgba(255,251,248,0.74);
+  --rp-fg-mute: rgba(255,251,248,0.52);
   --rp-accent: #F96203;
   --rp-accent2: #FF3D00;
   --rp-accent3: #FF6B00;
-  --rp-line: rgba(255,255,255,0.08);
+  --rp-line: rgba(255,255,255,0.09);
   --rp-line-strong: rgba(249,98,3,0.42);
-  --rp-card: rgba(0,0,0,0.28);
+  --rp-card: rgba(255,255,255,0.03);
+  --rp-card-strong: rgba(0,0,0,0.28);
+  --rp-serif: "Georgia", "Times New Roman", serif;
 }
 @page { size: A4; margin: 0; }
-html, body { margin: 0; padding: 0; background: var(--rp-bg); color: var(--rp-fg); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+html, body { margin: 0; padding: 0; background: var(--rp-bg); color: var(--rp-fg); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 img { max-width: 100%; display: block; }
 
 .rp-page {
   width: 210mm;
   min-height: 297mm;
-  padding: 22mm 20mm;
+  padding: 20mm 20mm;
   background: linear-gradient(170deg, var(--rp-bg) 0%, var(--rp-bg2) 100%);
   page-break-after: always;
   break-after: page;
   position: relative;
+  overflow: hidden;
 }
 .rp-page:last-child { page-break-after: auto; break-after: auto; }
 
-/* Cover ─────────────────────────────────────────────────────────── */
+/* ─────────────── COVER ─────────────── */
 .rp-cover {
-  background: linear-gradient(160deg, #06020e 0%, #0F1820 55%, #131a2c 100%);
-  padding: 26mm 22mm;
+  padding: 0;
+  background: linear-gradient(155deg, #06020e 0%, #0B121C 45%, #131a2c 100%);
+  min-height: 297mm;
+  position: relative;
+}
+.rp-cover::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0;
+  width: 60%; height: 60%;
+  background: radial-gradient(circle at top right, rgba(249,98,3,0.16), transparent 65%);
+  pointer-events: none;
+}
+.rp-cover::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 50%; height: 45%;
+  background: radial-gradient(circle at bottom left, rgba(255,61,0,0.10), transparent 60%);
+  pointer-events: none;
+}
+.rp-cover-frame {
+  position: relative;
+  z-index: 1;
+  padding: 26mm 24mm;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 297mm;
+  height: 297mm;
 }
-.rp-cover-inner { display: flex; flex-direction: column; height: 100%; min-height: 253mm; }
-.rp-cover-brand { min-height: 60mm; display: flex; align-items: center; justify-content: flex-start; }
-.rp-cover-logo { max-width: 90mm; max-height: 50mm; object-fit: contain; }
-.rp-cover-name { font-size: 34pt; font-weight: 900; letter-spacing: -0.5px; color: var(--rp-fg); }
-.rp-cover-eyebrow { margin-top: 28mm; font-size: 9pt; letter-spacing: 6px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; }
-.rp-cover-title { font-size: 46pt; font-weight: 900; letter-spacing: -1.2px; line-height: 1.05; color: var(--rp-fg); margin-top: 8mm; word-break: break-word; }
-.rp-cover-period { font-size: 16pt; letter-spacing: 2px; color: var(--rp-fg-dim); margin-top: 10mm; font-weight: 500; }
-.rp-cover-divider { height: 3px; width: 60mm; background: linear-gradient(90deg, var(--rp-accent), var(--rp-accent2)); margin: 14mm 0 auto; border-radius: 2px; }
-.rp-cover-foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; padding-top: 14mm; border-top: 1px solid var(--rp-line); }
-.rp-cover-foot-left, .rp-cover-foot-right { display: flex; flex-direction: column; gap: 3mm; }
+.rp-cover-top { display: flex; flex-direction: column; align-items: flex-start; }
+.rp-cover-logo { max-width: 50mm; max-height: 28mm; object-fit: contain; margin-bottom: 8mm; }
+.rp-cover-fallback-name { font-family: var(--rp-serif); font-size: 28pt; letter-spacing: -0.5px; font-weight: 700; color: var(--rp-fg); margin-bottom: 8mm; }
+.rp-cover-rule { width: 24mm; height: 2px; background: linear-gradient(90deg, var(--rp-accent), var(--rp-accent2)); border-radius: 1px; }
+.rp-cover-heart { margin-top: auto; margin-bottom: auto; padding: 20mm 0; }
+.rp-cover-eyebrow { font-size: 9pt; letter-spacing: 6px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 8mm; }
+.rp-cover-title { font-family: var(--rp-serif); font-size: 52pt; font-weight: 700; letter-spacing: -1.5px; line-height: 1; color: var(--rp-fg); margin-bottom: 4mm; word-break: break-word; }
+.rp-cover-title-sub { font-family: var(--rp-serif); font-size: 20pt; font-weight: 400; font-style: italic; letter-spacing: 0; color: var(--rp-fg-dim); margin-bottom: 14mm; }
+.rp-cover-period { font-size: 12pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 500; }
+.rp-cover-foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; padding-top: 12mm; border-top: 1px solid var(--rp-line); }
+.rp-cover-foot-left, .rp-cover-foot-right { display: flex; flex-direction: column; gap: 2mm; }
 .rp-cover-foot-right { align-items: flex-end; text-align: right; }
-.rp-cover-agency-logo { width: 20mm; height: 20mm; border-radius: 50%; box-shadow: 0 0 12mm rgba(249,98,3,0.35); margin-bottom: 4mm; }
-.rp-cover-label { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; }
-.rp-cover-sender { font-size: 14pt; font-weight: 800; color: var(--rp-fg); }
-.rp-cover-sender-title { font-size: 10pt; color: var(--rp-fg-dim); }
+.rp-cover-agency-logo { width: 14mm; height: 14mm; border-radius: 50%; box-shadow: 0 0 8mm rgba(249,98,3,0.28); margin-bottom: 3mm; }
+.rp-cover-label { font-size: 7pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; }
+.rp-cover-sender { font-size: 13pt; font-weight: 700; color: var(--rp-fg); font-family: var(--rp-serif); }
+.rp-cover-sender-title { font-size: 10pt; color: var(--rp-fg-dim); font-style: italic; }
+.rp-cover-agency-label { font-size: 12pt; font-weight: 700; color: var(--rp-fg); font-family: var(--rp-serif); }
+.rp-cover-agency-sub { font-size: 8pt; letter-spacing: 3px; color: var(--rp-accent); font-weight: 800; text-transform: uppercase; }
 
-/* Section chrome ────────────────────────────────────────────────── */
-.rp-section-eyebrow { font-size: 8pt; letter-spacing: 4px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 4mm; }
-.rp-h1 { font-size: 28pt; font-weight: 900; letter-spacing: -0.8px; line-height: 1.1; color: var(--rp-fg); margin: 0 0 6mm 0; }
-.rp-lede { font-size: 11pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 10mm; max-width: 160mm; }
+/* ─────────────── SECTION HEADER ─────────────── */
+.rp-section-head { display: flex; gap: 6mm; align-items: flex-start; margin-bottom: 8mm; padding-bottom: 6mm; border-bottom: 1px solid var(--rp-line); }
+.rp-section-num { font-family: var(--rp-serif); font-size: 32pt; font-weight: 700; color: var(--rp-accent); line-height: 1; letter-spacing: -1px; min-width: 20mm; }
+.rp-section-headline { flex: 1; }
+.rp-section-eyebrow { font-size: 8pt; letter-spacing: 4px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
+.rp-h1 { font-family: var(--rp-serif); font-size: 26pt; font-weight: 700; letter-spacing: -0.8px; line-height: 1.1; color: var(--rp-fg); margin: 0 0 4mm 0; }
+.rp-lede { font-size: 10.5pt; color: var(--rp-fg-dim); line-height: 1.6; max-width: 155mm; font-style: italic; }
 
-/* KPI grid ──────────────────────────────────────────────────────── */
-.rp-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-bottom: 10mm; }
-.rp-kpi { padding: 6mm 6mm; background: var(--rp-card); border: 1px solid var(--rp-line); border-radius: 3mm; page-break-inside: avoid; }
-.rp-kpi-primary { border-color: var(--rp-line-strong); background: linear-gradient(140deg, rgba(249,98,3,0.14), var(--rp-card)); }
-.rp-kpi-label { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; margin-bottom: 3mm; }
-.rp-kpi-value { font-size: 22pt; font-weight: 900; color: var(--rp-fg); line-height: 1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+/* ─────────────── BLOCKS ─────────────── */
+.rp-block { margin-bottom: 8mm; page-break-inside: avoid; }
+.rp-block-title { font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 4mm; }
+.rp-block-double { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 8mm; }
+
+/* ─────────────── KPI GRID ─────────────── */
+.rp-kpi-grid { display: grid; gap: 3mm; margin-bottom: 4mm; }
+.rp-kpi { padding: 5mm 5mm; background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 3mm; page-break-inside: avoid; }
+.rp-kpi-primary { border-color: var(--rp-line-strong); background: linear-gradient(140deg, rgba(249,98,3,0.14), var(--rp-card-strong)); }
+.rp-kpi-label { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; margin-bottom: 3mm; }
+.rp-kpi-value { font-family: var(--rp-serif); font-size: 22pt; font-weight: 700; color: var(--rp-fg); line-height: 1; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
 .rp-kpi-primary .rp-kpi-value { color: var(--rp-accent); }
 .rp-kpi-sub { font-size: 8pt; color: var(--rp-fg-mute); margin-top: 3mm; letter-spacing: 0.5px; }
 
-/* Narrative + body ──────────────────────────────────────────────── */
-.rp-narrative { margin-top: 6mm; padding: 6mm; background: var(--rp-card); border-radius: 3mm; border-left: 3px solid var(--rp-accent); page-break-inside: avoid; }
-.rp-narrative-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 4mm; }
-.rp-body { font-size: 10.5pt; color: var(--rp-fg-dim); line-height: 1.7; margin: 0; }
-.rp-body-note { margin-top: 5mm; font-size: 10pt; color: var(--rp-fg-mute); font-style: italic; }
+/* ─────────────── INSIGHT / NARRATIVE ─────────────── */
+.rp-insight { margin-top: 6mm; padding: 5mm 6mm; background: linear-gradient(140deg, rgba(249,98,3,0.06), var(--rp-card)); border-left: 3px solid var(--rp-accent); border-radius: 0 3mm 3mm 0; page-break-inside: avoid; }
+.rp-insight-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
+.rp-narrative { margin-top: 6mm; padding: 5mm 6mm; background: var(--rp-card-strong); border-radius: 3mm; border-left: 3px solid var(--rp-accent); page-break-inside: avoid; }
+.rp-narrative-eyebrow { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
+.rp-body { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.7; margin: 0; }
 
-/* Funnel visual ─────────────────────────────────────────────────── */
-.rp-funnel { display: flex; flex-direction: column; gap: 6mm; margin-bottom: 8mm; }
-.rp-funnel-stage { background: var(--rp-card); border: 1px solid var(--rp-line); border-radius: 4mm; padding: 6mm; }
-.rp-funnel-stage-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4mm; }
-.rp-funnel-stage-name { font-size: 14pt; font-weight: 900; letter-spacing: 0.5px; }
-.rp-funnel-stage-sub { font-size: 9pt; color: var(--rp-fg-mute); letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-top: 1mm; }
-.rp-funnel-stage-share { font-size: 20pt; font-weight: 900; color: var(--rp-fg); font-variant-numeric: tabular-nums; }
-.rp-funnel-bar-track { height: 6mm; background: rgba(0,0,0,0.4); border-radius: 3mm; overflow: hidden; margin-bottom: 4mm; }
-.rp-funnel-bar-fill { height: 100%; border-radius: 3mm; }
-.rp-funnel-stage-foot { display: flex; gap: 6mm; font-size: 10pt; color: var(--rp-fg); font-weight: 700; letter-spacing: 0.3px; }
-.rp-funnel-stage-foot span { padding-right: 6mm; border-right: 1px solid var(--rp-line); }
-.rp-funnel-stage-foot span:last-child { border-right: 0; }
-.rp-funnel-stage-role { margin-top: 3mm; font-size: 9.5pt; color: var(--rp-fg-mute); font-style: italic; line-height: 1.5; }
-
-/* Tables ────────────────────────────────────────────────────────── */
-.rp-table { width: 100%; border-collapse: collapse; background: var(--rp-card); border-radius: 3mm; overflow: hidden; font-size: 9.5pt; margin-top: 4mm; }
+/* ─────────────── TABLES ─────────────── */
+.rp-table { width: 100%; border-collapse: collapse; background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; font-size: 9.5pt; }
 .rp-table-wide { font-size: 9pt; }
-.rp-table th { padding: 3mm 3mm; text-align: left; font-size: 7.5pt; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; border-bottom: 1px solid rgba(249,98,3,0.2); background: rgba(249,98,3,0.06); }
+.rp-table th { padding: 3mm 3mm; text-align: left; font-size: 7pt; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; border-bottom: 1px solid rgba(249,98,3,0.2); background: rgba(249,98,3,0.06); }
 .rp-th-num { text-align: right; }
 .rp-th-rank { text-align: center; width: 8mm; }
-.rp-table td { padding: 3mm 3mm; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--rp-fg); vertical-align: middle; }
+.rp-table td { padding: 3mm 3mm; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--rp-fg); vertical-align: middle; font-variant-numeric: tabular-nums; }
 .rp-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
-.rp-td-num { text-align: right; font-variant-numeric: tabular-nums; }
-.rp-td-rank { text-align: center; color: var(--rp-fg-mute); font-weight: 800; }
+.rp-td-num { text-align: right; }
+.rp-td-name { color: var(--rp-fg); }
 .rp-td-sub { color: var(--rp-fg-mute); font-size: 8.5pt; }
-.rp-td-name-sub { font-size: 7.5pt; color: var(--rp-fg-mute); text-transform: uppercase; letter-spacing: 1px; margin-top: 1mm; }
-.rp-plat-chip { display: inline-block; padding: 1mm 2.5mm; font-size: 7pt; font-weight: 900; color: #fff; border-radius: 2px; letter-spacing: 1px; margin-right: 2mm; vertical-align: middle; }
-.rp-stage-chip { display: inline-block; padding: 1mm 2.5mm; font-size: 7pt; font-weight: 900; border: 1px solid; border-radius: 2px; letter-spacing: 1px; }
-.rp-dot { display: inline-block; width: 2.5mm; height: 2.5mm; border-radius: 50%; margin-right: 2mm; vertical-align: middle; }
-.rp-empty { padding: 6mm; text-align: center; color: var(--rp-fg-mute); font-style: italic; background: var(--rp-card); border-radius: 3mm; font-size: 10pt; }
+.rp-plat-chip { display: inline-block; padding: 1mm 3mm; font-size: 7.5pt; font-weight: 900; color: #fff; border-radius: 2px; letter-spacing: 1px; margin-right: 2mm; vertical-align: middle; }
+.rp-empty { padding: 5mm; text-align: center; color: var(--rp-fg-mute); font-style: italic; background: var(--rp-card); border-radius: 3mm; font-size: 10pt; }
 
-/* Ecommerce block ───────────────────────────────────────────────── */
-.rp-eco-block { margin-top: 6mm; padding: 6mm; background: var(--rp-card); border-radius: 3mm; border-left: 3px solid var(--rp-accent2); page-break-inside: avoid; }
-.rp-eco-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin: 5mm 0; }
-.rp-eco-tile { padding: 4mm; background: rgba(0,0,0,0.24); border-radius: 2mm; text-align: center; }
+/* ─────────────── BOFU SUBSECTIONS ─────────────── */
+.rp-bofu-sub { margin-bottom: 8mm; padding: 5mm 6mm; background: var(--rp-card); border: 1px solid var(--rp-line); border-radius: 3mm; page-break-inside: avoid; }
+.rp-bofu-sub-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
+.rp-bofu-sub-title { font-family: var(--rp-serif); font-size: 14pt; font-weight: 700; color: var(--rp-fg); letter-spacing: -0.3px; }
+.rp-bofu-sub-total { font-family: var(--rp-serif); font-size: 22pt; font-weight: 700; color: var(--rp-accent); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.rp-bofu-sub-desc { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 3mm; font-style: italic; }
+.rp-bofu-sub-costline { font-size: 9pt; color: var(--rp-fg-mute); margin-bottom: 4mm; letter-spacing: 0.5px; }
+.rp-bofu-sub-costline strong { color: var(--rp-fg); font-weight: 800; }
+.rp-bofu-eco { border-left: 3px solid var(--rp-accent2); }
+.rp-eco-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin-top: 3mm; }
+.rp-eco-tile { padding: 3mm; background: rgba(0,0,0,0.28); border-radius: 2mm; text-align: center; }
 .rp-eco-label { font-size: 7pt; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; margin-bottom: 2mm; }
-.rp-eco-value { font-size: 15pt; font-weight: 900; color: var(--rp-fg); font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.rp-eco-value { font-family: var(--rp-serif); font-size: 15pt; font-weight: 700; color: var(--rp-fg); font-variant-numeric: tabular-nums; }
 
-/* Creative section ──────────────────────────────────────────────── */
+/* ─────────────── PERSONA (audience) ─────────────── */
+.rp-persona-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4mm; }
+.rp-persona { border: 1px solid var(--rp-line); background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; page-break-inside: avoid; }
+.rp-persona-plat { padding: 3mm 4mm; font-size: 10pt; font-weight: 900; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
+.rp-persona-body { padding: 4mm; display: flex; flex-direction: column; gap: 2.5mm; }
+.rp-persona-line { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 2mm; border-bottom: 1px dotted var(--rp-line); font-size: 9pt; }
+.rp-persona-line:last-child { border-bottom: 0; padding-bottom: 0; }
+.rp-persona-label { color: var(--rp-fg-mute); letter-spacing: 0.5px; }
+.rp-persona-value { color: var(--rp-fg); font-weight: 700; text-transform: capitalize; font-variant-numeric: tabular-nums; }
+.rp-persona-pct { color: var(--rp-accent); font-size: 8.5pt; margin-left: 2mm; }
+
+/* Bars (age / region) */
+.rp-bars { display: flex; flex-direction: column; gap: 2.5mm; }
+.rp-bar-row { display: grid; grid-template-columns: 28mm 1fr 32mm; align-items: center; gap: 3mm; font-size: 9pt; }
+.rp-bar-label { color: var(--rp-fg); font-weight: 700; letter-spacing: 0.3px; }
+.rp-bar-track { height: 4mm; background: rgba(0,0,0,0.35); border-radius: 2mm; overflow: hidden; }
+.rp-bar-fill { height: 100%; border-radius: 2mm; }
+.rp-bar-value { text-align: right; color: var(--rp-fg-dim); font-variant-numeric: tabular-nums; font-size: 8.5pt; }
+.rp-bar-pct { color: var(--rp-accent); font-weight: 700; margin-left: 1mm; }
+
+/* ─────────────── CREATIVE ─────────────── */
 .rp-platform-block { margin-bottom: 8mm; page-break-inside: avoid; }
 .rp-platform-head { border-left: 3px solid; padding-left: 4mm; font-size: 11pt; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4mm; }
-.rp-creative-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
-.rp-creative-card { background: var(--rp-card); border: 1px solid var(--rp-line); border-radius: 3mm; overflow: hidden; }
-.rp-creative-thumb { position: relative; width: 100%; padding-top: 100%; background: #000; }
+.rp-creative-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+.rp-creative-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 3mm; overflow: hidden; }
+.rp-creative-thumb { position: relative; width: 100%; padding-top: 100%; }
 .rp-creative-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.rp-creative-rank { position: absolute; top: 3mm; left: 3mm; padding: 1mm 3mm; background: var(--rp-accent); color: #fff; font-size: 8pt; font-weight: 900; border-radius: 2mm; letter-spacing: 0.5px; }
-.rp-creative-body { padding: 4mm; }
-.rp-creative-name { font-size: 9pt; font-weight: 800; color: var(--rp-fg); margin-bottom: 1.5mm; line-height: 1.4; word-break: break-word; }
-.rp-creative-camp { font-size: 7.5pt; color: var(--rp-fg-mute); letter-spacing: 0.5px; margin-bottom: 3mm; text-transform: uppercase; }
-.rp-creative-metrics { display: flex; flex-direction: column; gap: 1mm; font-size: 8.5pt; color: var(--rp-fg-dim); }
-.rp-creative-metrics strong { color: var(--rp-accent); font-weight: 900; }
+.rp-creative-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 8pt; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+.rp-creative-rank { position: absolute; top: 2mm; left: 2mm; padding: 1mm 2mm; color: #fff; font-size: 7pt; font-weight: 900; border-radius: 2mm; letter-spacing: 0.5px; }
+.rp-creative-body { padding: 3mm; }
+.rp-creative-name { font-size: 8.5pt; font-weight: 800; color: var(--rp-fg); margin-bottom: 2mm; line-height: 1.35; word-break: break-word; max-height: 10mm; overflow: hidden; }
+.rp-creative-metrics { display: flex; flex-direction: column; gap: 0.8mm; font-size: 7.5pt; color: var(--rp-fg-dim); }
+.rp-creative-metrics strong { color: var(--rp-accent); font-weight: 900; font-variant-numeric: tabular-nums; }
 
-/* Recommendations ───────────────────────────────────────────────── */
-.rp-recs { display: flex; flex-direction: column; gap: 5mm; }
-.rp-rec { display: flex; gap: 5mm; padding: 6mm; background: var(--rp-card); border-radius: 3mm; border-left: 3px solid var(--rp-accent); page-break-inside: avoid; }
-.rp-rec-num { font-size: 22pt; font-weight: 900; color: var(--rp-accent); letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; min-width: 15mm; }
-.rp-rec-body { flex: 1; }
-.rp-rec-title { font-size: 12pt; font-weight: 900; color: var(--rp-fg); margin-bottom: 3mm; letter-spacing: -0.3px; }
-.rp-rec-text { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.7; }
+/* ─────────────── FUNNEL SPLITS (executive summary) ─────────────── */
+.rp-funnel-splits { display: flex; flex-direction: column; gap: 3mm; }
+.rp-funnel-splits-row { display: grid; grid-template-columns: 55mm 1fr 45mm; gap: 3mm; align-items: center; }
+.rp-funnel-splits-label { font-size: 10pt; color: var(--rp-fg); font-weight: 700; }
+.rp-funnel-splits-track { height: 6mm; background: rgba(0,0,0,0.35); border-radius: 3mm; overflow: hidden; }
+.rp-funnel-splits-fill { height: 100%; border-radius: 3mm; }
+.rp-funnel-splits-value { text-align: right; font-family: var(--rp-serif); font-size: 14pt; font-weight: 700; color: var(--rp-accent); font-variant-numeric: tabular-nums; }
+.rp-funnel-splits-sub { display: block; font-family: "Helvetica Neue", Helvetica, sans-serif; font-size: 8pt; color: var(--rp-fg-mute); font-weight: 500; letter-spacing: 0.5px; }
 
-/* Sign-off ──────────────────────────────────────────────────────── */
-.rp-signoff { background: linear-gradient(210deg, #06020e 0%, #0F1820 60%); display: flex; align-items: center; justify-content: center; min-height: 297mm; }
-.rp-signoff-inner { max-width: 140mm; text-align: center; padding: 0 20mm; }
-.rp-signoff-eyebrow { font-size: 9pt; letter-spacing: 6px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 8mm; }
-.rp-signoff-title { font-size: 30pt; font-weight: 900; letter-spacing: -0.8px; color: var(--rp-fg); margin-bottom: 10mm; }
-.rp-signoff-body { font-size: 12pt; color: var(--rp-fg-dim); line-height: 1.8; margin-bottom: 14mm; }
-.rp-signoff-sign { margin-bottom: 12mm; padding-top: 8mm; border-top: 1px solid var(--rp-line); }
-.rp-signoff-sender { font-size: 14pt; font-weight: 800; color: var(--rp-fg); }
-.rp-signoff-sender-title { font-size: 10pt; color: var(--rp-fg-dim); margin-top: 2mm; }
-.rp-signoff-contact { font-size: 10pt; color: var(--rp-fg-mute); margin-bottom: 12mm; line-height: 1.8; }
-.rp-signoff-emblem { font-size: 8pt; letter-spacing: 5px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; }
+/* ─────────────── SIGN-OFF ─────────────── */
+.rp-signoff {
+  padding: 0;
+  background: linear-gradient(155deg, #06020e 0%, #0B121C 45%, #131a2c 100%);
+  min-height: 297mm;
+  position: relative;
+}
+.rp-signoff::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 60%; height: 60%;
+  background: radial-gradient(circle at top left, rgba(249,98,3,0.16), transparent 65%);
+  pointer-events: none;
+}
+.rp-signoff::after {
+  content: "";
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 50%; height: 45%;
+  background: radial-gradient(circle at bottom right, rgba(255,61,0,0.10), transparent 60%);
+  pointer-events: none;
+}
+.rp-signoff-frame { position: relative; z-index: 1; padding: 28mm 28mm; display: flex; flex-direction: column; height: 297mm; }
+.rp-signoff-top { display: flex; flex-direction: column; align-items: flex-start; gap: 6mm; }
+.rp-signoff-emblem-logo { width: 18mm; height: 18mm; border-radius: 50%; box-shadow: 0 0 10mm rgba(249,98,3,0.35); }
+.rp-signoff-eyebrow { font-size: 9pt; letter-spacing: 6px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; }
+.rp-signoff-heart { margin-top: auto; margin-bottom: auto; padding: 20mm 0; max-width: 150mm; }
+.rp-signoff-title { font-family: var(--rp-serif); font-size: 38pt; font-weight: 700; letter-spacing: -1px; line-height: 1.1; color: var(--rp-fg); margin-bottom: 10mm; }
+.rp-signoff-body { font-size: 11.5pt; color: var(--rp-fg-dim); line-height: 1.8; margin-bottom: 6mm; }
+.rp-signoff-body strong { color: var(--rp-fg); font-weight: 700; }
+.rp-signoff-foot { display: flex; justify-content: space-between; align-items: flex-end; padding-top: 10mm; border-top: 1px solid var(--rp-line); margin-top: auto; }
+.rp-signoff-sender-block { display: flex; flex-direction: column; gap: 1mm; }
+.rp-signoff-sender { font-family: var(--rp-serif); font-size: 15pt; font-weight: 700; color: var(--rp-fg); }
+.rp-signoff-sender-title { font-size: 10pt; color: var(--rp-fg-dim); font-style: italic; }
+.rp-signoff-agency { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-top: 3mm; }
+.rp-signoff-contact { text-align: right; font-size: 9pt; color: var(--rp-fg-mute); display: flex; flex-direction: column; gap: 1mm; }
+.rp-signoff-emblem { font-size: 7pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-top: 3mm; }
 
-/* Print rules ───────────────────────────────────────────────────── */
+/* Print rules */
 @media print {
   html, body { background: var(--rp-bg) !important; }
   .rp-page { margin: 0; box-shadow: none; }
