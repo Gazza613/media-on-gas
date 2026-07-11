@@ -284,7 +284,7 @@ function renderKpiRow(kpis) {
   var kHtml = kpis.map(function(k) {
     return `<div class="rp-kpi ${k.primary ? "rp-kpi-primary" : ""}">
       <div class="rp-kpi-label">${escapeHtmlLocal(k.label)}</div>
-      <div class="rp-kpi-value">${escapeHtmlLocal(k.value)}</div>
+      <div class="rp-kpi-value" style="white-space:nowrap;word-break:keep-all;overflow-wrap:normal;overflow:hidden;max-width:100%;">${escapeHtmlLocal(k.value)}</div>
       ${k.sub ? `<div class="rp-kpi-sub">${escapeHtmlLocal(k.sub)}</div>` : ""}
     </div>`;
   }).join("");
@@ -647,85 +647,143 @@ function renderBofuSection(opts) {
 // SECTION: AUDIENCE (DEMOGRAPHICS)
 // ═══════════════════════════════════════════════════════════════════
 
+// 13-17 always excluded per owner spec — no client report surfaces
+// the under-18 band. Applied at ingest time so no downstream reader
+// has to remember to filter.
+var EXCLUDED_AGES = { "13-17": true };
+var ALLOWED_AGES = ["18-24","25-34","35-44","45-54","55-64","65+"];
+
+// Click-weighted age/gender aggregation, mirrors the dashboard's
+// buildPersona (App.jsx ~6295): every metric is weighted by clicks
+// rather than impressions so the persona reads as "who leaned in",
+// not "who was shown ads". Fixes TikTok reading "Results Attributed:
+// 0" — clicks is the reliable click-through weight even on platforms
+// where the demographics endpoint doesn't split results by age/gender.
 function aggregateAgeGender(rows) {
   var byPlat = {};
   var ageBuckets = {};
   var genderBuckets = { male: 0, female: 0, unknown: 0 };
   (rows || []).forEach(function(r) {
-    var p = r.platform || "Other";
-    if (!byPlat[p]) byPlat[p] = { age: {}, gender: { male: 0, female: 0, unknown: 0 }, impressions: 0, clicks: 0, spend: 0, results: 0 };
-    var bp = byPlat[p];
-    var imps = parseInt(r.impressions || 0, 10);
     var age = String(r.age || "unknown");
-    var gender = String(r.gender || "unknown").toLowerCase();
-    var g = gender === "male" || gender === "m" ? "male" : gender === "female" || gender === "f" ? "female" : "unknown";
-    ageBuckets[age] = (ageBuckets[age] || 0) + imps;
-    genderBuckets[g] += imps;
-    bp.age[age] = (bp.age[age] || 0) + imps;
-    bp.gender[g] += imps;
+    if (EXCLUDED_AGES[age]) return; // hard-drop 13-17 at ingest
+    var p = platformFamily(r.platform || "Other");
+    if (!byPlat[p]) byPlat[p] = { age: {}, gender: { male: 0, female: 0, unknown: 0 }, segMap: {}, impressions: 0, clicks: 0, spend: 0 };
+    var bp = byPlat[p];
+    var clicks = parseInt(r.clicks || 0, 10);
+    var imps = parseInt(r.impressions || 0, 10);
+    var rawGender = String(r.gender || "unknown").toLowerCase();
+    var g = rawGender === "male" || rawGender === "m" ? "male" : rawGender === "female" || rawGender === "f" ? "female" : "unknown";
+    ageBuckets[age] = (ageBuckets[age] || 0) + clicks;
+    genderBuckets[g] += clicks;
+    bp.age[age] = (bp.age[age] || 0) + clicks;
+    bp.gender[g] += clicks;
     bp.impressions += imps;
-    bp.clicks += parseInt(r.clicks || 0, 10);
+    bp.clicks += clicks;
     bp.spend += parseFloat(r.spend || 0);
-    // Results object → sum leads + follows + landingPageViews + appInstalls + pageLikes
-    var res = r.results || {};
-    bp.results += parseFloat(res.leads || 0) + parseFloat(res.follows || 0) + parseFloat(res.landingPageViews || 0) + parseFloat(res.appInstalls || 0) + parseFloat(res.pageLikes || 0);
+    // Age x Gender segment map for the "Best Personas" list. Only
+    // classified cells (real age + real gender) contribute.
+    if (ALLOWED_AGES.indexOf(age) >= 0 && (g === "male" || g === "female")) {
+      var k = age + "|" + g;
+      bp.segMap[k] = (bp.segMap[k] || 0) + clicks;
+    }
   });
   return { byPlatform: byPlat, ageBuckets: ageBuckets, genderBuckets: genderBuckets };
 }
 
 function aggregateRegion(rows) {
   var byRegion = {};
+  var byPlatformRegion = {};
   (rows || []).forEach(function(r) {
-    var reg = String(r.region || "Unknown");
-    if (!byRegion[reg]) byRegion[reg] = { impressions: 0, clicks: 0, spend: 0, results: 0 };
-    byRegion[reg].impressions += parseInt(r.impressions || 0, 10);
-    byRegion[reg].clicks += parseInt(r.clicks || 0, 10);
+    var reg = String(r.region || "").trim();
+    if (!reg || reg.toLowerCase() === "unknown") return;
+    var p = platformFamily(r.platform || "Other");
+    var clicks = parseInt(r.clicks || 0, 10);
+    var imps = parseInt(r.impressions || 0, 10);
+    if (!byRegion[reg]) byRegion[reg] = { impressions: 0, clicks: 0, spend: 0 };
+    byRegion[reg].impressions += imps;
+    byRegion[reg].clicks += clicks;
     byRegion[reg].spend += parseFloat(r.spend || 0);
-    var res = r.results || {};
-    byRegion[reg].results += parseFloat(res.leads || 0) + parseFloat(res.follows || 0) + parseFloat(res.landingPageViews || 0) + parseFloat(res.appInstalls || 0) + parseFloat(res.pageLikes || 0);
+    if (!byPlatformRegion[p]) byPlatformRegion[p] = {};
+    byPlatformRegion[p][reg] = (byPlatformRegion[p][reg] || 0) + clicks;
   });
-  return byRegion;
+  return { byRegion: byRegion, byPlatformRegion: byPlatformRegion };
 }
 
-// Render the audience/demographics section.
+// Render the audience/demographics section. Persona cards mirror the
+// dashboard's TargetingPersonaCard (App.jsx ~723): click-weighted
+// dominant age + share, gender lead + share, top regions, top 3 age
+// x gender segments. Every calculation excludes 13-17 (owner rule).
 function renderAudienceSection(opts) {
   var demo = opts.demographics;
   if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
   var agAgg = aggregateAgeGender(demo.ageGender || []);
   var regAgg = aggregateRegion(demo.region || []);
 
-  // Persona per platform
-  var platforms = Object.keys(agAgg.byPlatform).filter(function(p) { return agAgg.byPlatform[p].impressions > 0; });
-  var personaCards = platforms.map(function(p) {
+  // Persona per platform. Match dashboard's persona keys: only render
+  // Facebook, Instagram, TikTok, Google Ads (in that order) and skip
+  // any platform with zero click signal so a data-sparse platform
+  // doesn't produce a hollow card.
+  var personaOrder = ["Facebook", "Instagram", "TikTok", "Google Ads"];
+  var personaCards = personaOrder.filter(function(p) {
+    return agAgg.byPlatform[p] && agAgg.byPlatform[p].clicks > 0;
+  }).map(function(p) {
     var pb = agAgg.byPlatform[p];
-    // Top age
+    var accent = platformAccent(p);
+    // Dominant age (click-weighted). Already 13-17 free at ingest.
     var topAgeKey = "", topAgeVal = 0;
     Object.keys(pb.age).forEach(function(k) { if (pb.age[k] > topAgeVal) { topAgeVal = pb.age[k]; topAgeKey = k; } });
-    var totalAge = Object.keys(pb.age).reduce(function(s, k) { return s + pb.age[k]; }, 0);
-    var agePct = totalAge > 0 ? (topAgeVal / totalAge * 100) : 0;
-    // Dominant gender
-    var g = pb.gender;
-    var gTotal = g.male + g.female + g.unknown;
-    var dominantGender = g.female > g.male && g.female > g.unknown ? "female" : g.male > g.female && g.male > g.unknown ? "male" : "mixed";
-    var dominantPct = gTotal > 0 ? Math.max(g.male, g.female, g.unknown) / gTotal * 100 : 0;
-    var accent = platformAccent(p);
-    return `<div class="rp-persona">
+    var ageDenom = Object.keys(pb.age).reduce(function(s, k) { return s + pb.age[k]; }, 0);
+    var topAgeShare = ageDenom > 0 ? (topAgeVal / ageDenom * 100) : 0;
+    // Gender lead: female vs male share of classified gender.
+    var gSum = pb.gender.male + pb.gender.female;
+    var femaleShare = gSum > 0 ? (pb.gender.female / gSum * 100) : 0;
+    var maleShare = gSum > 0 ? (pb.gender.male / gSum * 100) : 0;
+    var genderLead = femaleShare > maleShare ? "Female" : (maleShare > 0 ? "Male" : "");
+    var genderShare = Math.max(femaleShare, maleShare);
+    // Top 2 regions for this platform.
+    var pRegs = (regAgg.byPlatformRegion && regAgg.byPlatformRegion[p]) || {};
+    var pRegKeys = Object.keys(pRegs).sort(function(a, b) { return pRegs[b] - pRegs[a]; }).slice(0, 3);
+    var pRegDenom = Object.keys(pRegs).reduce(function(s, k) { return s + pRegs[k]; }, 0);
+    var regionRows = pRegKeys.map(function(rk) {
+      var share = pRegDenom > 0 ? (pRegs[rk] / pRegDenom * 100) : 0;
+      return `<div class="rp-persona-region"><span class="rp-persona-region-name">${escapeHtmlLocal(rk)}</span><span class="rp-persona-region-share">${share.toFixed(2)}%</span></div>`;
+    }).join("");
+    // Top 3 age x gender segments (Best Personas).
+    var segTotal = Object.keys(pb.segMap).reduce(function(s, k) { return s + pb.segMap[k]; }, 0);
+    var segments = Object.keys(pb.segMap).map(function(k) {
+      var parts = k.split("|");
+      return { age: parts[0], gen: parts[1], val: pb.segMap[k], share: segTotal > 0 ? (pb.segMap[k] / segTotal * 100) : 0 };
+    }).sort(function(a, b) { return b.val - a.val; }).slice(0, 3);
+    var segRows = segments.map(function(s, i) {
+      var label = s.age + " " + (s.gen === "female" ? "Female" : "Male");
+      return `<div class="rp-persona-seg"><span class="rp-persona-seg-rank">${i + 1}</span><span class="rp-persona-seg-label">${escapeHtmlLocal(label)}</span><span class="rp-persona-seg-share">${s.share.toFixed(2)}%</span></div>`;
+    }).join("");
+    return `<div class="rp-persona" style="border-color:${accent}55;">
       <div class="rp-persona-plat" style="background:${accent};">${escapeHtmlLocal(p)}</div>
-      <div class="rp-persona-body">
-        <div class="rp-persona-line"><span class="rp-persona-label">Dominant Age Group</span> <span class="rp-persona-value">${escapeHtmlLocal(topAgeKey || "-")} <span class="rp-persona-pct">${agePct.toFixed(1)}%</span></span></div>
-        <div class="rp-persona-line"><span class="rp-persona-label">Gender Skew</span> <span class="rp-persona-value">${escapeHtmlLocal(dominantGender)} <span class="rp-persona-pct">${dominantPct.toFixed(1)}%</span></span></div>
-        <div class="rp-persona-line"><span class="rp-persona-label">Impressions Served</span> <span class="rp-persona-value">${fmtNum(pb.impressions)}</span></div>
-        <div class="rp-persona-line"><span class="rp-persona-label">Results Attributed</span> <span class="rp-persona-value">${fmtNum(pb.results)}</span></div>
+      <div class="rp-persona-hero">
+        <div class="rp-persona-hero-age" style="color:${accent};">${escapeHtmlLocal(topAgeKey || "—")}</div>
+        <div class="rp-persona-hero-caption">Dominant Age${topAgeKey ? " &middot; " + topAgeShare.toFixed(2) + "%" : ""}</div>
       </div>
+      <div class="rp-persona-strip">
+        <div class="rp-persona-strip-tile">
+          <div class="rp-persona-strip-label">Gender Lead</div>
+          <div class="rp-persona-strip-value">${escapeHtmlLocal(genderLead || "—")}</div>
+          <div class="rp-persona-strip-sub" style="color:${accent};">${genderLead ? genderShare.toFixed(2) + "%" : ""}</div>
+        </div>
+        <div class="rp-persona-strip-tile">
+          <div class="rp-persona-strip-label">Total Clicks</div>
+          <div class="rp-persona-strip-value">${fmtNum(pb.clicks)}</div>
+          <div class="rp-persona-strip-sub">click-weighted</div>
+        </div>
+      </div>
+      ${regionRows ? `<div class="rp-persona-block-title">Top Regions</div><div class="rp-persona-regions">${regionRows}</div>` : ""}
+      ${segRows ? `<div class="rp-persona-block-title" style="color:${accent};">Best Personas</div><div class="rp-persona-segs">${segRows}</div>` : ""}
     </div>`;
   }).join("");
 
-  // Age breakdown (global). 13-17 excluded per owner spec — no client
-  // report targets under-18s and surfacing that band creates awkward
-  // optics.
-  var ageOrder = ["18-24","25-34","35-44","45-54","55-64","65+","unknown"];
-  // Age total excludes 13-17 too, else percentages under displayed
-  // bands wouldn't sum to 100.
+  // Global age breakdown. Click-weighted, 13-17 excluded at ingest so
+  // ageOrder here is display-only.
+  var ageOrder = ["18-24","25-34","35-44","45-54","55-64","65+"];
   var ageTotal = ageOrder.reduce(function(s, k) { return s + (agAgg.ageBuckets[k] || 0); }, 0);
   var ageBars = ageOrder.filter(function(k) { return (agAgg.ageBuckets[k] || 0) > 0; }).map(function(k) {
     var v = agAgg.ageBuckets[k] || 0;
@@ -733,30 +791,30 @@ function renderAudienceSection(opts) {
     return `<div class="rp-bar-row">
       <div class="rp-bar-label">${escapeHtmlLocal(k)}</div>
       <div class="rp-bar-track"><div class="rp-bar-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#F96203,#FF3D00);"></div></div>
-      <div class="rp-bar-value">${fmtNum(v)} <span class="rp-bar-pct">${pct.toFixed(1)}%</span></div>
+      <div class="rp-bar-value">${fmtNum(v)} <span class="rp-bar-pct">${pct.toFixed(2)}%</span></div>
     </div>`;
   }).join("");
 
-  // Region breakdown (top 8)
-  var regionKeys = Object.keys(regAgg).sort(function(a, b) { return regAgg[b].impressions - regAgg[a].impressions; }).slice(0, 8);
-  var regionTotal = regionKeys.reduce(function(s, k) { return s + regAgg[k].impressions; }, 0);
+  // Region breakdown (top 8). Click-weighted.
+  var regionKeys = Object.keys(regAgg.byRegion).sort(function(a, b) { return regAgg.byRegion[b].clicks - regAgg.byRegion[a].clicks; }).slice(0, 8);
+  var regionTotal = regionKeys.reduce(function(s, k) { return s + regAgg.byRegion[k].clicks; }, 0);
   var regionBars = regionKeys.map(function(k) {
-    var v = regAgg[k].impressions;
+    var v = regAgg.byRegion[k].clicks;
     var pct = regionTotal > 0 ? (v / regionTotal * 100) : 0;
     return `<div class="rp-bar-row">
       <div class="rp-bar-label">${escapeHtmlLocal(k)}</div>
       <div class="rp-bar-track"><div class="rp-bar-fill" style="width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#4599FF,#00F2EA);"></div></div>
-      <div class="rp-bar-value">${fmtNum(v)} <span class="rp-bar-pct">${pct.toFixed(1)}%</span></div>
+      <div class="rp-bar-value">${fmtNum(v)} <span class="rp-bar-pct">${pct.toFixed(2)}%</span></div>
     </div>`;
   }).join("");
 
   var insight = "";
   if (regionKeys.length && ageOrder.some(function(k) { return agAgg.ageBuckets[k] > 0; })) {
     var topRegion = regionKeys[0];
-    var topRegionPct = regionTotal > 0 ? (regAgg[topRegion].impressions / regionTotal * 100) : 0;
+    var topRegionPct = regionTotal > 0 ? (regAgg.byRegion[topRegion].clicks / regionTotal * 100) : 0;
     var topAgeKeyG = "", topAgeValG = 0;
-    Object.keys(agAgg.ageBuckets).forEach(function(k) { if (agAgg.ageBuckets[k] > topAgeValG) { topAgeValG = agAgg.ageBuckets[k]; topAgeKeyG = k; } });
-    insight = "The perfect target audience for this window is anchored in " + escapeHtmlLocal(topRegion) + " (" + topRegionPct.toFixed(1) + "% of impressions) with the " + escapeHtmlLocal(topAgeKeyG) + " age band the most-served demographic. Refining lookalikes and interest layers to reinforce this signal is likely to compound efficiency in the next window.";
+    ageOrder.forEach(function(k) { if ((agAgg.ageBuckets[k] || 0) > topAgeValG) { topAgeValG = agAgg.ageBuckets[k]; topAgeKeyG = k; } });
+    insight = "The perfect target audience for this window is anchored in " + escapeHtmlLocal(topRegion) + " (" + topRegionPct.toFixed(2) + "% of clicks) with the " + escapeHtmlLocal(topAgeKeyG) + " age band the most engaged demographic. Refining lookalikes and interest layers to reinforce this signal is likely to compound efficiency in the next window.";
   }
 
   return `<section class="rp-page">
@@ -863,22 +921,39 @@ function renderExecutiveSummary(opts) {
     </div>
     <div class="rp-block">
       <div class="rp-block-title">Funnel Investment Split</div>
-      <div class="rp-funnel-splits">
-        <div class="rp-funnel-splits-row">
-          <div class="rp-funnel-splits-label">Top of Funnel (Awareness)</div>
-          <div class="rp-funnel-splits-track"><div class="rp-funnel-splits-fill" style="width:${stagePcts.tofu.toFixed(1)}%;background:linear-gradient(90deg,#F96203,#FF6B00);"></div></div>
-          <div class="rp-funnel-splits-value">${stagePcts.tofu.toFixed(1)}% <span class="rp-funnel-splits-sub">${fmtR(book.byStage.tofu.spend)}</span></div>
+      <div class="rp-block-caption">Where the budget was invested across the three stages of the customer journey and what each stage was structured to deliver.</div>
+      <div class="rp-funnel-cards">
+        <div class="rp-funnel-card" style="border-color:#F96203;">
+          <div class="rp-funnel-card-eyebrow" style="color:#F96203;">Stage 01 &middot; Top of Funnel</div>
+          <div class="rp-funnel-card-title">Awareness &amp; Reach</div>
+          <div class="rp-funnel-card-role">Puts the brand in front of new eyes. Measured in impressions, reach, and cost of getting seen.</div>
+          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#F96203;">${stagePcts.tofu.toFixed(1)}%</span><span class="rp-funnel-card-of">of budget</span></div>
+          <div class="rp-funnel-card-spend">${fmtR(book.byStage.tofu.spend)}</div>
+          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${stagePcts.tofu.toFixed(1)}%;background:linear-gradient(90deg,#F96203,#FF6B00);"></div></div>
+          <div class="rp-funnel-card-result">Delivered <strong>${fmtNum(book.byStage.tofu.impressions)}</strong> impressions${book.byStage.tofu.reach > 0 ? " to " + fmtNum(book.byStage.tofu.reach) + " unique users" : ""}.</div>
         </div>
-        <div class="rp-funnel-splits-row">
-          <div class="rp-funnel-splits-label">Middle of Funnel (Clicks)</div>
-          <div class="rp-funnel-splits-track"><div class="rp-funnel-splits-fill" style="width:${stagePcts.mofu.toFixed(1)}%;background:linear-gradient(90deg,#FF6B00,#FF3D00);"></div></div>
-          <div class="rp-funnel-splits-value">${stagePcts.mofu.toFixed(1)}% <span class="rp-funnel-splits-sub">${fmtR(book.byStage.mofu.spend)}</span></div>
+        <div class="rp-funnel-card" style="border-color:#FF6B00;">
+          <div class="rp-funnel-card-eyebrow" style="color:#FF6B00;">Stage 02 &middot; Middle of Funnel</div>
+          <div class="rp-funnel-card-title">Clicks &amp; Consideration</div>
+          <div class="rp-funnel-card-role">Turns awareness into intent. Measured in click through rate, cost per click, and content engagement.</div>
+          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF6B00;">${stagePcts.mofu.toFixed(1)}%</span><span class="rp-funnel-card-of">of budget</span></div>
+          <div class="rp-funnel-card-spend">${fmtR(book.byStage.mofu.spend)}</div>
+          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${stagePcts.mofu.toFixed(1)}%;background:linear-gradient(90deg,#FF6B00,#FF3D00);"></div></div>
+          <div class="rp-funnel-card-result">Delivered <strong>${fmtNum(book.byStage.mofu.clicks)}</strong> clicks${book.byStage.mofu.impressions > 0 ? " at " + fmtPct(book.byStage.mofu.clicks / book.byStage.mofu.impressions * 100) + " CTR" : ""}.</div>
         </div>
-        <div class="rp-funnel-splits-row">
-          <div class="rp-funnel-splits-label">Bottom of Funnel (Results)</div>
-          <div class="rp-funnel-splits-track"><div class="rp-funnel-splits-fill" style="width:${stagePcts.bofu.toFixed(1)}%;background:linear-gradient(90deg,#FF3D00,#F96203);"></div></div>
-          <div class="rp-funnel-splits-value">${stagePcts.bofu.toFixed(1)}% <span class="rp-funnel-splits-sub">${fmtR(book.byStage.bofu.spend)}</span></div>
+        <div class="rp-funnel-card" style="border-color:#FF3D00;">
+          <div class="rp-funnel-card-eyebrow" style="color:#FF3D00;">Stage 03 &middot; Bottom of Funnel</div>
+          <div class="rp-funnel-card-title">Conversions &amp; Growth</div>
+          <div class="rp-funnel-card-role">Turns intent into measurable business outcomes. Leads captured, app store clicks, followers gained, community reached.</div>
+          <div class="rp-funnel-card-num"><span class="rp-funnel-card-pct" style="color:#FF3D00;">${stagePcts.bofu.toFixed(1)}%</span><span class="rp-funnel-card-of">of budget</span></div>
+          <div class="rp-funnel-card-spend">${fmtR(book.byStage.bofu.spend)}</div>
+          <div class="rp-funnel-card-track"><div class="rp-funnel-card-fill" style="width:${stagePcts.bofu.toFixed(1)}%;background:linear-gradient(90deg,#FF3D00,#F96203);"></div></div>
+          <div class="rp-funnel-card-result">${(function(){var parts=[];if(totalLeads>0)parts.push(fmtNum(totalLeads)+" leads");if(totalFollows>0)parts.push("+"+fmtNum(totalFollows)+" community");if(totalApp>0)parts.push(fmtNum(totalApp)+" app store clicks");if(totalLp>0)parts.push(fmtNum(totalLp)+" landing page clicks");return parts.length?("Delivered <strong>"+parts.join("</strong>, <strong>")+"</strong>."):"No conversion outcomes recorded this window.";})()}</div>
         </div>
+      </div>
+      <div class="rp-funnel-callout">
+        <div class="rp-funnel-callout-eyebrow">How To Read This</div>
+        <p class="rp-body">A well balanced funnel keeps every stage healthy. Overweight the top and there is nowhere for the audience to convert. Overweight the bottom and the pool exhausts because there is no fresh awareness feeding it. The percentages above are the strategic ratio of the reporting window. The rand amounts and outcomes below each bar show what that ratio actually delivered on the ground.</p>
       </div>
     </div>
     <div class="rp-narrative">
@@ -894,11 +969,23 @@ function renderExecutiveSummary(opts) {
 
 function renderClosingNote(opts) {
   var clientName = escapeHtmlLocal(opts.clientName || "Client");
-  var senderName = escapeHtmlLocal(opts.senderName || "");
+  var senderNameRaw = String(opts.senderName || "").trim();
+  var senderName = escapeHtmlLocal(senderNameRaw);
   var senderTitle = escapeHtmlLocal(opts.senderTitle || "");
   var origin = opts.origin || "https://media.gasmarketing.co.za";
   var agencyLogo = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
   var period = escapeHtmlLocal(opts.periodDisplay || "");
+  // Sender-derived contact email so the client sees the person who
+  // actually prepared the report, not the generic grow@ mailbox.
+  // Firstname-lowercased-alphanumeric @ gasmarketing.co.za matches
+  // the internal email convention. Falls back to grow@ when no
+  // sender name is provided.
+  var senderEmail = "grow@gasmarketing.co.za";
+  if (senderNameRaw) {
+    var firstToken = senderNameRaw.split(/\s+/)[0] || "";
+    var handle = firstToken.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (handle.length >= 2) senderEmail = handle + "@gasmarketing.co.za";
+  }
   var book = opts.book;
   var g = book.global;
   var earnedTotal = opts.earnedTotal || 0;
@@ -938,11 +1025,11 @@ function renderClosingNote(opts) {
           <div class="rp-signoff-agency">GAS Marketing Automation</div>
         </div>
         <div class="rp-signoff-contact">
-          <div>grow@gasmarketing.co.za</div>
+          <div>${escapeHtmlLocal(senderEmail)}</div>
           <div>${escapeHtmlLocal(origin.replace(/^https?:\/\//, ""))}</div>
-          <div class="rp-signoff-emblem">Media On GAS · Metrics That Matter</div>
         </div>
       </div>
+      <div class="rp-signoff-bottom-band">Media On GAS &middot; Metrics That Matter</div>
     </div>
   </section>`;
 }
@@ -1106,7 +1193,7 @@ img { max-width: 100%; display: block; }
    32mm tile content width, negative letter-spacing pulls glyphs
    closer, and container overflow hidden means the tile boundary
    truly acts as a clip so no rogue character can push the layout. */
-.rp-kpi-value { font-family: var(--rp-font); font-size: 13pt; font-weight: 900; color: var(--rp-fg); line-height: 1.1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; white-space: nowrap !important; word-break: keep-all !important; overflow-wrap: normal !important; overflow: hidden; text-overflow: clip; max-width: 100%; }
+.rp-kpi-value { font-family: var(--rp-font); font-size: 12pt; font-weight: 900; color: var(--rp-fg); line-height: 1.15; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; white-space: nowrap !important; word-break: keep-all !important; overflow-wrap: normal !important; overflow: hidden; text-overflow: clip; max-width: 100%; display: block; }
 .rp-kpi-primary .rp-kpi-value { color: var(--rp-accent); }
 .rp-kpi-sub { font-size: 8.5pt; color: var(--rp-fg-mute); margin-top: 3mm; letter-spacing: 0.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -1159,15 +1246,32 @@ img { max-width: 100%; display: block; }
 .rp-eco-value { font-family: var(--rp-font); font-size: 15pt; font-weight: 700; color: var(--rp-fg); font-variant-numeric: tabular-nums; }
 
 /* ─────────────── PERSONA (audience) ─────────────── */
+/* Rewritten to mirror dashboard TargetingPersonaCard: hero dominant
+   age, gender + click-share strip, top regions list, best age x
+   gender segments. 2-column grid so up to 4 platforms fit the page. */
 .rp-persona-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4mm; }
-.rp-persona { border: 1px solid var(--rp-line); background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; page-break-inside: avoid; }
-.rp-persona-plat { padding: 3mm 4mm; font-size: 10pt; font-weight: 900; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
-.rp-persona-body { padding: 4mm; display: flex; flex-direction: column; gap: 2.5mm; }
-.rp-persona-line { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 2mm; border-bottom: 1px dotted var(--rp-line); font-size: 9pt; }
-.rp-persona-line:last-child { border-bottom: 0; padding-bottom: 0; }
-.rp-persona-label { color: var(--rp-fg-mute); letter-spacing: 0.5px; }
-.rp-persona-value { color: var(--rp-fg); font-weight: 700; text-transform: capitalize; font-variant-numeric: tabular-nums; }
-.rp-persona-pct { color: var(--rp-accent); font-size: 8.5pt; margin-left: 2mm; }
+.rp-persona { border: 1px solid var(--rp-line); background: var(--rp-card-strong); border-radius: 3mm; overflow: hidden; page-break-inside: avoid; display: flex; flex-direction: column; }
+.rp-persona-plat { padding: 2.5mm 4mm; font-size: 10pt; font-weight: 900; color: #fff; letter-spacing: 2px; text-transform: uppercase; }
+.rp-persona-hero { padding: 4mm 4mm 3mm; text-align: center; border-bottom: 1px solid var(--rp-line); }
+.rp-persona-hero-age { font-size: 30pt; font-weight: 900; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
+.rp-persona-hero-caption { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; margin-top: 3mm; }
+.rp-persona-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; padding: 3mm 4mm 3mm; border-bottom: 1px solid var(--rp-line); }
+.rp-persona-strip-tile { background: rgba(0,0,0,0.25); border-radius: 2mm; padding: 3mm; text-align: center; }
+.rp-persona-strip-label { font-size: 7pt; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; margin-bottom: 2mm; }
+.rp-persona-strip-value { font-size: 11pt; font-weight: 900; color: var(--rp-fg); font-variant-numeric: tabular-nums; }
+.rp-persona-strip-sub { font-size: 8pt; margin-top: 1mm; color: var(--rp-fg-mute); font-weight: 700; }
+.rp-persona-block-title { padding: 3mm 4mm 2mm; font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 900; }
+.rp-persona-regions { padding: 0 4mm 2mm; }
+.rp-persona-region { display: flex; justify-content: space-between; align-items: baseline; padding: 1.6mm 0; border-bottom: 1px dotted var(--rp-line); font-size: 9pt; }
+.rp-persona-region:last-child { border-bottom: 0; }
+.rp-persona-region-name { color: var(--rp-fg); font-weight: 700; }
+.rp-persona-region-share { color: var(--rp-accent); font-weight: 900; font-variant-numeric: tabular-nums; }
+.rp-persona-segs { padding: 0 4mm 4mm; margin-top: auto; }
+.rp-persona-seg { display: grid; grid-template-columns: 6mm 1fr auto; gap: 2mm; align-items: baseline; padding: 1.6mm 0; border-bottom: 1px dotted var(--rp-line); font-size: 9pt; }
+.rp-persona-seg:last-child { border-bottom: 0; }
+.rp-persona-seg-rank { width: 5mm; height: 5mm; border-radius: 50%; background: rgba(249,98,3,0.20); color: var(--rp-fg); font-size: 7.5pt; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; }
+.rp-persona-seg-label { color: var(--rp-fg); font-weight: 700; }
+.rp-persona-seg-share { color: var(--rp-accent); font-weight: 900; font-variant-numeric: tabular-nums; }
 
 /* Bars (age / region) */
 .rp-bars { display: flex; flex-direction: column; gap: 2.5mm; }
@@ -1196,7 +1300,30 @@ img { max-width: 100%; display: block; }
 .rp-creative-metrics { display: flex; flex-direction: column; gap: 1.4mm; font-size: 8pt; color: var(--rp-fg-dim); margin-top: auto; }
 .rp-creative-metrics strong { color: var(--rp-accent); font-weight: 900; font-variant-numeric: tabular-nums; }
 
-/* ─────────────── FUNNEL SPLITS (executive summary) ─────────────── */
+/* ─────────────── FUNNEL CARDS (executive summary) ─────────────── */
+/* Replaces the old inline row bars. Three side-by-side cards, one
+   per funnel stage, with role explanation, percentage of budget,
+   rand spend, mini fill bar, and what that stage actually delivered.
+   Reads clearly for a marketing team without pre-context. */
+.rp-block-caption { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 5mm; font-style: italic; }
+.rp-funnel-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; page-break-inside: avoid; }
+.rp-funnel-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-left: 3px solid; border-radius: 3mm; padding: 4mm; display: flex; flex-direction: column; gap: 2.5mm; page-break-inside: avoid; }
+.rp-funnel-card-eyebrow { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; font-weight: 900; }
+.rp-funnel-card-title { font-size: 11pt; font-weight: 900; color: var(--rp-fg); line-height: 1.2; }
+.rp-funnel-card-role { font-size: 8.5pt; color: var(--rp-fg-dim); line-height: 1.5; font-style: italic; min-height: 15mm; }
+.rp-funnel-card-num { display: flex; align-items: baseline; gap: 2mm; padding-top: 2mm; border-top: 1px solid var(--rp-line); }
+.rp-funnel-card-pct { font-size: 20pt; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.rp-funnel-card-of { font-size: 8pt; color: var(--rp-fg-mute); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.rp-funnel-card-spend { font-size: 11pt; color: var(--rp-fg); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.2px; }
+.rp-funnel-card-track { height: 3mm; background: rgba(0,0,0,0.35); border-radius: 1.5mm; overflow: hidden; }
+.rp-funnel-card-fill { height: 100%; border-radius: 1.5mm; }
+.rp-funnel-card-result { font-size: 9pt; color: var(--rp-fg-dim); line-height: 1.55; }
+.rp-funnel-card-result strong { color: var(--rp-fg); font-weight: 800; }
+.rp-funnel-callout { margin-top: 5mm; padding: 4mm 5mm; background: rgba(249,98,3,0.05); border-left: 3px solid var(--rp-accent); border-radius: 0 3mm 3mm 0; }
+.rp-funnel-callout-eyebrow { font-size: 8pt; letter-spacing: 2.5px; text-transform: uppercase; color: var(--rp-accent); font-weight: 900; margin-bottom: 2.5mm; }
+
+/* Legacy funnel-splits selectors kept in case older cached HTML pages
+   are still served — harmless to include. */
 /* Widths tightened so long money strings like "R1,234,567.89" fit
    inside the value column without spilling into the page margin
    (previously the value overflowed the pill on the executive summary
@@ -1247,6 +1374,10 @@ img { max-width: 100%; display: block; }
 .rp-signoff-agency { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-top: 3mm; }
 .rp-signoff-contact { text-align: right; font-size: 9pt; color: var(--rp-fg-mute); display: flex; flex-direction: column; gap: 1mm; }
 .rp-signoff-emblem { font-size: 7pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-top: 3mm; }
+/* Closing-page emblem band. Pulled out of the contact column and pinned
+   near the physical bottom of the page, larger + more presence per
+   owner spec. Sits below the sender/contact foot with breathing room. */
+.rp-signoff-bottom-band { margin-top: 10mm; padding: 6mm 0 0; border-top: 1px solid var(--rp-line); font-size: 14pt; letter-spacing: 8px; text-transform: uppercase; color: var(--rp-accent); font-weight: 900; text-align: center; }
 
 /* Closing-page CTA. Subtle glass button with a warm accent border and
    an underline-style caption so it reads corporate, not marketing. */

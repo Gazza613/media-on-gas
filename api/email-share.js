@@ -120,9 +120,13 @@ function aggregate(arr) {
 // Pull live top creative ads for the allowed campaigns.
 // opts.perPlatform (default 3) — top N per platform.
 // opts.platformCap (default 3) — cap platforms shown.
+// opts.raw (default false) — if true, ALSO return the unfiltered
+// scored ad array as .raw so the report builder can group by
+// objective (Top 5 per objective) rather than by platform.
 async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile, opts) {
   var perPlatform = (opts && opts.perPlatform) || 3;
   var platformCap = (opts && opts.platformCap) || 3;
+  var wantRaw = !!(opts && opts.raw);
   try {
     var apiKey = process.env.DASHBOARD_API_KEY;
     if (!apiKey) { console.warn("[email-share] DASHBOARD_API_KEY missing, top ads skipped"); return null; }
