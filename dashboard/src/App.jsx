@@ -1727,25 +1727,35 @@ function ShareModal(props){
     }).then(function(r){return r.json();}).then(function(d){
       pdfBusy[1](false);
       if(!(d&&d.ok&&d.html)){try{w.close();}catch(_){}err[1]((d&&d.error)||"Could not build PDF");return;}
-      if(d.shareUrl){shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt||"");}
+      // Deliberately do NOT populate shareUrl / expiresAt from a PDF
+      // response, or the modal flips into the "email draft is ready"
+      // view underneath the popup — which reads as the "email-type
+      // outcome" the DOWNLOAD PDF button was supposed to avoid. Team
+      // gets the share link + draft only by clicking LINK ONLY or
+      // PREVIEW + SEND explicitly.
       // The report builder ships its own print CSS (@page A4, 0 margin,
       // dark brand background). Injecting the old white-background
       // override would wash it out, so we skip the extra <style> when
-      // we're in report mode. The auto-print script is still injected
-      // in both modes so the browser Save-as-PDF dialog opens on load.
+      // we're in report mode.
       var printCss=payload.mode==="report"?"":'\n<style id="gas-print-style">\n@page{size:A4;margin:12mm;}\nhtml,body{background:#ffffff !important;margin:0 !important;padding:0 !important;}\nbody{-webkit-print-color-adjust:exact;print-color-adjust:exact;}\na[href]{word-break:break-word;}\n</style>\n';
-      var printScript='\n<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},450);});<\\/script>\n';
       var html=String(d.html||"");
       if(printCss){
         if(html.indexOf("</head>")>=0)html=html.replace("</head>",printCss+"</head>");
         else html='<!doctype html><html><head><meta charset="utf-8">'+printCss+'</head><body>'+html+'</body></html>';
       }
-      if(html.indexOf("</body>")>=0)html=html.replace("</body>",printScript+"</body>");
-      else html+=printScript;
       try{
         w.document.open();
         w.document.write(html);
         w.document.close();
+        // The child's <load> event already fired for the placeholder,
+        // so an inline window.addEventListener("load", print) inside
+        // the written HTML never re-triggers. Trigger print explicitly
+        // from the parent after we know the document is written.
+        // Delay lets the child paint fonts, resolve <img> requests,
+        // and compute page breaks before Save-as-PDF opens.
+        setTimeout(function(){
+          try{ w.focus(); w.print(); }catch(_){/* user closed the popup */}
+        },900);
       }catch(e){
         err[1]("Could not write report into new window: "+(e&&e.message||"unknown"));
       }
