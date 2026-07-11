@@ -7,6 +7,7 @@ import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain, brandDisplayForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
 import { redisSetIfAbsent } from "./_pulseShared.js";
+import { buildReportHtml } from "./_reportBuilder.js";
 import { createHash } from "crypto";
 
 // Admin-only endpoint. Issues a signed share token, fetches the campaign summary,
@@ -1186,23 +1187,27 @@ export default async function handler(req, res) {
     // nominates reach as the primary KPI. Other fetches are still
     // parallelised below so the email isn't sequential-slow.
     var kpiProfile = await getKpiProfile(clientSlug).catch(function(){ return null; });
-    // PDF-only flag. When true (Share modal's DOWNLOAD PDF button) we
-    // additionally pull placements data so the PDF-only sections can
-    // render. Kept off the email path so a normal send stays fast.
+    // PDF paths need the placements data (the inbox email doesn't).
+    // Two PDF paths carry that need:
+    //   body.pdf === true    → enriched email HTML (legacy PDF button)
+    //   body.mode === "report" → deep-insights report layout
+    // Either flag triggers the extra fetch.
     var wantPdfExtras = body.pdf === true;
+    var wantReportData = body.mode === "report";
+    var needPlacementsFetch = wantPdfExtras || wantReportData;
     var extraFetches = [
       fetchCampaignSummary(req, from, to, campaignIds, campaignNames),
       fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile),
       fetchEcommerce(req, from, to, clientSlug)
     ];
-    if (wantPdfExtras) {
+    if (needPlacementsFetch) {
       extraFetches.push(fetchPlacementsData(req, from, to, campaignIds));
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
     var topAds = results[1];
     var ecommerce = results[2];
-    var placements = wantPdfExtras ? (results[3] || []) : [];
+    var placements = needPlacementsFetch ? (results[3] || []) : [];
 
     // The per-creative breakdown is intentionally NOT precomputed for
     // the email anymore: it is whole-ad / all-placements and cannot
@@ -1259,30 +1264,57 @@ export default async function handler(req, res) {
       } catch (e) { console.warn("[email-share] client logo fetch failed", _abs, String(e && e.message || e)); }
     }
 
-    var html = buildEmailHtml({
-      clientSlug: clientSlug,
-      from: from,
-      to: to,
-      shareUrl: shareUrl,
-      expiresAt: expiresAt,
-      personalMessage: body.personalMessage || "",
-      senderName: body.senderName || "",
-      senderTitle: body.senderTitle || "",
-      recipientName: body.recipientName || "",
-      origin: origin,
-      summary: summary,
-      topAds: topAds,
-      ecommerce: ecommerce,
-      profile: kpiProfile,
-      clientLogo: clientLogo,
-      // PDF-only enrichment. buildEmailHtml renders three additional
-      // blocks (Community Growth, Placement Performance, Campaigns In
-      // This Report) when pdf === true. The inbox email skips them so
-      // day-to-day sends stay lean.
-      pdf: wantPdfExtras,
-      campaigns: (summary && summary.campaigns) || [],
-      placements: placements
-    });
+    // Two rendering paths:
+    //   body.mode === "report" → deep-insights, multi-page A4 PDF
+    //     report with cover page, ToFu/MoFu/BoFu funnel model, per-
+    //     stage detail, and recommendations. Built by
+    //     api/_reportBuilder.js. This is what the Share modal's
+    //     DOWNLOAD PDF button triggers so team can share a proper
+    //     leave-behind with client management teams.
+    //   otherwise → the inbox email HTML (buildEmailHtml). Used by
+    //     both the real Gmail send AND the preview short-circuit for
+    //     the account manager's review.
+    var wantReport = body.mode === "report";
+    var html;
+    if (wantReport) {
+      var clientNameForReport = (brandDisplayForSlug(clientSlug) || String(clientSlug || "")).replace(/[_-]+/g, " ").trim() || "Client";
+      html = buildReportHtml({
+        clientSlug: clientSlug,
+        clientName: clientNameForReport,
+        from: from,
+        to: to,
+        origin: origin,
+        senderName: body.senderName || "",
+        senderTitle: body.senderTitle || "",
+        summary: summary,
+        topAds: topAds,
+        ecommerce: ecommerce,
+        profile: kpiProfile,
+        clientLogo: clientLogo,
+        placements: placements
+      });
+    } else {
+      html = buildEmailHtml({
+        clientSlug: clientSlug,
+        from: from,
+        to: to,
+        shareUrl: shareUrl,
+        expiresAt: expiresAt,
+        personalMessage: body.personalMessage || "",
+        senderName: body.senderName || "",
+        senderTitle: body.senderTitle || "",
+        recipientName: body.recipientName || "",
+        origin: origin,
+        summary: summary,
+        topAds: topAds,
+        ecommerce: ecommerce,
+        profile: kpiProfile,
+        clientLogo: clientLogo,
+        pdf: wantPdfExtras,
+        campaigns: (summary && summary.campaigns) || [],
+        placements: placements
+      });
+    }
 
     // Plain-text alternative for SpamAssassin MIME_HTML_ONLY and text-only mail clients.
     // Same brand resolution as buildEmailHtml so HTML and text stay in sync.

@@ -1714,11 +1714,12 @@ function ShareModal(props){
     payload.emailCc=emailCc[0].trim();
     payload.emailBcc=emailBcc[0].trim();
     payload.preview=true;
-    // Ask the server for the PDF-enriched HTML (adds Community Growth,
-    // Placement Performance, and Per-Campaign tables that the inbox
-    // email intentionally omits). Same endpoint short-circuits on
-    // preview: true so no email is sent.
-    payload.pdf=true;
+    // Route to the deep-insights report builder (api/_reportBuilder.js).
+    // Produces a multi-page A4 document: cover page, executive summary,
+    // funnel model (ToFu / MoFu / BoFu), per-stage detail, placement
+    // performance, campaign detail, top creatives, recommendations,
+    // and sign-off page. Distinct from the inbox email HTML.
+    payload.mode="report";
     fetch(props.apiBase+"/api/email-share",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-session-token":props.session||""},
@@ -1727,11 +1728,18 @@ function ShareModal(props){
       pdfBusy[1](false);
       if(!(d&&d.ok&&d.html)){try{w.close();}catch(_){}err[1]((d&&d.error)||"Could not build PDF");return;}
       if(d.shareUrl){shareUrl[1](d.shareUrl);expiresAt[1](d.expiresAt||"");}
-      var printCss='\n<style id="gas-print-style">\n@page{size:A4;margin:12mm;}\nhtml,body{background:#ffffff !important;margin:0 !important;padding:0 !important;}\nbody{-webkit-print-color-adjust:exact;print-color-adjust:exact;}\na[href]{word-break:break-word;}\n</style>\n';
-      var printScript='\n<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},250);});<\\/script>\n';
+      // The report builder ships its own print CSS (@page A4, 0 margin,
+      // dark brand background). Injecting the old white-background
+      // override would wash it out, so we skip the extra <style> when
+      // we're in report mode. The auto-print script is still injected
+      // in both modes so the browser Save-as-PDF dialog opens on load.
+      var printCss=payload.mode==="report"?"":'\n<style id="gas-print-style">\n@page{size:A4;margin:12mm;}\nhtml,body{background:#ffffff !important;margin:0 !important;padding:0 !important;}\nbody{-webkit-print-color-adjust:exact;print-color-adjust:exact;}\na[href]{word-break:break-word;}\n</style>\n';
+      var printScript='\n<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},450);});<\\/script>\n';
       var html=String(d.html||"");
-      if(html.indexOf("</head>")>=0)html=html.replace("</head>",printCss+"</head>");
-      else html='<!doctype html><html><head><meta charset="utf-8">'+printCss+'</head><body>'+html+'</body></html>';
+      if(printCss){
+        if(html.indexOf("</head>")>=0)html=html.replace("</head>",printCss+"</head>");
+        else html='<!doctype html><html><head><meta charset="utf-8">'+printCss+'</head><body>'+html+'</body></html>';
+      }
       if(html.indexOf("</body>")>=0)html=html.replace("</body>",printScript+"</body>");
       else html+=printScript;
       try{
