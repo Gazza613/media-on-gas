@@ -1747,15 +1747,20 @@ function ShareModal(props){
         w.document.open();
         w.document.write(html);
         w.document.close();
-        // The child's <load> event already fired for the placeholder,
-        // so an inline window.addEventListener("load", print) inside
-        // the written HTML never re-triggers. Trigger print explicitly
-        // from the parent after we know the document is written.
-        // Delay lets the child paint fonts, resolve <img> requests,
-        // and compute page breaks before Save-as-PDF opens.
-        setTimeout(function(){
-          try{ w.focus(); w.print(); }catch(_){/* user closed the popup */}
-        },900);
+        // The report HTML ships its own print trigger inside a <script>
+        // in the child document, so we do NOT schedule window.print
+        // from the parent here. Parent-side setTimeout was tied to the
+        // dashboard tab's JS context; navigating the dashboard away
+        // killed the timer before the print dialog opened, which read
+        // as the popup "bombing out". Legacy pdf-mode still hits this
+        // path but its HTML skeleton doesn't include the trigger — the
+        // conditional below fires the parent-side print only for that
+        // legacy shape, keeping backwards compatibility intact.
+        if (payload.mode !== "report") {
+          setTimeout(function(){
+            try{ w.focus(); w.print(); }catch(_){/* popup closed */}
+          },900);
+        }
       }catch(e){
         err[1]("Could not write report into new window: "+(e&&e.message||"unknown"));
       }

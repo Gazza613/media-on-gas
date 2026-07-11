@@ -1040,6 +1040,45 @@ img { max-width: 100%; display: block; }
 </head>
 <body>
 ${pages}
+<script>
+// Print trigger lives INSIDE the child window so it fires
+// independently of the parent — earlier we scheduled window.print()
+// from the parent's setTimeout, and if the operator navigated the
+// dashboard tab away or closed the modal before the 900ms delay
+// elapsed, the timer was cancelled and the popup sat unprinted
+// (which read as "bombed out"). Now the popup is self-sufficient.
+// waitForImages: we resolve when every <img> has loaded OR errored
+// so a slow ad-image proxy doesn't hold the print dialog hostage.
+(function(){
+  var printed = false;
+  function doPrint(){
+    if (printed) return;
+    printed = true;
+    try { window.focus(); window.print(); } catch(_) {}
+  }
+  function whenImagesReady(cb, timeoutMs){
+    var imgs = Array.prototype.slice.call(document.images || []);
+    if (!imgs.length) { cb(); return; }
+    var remaining = imgs.length;
+    var done = false;
+    function tick(){ if (--remaining <= 0 && !done) { done = true; cb(); } }
+    imgs.forEach(function(img){
+      if (img.complete) { tick(); return; }
+      img.addEventListener("load", tick, { once: true });
+      img.addEventListener("error", tick, { once: true });
+    });
+    // Hard ceiling: even if a thumbnail never resolves, print anyway.
+    setTimeout(function(){ if (!done) { done = true; cb(); } }, timeoutMs || 4000);
+  }
+  function start(){
+    // Small settle delay for layout + font metrics before the print
+    // dialog snapshots the document.
+    whenImagesReady(function(){ setTimeout(doPrint, 300); }, 4000);
+  }
+  if (document.readyState === "complete") start();
+  else window.addEventListener("load", start);
+})();
+</script>
 </body>
 </html>`;
 }
