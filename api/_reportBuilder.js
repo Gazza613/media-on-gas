@@ -936,12 +936,36 @@ function aggregateRegion(rows, campaignObjType) {
 function renderAudienceSection(opts) {
   var demo = opts.demographics;
   if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
-  // Objective-weight the aggregation with the shared campaignObjType
-  // map so AGE / REGION breakdowns tally the same way as the
-  // dashboard's Demographics OBJECTIVE stage.
+  // /api/demographics only applies its campaignIds scope filter when
+  // the caller is client-role. This report fetches with an admin
+  // api-key so we receive the FULL account demographics, then we
+  // filter here to the selected campaigns exactly the way the
+  // dashboard does (App.jsx ~5293-5294 inSel). Without this filter
+  // the persona reads dominated by campaigns the client's report is
+  // NOT actually reporting on (e.g. wrong account or non-selected
+  // campaign that heavy-indexes on 65+).
+  var campaignsList = (opts.summary && opts.summary.campaigns) || [];
+  var selSet = {};
+  campaignsList.forEach(function(c) {
+    var cid = String(c.campaignId || "");
+    if (cid) selSet[cid] = true;
+    var raw = c.rawCampaignId || cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+    if (raw) selSet[raw] = true;
+  });
+  var inSel = function(r) {
+    var cid = String((r && r.campaignId) || "");
+    if (selSet[cid]) return true;
+    var raw = cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+    return !!selSet[raw];
+  };
+  // Client-side scope filter mirrors dashboard exactly. If nothing
+  // selected we bail rather than aggregate the whole account.
+  if (!Object.keys(selSet).length) return "";
+  var ageRows = (demo.ageGender || []).filter(inSel);
+  var regRows = (demo.region || []).filter(inSel);
   var cot = opts.campaignObjType || {};
-  var agAgg = aggregateAgeGender(demo.ageGender || [], cot);
-  var regAgg = aggregateRegion(demo.region || [], cot);
+  var agAgg = aggregateAgeGender(ageRows, cot);
+  var regAgg = aggregateRegion(regRows, cot);
 
   // Persona per platform. Match dashboard's persona keys: only render
   // Facebook, Instagram, TikTok, Google Ads (in that order) and skip
