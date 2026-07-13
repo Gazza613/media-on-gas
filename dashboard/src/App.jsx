@@ -2311,6 +2311,55 @@ function CampaignAuditModal(props){
   };
   useEffect(function(){if(props.open&&view[0]==="kpi"&&props.isSuperadmin)loadKpiProfiles();},[props.open,view[0],props.isSuperadmin]);
 
+  // ---- Custom Outcomes (Learnalot for MVP) -------------------------
+  // Manually-entered KPIs the ad-platform APIs cannot see. Path 3
+  // solution for Learnalot's 8 WhatsApp QualifiedLead events fired
+  // via Conversions API to the WhatsApp Business dataset — Meta does
+  // not surface those events on Marketing Insights so we cannot pull
+  // them programmatically. Operator enters the count each month; the
+  // Summary tab renders them as a tile alongside LEADS when at least
+  // one Learnalot campaign is in the current selection.
+  var CO_CLIENT = "learnalot";
+  var coList=useState([]);
+  var coLoading=useState(false);
+  var coBusy=useState(false);
+  var coErr=useState("");
+  var coMsg=useState("");
+  var coForm=useState({id:"",label:"WhatsApp Qualified Leads",month:"",count:"",cost:"",campaignHint:"",note:""});
+  var loadCustomOutcomes=function(){
+    coLoading[1](true);coErr[1]("");
+    fetch(props.apiBase+"/api/custom-outcomes?client="+CO_CLIENT,{headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){coLoading[1](false);if(d&&d.ok&&Array.isArray(d.outcomes))coList[1](d.outcomes);else coErr[1]((d&&d.error)||"Could not load outcomes");})
+      .catch(function(){coLoading[1](false);coErr[1]("Connection error");});
+  };
+  var saveCustomOutcome=function(){
+    if(coBusy[0])return;
+    var f=coForm[0];
+    if(!f.label.trim()){coErr[1]("Label is required.");return;}
+    if(!/^\d{4}-\d{2}$/.test(f.month)){coErr[1]("Month must be YYYY-MM.");return;}
+    if(f.count===""||isNaN(parseInt(f.count,10))||parseInt(f.count,10)<0){coErr[1]("Count must be a non-negative integer.");return;}
+    coBusy[1](true);coErr[1]("");coMsg[1]("");
+    var body={client:CO_CLIENT,label:f.label.trim(),month:f.month,count:parseInt(f.count,10),cost:f.cost===""?null:parseFloat(f.cost),campaignHint:(f.campaignHint||"").trim(),note:(f.note||"").trim()};
+    if(f.id)body.id=f.id;
+    fetch(props.apiBase+"/api/custom-outcomes",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
+      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp Qualified Leads",month:"",count:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();})
+      .catch(function(){coBusy[1](false);coErr[1]("Connection error");});
+  };
+  var editCustomOutcome=function(o){
+    coForm[1]({id:o.id,label:o.label||"",month:o.month||"",count:String(o.count==null?"":o.count),cost:o.cost==null?"":String(o.cost),campaignHint:o.campaignHint||"",note:o.note||""});
+    coMsg[1]("");coErr[1]("");
+  };
+  var deleteCustomOutcome=function(id,label){
+    if(!window.confirm("Delete outcome '"+label+"'? This cannot be undone."))return;
+    fetch(props.apiBase+"/api/custom-outcomes?client="+CO_CLIENT+"&id="+encodeURIComponent(id),{method:"DELETE",headers:{"x-session-token":props.session||""}})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d&&d.ok){coMsg[1]("Deleted.");setTimeout(function(){coMsg[1]("");},1500);loadCustomOutcomes();}else coErr[1]((d&&d.error)||"Delete failed");})
+      .catch(function(){coErr[1]("Connection error");});
+  };
+  useEffect(function(){if(props.open&&view[0]==="outcomes"&&props.isSuperadmin)loadCustomOutcomes();},[props.open,view[0],props.isSuperadmin]);
+
   var sendInvite=function(){
     if(teamBusy[0])return;
     teamBusy[1](true);inviteNote[1]("");teamErr[1]("");
@@ -2497,6 +2546,7 @@ function CampaignAuditModal(props){
           <button onClick={function(){view[1]("usage");}} style={{background:view[0]==="usage"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="usage"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="usage"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Usage Audit</button>
           {props.isSuperadmin&&<button onClick={function(){view[1]("users");}} style={{background:view[0]==="users"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="users"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="users"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Team Access</button>}
           {props.isSuperadmin&&<button onClick={function(){view[1]("kpi");}} style={{background:view[0]==="kpi"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="kpi"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="kpi"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>KPI Profiles</button>}
+          {props.isSuperadmin&&<button onClick={function(){view[1]("outcomes");}} style={{background:view[0]==="outcomes"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="outcomes"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="outcomes"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Custom Outcomes</button>}
           {props.isSuperadmin&&<button onClick={function(){view[1]("sla");}} style={{background:view[0]==="sla"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="sla"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="sla"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>SLA Nudges</button>}
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -3196,6 +3246,67 @@ function CampaignAuditModal(props){
           </div>}
 
           {kpiLoading[0]&&<div style={{fontSize:12,color:P.label,fontFamily:fm,marginTop:12}}>Loading profiles...</div>}
+        </div>;
+      })()}
+
+      {view[0]==="outcomes"&&props.isSuperadmin&&(function(){
+        var f=coForm[0];
+        var inp={width:"100%",boxSizing:"border-box",background:"rgba(6,2,14,0.6)",border:"1px solid "+P.rule,borderRadius:8,padding:"10px 12px",color:P.txt,fontSize:13,fontFamily:fm,outline:"none"};
+        var lbl={display:"block",fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:P.label,marginBottom:6};
+        var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
+        var cell={padding:"9px 10px",fontSize:11,color:P.txt,fontFamily:fm,borderBottom:"1px solid "+P.rule};
+        var setF=function(patch){coForm[1](Object.assign({},f,patch));};
+        var resetForm=function(){coForm[1]({id:"",label:"WhatsApp Qualified Leads",month:"",count:"",cost:"",campaignHint:"",note:""});};
+        return <div style={{padding:"18px 22px",overflowY:"auto",flex:1,minHeight:0}}>
+          <div style={{fontSize:12,color:P.label,fontFamily:fm,marginBottom:12,lineHeight:1.5}}>
+            Client: <span style={{color:P.txt,fontWeight:700}}>Learnalot</span>. These entries surface as extra tiles on the Summary tab when the tile month falls in the selected date range.
+          </div>
+
+          <div style={{background:"rgba(15,8,26,0.55)",border:"1px solid "+P.rule,borderRadius:12,padding:16,marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:P.ember,marginBottom:12}}>{f.id?"Edit outcome":"Add outcome"}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1.4fr 0.8fr 0.7fr 0.9fr",gap:12,marginBottom:12}}>
+              <div><label style={lbl}>Label</label><input style={inp} value={f.label} onChange={function(e){setF({label:e.target.value});}} placeholder="WhatsApp Qualified Leads"/></div>
+              <div><label style={lbl}>Month (YYYY-MM)</label><input style={inp} value={f.month} onChange={function(e){setF({month:e.target.value});}} placeholder="2026-07"/></div>
+              <div><label style={lbl}>Count</label><input style={inp} value={f.count} onChange={function(e){setF({count:e.target.value});}} placeholder="8" inputMode="numeric"/></div>
+              <div><label style={lbl}>Cost (R, optional)</label><input style={inp} value={f.cost} onChange={function(e){setF({cost:e.target.value});}} placeholder="688.80" inputMode="decimal"/></div>
+            </div>
+            <div style={{marginBottom:12}}><label style={lbl}>Campaign hint (optional)</label><input style={inp} value={f.campaignHint} onChange={function(e){setF({campaignHint:e.target.value});}} placeholder="GAS_Learnalot_META_Leads_WApp_PSI_July_2026"/></div>
+            <div style={{marginBottom:12}}><label style={lbl}>Note (optional)</label><input style={inp} value={f.note} onChange={function(e){setF({note:e.target.value});}} placeholder="Source: Meta dataset UI (Conversions API)"/></div>
+            {coErr[0]&&<div style={{fontSize:11,color:"#ff6b6b",fontFamily:fm,marginBottom:8}}>{coErr[0]}</div>}
+            {coMsg[0]&&<div style={{fontSize:11,color:P.ember,fontFamily:fm,marginBottom:8}}>{coMsg[0]}</div>}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={resetForm} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"9px 16px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase"}}>Clear</button>
+              <button disabled={coBusy[0]} onClick={saveCustomOutcome} style={{background:coBusy[0]?"rgba(249,98,3,0.35)":P.ember,border:"none",borderRadius:8,padding:"9px 18px",color:"#0d0517",fontSize:10,fontWeight:800,fontFamily:fm,cursor:coBusy[0]?"default":"pointer",letterSpacing:1.2,textTransform:"uppercase"}}>{coBusy[0]?"Saving...":(f.id?"Update":"Save outcome")}</button>
+            </div>
+          </div>
+
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:P.label,marginBottom:8}}>Existing outcomes</div>
+          {coLoading[0]?<div style={{fontSize:12,color:P.label,fontFamily:fm}}>Loading outcomes...</div>:
+            (coList[0].length===0?<div style={{fontSize:12,color:P.label,fontFamily:fm,padding:"14px 0"}}>No outcomes yet, use the form above to add the first.</div>:
+              <div style={{border:"1px solid "+P.rule,borderRadius:12,overflow:"hidden"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr>
+                    <th style={hdr}>Label</th><th style={hdr}>Month</th><th style={hdr}>Count</th><th style={hdr}>Cost</th><th style={hdr}>Hint</th><th style={hdr}></th>
+                  </tr></thead>
+                  <tbody>
+                    {coList[0].slice().sort(function(a,b){return String(b.month).localeCompare(String(a.month));}).map(function(o){
+                      return <tr key={o.id}>
+                        <td style={cell}>{o.label}</td>
+                        <td style={cell}>{o.month}</td>
+                        <td style={cell}>{o.count}</td>
+                        <td style={cell}>{o.cost!=null&&o.cost!==""?("R "+Number(o.cost).toFixed(2)):"—"}</td>
+                        <td style={Object.assign({},cell,{fontSize:10,color:P.label,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})} title={o.campaignHint||""}>{o.campaignHint||"—"}</td>
+                        <td style={Object.assign({},cell,{textAlign:"right",whiteSpace:"nowrap"})}>
+                          <button onClick={function(){editCustomOutcome(o);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,padding:"5px 10px",color:P.label,fontSize:9,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,textTransform:"uppercase",marginRight:6}}>Edit</button>
+                          <button onClick={function(){deleteCustomOutcome(o.id,o.label);}} style={{background:"transparent",border:"1px solid rgba(255,107,107,0.4)",borderRadius:6,padding:"5px 10px",color:"#ff6b6b",fontSize:9,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,textTransform:"uppercase"}}>Delete</button>
+                        </td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
         </div>;
       })()}
     </div>
@@ -4068,6 +4179,13 @@ export default function MediaOnGas(){
   var ecoD=useState(null),ecoData=ecoD[0],setEcoData=ecoD[1];
   var ecoL=useState(false),ecoLoading=ecoL[0],setEcoLoading=ecoL[1];
   var ecoE=useState(""),ecoErr=ecoE[0],setEcoErr=ecoE[1];
+  // Custom Outcomes per client (manual KPI entries for events that don't
+  // reach us via any ad-platform API, e.g. Learnalot's WhatsApp
+  // QualifiedLead events fired to Meta's Conversions API dataset). Stored
+  // as { slug: [ {label, month, count, cost, ...}, ... ] }. Fetched from
+  // /api/custom-outcomes and folded into the Objective Highlights grid on
+  // the Summary tab.
+  var coState=useState({}),customOutcomes=coState[0],setCustomOutcomes=coState[1];
   // Ecommerce-tab loader quip. Separate rotation so the copy is about
   // sales/revenue/best-sellers, not generic platform pulling.
   var eq1=useState(QUIRKY_ECOMMERCE_LOADERS[0]),ecoQuip=eq1[0],setEcoQuip=eq1[1];
@@ -5186,6 +5304,19 @@ export default function MediaOnGas(){
       .then(function(d){setEcoLoading(false);if(d&&d.ok){setEcoData(d);}else{setEcoData(null);setEcoErr((d&&(d.reason||d.message||d.error))||"Ecommerce data unavailable");}})
       .catch(function(){setEcoLoading(false);setEcoData(null);setEcoErr("Ecommerce request failed");});
   },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,selectedEcoClient,kpiRev]);
+
+  // Custom Outcomes fetch: pull once per Summary view. Currently only
+  // Learnalot has entries but the endpoint returns any slug we ask for
+  // (empty array if none). For client tokens the server auto-scopes and
+  // ignores the query param, so we still just ask by slug.
+  useEffect(function(){
+    if(!isAuthed())return;
+    if(tab!=="summary")return;
+    fetch(API+"/api/custom-outcomes?client=learnalot",{headers:authHeaders()})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d&&d.ok&&Array.isArray(d.outcomes)){setCustomOutcomes(function(prev){var next=Object.assign({},prev);next[d.client||"learnalot"]=d.outcomes;return next;});}})
+      .catch(function(){});
+  },[tab,session,viewToken]);
 
   var benchmarks={
     meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
@@ -7160,10 +7291,35 @@ export default function MediaOnGas(){
                     </Glass>;})}
                   </div>
                 </div>;
-              })():(objKeys.filter(function(k){return objectives4[k];}).length>0&&<div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+              })():(function(){
+                // Non-profiled Objective Highlights. Renders the standard
+                // objectives4 cards PLUS any active Custom Outcomes for
+                // clients in the current selection (currently Learnalot
+                // only, its 8 WhatsApp QualifiedLead events fired via the
+                // Meta Conversions API are not accessible over any Meta
+                // Marketing API path, so they're entered manually via
+                // Settings → Custom Outcomes and appear here alongside
+                // the API-derived objectives).
+                var activeObjKeys=objKeys.filter(function(k){return objectives4[k];});
+                var learnalotInSel=(computed.allSelected||[]).some(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
+                });
+                var monthsInRange={};
+                if(df&&dt){
+                  var _d=new Date(df+"T00:00:00Z"),_e=new Date(dt+"T00:00:00Z");
+                  if(!isNaN(_d.getTime())&&!isNaN(_e.getTime())){
+                    while(_d<=_e){var _y=_d.getUTCFullYear(),_m=_d.getUTCMonth()+1;monthsInRange[_y+"-"+(_m<10?"0":"")+_m]=1;_d.setUTCMonth(_d.getUTCMonth()+1);}
+                  }
+                }
+                var coArr=(learnalotInSel&&Array.isArray(customOutcomes["learnalot"]))?customOutcomes["learnalot"].filter(function(o){return monthsInRange[o.month];}):[];
+                if(activeObjKeys.length===0&&coArr.length===0)return null;
+                var totalCards=activeObjKeys.length+coArr.length;
+                return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
-                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,objKeys.filter(function(k){return objectives4[k];}).length)+",1fr)",gap:14,marginBottom:20}}>
-                  {objKeys.filter(function(k){return objectives4[k];}).map(function(objName){
+                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
+                  {activeObjKeys.map(function(objName){
                     var od=objectives4[objName];var oc=objCol4[objName]||P.ember;
                     // Community Reach reports CPM (cost per 1,000 reached)
                     // not the spend/reach raw fraction. Every other
@@ -7184,6 +7340,21 @@ export default function MediaOnGas(){
                         {bmTag&&<span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:bmCol}}>{bmTag}</span>}
                       </div>
                     </div>;})}
+                  {coArr.map(function(o){
+                    var oc=P.orchid;
+                    var cost=(o.cost!=null&&o.cost!=="")?Number(o.cost):0;
+                    var count=Number(o.count||0);
+                    var costPer=count>0&&cost>0?(cost/count):0;
+                    return <div key={o.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{o.label}</span></div>
+                      <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(count)}</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>{cost>0?("from "+fR(cost)+" invested"):"manually recorded"}</div>
+                      <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>COST PER RESULT</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?oc:P.caption,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}</div></div>
+                        <span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:oc}}>MANUAL</span>
+                      </div>
+                    </div>;
+                  })}
                 </div>
                 {(function(){var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
                 {(function(){
@@ -7258,7 +7429,7 @@ export default function MediaOnGas(){
                   });
                   return <Insight title="Objective Insights" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
                 })()}
-              </div>)}
+              </div>;})()}
 
               {/* Performance Trendlines, slotted between Objective Insights
                   and Objective Demographics so the same matrix surfaced on
