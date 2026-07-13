@@ -349,6 +349,86 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ?leadprobe=1 — Admin-only diagnostic: dumps every action_type
+  // Meta returns for a specific campaign so we can see exactly what
+  // string a custom Conversions API event (e.g. Learnalot's
+  // "QualifiedLead" event) arrives under. Without this we can't
+  // safely extend isLeadAction() to catch it.
+  //
+  // Optional query params:
+  //   &campaignFilter=<substring>  — case-insensitive name match
+  //   &campaignId=<id>             — exact Meta campaign id (numeric)
+  //   &account=<substring>         — restrict to one Meta account
+  //
+  // Returns per matching campaign: campaign_id, campaign_name,
+  // spend, and the RAW actions[] array + action_values[] +
+  // cost_per_action_type[] + cost_per_unique_action_type[] so the
+  // custom-conversion action_type strings surface verbatim.
+  // ═══════════════════════════════════════════════════════════════
+  if (req.query.leadprobe === "1" && isAdminOrSuperadmin(req.authPrincipal || {})) {
+    var lpFilter = String(req.query.campaignFilter || "").toLowerCase();
+    var lpCid = String(req.query.campaignId || "");
+    var lpAcct = String(req.query.account || "").toLowerCase();
+    var lpTR = JSON.stringify({ since: from, until: to });
+    var lpOut = [];
+    for (var lpi = 0; lpi < metaAccounts.length; lpi++) {
+      var lpAcc = metaAccounts[lpi];
+      if (lpAcct && lpAcc.name.toLowerCase().indexOf(lpAcct) < 0) continue;
+      var lpAccRes = { account: lpAcc.name, accountId: lpAcc.id, campaigns: [], errors: [] };
+      try {
+        // Full breadth of every action-related field Meta exposes on
+        // campaign insights so a custom event under ANY of them is
+        // caught.
+        var lpFields = "campaign_id,campaign_name,spend,impressions,clicks,actions,action_values,conversions,conversion_values,cost_per_action_type,cost_per_unique_action_type,unique_actions,cost_per_conversion";
+        var lpUrl = "https://graph.facebook.com/v25.0/" + lpAcc.id + "/insights?fields=" + lpFields + "&time_range=" + lpTR + "&level=campaign&limit=500&access_token=" + metaToken;
+        var lpNext = lpUrl, lpGuard = 0, lpRows = [];
+        while (lpNext && lpGuard < 10) {
+          lpGuard++;
+          var lpR = await fetch(lpNext);
+          if (!lpR.ok) { lpAccRes.errors.push("HTTP " + lpR.status + " on page " + lpGuard); break; }
+          var lpJ = await lpR.json();
+          if (lpJ && lpJ.error) { lpAccRes.errors.push(lpJ.error.message || lpJ.error.type); break; }
+          if (lpJ && lpJ.data) lpRows = lpRows.concat(lpJ.data);
+          lpNext = lpJ && lpJ.paging && lpJ.paging.next ? lpJ.paging.next : null;
+        }
+        lpRows.forEach(function(row) {
+          var cname = String(row.campaign_name || "").toLowerCase();
+          var cid = String(row.campaign_id || "");
+          if (lpCid && cid !== lpCid) return;
+          if (lpFilter && cname.indexOf(lpFilter) < 0) return;
+          // Distinct action_type strings + values, sorted by value
+          // desc so the "hottest" ones surface at the top for easy
+          // scanning.
+          var actMap = {};
+          (row.actions || []).forEach(function(a) {
+            actMap[a.action_type] = (actMap[a.action_type] || 0) + (parseInt(a.value || 0, 10) || 0);
+          });
+          var actList = Object.keys(actMap).map(function(k) { return { action_type: k, value: actMap[k], caughtByHeuristic: /lead/i.test(k) && !/install|video|post/i.test(k) }; }).sort(function(a, b) { return b.value - a.value; });
+          lpAccRes.campaigns.push({
+            campaign_id: row.campaign_id,
+            campaign_name: row.campaign_name,
+            spend: row.spend,
+            impressions: row.impressions,
+            clicks: row.clicks,
+            actionTypesReturned: actList,
+            rawActions: row.actions || [],
+            rawActionValues: row.action_values || [],
+            rawConversions: row.conversions || [],
+            rawConversionValues: row.conversion_values || [],
+            rawCostPerActionType: row.cost_per_action_type || [],
+            rawUniqueActions: row.unique_actions || []
+          });
+        });
+      } catch (lpe) {
+        lpAccRes.errors.push("probe failed: " + String(lpe && lpe.message || lpe));
+      }
+      if (lpAccRes.campaigns.length > 0 || lpAccRes.errors.length > 0) lpOut.push(lpAccRes);
+    }
+    res.status(200).json({ leadprobe: true, from: from, to: to, filter: lpFilter, campaignId: lpCid, account: lpAcct, hint: "Look at actionTypesReturned per campaign. caughtByHeuristic=true means our isLeadAction() will fold this action_type into the leads total. If your custom event's action_type has caughtByHeuristic=false, we need to extend the heuristic (or add a client-scoped custom lead action allow-list) to include it.", accounts: lpOut });
+    return;
+  }
+
   // Admin-only ad-set optimization_goal probe. Definitively answers
   // "what does Meta actually return as optimization_goal for this
   // campaign's ad sets?" without going through the cached _pageLikeOpt
