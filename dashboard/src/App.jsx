@@ -7748,26 +7748,41 @@ export default function MediaOnGas(){
                   var cn=String(r.campaignName||"").toLowerCase();
                   return cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0;
                 });
-                var totalConv=0,byAge={},byGender={};
+                var bucketTotal=0,byAge={},byGender={};
                 wappRows.forEach(function(r){
                   var mc=(r.results&&r.results.messagingConversations)||0;
                   if(mc<=0)return;
-                  totalConv+=mc;
+                  bucketTotal+=mc;
                   var age=r.age||"unknown";
                   var gen=(r.gender||"unknown").toLowerCase();
                   byAge[age]=(byAge[age]||0)+mc;
                   byGender[gen]=(byGender[gen]||0)+mc;
                 });
-                if(totalConv<=0)return null;
+                if(bucketTotal<=0)return null;
+                // Meta's age/gender breakdown returns conversation counts
+                // per publisher_platform, so summing the buckets inflates
+                // vs the campaign-level total (Ads Manager number). Anchor
+                // the narrative on the same headline number the Objective
+                // Highlights tile uses (max across placements = Meta's
+                // reported campaign total) and keep the demographic
+                // buckets only for their proportional shares.
+                var _headlineConv=0;
+                (computed.allSelected||[]).forEach(function(c){
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  if(!(cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0))return;
+                  var acts=Array.isArray(c.actions)?c.actions:[];var best=0;
+                  for(var _ia=0;_ia<acts.length;_ia++){if(String(acts[_ia].action_type||"").toLowerCase()==="onsite_conversion.messaging_conversation_started_7d"){var _av=parseFloat(acts[_ia].value||0);if(_av>best)best=_av;}}
+                  _headlineConv+=best;
+                });
                 var ageOrder=["13-17","18-24","25-34","35-44","45-54","55-64","65+","unknown"];
-                var ageRows=ageOrder.filter(function(a){return byAge[a];}).map(function(a){return{k:a,v:byAge[a],pct:byAge[a]/totalConv*100};});
-                var genRows=["female","male","unknown"].filter(function(g){return byGender[g];}).map(function(g){return{k:g,v:byGender[g],pct:byGender[g]/totalConv*100};});
+                var ageRows=ageOrder.filter(function(a){return byAge[a];}).map(function(a){return{k:a,v:byAge[a],pct:byAge[a]/bucketTotal*100};});
+                var genRows=["female","male","unknown"].filter(function(g){return byGender[g];}).map(function(g){return{k:g,v:byGender[g],pct:byGender[g]/bucketTotal*100};});
                 var oc=P.mint;
-                var convRate=(totalConv>0&&_waLeadsCount>0)?(_waLeadsCount/totalConv*100):0;
+                var convRate=(_headlineConv>0&&_waLeadsCount>0)?(_waLeadsCount/_headlineConv*100):0;
                 return <div style={{background:P.glass,borderRadius:18,padding:"22px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                   {secHead(oc,"WHATSAPP AUDIENCE",Ic.target(oc,18))}
                   <div style={{fontSize:11.5,color:P.label,fontFamily:fm,lineHeight:1.75,marginBottom:16}}>
-                    {_formLeadsCount>0?fmt(_formLeadsCount)+" PSI Form leads have full demographic attribution.":""} The {fmt(_waLeadsCount)} WhatsApp qualified leads can't be broken down individually, this is the audience of the {fmt(totalConv)} conversations that produced them{convRate>0?", ~"+convRate.toFixed(2)+"% of which converted":""}.
+                    {_formLeadsCount>0?fmt(_formLeadsCount)+" PSI Form leads have full demographic attribution.":""} The {fmt(_waLeadsCount)} WhatsApp qualified leads can't be broken down individually, this is the audience of the {fmt(_headlineConv)} conversations that produced them{convRate>0?", ~"+convRate.toFixed(2)+"% of which converted":""}. Age and gender shares below are proportional (each chart sums to 100% of the tagged conversations Meta returned per bucket).
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                     <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
@@ -7776,7 +7791,7 @@ export default function MediaOnGas(){
                         <div style={{fontSize:8,color:oc,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                       </div>
                       {ageRows.map(function(r){return <div key={r.k} style={{marginBottom:8}}>
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:P.label,fontFamily:fm,marginBottom:3}}><span>{r.k}</span><span>{fmt(r.v)} · {r.pct.toFixed(2)}%</span></div>
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:P.label,fontFamily:fm,marginBottom:3}}><span>{r.k}</span><span>{r.pct.toFixed(2)}%</span></div>
                         <div style={{height:8,background:"rgba(255,255,255,0.06)",borderRadius:4,overflow:"hidden"}}><div style={{width:r.pct+"%",height:"100%",background:oc,borderRadius:4}}></div></div>
                       </div>;})}
                     </div>
@@ -7786,7 +7801,7 @@ export default function MediaOnGas(){
                         <div style={{fontSize:8,color:oc,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
                       </div>
                       {genRows.map(function(r){return <div key={r.k} style={{marginBottom:8}}>
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:P.label,fontFamily:fm,marginBottom:3}}><span>{r.k.charAt(0).toUpperCase()+r.k.slice(1)}</span><span>{fmt(r.v)} · {r.pct.toFixed(2)}%</span></div>
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:P.label,fontFamily:fm,marginBottom:3}}><span>{r.k.charAt(0).toUpperCase()+r.k.slice(1)}</span><span>{r.pct.toFixed(2)}%</span></div>
                         <div style={{height:8,background:"rgba(255,255,255,0.06)",borderRadius:4,overflow:"hidden"}}><div style={{width:r.pct+"%",height:"100%",background:oc,borderRadius:4}}></div></div>
                       </div>;})}
                     </div>
