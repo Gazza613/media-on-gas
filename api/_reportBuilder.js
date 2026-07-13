@@ -443,7 +443,7 @@ function renderTofuSection(opts) {
   var book = opts.book;
   var g = book.global;
   var globalKpis = [
-    { label: "Total Ads Served", value: fmtNum(g.impressions), primary: true },
+    { label: "Ads Served", value: fmtNum(g.impressions), primary: true },
     { label: "Total Reach", value: fmtNum(g.reach), sub: "unique users" },
     { label: "Frequency", value: fmtNumDec(frequencyOf(g), 2) + "x", sub: "per user" },
     { label: "Blended CPM", value: fmtR(cpmOf(g)), sub: "cost per 1,000" }
