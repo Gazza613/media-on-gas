@@ -1534,6 +1534,15 @@ function deriveClientNames(campaigns,activeOnly){
 }
 
 function ShareModal(props){
+  // ESC key dismisses the Share modal so the operator isn't trapped
+  // in it after DOWNLOAD PDF returns from the popup with focus back
+  // on the parent (a case where clicking the modal content did
+  // nothing and there was no visible ✕ button previously).
+  useEffect(function(){
+    var onKey=function(e){if(e.key==="Escape"&&typeof props.onClose==="function")props.onClose();};
+    window.addEventListener("keydown",onKey);
+    return function(){window.removeEventListener("keydown",onKey);};
+  },[props.onClose]);
   // Derive client names; the dropdown only lists clients with an
   // actively-campaigning campaign. allClientNames keeps the full list
   // so the auto-select can still display-case a selected client even
@@ -1900,7 +1909,8 @@ function ShareModal(props){
     </div>
   </div>}
   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
-    <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto"}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto",position:"relative"}}>
+      <button onClick={props.onClose} title="Close (Esc)" aria-label="Close" style={{position:"absolute",top:14,right:14,background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:34,height:34,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,lineHeight:1,zIndex:2}}>×</button>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
       <div style={{fontSize:12,color:P.label,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
 
