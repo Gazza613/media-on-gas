@@ -2325,7 +2325,7 @@ function CampaignAuditModal(props){
   var coBusy=useState(false);
   var coErr=useState("");
   var coMsg=useState("");
-  var coForm=useState({id:"",label:"WhatsApp Qualified Leads",month:"",count:"",cost:"",campaignHint:"",note:""});
+  var coForm=useState({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});
   var loadCustomOutcomes=function(){
     coLoading[1](true);coErr[1]("");
     fetch(props.apiBase+"/api/custom-outcomes?client="+CO_CLIENT,{headers:{"x-session-token":props.session||""}})
@@ -2344,7 +2344,7 @@ function CampaignAuditModal(props){
     if(f.id)body.id=f.id;
     fetch(props.apiBase+"/api/custom-outcomes",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
-      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp Qualified Leads",month:"",count:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();})
+      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();})
       .catch(function(){coBusy[1](false);coErr[1]("Connection error");});
   };
   var editCustomOutcome=function(o){
@@ -3256,7 +3256,7 @@ function CampaignAuditModal(props){
         var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
         var cell={padding:"9px 10px",fontSize:11,color:P.txt,fontFamily:fm,borderBottom:"1px solid "+P.rule};
         var setF=function(patch){coForm[1](Object.assign({},f,patch));};
-        var resetForm=function(){coForm[1]({id:"",label:"WhatsApp Qualified Leads",month:"",count:"",cost:"",campaignHint:"",note:""});};
+        var resetForm=function(){coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});};
         return <div style={{padding:"18px 22px",overflowY:"auto",flex:1,minHeight:0}}>
           <div style={{fontSize:12,color:P.label,fontFamily:fm,marginBottom:12,lineHeight:1.5}}>
             Client: <span style={{color:P.txt,fontWeight:700}}>Learnalot</span>. These entries surface as extra tiles on the Summary tab when the tile month falls in the selected date range.
@@ -3265,7 +3265,7 @@ function CampaignAuditModal(props){
           <div style={{background:"rgba(15,8,26,0.55)",border:"1px solid "+P.rule,borderRadius:12,padding:16,marginBottom:18}}>
             <div style={{fontSize:11,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:P.ember,marginBottom:12}}>{f.id?"Edit outcome":"Add outcome"}</div>
             <div style={{display:"grid",gridTemplateColumns:"1.4fr 0.8fr 0.7fr 0.9fr",gap:12,marginBottom:12}}>
-              <div><label style={lbl}>Label</label><input style={inp} value={f.label} onChange={function(e){setF({label:e.target.value});}} placeholder="WhatsApp Qualified Leads"/></div>
+              <div><label style={lbl}>Label</label><input style={inp} value={f.label} onChange={function(e){setF({label:e.target.value});}} placeholder="WhatsApp PSI Leads"/></div>
               <div><label style={lbl}>Month (YYYY-MM)</label><input style={inp} value={f.month} onChange={function(e){setF({month:e.target.value});}} placeholder="2026-07"/></div>
               <div><label style={lbl}>Count</label><input style={inp} value={f.count} onChange={function(e){setF({count:e.target.value});}} placeholder="8" inputMode="numeric"/></div>
               <div><label style={lbl}>Cost (R, optional)</label><input style={inp} value={f.cost} onChange={function(e){setF({cost:e.target.value});}} placeholder="688.80" inputMode="decimal"/></div>
@@ -7375,6 +7375,13 @@ export default function MediaOnGas(){
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
                   {activeObjKeys.map(function(objName){
                     var od=objectives4[objName];var oc=objCol4[objName]||P.ember;
+                    // Learnalot-specific relabel: on this client, the
+                    // Leads objective is exclusively PSI Lead Form leads
+                    // (the WhatsApp campaign's leads live on the
+                    // separate WhatsApp PSI Leads Custom Outcome tile),
+                    // so the tile carries the more specific label. Every
+                    // other client keeps the generic "Leads" label.
+                    var displayObjName=(learnalotInSel&&objName==="Leads")?"PSI Lead Form Leads":objName;
                     // Community Reach reports CPM (cost per 1,000 reached)
                     // not the spend/reach raw fraction. Every other
                     // objective keeps the standard spend/result formula.
@@ -7395,7 +7402,7 @@ export default function MediaOnGas(){
                       return bits.length?bits.join(" · "):"";
                     })():"";
                     return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{objName}</span></div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{displayObjName}</span></div>
                       <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}{prevResults!==null&&deltaChip(od.results,prevResults,false)}</div>
                       <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:_waSub?4:14}}>from {fR(od.spend)} invested</div>
                       {_waSub&&<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginBottom:12,lineHeight:1.4}}>{_waSub}</div>}
