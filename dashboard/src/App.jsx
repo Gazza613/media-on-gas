@@ -7526,6 +7526,31 @@ export default function MediaOnGas(){
                 </div>}
                 {(function(){var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
                 {(function(){
+                  // Learnalot: the standRow frame is LEADS-first, not the
+                  // generic multi-objective mix. The client's two lead
+                  // paths (PSI Form leads via Meta Marketing API + manual
+                  // WhatsApp qualified leads via Custom Outcomes) are
+                  // compared head-to-head on volume, on CPL, and rolled
+                  // into a blended total. Non-Learnalot clients keep the
+                  // original multi-objective standRow.
+                  if(showLearnalotOctet){
+                    var _formVol=formLeadsCount,_waVol=waLeadsCount;
+                    var _formCpl=formLeadsCount>0?(formLeadsSpend/formLeadsCount):0;
+                    var _waCpl=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
+                    var _blendedCpl=totalLeadsCount>0?(totalLeadsSpend/totalLeadsCount):0;
+                    var _topVolCard=(_formVol>=_waVol&&_formVol>0)
+                      ?stand("HIGHEST VOLUME","PSI Form Leads, "+fmt(_formVol),P.rose)
+                      :(_waVol>0?stand("HIGHEST VOLUME","WhatsApp PSI Leads, "+fmt(_waVol),P.orchid):null);
+                    var _bestEffPool=[];
+                    if(_formCpl>0)_bestEffPool.push({k:"PSI Form Leads",cpl:_formCpl,col:P.rose});
+                    if(_waCpl>0)_bestEffPool.push({k:"WhatsApp PSI Leads",cpl:_waCpl,col:P.orchid});
+                    _bestEffPool.sort(function(a,b){return a.cpl-b.cpl;});
+                    var _bestEff=_bestEffPool[0]||null;
+                    var _bestEffCard=_bestEff?stand("BEST EFFICIENCY",_bestEff.k+", "+fR(_bestEff.cpl)+"/lead",_bestEff.col):null;
+                    var _blendedCard=_blendedCpl>0?stand("BLENDED CPL",fR(_blendedCpl),P.solar):null;
+                    var _totalCard=stand("TOTAL LEADS",fmt(totalLeadsCount),P.ember);
+                    return standRow([_topVolCard,_bestEffCard,_blendedCard,_totalCard]);
+                  }
                   var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};
                   var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;
                   var topVol=active.slice().sort(function(a,b){return objectives4[b].results-objectives4[a].results;})[0];
