@@ -50,7 +50,15 @@ function extractResults(actions, pageLikeOpt) {
     pageLikes: pl,
     postReactions: map["post_reaction"] || 0,
     landingPageViews: map["landing_page_view"] || 0,
-    follows: map["follow"] || map["onsite_conversion.follow"] || 0
+    follows: map["follow"] || map["onsite_conversion.follow"] || 0,
+    // Meta CAPI messaging events attributed to a campaign. Same 7d
+    // window Meta uses in Ads Manager for "New conversations". Feeds
+    // the Learnalot WhatsApp Audience demographic panel (breakdown of
+    // conversations by age / gender, as a proxy for the QualifiedLead
+    // events which can't be broken down individually).
+    messagingConversations: map["onsite_conversion.messaging_conversation_started_7d"] || 0,
+    messagingFirstReplies: map["onsite_conversion.messaging_first_reply"] || 0,
+    messagingEngaged3: map["onsite_conversion.messaging_user_depth_3_message_send"] || 0
   };
 }
 

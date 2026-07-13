@@ -7368,8 +7368,21 @@ export default function MediaOnGas(){
                 var waIsCap=function(o){var s=String(o&&o.label||"").toLowerCase();return s.indexOf("whatsapp")>=0||s.indexOf("wapp")>=0||s.indexOf(" wa ")>=0;};
                 var waLeadsCount=coArr.reduce(function(t,o){return t+(waIsCap(o)?Number(o.count||0):0);},0);
                 var showConvRateTile=waConversations>0&&waLeadsCount>0;
+                // Total (blended) leads tile — only shown on Learnalot,
+                // and only when BOTH lead-form leads (Meta Marketing API,
+                // objectives4.Leads) AND WhatsApp qualified leads (manual
+                // Custom Outcome) are present. Blended CPL divides the
+                // combined spend of both campaigns by the combined lead
+                // count so the client sees a single "total leads at CPL"
+                // read that folds both channels together.
+                var leadsObjRec=objectives4["Leads"]||null;
+                var formLeadsCount=leadsObjRec?parseFloat(leadsObjRec.results||0):0;
+                var formLeadsSpend=leadsObjRec?parseFloat(leadsObjRec.spend||0):0;
+                var totalLeadsCount=formLeadsCount+waLeadsCount;
+                var totalLeadsSpend=formLeadsSpend+waSpend;
+                var showTotalLeadsTile=learnalotInSel&&formLeadsCount>0&&waLeadsCount>0;
                 if(activeObjKeys.length===0&&coArr.length===0)return null;
-                var totalCards=activeObjKeys.length+coArr.length+(showConvRateTile?1:0);
+                var totalCards=activeObjKeys.length+coArr.length+(showConvRateTile?1:0)+(showTotalLeadsTile?1:0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
@@ -7436,6 +7449,19 @@ export default function MediaOnGas(){
                       </div>
                     </div>;
                   })}
+                  {showTotalLeadsTile&&(function(){
+                    var oc=P.solar;
+                    var blendedCpl=totalLeadsCount>0?totalLeadsSpend/totalLeadsCount:0;
+                    return <div key="wa-total-leads" style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>Total Leads (blended)</span></div>
+                      <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(totalLeadsCount)}</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>{fmt(formLeadsCount)} form + {fmt(waLeadsCount)} WhatsApp · from {fR(totalLeadsSpend)} invested</div>
+                      <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>BLENDED COST PER LEAD</div><div style={{fontSize:18,fontWeight:900,color:blendedCpl>0?oc:P.caption,fontFamily:fm}}>{blendedCpl>0?fR(blendedCpl):"-"}</div></div>
+                        <span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:oc}}>BLENDED</span>
+                      </div>
+                    </div>;
+                  })()}
                   {showConvRateTile&&(function(){
                     // Conversation → Lead conversion. How many of the
                     // paid-media-driven WhatsApp conversations actually
@@ -7643,6 +7669,88 @@ export default function MediaOnGas(){
                   the two on the Summary flow. Wrapped in its own Glass
                   card to match section styling. */}
               {demoBlocks&&demoBlocks.objectiveBlock&&<div style={{background:P.glass,borderRadius:18,padding:"22px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>{demoBlocks.objectiveBlock}</div>}
+
+              {/* Learnalot-only WhatsApp Audience panel. The 8 CAPI-fired
+                  QualifiedLead events can't be broken down by demographic
+                  (no Meta public-API path exposes per-event dataset data),
+                  so this panel shows the age/gender split of the WhatsApp
+                  conversations that produced them — the closest available
+                  proxy. Same 7d attribution window Meta uses in Ads
+                  Manager. Gated on demoData being present AND a Learnalot
+                  WhatsApp campaign being in the current selection. */}
+              {(function(){
+                if(!demoData||!Array.isArray(demoData.ageGender))return null;
+                var learnalotWApp=(computed.allSelected||[]).some(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return (an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0)
+                    &&(cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0);
+                });
+                if(!learnalotWApp)return null;
+                // Recompute WhatsApp Marketing-API conversations + manual
+                // qualified-lead count + PSI Form leads locally so the
+                // narrative caption doesn't rely on the Objective
+                // Highlights IIFE's scope (they're separate branches of
+                // the render tree).
+                var _monthsInRange={};
+                if(df&&dt){var _d=new Date(df+"T00:00:00Z"),_e=new Date(dt+"T00:00:00Z");if(!isNaN(_d.getTime())&&!isNaN(_e.getTime())){while(_d<=_e){var _y=_d.getUTCFullYear(),_m=_d.getUTCMonth()+1;_monthsInRange[_y+"-"+(_m<10?"0":"")+_m]=1;_d.setUTCMonth(_d.getUTCMonth()+1);}}}
+                var _coArr=Array.isArray(customOutcomes["learnalot"])?customOutcomes["learnalot"].filter(function(o){return _monthsInRange[o.month];}):[];
+                var _waLeadsCount=_coArr.reduce(function(t,o){var s=String(o.label||"").toLowerCase();return t+((s.indexOf("whatsapp")>=0||s.indexOf("wapp")>=0||s.indexOf(" wa ")>=0)?Number(o.count||0):0);},0);
+                var _formLeadsCount=0;
+                (computed.allSelected||[]).forEach(function(c){
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  var isWApp=cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0;
+                  if(!isWApp&&cn.indexOf("lead")>=0)_formLeadsCount+=parseFloat(c.leads||0);
+                });
+                var wappRows=demoData.ageGender.filter(function(r){
+                  var cn=String(r.campaignName||"").toLowerCase();
+                  return cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0;
+                });
+                var totalConv=0,byAge={},byGender={};
+                wappRows.forEach(function(r){
+                  var mc=(r.results&&r.results.messagingConversations)||0;
+                  if(mc<=0)return;
+                  totalConv+=mc;
+                  var age=r.age||"unknown";
+                  var gen=(r.gender||"unknown").toLowerCase();
+                  byAge[age]=(byAge[age]||0)+mc;
+                  byGender[gen]=(byGender[gen]||0)+mc;
+                });
+                if(totalConv<=0)return null;
+                var ageOrder=["13-17","18-24","25-34","35-44","45-54","55-64","65+","unknown"];
+                var ageRows=ageOrder.filter(function(a){return byAge[a];}).map(function(a){return{k:a,v:byAge[a],pct:byAge[a]/totalConv*100};});
+                var genRows=["female","male","unknown"].filter(function(g){return byGender[g];}).map(function(g){return{k:g,v:byGender[g],pct:byGender[g]/totalConv*100};});
+                var oc=P.mint;
+                var convRate=(totalConv>0&&_waLeadsCount>0)?(_waLeadsCount/totalConv*100):0;
+                return <div style={{background:P.glass,borderRadius:18,padding:"22px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
+                  {secHead(oc,"WHATSAPP AUDIENCE",Ic.target(oc,18))}
+                  <div style={{fontSize:11.5,color:P.label,fontFamily:fm,lineHeight:1.75,marginBottom:16}}>
+                    {_formLeadsCount>0?fmt(_formLeadsCount)+" PSI Form leads have full demographic attribution.":""} The {fmt(_waLeadsCount)} WhatsApp qualified leads can't be broken down individually, this is the audience of the {fmt(totalConv)} conversations that produced them{convRate>0?", ~"+convRate.toFixed(2)+"% of which converted":""}.
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                    <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                        <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>By Age Group</div>
+                        <div style={{fontSize:8,color:oc,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                      </div>
+                      {ageRows.map(function(r){return <div key={r.k} style={{marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:P.label,fontFamily:fm,marginBottom:3}}><span>{r.k}</span><span>{fmt(r.v)} · {r.pct.toFixed(2)}%</span></div>
+                        <div style={{height:8,background:"rgba(255,255,255,0.06)",borderRadius:4,overflow:"hidden"}}><div style={{width:r.pct+"%",height:"100%",background:oc,borderRadius:4}}></div></div>
+                      </div>;})}
+                    </div>
+                    <div style={{background:"linear-gradient(145deg,#16091f,#0b0418)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)"}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                        <div style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Gender Split</div>
+                        <div style={{fontSize:8,color:oc,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>100% SPLIT</div>
+                      </div>
+                      {genRows.map(function(r){return <div key={r.k} style={{marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:P.label,fontFamily:fm,marginBottom:3}}><span>{r.k.charAt(0).toUpperCase()+r.k.slice(1)}</span><span>{fmt(r.v)} · {r.pct.toFixed(2)}%</span></div>
+                        <div style={{height:8,background:"rgba(255,255,255,0.06)",borderRadius:4,overflow:"hidden"}}><div style={{width:r.pct+"%",height:"100%",background:oc,borderRadius:4}}></div></div>
+                      </div>;})}
+                    </div>
+                  </div>
+                </div>;
+              })()}
 
               {/* Targeting Standouts block removed from Summary, lives on
                   the Targeting tab instead. */}
