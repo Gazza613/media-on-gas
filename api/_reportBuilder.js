@@ -95,6 +95,13 @@ function funnelStageFor(camp) {
 function getObj(camp) {
   var canon = String((camp && camp.objective) || "").toLowerCase();
   var n = String((camp && camp.campaignName) || "").toLowerCase();
+  // WhatsApp / messaging campaigns route to their own bucket BEFORE the
+  // generic "lead" name match, so a campaign like
+  // GAS_Learnalot_META_Leads_WApp_... no longer contaminates the
+  // Leads bucket's spend (its Meta-attributed c.leads is 0, its
+  // qualified-lead result comes through Custom Outcomes / book.whatsapp
+  // instead). Mirrors the dashboard's App.jsx classifier.
+  if (n.indexOf("_wapp_") >= 0 || n.indexOf("wapp_") >= 0 || n.indexOf("_whatsapp_") >= 0 || n.indexOf(" whatsapp ") >= 0 || n.indexOf("_wa_") >= 0) return "WhatsApp Conversations";
   if (n.indexOf("follow/like-audience") >= 0 || /(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)) return "Community Reach";
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0) return "Clicks to App Store";
   if (n.indexOf("follower") >= 0 || n.indexOf("page like") >= 0 || n.indexOf("pagelikes") >= 0 || n.indexOf("_like_") >= 0 || n.indexOf("_like ") >= 0 || n.indexOf("paidsocial_like") >= 0 || n.indexOf("like_facebook") >= 0 || n.indexOf("like_instagram") >= 0) return "Followers & Likes";
@@ -747,7 +754,20 @@ function renderBofuSection(opts) {
   var formLeadsBucket = byObj["Leads"] && byObj["Leads"].global ? byObj["Leads"].global : null;
   var formLeadsCount = formLeadsBucket ? (formLeadsBucket.result || 0) : 0;
   var formLeadsSpend = formLeadsBucket ? (formLeadsBucket.spend || 0) : 0;
-  var showLearnalotOctet = _isLearnalot && (formLeadsCount > 0 || waLeadTotal > 0 || (wa && wa.conversations > 0));
+  // Render the Learnalot octet whenever the report is FOR Learnalot
+  // (even if customOutcomes came back empty from Redis for that
+  // window). The tiles then show 0 / "—" rather than falling back to
+  // the standard vertical-sub layout that hides the leads picture.
+  var showLearnalotOctet = _isLearnalot;
+  try {
+    console.log("[report] Learnalot BoFu render", {
+      slug: opts.clientSlug, from: opts.from, to: opts.to,
+      formLeadsCount: formLeadsCount, formLeadsSpend: formLeadsSpend,
+      waLeadTotal: waLeadTotal, coListLen: coList.length,
+      waConversations: (wa && wa.conversations) || 0,
+      isLearnalot: _isLearnalot
+    });
+  } catch (_) { /* logging is best-effort */ }
 
   if (showLearnalotOctet) {
     // ── OCTET (2×4 tiles) ──────────────────────────────────────────
@@ -845,16 +865,22 @@ function renderBofuSection(opts) {
       <div class="rp-bofu-sub-desc" style="line-height:1.6;">${_narLines.join(" ")}</div>
     </div>`;
 
-    // Wrap the whole Learnalot block in a single sub so the section's
-    // filter(Boolean).join("") logic still stitches it into subsHtml.
-    subs.push(`<div class="rp-bofu-sub" style="padding-bottom:0;border-bottom:none;">
-      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Captured</div></div>
-      <div class="rp-bofu-sub-desc">Learnalot runs two lead paths in parallel: PSI Form Leads via Meta lead forms (full platform attribution) and WhatsApp PSI Leads via CAPI QualifiedLead events on the client&rsquo;s Meta dataset (event-scoped, no per-lead demographic attribution).</div>
+    // Push each piece as its own sub — a single wrapper with the
+    // whole Learnalot layout was too tall for `.rp-bofu-sub`'s
+    // `page-break-inside: avoid` and the browser pushed it off-page,
+    // leaving section 03 blank. Separated pieces page-break naturally
+    // between them.
+    subs.push(`<div class="rp-bofu-sub" style="page-break-inside:avoid;">
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Captured</div><div class="rp-bofu-sub-total">${fmtNum(_totalLeads)}</div></div>
+      <div class="rp-bofu-sub-desc">Learnalot runs two lead paths in parallel: PSI Form Leads via Meta lead forms (full platform attribution) and WhatsApp PSI Leads via CAPI QualifiedLead events on the client&rsquo;s Meta dataset (event-scoped, no per-lead demographic attribution). The tiles below show each path independently plus a blended total that matches the dashboard Total Leads (blended) card.</div>
       ${_octet}
-      ${_barBlock}
-      ${_standRow}
-      ${_narrative}
     </div>`);
+    if (_barBlock) subs.push(_barBlock);
+    subs.push(`<div class="rp-bofu-sub" style="page-break-inside:avoid;">
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Standouts</div></div>
+      ${_standRow}
+    </div>`);
+    subs.push(_narrative);
   } else {
     // Non-Learnalot: keep the existing Leads Captured sub layout.
     subs.push(renderBofuObjective(byObj["Leads"], {
