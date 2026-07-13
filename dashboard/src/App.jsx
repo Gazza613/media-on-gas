@@ -6884,6 +6884,32 @@ export default function MediaOnGas(){
             // across the full media mix instead of silently hiding Google.
             var blFreq=(m.reach+t.reach+computed.gd.reach)>0?(m.impressions+t.impressions+computed.gd.impressions)/(m.reach+t.reach+computed.gd.reach):0;
 
+            // Meta CAPI messaging conversations attributed to a campaign
+            // are returned inside camp.actions as
+            // onsite_conversion.messaging_conversation_started_7d — same
+            // attribution window Meta uses in Ads Manager for the "New
+            // conversations" column. Extract the max across placements
+            // (mirrors the shared _extractMaxByType logic in
+            // api/_pulseShared.js). Used to route wapp/whatsapp campaigns
+            // to their own "WhatsApp Conversations" tile.
+            var _msgConvOf=function(camp){
+              var acts=camp&&Array.isArray(camp.actions)?camp.actions:[];
+              var best=0;
+              for(var _a=0;_a<acts.length;_a++){
+                var t=String(acts[_a].action_type||"").toLowerCase();
+                if(t==="onsite_conversion.messaging_conversation_started_7d"){
+                  var v=parseFloat(acts[_a].value||0);if(v>best)best=v;
+                }
+              }
+              return best;
+            };
+            var _isWhatsAppCamp=function(name){
+              var s=String(name||"").toLowerCase();
+              return s.indexOf("_wapp_")>=0||s.indexOf(" wapp ")>=0||s.indexOf("|wapp")>=0
+                ||s.indexOf("_whatsapp_")>=0||s.indexOf(" whatsapp ")>=0||s.indexOf("|whatsapp")>=0
+                ||s.indexOf("wapp_")>=0||s.indexOf("_wa_")>=0||s.indexOf("wa_msg")>=0;
+            };
+
             var objectives4={};sel.forEach(function(camp){
               var obj="Traffic";
               // Backend already classifies every row with a canonical
@@ -6899,12 +6925,15 @@ export default function MediaOnGas(){
               // Name detection is authoritative per
               // project_objective_classification, so every name pattern
               // runs ahead of canon (not just Community Reach). Priority:
-              // Community Reach (audience + Reach tags), AppInstall,
-              // Followers, Leads, LandingPage. AppInstall is matched
-              // BEFORE Followers so a campaign tagged
+              // WhatsApp (routes messaging campaigns to their own tile
+              // BEFORE lead detection so a "Leads_WApp" campaign is not
+              // double-counted as a lead-form campaign), Community Reach,
+              // AppInstall, Followers, Leads, LandingPage. AppInstall is
+              // matched BEFORE Followers so a campaign tagged
               // ..._AppInstall_..._Follower-Audiences_... lands in App
               // Store, not Followers or Community Reach.
-              if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
+              if(_isWhatsAppCamp(n))obj="WhatsApp Conversations";
+              else if(n.indexOf("follow/like-audience")>=0||n.indexOf("follow_like_audience")>=0||n.indexOf("follow-like-audience")>=0||n.indexOf("like-audience")>=0||/(^|[_\s|\-])reach([_\s|\-]|$)/.test(n)||(n.indexOf("reach")>=0&&n.indexOf("community")>=0))obj="Community Reach";
               else if(n.indexOf("appinstal")>=0||n.indexOf("app install")>=0||n.indexOf("app_install")>=0)obj="Clicks to App Store";
               else if(n.indexOf("follower")>=0||n.indexOf("_like_")>=0||n.indexOf("_like ")>=0||n.indexOf("paidsocial_like")>=0||n.indexOf("like_facebook")>=0||n.indexOf("like_instagram")>=0)obj="Followers & Likes";
               else if(n.indexOf("lead")>=0||n.indexOf("pos")>=0)obj="Leads";
@@ -6918,6 +6947,7 @@ export default function MediaOnGas(){
               objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);objectives4[obj].reach+=parseFloat(camp.reach||0);
               var result;
               if(obj==="Leads"){result=parseFloat(camp.leads||0);}
+              else if(obj==="WhatsApp Conversations"){result=_msgConvOf(camp);}
               else if(obj==="Followers & Likes"){result=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);if(result===0&&camp.platform==="Instagram"){var igFL1=findIgGrowth(camp.campaignName,pages);if(igFL1>0)result=igFL1;}}
               else if(obj==="Community Reach"){result=parseFloat(camp.reach||0);}
               else{result=parseFloat(camp.clicks||0);}
@@ -6982,9 +7012,9 @@ export default function MediaOnGas(){
             var platOrd4={"Facebook":0,"Instagram":1,"TikTok":2,"Google Display":3,"YouTube":4};
             var platCol4={"Facebook":P.fb,"Instagram":P.ig,"TikTok":P.tt,"Google Display":P.gd,"YouTube":P.lava};
             var platShort={"Facebook":"FB","Instagram":"IG","TikTok":"TT","Google Display":"GD","YouTube":"YT"};
-            var objKeys=["Clicks to App Store","Landing Page Clicks","Followers & Likes","Leads","Community Reach"];
-            var objCol4={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.momoYellow,"Leads":P.rose,"Followers & Likes":P.tt};
-            var objCL4={"Clicks to App Store":"COST PER CLICK","Landing Page Clicks":"COST PER CLICK","Community Reach":"COST PER 1,000 REACHED","Leads":"COST PER LEAD","Followers & Likes":"COST PER FOLLOWER"};
+            var objKeys=["Clicks to App Store","Landing Page Clicks","Followers & Likes","Leads","WhatsApp Conversations","Community Reach"];
+            var objCol4={"Clicks to App Store":P.fb,"Landing Page Clicks":P.cyan,"Community Reach":P.momoYellow,"Leads":P.rose,"Followers & Likes":P.tt,"WhatsApp Conversations":P.mint};
+            var objCL4={"Clicks to App Store":"COST PER CLICK","Landing Page Clicks":"COST PER CLICK","Community Reach":"COST PER 1,000 REACHED","Leads":"COST PER LEAD","Followers & Likes":"COST PER FOLLOWER","WhatsApp Conversations":"COST PER CONVERSATION"};
 
             var sortedPlats=Object.keys(platBreak).sort(function(a,b){return (platOrd4[a]||9)-(platOrd4[b]||9);});
             var spendData=sortedPlats.map(function(pl){return{name:platShort[pl]||pl,fullName:pl,value:platBreak[pl].spend,color:platCol4[pl]||P.ember,_currency:true};}).sort(function(a,b){return b.value-a.value;});
@@ -7061,7 +7091,7 @@ export default function MediaOnGas(){
             execLines.push(fR(computed.totalSpend)+" deployed across "+sortedPlats.length+" platforms ("+sortedPlats.join(", ")+") over "+elapsedDays+" of "+totalDays2+" days, delivering "+fmt(computed.totalImps)+" impressions and "+fmt(computed.totalClicks)+" clicks at "+fR(execTotalCpc)+" blended CPC ("+benchLabel(execTotalCpc,benchmarks.meta.cpc)+") and "+fR(computed.blendedCpm)+" CPM.");
             execLines.push("Run rate: "+fR(dailySpend)+"/day, projecting "+fR(projSpend)+" by period end."+(pacePct>=90?" Flight nearing completion,consolidate learnings.":pacePct>=50?" Pacing on track,mid-flight optimisation window.":"  Early delivery,algorithms in learning phase."));
             var activeObj=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});
-            activeObj.forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?(objName==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:benchmarks.meta.cpc;var unitLabel=objName==="Community Reach"?" CPM":"/result";if(od.results>=10)execLines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+unitLabel+", "+benchLabel(cp,bm)+". Confirmed at scale.");else if(od.results>0)execLines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+unitLabel+". Below 10-result threshold for confirmed read.");});
+            activeObj.forEach(function(objName){var od=objectives4[objName];var cp=od.results>0?(objName==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:objName==="WhatsApp Conversations"?null:benchmarks.meta.cpc;var unitLabel=objName==="Community Reach"?" CPM":"/result";if(od.results>=10)execLines.push(objName+": "+fmt(od.results)+" results at "+fR(cp)+unitLabel+", "+benchLabel(cp,bm)+". Confirmed at scale.");else if(od.results>0)execLines.push(objName+": "+fmt(od.results)+" early results at "+fR(cp)+unitLabel+". Below 10-result threshold for confirmed read.");});
             var noResultObj=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results===0&&objectives4[k].spend>500;});
             noResultObj.forEach(function(objName){execLines.push(objName+": "+fR(objectives4[objName].spend)+" invested, no results yet,verify pixel and landing page.");});
             if(bestCpmPlat&&sortedPlats.length>1&&worstCpmPlat!==bestCpmPlat){var cpmDiff=Math.round(worstCpmVal/bestCpmVal);execLines.push(bestCpmPlat+" leads on reach efficiency at "+fR(bestCpmVal)+" CPM vs "+worstCpmPlat+" at "+fR(worstCpmVal)+" ("+cpmDiff+"x gap)"+(cpmDiff>=3?". Rebalance awareness spend towards "+bestCpmPlat+".":"."));}
@@ -7325,7 +7355,7 @@ export default function MediaOnGas(){
                     // not the spend/reach raw fraction. Every other
                     // objective keeps the standard spend/result formula.
                     var costPer=od.results>0?(objName==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;
-                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:benchmarks.meta.cpc;
+                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:objName==="WhatsApp Conversations"?null:benchmarks.meta.cpc;
                     var bmCol=costPer>0&&bm&&costPer<=bm.mid?P.mint:costPer>0&&bm&&costPer>bm.high?P.rose:P.solar;
                     var bmTag=costPer>0&&bm?(costPer<=bm.low?"EXCELLENT":costPer<=bm.mid?"GOOD":costPer<=bm.high?"ON TRACK":"OPTIMISE"):"";
                     var cObjPrev=(compareComputed&&compareComputed.objectives&&compareComputed.objectives[objName])||null;
@@ -8157,7 +8187,7 @@ export default function MediaOnGas(){
                     // spend/result. Every other objective keeps the standard
                     // spend/result. Benchmark band swaps to meta.cpm.
                     var cp=od.results>0?(objName==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;
-                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:benchmarks.meta.cpc;
+                    var bm=objName==="Leads"?benchmarks.meta.cpl:objName==="Followers & Likes"?benchmarks.meta.cpf:objName==="Community Reach"?benchmarks.meta.cpm:objName==="WhatsApp Conversations"?null:benchmarks.meta.cpc;
                     var verdict=cp>0&&bm?(cp<=bm.low?"well below the benchmark midpoint":cp<=bm.mid?"a healthy, efficient cost in line with industry benchmarks":cp<=bm.high?"a steady cost within benchmark range":"a cost tracking just above benchmark midpoint"):"";
                     if(objName==="Leads"&&od.results>0){
                       lines.push("Lead Generation produced "+fmt(od.results)+" qualified leads at "+fR(cp)+" per lead"+(verdict?", "+verdict:"")+". Each lead represents a genuine prospect who chose to share their contact details, the highest-value first-party signal in the entire funnel.");
