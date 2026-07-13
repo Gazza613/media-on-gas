@@ -1537,7 +1537,7 @@ export function buildReportHtml(opts) {
   --rp-font: Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
 @page { size: A4; margin: 0; }
-html, body { margin: 0; padding: 0; background: var(--rp-bg); color: var(--rp-fg); font-family: var(--rp-font); -webkit-print-color-adjust: exact; print-color-adjust: exact; -webkit-font-smoothing: antialiased; font-weight: 400; }
+html, body { margin: 0; padding: 0; background: var(--rp-bg); color: var(--rp-fg); font-family: var(--rp-font); -webkit-print-color-adjust: exact; print-color-adjust: exact; -webkit-font-smoothing: antialiased; font-weight: 400; font-synthesis: none; -webkit-font-synthesis: none; }
 * { box-sizing: border-box; }
 img { max-width: 100%; display: block; }
 
@@ -1602,7 +1602,7 @@ img { max-width: 100%; display: block; }
 .rp-cover-agency-logo { width: 14mm; height: 14mm; border-radius: 50%; margin-bottom: 3mm; }
 .rp-cover-label { font-size: 7pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; }
 .rp-cover-sender { font-size: 13pt; font-weight: 700; color: var(--rp-fg); font-family: var(--rp-font); }
-.rp-cover-sender-title { font-size: 10pt; color: var(--rp-fg-dim); font-style: italic; }
+.rp-cover-sender-title { font-size: 10pt; color: var(--rp-fg-dim); }
 .rp-cover-agency-label { font-size: 12pt; font-weight: 700; color: var(--rp-fg); font-family: var(--rp-font); }
 .rp-cover-agency-sub { font-size: 8pt; letter-spacing: 3px; color: var(--rp-accent); font-weight: 800; text-transform: uppercase; }
 
@@ -1612,7 +1612,7 @@ img { max-width: 100%; display: block; }
 .rp-section-headline { flex: 1; }
 .rp-section-eyebrow { font-size: 8pt; letter-spacing: 4px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
 .rp-h1 { font-family: var(--rp-font); font-size: 22pt; font-weight: 900; letter-spacing: -0.6px; line-height: 1.1; color: var(--rp-fg); margin: 0 0 3mm 0; }
-.rp-lede { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.5; max-width: 155mm; font-style: italic; }
+.rp-lede { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.5; max-width: 155mm; }
 
 /* ─────────────── BLOCKS ─────────────── */
 .rp-block { margin-bottom: 6mm; page-break-inside: avoid; }
@@ -1676,14 +1676,14 @@ img { max-width: 100%; display: block; }
    the platform chip must keep the same visual weight. nowrap keeps
    "Google Ads" on a single line inside the pill. */
 .rp-plat-chip { display: inline-block; padding: 1.4mm 3.5mm; font-size: 7.5pt; font-weight: 900; color: #fff; border-radius: 2px; letter-spacing: 1px; vertical-align: middle; white-space: nowrap; }
-.rp-empty { padding: 5mm; text-align: center; color: var(--rp-fg-mute); font-style: italic; background: var(--rp-card); border-radius: 3mm; font-size: 10pt; }
+.rp-empty { padding: 5mm; text-align: center; color: var(--rp-fg-mute); background: var(--rp-card); border-radius: 3mm; font-size: 10pt; }
 
 /* ─────────────── BOFU SUBSECTIONS ─────────────── */
 .rp-bofu-sub { margin-bottom: 8mm; padding: 5mm 6mm; background: var(--rp-card); border: 1px solid var(--rp-line); border-radius: 3mm; page-break-inside: avoid; }
 .rp-bofu-sub-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
 .rp-bofu-sub-title { font-family: var(--rp-font); font-size: 14pt; font-weight: 700; color: var(--rp-fg); letter-spacing: -0.3px; }
 .rp-bofu-sub-total { font-family: var(--rp-font); font-size: 22pt; font-weight: 700; color: var(--rp-accent); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
-.rp-bofu-sub-desc { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 3mm; font-style: italic; }
+.rp-bofu-sub-desc { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 3mm; }
 .rp-bofu-sub-costline { font-size: 9pt; color: var(--rp-fg-mute); margin-bottom: 4mm; letter-spacing: 0.5px; }
 .rp-bofu-sub-costline strong { color: var(--rp-fg); font-weight: 800; }
 .rp-bofu-eco { border-left: 3px solid var(--rp-accent2); }
@@ -1750,7 +1750,7 @@ img { max-width: 100%; display: block; }
 .rp-obj-section { margin-bottom: 8mm; border: 1px solid; border-radius: 4mm; overflow: hidden; page-break-inside: avoid; background: rgba(0,0,0,0.12); }
 .rp-obj-section-head { padding: 4mm 5mm; border-left: 4px solid; }
 .rp-obj-section-title { font-size: 12pt; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 1.5mm; }
-.rp-obj-section-crit { font-size: 8.5pt; color: var(--rp-fg-mute); font-style: italic; letter-spacing: 0.3px; }
+.rp-obj-section-crit { font-size: 8.5pt; color: var(--rp-fg-mute); letter-spacing: 0.3px; }
 /* Platform label promoted to a top banner (was a side pill). Cards
    below now use the full section width so each ad tile reads bigger,
    per owner feedback. */
@@ -1774,12 +1774,12 @@ img { max-width: 100%; display: block; }
    per funnel stage, with role explanation, percentage of budget,
    rand spend, mini fill bar, and what that stage actually delivered.
    Reads clearly for a marketing team without pre-context. */
-.rp-block-caption { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 5mm; font-style: italic; }
+.rp-block-caption { font-size: 9.5pt; color: var(--rp-fg-dim); line-height: 1.6; margin-bottom: 5mm; }
 .rp-funnel-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; page-break-inside: avoid; }
 .rp-funnel-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-left: 3px solid; border-radius: 3mm; padding: 4mm; display: flex; flex-direction: column; gap: 2.5mm; page-break-inside: avoid; }
 .rp-funnel-card-eyebrow { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; font-weight: 900; }
 .rp-funnel-card-title { font-size: 11pt; font-weight: 900; color: var(--rp-fg); line-height: 1.2; }
-.rp-funnel-card-role { font-size: 8.5pt; color: var(--rp-fg-dim); line-height: 1.5; font-style: italic; min-height: 15mm; }
+.rp-funnel-card-role { font-size: 8.5pt; color: var(--rp-fg-dim); line-height: 1.5; min-height: 15mm; }
 .rp-funnel-card-num { display: flex; align-items: baseline; gap: 2mm; padding-top: 2mm; border-top: 1px solid var(--rp-line); }
 .rp-funnel-card-pct { font-size: 20pt; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
 .rp-funnel-card-of { font-size: 8pt; color: var(--rp-fg-mute); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
@@ -1830,7 +1830,7 @@ img { max-width: 100%; display: block; }
 .rp-signoff-foot { display: flex; justify-content: space-between; align-items: flex-end; padding-top: 10mm; border-top: 1px solid var(--rp-line); margin-top: auto; }
 .rp-signoff-sender-block { display: flex; flex-direction: column; gap: 1mm; }
 .rp-signoff-sender { font-family: var(--rp-font); font-size: 15pt; font-weight: 700; color: var(--rp-fg); }
-.rp-signoff-sender-title { font-size: 10pt; color: var(--rp-fg-dim); font-style: italic; }
+.rp-signoff-sender-title { font-size: 10pt; color: var(--rp-fg-dim); }
 .rp-signoff-agency { font-size: 8pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-top: 3mm; }
 .rp-signoff-contact { text-align: right; font-size: 9pt; color: var(--rp-fg-mute); display: flex; flex-direction: column; gap: 1mm; }
 .rp-signoff-emblem { font-size: 7pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-top: 3mm; }
