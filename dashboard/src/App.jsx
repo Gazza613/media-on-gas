@@ -7527,7 +7527,28 @@ export default function MediaOnGas(){
                     </div>;
                   })()}
                 </div>}
-                {(function(){var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
+                {(function(){
+                  var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};
+                  var objData;
+                  var chartTitle="COST PER RESULT BY OBJECTIVE";
+                  if(showLearnalotOctet){
+                    // Learnalot chart compares the two LEAD paths head-to-
+                    // head (Form CPL vs WhatsApp CPL), not the mixed-
+                    // objective set. WhatsApp Conversations is a mid-
+                    // funnel metric already covered elsewhere and would
+                    // otherwise dominate the visual on volume.
+                    objData=[];
+                    var _fCpl=formLeadsCount>0?(formLeadsSpend/formLeadsCount):0;
+                    var _wCpl=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
+                    if(_fCpl>0)objData.push({name:"PSI Form Leads",results:formLeadsCount,spend:formLeadsSpend,costPer:parseFloat(_fCpl.toFixed(2)),color:P.rose});
+                    if(_wCpl>0)objData.push({name:"WhatsApp Leads",results:waLeadsCount,spend:waSpend,costPer:parseFloat(_wCpl.toFixed(2)),color:P.orchid});
+                    chartTitle="COST PER LEAD BY PATH";
+                  } else {
+                    objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});
+                  }
+                  if(objData.length<2)return null;
+                  return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>{chartTitle}</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name={showLearnalotOctet?"Cost Per Lead":"Cost Per Result"} radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;
+                })()}
                 {(function(){
                   // Learnalot: the standRow frame is LEADS-first, not the
                   // generic multi-objective mix. The client's two lead
