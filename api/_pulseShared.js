@@ -389,6 +389,18 @@ export function resultMetricFor(c) {
   if (obj.indexOf("appinstall") >= 0 || obj.indexOf("app_install") >= 0 || obj.indexOf("app_promotion") >= 0 || name.indexOf("appinstal") >= 0) {
     return { kind: "Clicks to App Store", value: parseInt(c.clicks || 0), costLabel: "CPC" };
   }
+  // WhatsApp / messaging campaigns are classified ahead of the generic
+  // "lead" branch so a campaign named e.g.
+  // GAS_Learnalot_META_Leads_WApp_... reports on WhatsApp conversations
+  // (Meta CAPI messaging_conversation_started_7d) instead of dropping
+  // into the Leads bucket with c.leads=0 (WhatsApp campaigns don't fire
+  // in-form leads, their qualified leads come through a separate CAPI
+  // event that no Marketing API path exposes and is entered manually
+  // via Settings → Custom Outcomes).
+  if (name.indexOf("_wapp_") >= 0 || name.indexOf("wapp_") >= 0 || name.indexOf("_whatsapp_") >= 0 || name.indexOf(" whatsapp ") >= 0 || name.indexOf("_wa_") >= 0) {
+    var _wConv = extractMessagingConversations(c.actions);
+    return { kind: "WhatsApp Conversations", value: _wConv, costLabel: "Cost / Conversation" };
+  }
   if (obj === "lead_generation" || obj === "outcome_leads" || obj.indexOf("lead") >= 0) {
     return { kind: "Leads", value: parseInt(c.leads || 0), costLabel: "CPL" };
   }

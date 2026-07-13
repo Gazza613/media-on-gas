@@ -1261,12 +1261,33 @@ export default async function handler(req, res) {
     if (wantReportData) {
       extraFetches.push(fetchDemographicsData(req, from, to, campaignIds));
     }
+    // Custom Outcomes fetch — only needed for the PDF report, and only
+    // for clients that have manual outcome entries (currently Learnalot,
+    // the 8 WhatsApp QualifiedLead events fired via Meta CAPI that no
+    // Marketing API path exposes). Always safe to fetch: unknown slugs
+    // return an empty array.
+    var _canonSlugForCO = canonicalClientSlug(clientSlug);
+    var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
+    if (wantCustomOutcomes) {
+      extraFetches.push((async function() {
+        try {
+          var _cor = await fetch(origin + "/api/custom-outcomes?client=learnalot", {
+            headers: { "x-session-token": req.headers["x-session-token"] || "", "x-api-key": process.env.API_KEY || "" }
+          });
+          if (!_cor.ok) return [];
+          var _cod = await _cor.json();
+          return (_cod && Array.isArray(_cod.outcomes)) ? _cod.outcomes : [];
+        } catch (_) { return []; }
+      })());
+    }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
     var topAds = results[1];
     var ecommerce = results[2];
-    var placements = needPlacementsFetch ? (results[3] || []) : [];
-    var demographics = wantReportData ? (results[needPlacementsFetch ? 4 : 3] || null) : null;
+    var _idx = 3;
+    var placements = needPlacementsFetch ? (results[_idx++] || []) : [];
+    var demographics = wantReportData ? (results[_idx++] || null) : null;
+    var customOutcomes = wantCustomOutcomes ? (results[_idx++] || []) : [];
 
     // The per-creative breakdown is intentionally NOT precomputed for
     // the email anymore: it is whole-ad / all-placements and cannot
@@ -1367,7 +1388,13 @@ export default async function handler(req, res) {
         // Dashboard" CTA. expiresInDays was force-bumped to >= 90
         // above when mode === "report".
         dashboardUrl: shareUrl,
-        expiresAt: expiresAt
+        expiresAt: expiresAt,
+        // Manually-recorded outcomes for the client (Learnalot's 8
+        // WhatsApp qualified leads, sourced from the Meta CAPI dataset
+        // UI, not accessible over any public Marketing API path). The
+        // report builder folds these into the BoFu Leads section and
+        // headline outcome tile when present.
+        customOutcomes: customOutcomes
       });
     } else {
       html = buildEmailHtml({

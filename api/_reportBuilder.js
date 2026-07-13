@@ -268,6 +268,43 @@ function aggregateBook(campaigns, pages) {
       b.campaignCount += 1;
     });
   });
+
+  // WhatsApp aggregate for the Learnalot-specific section. Same shape
+  // as book.byPlatform entries but keyed by "WhatsApp" via campaign
+  // name (_wapp_ / _whatsapp_ tokens). Conversations come from Meta
+  // CAPI onsite_conversion.messaging_conversation_started_7d on the
+  // campaign's actions array (same 7d window Meta uses in Ads
+  // Manager). Consumed by renderBofuSection to emit the WhatsApp PSI
+  // Leads sub when the report is for Learnalot.
+  var whatsapp = { spend: 0, impressions: 0, clicks: 0, reach: 0, conversations: 0, firstReplies: 0, engaged3: 0, campaignCount: 0 };
+  var _isWApp = function(name) {
+    var s = String(name || "").toLowerCase();
+    return s.indexOf("_wapp_") >= 0 || s.indexOf("wapp_") >= 0 || s.indexOf("_whatsapp_") >= 0 || s.indexOf(" whatsapp ") >= 0 || s.indexOf("_wa_") >= 0;
+  };
+  var _maxActionByType = function(actions, type) {
+    var best = 0;
+    var t = String(type).toLowerCase();
+    (actions || []).forEach(function(a) {
+      if (String(a.action_type || "").toLowerCase() === t) {
+        var v = parseFloat(a.value || 0);
+        if (v > best) best = v;
+      }
+    });
+    return best;
+  };
+  (campaigns || []).forEach(function(c) {
+    if (!_isWApp(c.campaignName)) return;
+    whatsapp.spend += parseFloat(c.spend || 0);
+    whatsapp.impressions += parseFloat(c.impressions || 0);
+    whatsapp.clicks += parseFloat(c.clicks || 0);
+    whatsapp.reach += parseFloat(c.reach || 0);
+    whatsapp.conversations += _maxActionByType(c.actions, "onsite_conversion.messaging_conversation_started_7d");
+    whatsapp.firstReplies += _maxActionByType(c.actions, "onsite_conversion.messaging_first_reply");
+    whatsapp.engaged3 += _maxActionByType(c.actions, "onsite_conversion.messaging_user_depth_3_message_send");
+    whatsapp.campaignCount += 1;
+  });
+  book.whatsapp = whatsapp;
+
   return book;
 }
 
@@ -679,13 +716,114 @@ function renderBofuSection(opts) {
     columnLabel: "LP Clicks",
     resultKey: "click"
   }));
+  // Learnalot's Lead Form campaigns get a more specific title on this
+  // client's report so the reader can distinguish these from the manual
+  // WhatsApp qualified-lead entries that follow. Everyone else keeps
+  // the generic "Leads Captured" label.
+  var _isLearnalot = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
   subs.push(renderBofuObjective(byObj["Leads"], {
     key: "Leads",
-    title: "Leads Captured",
-    description: "Direct-response leads captured from in-platform forms or landing-page submissions during the reporting period.",
+    title: _isLearnalot ? "PSI Form Leads" : "Leads Captured",
+    description: _isLearnalot
+      ? "Direct-response leads captured through Meta lead forms during the reporting period. Excludes WhatsApp qualified leads, which are covered separately below."
+      : "Direct-response leads captured from in-platform forms or landing-page submissions during the reporting period.",
     columnLabel: "Leads",
     resultKey: "lead"
   }));
+
+  // WhatsApp Conversations sub — client-facing summary of the paid
+  // WhatsApp funnel. Meta Marketing API returns messaging_conversation_
+  // started_7d, messaging_first_reply and messaging_user_depth_3_
+  // message_send per WhatsApp campaign; aggregateBook rolls them onto
+  // book.whatsapp. Rendered on every client whose selection includes a
+  // WhatsApp campaign, not gated to Learnalot (the metric itself is
+  // universal). Cost-per-conversation is the campaign's paid spend
+  // divided by conversations opened.
+  var wa = book.whatsapp;
+  if (wa && wa.conversations > 0) {
+    var waCPC = wa.conversations > 0 ? (wa.spend / wa.conversations) : 0;
+    var waFrRate = wa.conversations > 0 ? (wa.firstReplies / wa.conversations * 100) : 0;
+    var waEngRate = wa.conversations > 0 ? (wa.engaged3 / wa.conversations * 100) : 0;
+    var waFunnelBits = [];
+    if (wa.firstReplies > 0) waFunnelBits.push(fmtNum(wa.firstReplies) + " first replies (" + waFrRate.toFixed(2) + "%)");
+    if (wa.engaged3 > 0) waFunnelBits.push(fmtNum(wa.engaged3) + " engaged 3+ messages (" + waEngRate.toFixed(2) + "%)");
+    var waFunnelLine = waFunnelBits.length ? '<div class="rp-bofu-sub-desc" style="margin-top:6px;">' + waFunnelBits.join(" &middot; ") + '</div>' : "";
+    subs.push(`<div class="rp-bofu-sub">
+      <div class="rp-bofu-sub-head">
+        <div class="rp-bofu-sub-title">WhatsApp Conversations</div>
+        <div class="rp-bofu-sub-total">${fmtNum(wa.conversations)}</div>
+      </div>
+      <div class="rp-bofu-sub-desc">New paid-media-driven WhatsApp conversations opened during the reporting period. Same 7-day attribution window Meta uses in Ads Manager.</div>
+      <div class="rp-bofu-sub-costline">Cost per conversation: <strong>${waCPC > 0 ? fmtR(waCPC) : "n/a"}</strong> &middot; Spend on this objective: <strong>${fmtR(wa.spend)}</strong></div>
+      ${waFunnelLine}
+    </div>`);
+  }
+
+  // Custom Outcomes — client-recorded outcomes fired outside the
+  // Marketing API (Learnalot's 8 WhatsApp CAPI QualifiedLead events).
+  // Each entry becomes its own sub with its manually-set label. Cost
+  // per outcome uses the WhatsApp campaign spend for WhatsApp-labelled
+  // entries (CPL = paid spend / qualified leads) and falls back to
+  // the manually entered cost otherwise. Also emits a blended Total
+  // Leads sub when both PSI Form Leads and WhatsApp qualified leads
+  // are present in the window.
+  var coList = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
+  if (coList.length > 0) {
+    // Filter to entries whose month falls in the report window.
+    var _monthsInRange = {};
+    if (opts.from && opts.to) {
+      var _d = new Date(opts.from + "T00:00:00Z");
+      var _e = new Date(opts.to + "T00:00:00Z");
+      if (!isNaN(_d.getTime()) && !isNaN(_e.getTime())) {
+        while (_d <= _e) {
+          var _y = _d.getUTCFullYear();
+          var _m = _d.getUTCMonth() + 1;
+          _monthsInRange[_y + "-" + (_m < 10 ? "0" : "") + _m] = 1;
+          _d.setUTCMonth(_d.getUTCMonth() + 1);
+        }
+      }
+    }
+    var activeCo = coList.filter(function(o) { return _monthsInRange[o.month]; });
+    var waLeadTotal = 0;
+    activeCo.forEach(function(o) {
+      var isWA = /whatsapp|wapp|(^| )wa /i.test(String(o.label || ""));
+      var count = parseInt(o.count || 0, 10);
+      if (isWA) waLeadTotal += count;
+      var manualCost = (o.cost !== undefined && o.cost !== null && o.cost !== "") ? parseFloat(o.cost) : 0;
+      var effCost = isWA && wa && wa.spend > 0 ? wa.spend : manualCost;
+      var costPer = count > 0 && effCost > 0 ? (effCost / count) : 0;
+      var costLabelWord = isWA ? "Cost per lead" : "Cost per result";
+      var investedLine = effCost > 0
+        ? ("Spend attributed: <strong>" + fmtR(effCost) + "</strong>" + (isWA ? " <em>(WhatsApp campaign spend)</em>" : ""))
+        : "Spend: <em>not attributed</em>";
+      subs.push(`<div class="rp-bofu-sub">
+        <div class="rp-bofu-sub-head">
+          <div class="rp-bofu-sub-title">${escapeHtmlLocal(o.label || "Outcome")}</div>
+          <div class="rp-bofu-sub-total">${fmtNum(count)}</div>
+        </div>
+        <div class="rp-bofu-sub-desc">${isWA ? "WhatsApp qualified leads fired via Meta&rsquo;s Conversions API to the client&rsquo;s dataset. These are event-scoped and cannot be broken down per age or gender in the demographic section, the WhatsApp conversation audience above is the closest available proxy." : "Manually recorded outcome for the reporting period."}</div>
+        <div class="rp-bofu-sub-costline">${costLabelWord}: <strong>${costPer > 0 ? fmtR(costPer) : "n/a"}</strong> &middot; ${investedLine}</div>
+      </div>`);
+    });
+    // Blended Total Leads sub — only when both form-lead and WhatsApp-
+    // qualified-lead paths carried volume in the window.
+    var formLeads = (byObj["Leads"] && byObj["Leads"].global && byObj["Leads"].global.result) || 0;
+    var formSpend = (byObj["Leads"] && byObj["Leads"].global && byObj["Leads"].global.spend) || 0;
+    if (formLeads > 0 && waLeadTotal > 0) {
+      var totalLeads = formLeads + waLeadTotal;
+      var totalSpend = formSpend + (wa ? wa.spend : 0);
+      var blendedCpl = totalLeads > 0 && totalSpend > 0 ? (totalSpend / totalLeads) : 0;
+      subs.push(`<div class="rp-bofu-sub">
+        <div class="rp-bofu-sub-head">
+          <div class="rp-bofu-sub-title">Total Leads (blended)</div>
+          <div class="rp-bofu-sub-total">${fmtNum(totalLeads)}</div>
+        </div>
+        <div class="rp-bofu-sub-desc">${fmtNum(formLeads)} PSI Form Leads &middot; ${fmtNum(waLeadTotal)} WhatsApp qualified leads. Blended cost per lead combines the paid spend of both channels against the combined lead count so the top-line efficiency read is honest across the two paths.</div>
+        <div class="rp-bofu-sub-costline">Blended cost per lead: <strong>${blendedCpl > 0 ? fmtR(blendedCpl) : "n/a"}</strong> &middot; Combined spend: <strong>${fmtR(totalSpend)}</strong></div>
+      </div>`);
+    }
+  }
+
   // Followers & Likes uses the whole-account earnedTotal override
   // (mirrors dashboard line ~9563). Per-platform rows continue to
   // show campaign-attributable result, but the headline total is the

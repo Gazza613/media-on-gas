@@ -188,9 +188,9 @@ function buildHtml(opts) {
           leadHtml = '<strong style="color:' + P.cyan + ';">Reach ' + fmtNum(effectiveReach) + '</strong> at ' +
             (cpm !== null ? fmtR(cpm) + ' CPM' : 'CPM n/a') + ' · freq ' + freq.toFixed(2) + 'x' + escapeHtml(deltaWord(reachDelta));
           adjacentHtml = fmtNum(s.impressions) + ' impressions · ' + fmtNum(s.clicks) + ' clicks at ' + fmtPct(ctr) + ' CTR · ' + fmtR(s.spend) + ' spend' + escapeHtml(deltaWord(spendDelta));
-        } else if (s.kind === "Leads" || s.kind === "Clicks to App Store" || s.kind === "Follows + Likes") {
+        } else if (s.kind === "Leads" || s.kind === "Clicks to App Store" || s.kind === "Follows + Likes" || s.kind === "WhatsApp Conversations") {
           // Lead with results + cost-per-result
-          var resWord = String(s.kind || "results").toLowerCase();
+          var resWord = s.kind === "WhatsApp Conversations" ? "conversations" : String(s.kind || "results").toLowerCase();
           leadHtml = '<strong style="color:' + P.cyan + ';">' + fmtNum(s.results) + ' ' + escapeHtml(resWord) + '</strong>' +
             (cpr !== null ? ' at ' + fmtR(cpr) + ' ' + escapeHtml(String(s.costLabel || "cost per result").toLowerCase()) : '') +
             escapeHtml(deltaWord(resultsDelta));

@@ -30,7 +30,7 @@ function dispositionFor(thisWeek, lastWeek, ageDays) {
   var sample7d = rmB ? rmB.value : 0;
 
   var ZERO_RESULT_FLOOR = 700; // ~R100/day for a 7-day window
-  var isResultObjective = rmY.kind === "Clicks to App Store" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes" || rmY.kind === "Profile Visits";
+  var isResultObjective = rmY.kind === "Clicks to App Store" || rmY.kind === "Leads" || rmY.kind === "Follows + Likes" || rmY.kind === "Profile Visits" || rmY.kind === "WhatsApp Conversations";
   if (isResultObjective && rmY.value === 0 && spendY >= ZERO_RESULT_FLOOR) {
     return {
       color: "red", tag: "ACTION",
