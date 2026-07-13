@@ -1274,9 +1274,14 @@ export default async function handler(req, res) {
       // request (cold-start latency in the loop, hence the slow
       // "Creating PDF" dialog). redisGetJson goes straight to Upstash
       // over HTTP and returns in a couple hundred ms.
-      extraFetches.push(redisGetJson("client:outcomes:" + _canonSlugForCO).then(function(v) {
+      var _coKey = "client:outcomes:" + _canonSlugForCO;
+      extraFetches.push(redisGetJson(_coKey).then(function(v) {
+        try { console.log("[email-share] custom-outcomes fetch", { key: _coKey, isArray: Array.isArray(v), length: Array.isArray(v) ? v.length : (v == null ? "null" : "not-array"), sample: Array.isArray(v) && v.length ? v[0] : null }); } catch (_) {}
         return Array.isArray(v) ? v : [];
-      }, function() { return []; }));
+      }, function(err) {
+        try { console.error("[email-share] custom-outcomes fetch error", err && err.message); } catch (_) {}
+        return [];
+      }));
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
