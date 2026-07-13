@@ -716,110 +716,173 @@ function renderBofuSection(opts) {
     columnLabel: "LP Clicks",
     resultKey: "click"
   }));
-  // Learnalot's Lead Form campaigns get a more specific title on this
-  // client's report so the reader can distinguish these from the manual
-  // WhatsApp qualified-lead entries that follow. Everyone else keeps
-  // the generic "Leads Captured" label.
+  // Learnalot-specific layout for the leads section: mirrors the
+  // Summary tab's 8-tile octet + standRow + lead-first narrative +
+  // bar chart, so the PDF reads identically to the dashboard. Every
+  // other client keeps the standard renderBofuObjective sub for Leads.
   var _isLearnalot = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
-  subs.push(renderBofuObjective(byObj["Leads"], {
-    key: "Leads",
-    title: _isLearnalot ? "PSI Form Leads" : "Leads Captured",
-    description: _isLearnalot
-      ? "Direct-response leads captured through Meta lead forms during the reporting period. Excludes WhatsApp qualified leads, which are covered separately below."
-      : "Direct-response leads captured from in-platform forms or landing-page submissions during the reporting period.",
-    columnLabel: "Leads",
-    resultKey: "lead"
-  }));
-
-  // WhatsApp Conversations sub — client-facing summary of the paid
-  // WhatsApp funnel. Meta Marketing API returns messaging_conversation_
-  // started_7d, messaging_first_reply and messaging_user_depth_3_
-  // message_send per WhatsApp campaign; aggregateBook rolls them onto
-  // book.whatsapp. Rendered on every client whose selection includes a
-  // WhatsApp campaign, not gated to Learnalot (the metric itself is
-  // universal). Cost-per-conversation is the campaign's paid spend
-  // divided by conversations opened.
   var wa = book.whatsapp;
-  if (wa && wa.conversations > 0) {
-    var waCPC = wa.conversations > 0 ? (wa.spend / wa.conversations) : 0;
-    var waFrRate = wa.conversations > 0 ? (wa.firstReplies / wa.conversations * 100) : 0;
-    var waEngRate = wa.conversations > 0 ? (wa.engaged3 / wa.conversations * 100) : 0;
-    var waFunnelBits = [];
-    if (wa.firstReplies > 0) waFunnelBits.push(fmtNum(wa.firstReplies) + " first replies (" + waFrRate.toFixed(2) + "%)");
-    if (wa.engaged3 > 0) waFunnelBits.push(fmtNum(wa.engaged3) + " engaged 3+ messages (" + waEngRate.toFixed(2) + "%)");
-    var waFunnelLine = waFunnelBits.length ? '<div class="rp-bofu-sub-desc" style="margin-top:6px;">' + waFunnelBits.join(" &middot; ") + '</div>' : "";
-    subs.push(`<div class="rp-bofu-sub">
-      <div class="rp-bofu-sub-head">
-        <div class="rp-bofu-sub-title">WhatsApp Conversations</div>
-        <div class="rp-bofu-sub-total">${fmtNum(wa.conversations)}</div>
-      </div>
-      <div class="rp-bofu-sub-desc">New paid-media-driven WhatsApp conversations opened during the reporting period. Same 7-day attribution window Meta uses in Ads Manager.</div>
-      <div class="rp-bofu-sub-costline">Cost per conversation: <strong>${waCPC > 0 ? fmtR(waCPC) : "n/a"}</strong> &middot; Spend on this objective: <strong>${fmtR(wa.spend)}</strong></div>
-      ${waFunnelLine}
-    </div>`);
-  }
-
-  // Custom Outcomes — client-recorded outcomes fired outside the
-  // Marketing API (Learnalot's 8 WhatsApp CAPI QualifiedLead events).
-  // Each entry becomes its own sub with its manually-set label. Cost
-  // per outcome uses the WhatsApp campaign spend for WhatsApp-labelled
-  // entries (CPL = paid spend / qualified leads) and falls back to
-  // the manually entered cost otherwise. Also emits a blended Total
-  // Leads sub when both PSI Form Leads and WhatsApp qualified leads
-  // are present in the window.
   var coList = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
-  if (coList.length > 0) {
-    // Filter to entries whose month falls in the report window.
-    var _monthsInRange = {};
-    if (opts.from && opts.to) {
-      var _d = new Date(opts.from + "T00:00:00Z");
-      var _e = new Date(opts.to + "T00:00:00Z");
-      if (!isNaN(_d.getTime()) && !isNaN(_e.getTime())) {
-        while (_d <= _e) {
-          var _y = _d.getUTCFullYear();
-          var _m = _d.getUTCMonth() + 1;
-          _monthsInRange[_y + "-" + (_m < 10 ? "0" : "") + _m] = 1;
-          _d.setUTCMonth(_d.getUTCMonth() + 1);
-        }
+  // Compute the WhatsApp qualified-leads total from the custom outcomes
+  // whose month intersects the report window.
+  var _monthsInRange = {};
+  if (opts.from && opts.to) {
+    var _d = new Date(opts.from + "T00:00:00Z");
+    var _e = new Date(opts.to + "T00:00:00Z");
+    if (!isNaN(_d.getTime()) && !isNaN(_e.getTime())) {
+      while (_d <= _e) {
+        var _y = _d.getUTCFullYear();
+        var _m = _d.getUTCMonth() + 1;
+        _monthsInRange[_y + "-" + (_m < 10 ? "0" : "") + _m] = 1;
+        _d.setUTCMonth(_d.getUTCMonth() + 1);
       }
     }
-    var activeCo = coList.filter(function(o) { return _monthsInRange[o.month]; });
-    var waLeadTotal = 0;
-    activeCo.forEach(function(o) {
-      var isWA = /whatsapp|wapp|(^| )wa /i.test(String(o.label || ""));
-      var count = parseInt(o.count || 0, 10);
-      if (isWA) waLeadTotal += count;
-      var manualCost = (o.cost !== undefined && o.cost !== null && o.cost !== "") ? parseFloat(o.cost) : 0;
-      var effCost = isWA && wa && wa.spend > 0 ? wa.spend : manualCost;
-      var costPer = count > 0 && effCost > 0 ? (effCost / count) : 0;
-      var costLabelWord = isWA ? "Cost per lead" : "Cost per result";
-      var investedLine = effCost > 0
-        ? ("Spend attributed: <strong>" + fmtR(effCost) + "</strong>" + (isWA ? " <em>(WhatsApp campaign spend)</em>" : ""))
-        : "Spend: <em>not attributed</em>";
+  }
+  var activeCo = coList.filter(function(o) { return _monthsInRange[o.month]; });
+  var waLeadTotal = 0;
+  activeCo.forEach(function(o) {
+    var isWA = /whatsapp|wapp|(^| )wa /i.test(String(o.label || ""));
+    if (isWA) waLeadTotal += parseInt(o.count || 0, 10);
+  });
+  var formLeadsBucket = byObj["Leads"] && byObj["Leads"].global ? byObj["Leads"].global : null;
+  var formLeadsCount = formLeadsBucket ? (formLeadsBucket.result || 0) : 0;
+  var formLeadsSpend = formLeadsBucket ? (formLeadsBucket.spend || 0) : 0;
+  var showLearnalotOctet = _isLearnalot && (formLeadsCount > 0 || waLeadTotal > 0 || (wa && wa.conversations > 0));
+
+  if (showLearnalotOctet) {
+    // ── OCTET (2×4 tiles) ──────────────────────────────────────────
+    var _formCpl = formLeadsCount > 0 ? (formLeadsSpend / formLeadsCount) : 0;
+    var _waSpend = wa ? (wa.spend || 0) : 0;
+    var _waConv = wa ? (wa.conversations || 0) : 0;
+    var _waEng3 = wa ? (wa.engaged3 || 0) : 0;
+    var _waCpl = waLeadTotal > 0 && _waSpend > 0 ? (_waSpend / waLeadTotal) : 0;
+    var _totalLeads = formLeadsCount + waLeadTotal;
+    var _totalSpend = formLeadsSpend + _waSpend;
+    var _blendedCpl = _totalLeads > 0 ? (_totalSpend / _totalLeads) : 0;
+    var _convToLead = _waConv > 0 && waLeadTotal > 0 ? (waLeadTotal / _waConv * 100) : 0;
+    var _eng3Rate = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
+    var _tile = function(label, value, sub, accent) {
+      return `<div class="rp-outcome-tile" style="border-left:3px solid ${accent};">
+        <div class="rp-outcome-label" style="color:${accent};">${label}</div>
+        <div class="rp-outcome-value" style="color:${accent};">${value}</div>
+        <div class="rp-outcome-sub">${sub}</div>
+      </div>`;
+    };
+    var COL = {
+      rose: "#F43F5E", orchid: "#A855F7", solar: "#FFAA00",
+      mint: "#34D399", cyan: "#0891B2", ember: "#F96203"
+    };
+    var _octet = '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);">'
+      + _tile("PSI Form Leads",       fmtNum(formLeadsCount),               "Meta lead-form captures",       COL.rose)
+      + _tile("CPL Form Leads",       _formCpl > 0 ? fmtR(_formCpl) : "&mdash;", "form-campaign spend / leads", COL.rose)
+      + _tile("WhatsApp PSI Leads",   fmtNum(waLeadTotal),                  "CAPI QualifiedLead events",     COL.orchid)
+      + _tile("CPL WhatsApp Leads",   _waCpl > 0 ? fmtR(_waCpl) : "&mdash;", "WhatsApp spend / leads",       COL.orchid)
+      + _tile("Total Leads (blended)",fmtNum(_totalLeads),                  fmtNum(formLeadsCount) + " form + " + fmtNum(waLeadTotal) + " WhatsApp" + (_blendedCpl > 0 ? " &middot; " + fmtR(_blendedCpl) + " blended CPL" : ""), COL.solar)
+      + _tile("WhatsApp Conversations",fmtNum(_waConv),                     "conversations opened (7d)",     COL.mint)
+      + _tile("Engaged 3+ Messages",  fmtNum(_waEng3),                      _waConv > 0 ? _eng3Rate.toFixed(2) + "% of conversations" : "3+ message exchanges", COL.mint)
+      + _tile("Conversion Ratio",     _convToLead > 0 ? _convToLead.toFixed(2) + "%" : "&mdash;", waLeadTotal > 0 && _waConv > 0 ? fmtNum(waLeadTotal) + " of " + fmtNum(_waConv) + " converted" : "conversations &rarr; leads", COL.cyan)
+      + '</div>';
+
+    // ── COST PER LEAD BY PATH — mini horizontal bar comparison ────
+    var _barCap = Math.max(_formCpl, _waCpl) || 1;
+    var _bar = function(label, cpl, accent) {
+      var pct = cpl > 0 ? (cpl / _barCap * 100) : 0;
+      return `<div style="display:flex;align-items:center;gap:4mm;margin-bottom:2mm;font-size:9pt;color:var(--rp-fg);">
+        <div style="width:36mm;color:var(--rp-fg-dim);">${label}</div>
+        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:1mm;height:5mm;position:relative;">
+          <div style="background:${accent};width:${pct.toFixed(1)}%;height:100%;border-radius:1mm;"></div>
+        </div>
+        <div style="width:24mm;text-align:right;font-weight:800;color:${accent};">${cpl > 0 ? fmtR(cpl) : "n/a"}</div>
+      </div>`;
+    };
+    var _barBlock = (_formCpl > 0 || _waCpl > 0) ? `<div class="rp-bofu-sub" style="page-break-inside:avoid;">
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Cost Per Lead by Path</div></div>
+      <div class="rp-bofu-sub-desc">Head-to-head efficiency read across Learnalot's two lead paths.</div>
+      <div style="margin-top:3mm;">
+        ${_bar("PSI Form Leads",  _formCpl, COL.rose)}
+        ${_bar("WhatsApp Leads",  _waCpl,   COL.orchid)}
+      </div>
+    </div>` : "";
+
+    // ── STAND ROW ─────────────────────────────────────────────────
+    var _topVol = formLeadsCount >= waLeadTotal ? ["PSI Form Leads", formLeadsCount, COL.rose] : ["WhatsApp PSI Leads", waLeadTotal, COL.orchid];
+    var _effPool = [];
+    if (_formCpl > 0) _effPool.push({ k: "PSI Form Leads", v: _formCpl, c: COL.rose });
+    if (_waCpl  > 0) _effPool.push({ k: "WhatsApp PSI Leads", v: _waCpl,  c: COL.orchid });
+    _effPool.sort(function(a, b) { return a.v - b.v; });
+    var _bestEff = _effPool[0] || null;
+    var _standTile = function(label, value, accent) {
+      return `<div class="rp-outcome-tile" style="border-left:3px solid ${accent};">
+        <div class="rp-outcome-label" style="color:${accent};">${label}</div>
+        <div class="rp-outcome-value" style="font-size:14pt;color:var(--rp-fg);">${value}</div>
+      </div>`;
+    };
+    var _standRow = `<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);margin-top:3mm;">
+      ${_standTile("Highest Volume", _topVol[0] + ", " + fmtNum(_topVol[1]), _topVol[2])}
+      ${_bestEff ? _standTile("Best Efficiency", _bestEff.k + ", " + fmtR(_bestEff.v) + "/lead", _bestEff.c) : ""}
+      ${_blendedCpl > 0 ? _standTile("Blended CPL", fmtR(_blendedCpl), COL.solar) : ""}
+      ${_standTile("Total Leads", fmtNum(_totalLeads), COL.ember)}
+    </div>`;
+
+    // ── LEAD-FIRST OBJECTIVE INSIGHTS NARRATIVE ───────────────────
+    var _narLines = [];
+    _narLines.push(fmtNum(_totalLeads) + " qualified leads were captured across the two paths from " + fmtR(_totalSpend) + " invested" + (_blendedCpl > 0 ? " at a blended " + fmtR(_blendedCpl) + " cost per lead" : "") + ", " + fmtNum(formLeadsCount) + " through PSI lead forms and " + fmtNum(waLeadTotal) + " as WhatsApp qualified leads.");
+    if (formLeadsCount > 0 && waLeadTotal > 0) {
+      var _pathVol = formLeadsCount >= waLeadTotal ? "PSI Form Leads" : "WhatsApp PSI Leads";
+      var _pathEff = _formCpl > 0 && _waCpl > 0 ? (_formCpl <= _waCpl ? "PSI Form Leads" : "WhatsApp PSI Leads") : (_formCpl > 0 ? "PSI Form Leads" : "WhatsApp PSI Leads");
+      _narLines.push(_pathVol + " led on volume" + (_pathEff === _pathVol ? " and on efficiency, the stronger path on both dimensions" : "; " + _pathEff + " led on efficiency at " + fmtR(_pathEff === "PSI Form Leads" ? _formCpl : _waCpl) + " per lead vs " + fmtR(_pathVol === "PSI Form Leads" ? _formCpl : _waCpl) + " on " + _pathVol) + ".");
+    }
+    if (_waConv > 0) {
+      var _cpc = _waConv > 0 ? (_waSpend / _waConv) : 0;
+      var _funnelBits = [];
+      _funnelBits.push(fmtNum(_waConv) + " paid conversations opened at " + fmtR(_cpc) + " per conversation");
+      if (_waEng3 > 0) _funnelBits.push(fmtNum(_waEng3) + " engaged 3+ messages");
+      if (_convToLead > 0) _funnelBits.push(_convToLead.toFixed(2) + "% of conversations became a qualified lead");
+      _narLines.push("WhatsApp mid-funnel context, " + _funnelBits.join(", ") + ", the volume the WhatsApp lead conversions came out of.");
+    }
+    var _narrative = `<div class="rp-bofu-sub" style="page-break-inside:avoid;">
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Objective Insights</div></div>
+      <div class="rp-bofu-sub-desc" style="line-height:1.6;">${_narLines.join(" ")}</div>
+    </div>`;
+
+    // Wrap the whole Learnalot block in a single sub so the section's
+    // filter(Boolean).join("") logic still stitches it into subsHtml.
+    subs.push(`<div class="rp-bofu-sub" style="padding-bottom:0;border-bottom:none;">
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Captured</div></div>
+      <div class="rp-bofu-sub-desc">Learnalot runs two lead paths in parallel: PSI Form Leads via Meta lead forms (full platform attribution) and WhatsApp PSI Leads via CAPI QualifiedLead events on the client&rsquo;s Meta dataset (event-scoped, no per-lead demographic attribution).</div>
+      ${_octet}
+      ${_barBlock}
+      ${_standRow}
+      ${_narrative}
+    </div>`);
+  } else {
+    // Non-Learnalot: keep the existing Leads Captured sub layout.
+    subs.push(renderBofuObjective(byObj["Leads"], {
+      key: "Leads",
+      title: "Leads Captured",
+      description: "Direct-response leads captured from in-platform forms or landing-page submissions during the reporting period.",
+      columnLabel: "Leads",
+      resultKey: "lead"
+    }));
+
+    // WhatsApp Conversations sub for non-Learnalot clients whose
+    // selection includes WhatsApp campaigns (rare, but supported).
+    if (wa && wa.conversations > 0) {
+      var waCPC = wa.conversations > 0 ? (wa.spend / wa.conversations) : 0;
+      var waFrRate = wa.conversations > 0 ? (wa.firstReplies / wa.conversations * 100) : 0;
+      var waEngRate = wa.conversations > 0 ? (wa.engaged3 / wa.conversations * 100) : 0;
+      var waFunnelBits = [];
+      if (wa.firstReplies > 0) waFunnelBits.push(fmtNum(wa.firstReplies) + " first replies (" + waFrRate.toFixed(2) + "%)");
+      if (wa.engaged3 > 0) waFunnelBits.push(fmtNum(wa.engaged3) + " engaged 3+ messages (" + waEngRate.toFixed(2) + "%)");
+      var waFunnelLine = waFunnelBits.length ? '<div class="rp-bofu-sub-desc" style="margin-top:6px;">' + waFunnelBits.join(" &middot; ") + '</div>' : "";
       subs.push(`<div class="rp-bofu-sub">
         <div class="rp-bofu-sub-head">
-          <div class="rp-bofu-sub-title">${escapeHtmlLocal(o.label || "Outcome")}</div>
-          <div class="rp-bofu-sub-total">${fmtNum(count)}</div>
+          <div class="rp-bofu-sub-title">WhatsApp Conversations</div>
+          <div class="rp-bofu-sub-total">${fmtNum(wa.conversations)}</div>
         </div>
-        <div class="rp-bofu-sub-desc">${isWA ? "WhatsApp qualified leads fired via Meta&rsquo;s Conversions API to the client&rsquo;s dataset. These are event-scoped and cannot be broken down per age or gender in the demographic section, the WhatsApp conversation audience above is the closest available proxy." : "Manually recorded outcome for the reporting period."}</div>
-        <div class="rp-bofu-sub-costline">${costLabelWord}: <strong>${costPer > 0 ? fmtR(costPer) : "n/a"}</strong> &middot; ${investedLine}</div>
-      </div>`);
-    });
-    // Blended Total Leads sub — only when both form-lead and WhatsApp-
-    // qualified-lead paths carried volume in the window.
-    var formLeads = (byObj["Leads"] && byObj["Leads"].global && byObj["Leads"].global.result) || 0;
-    var formSpend = (byObj["Leads"] && byObj["Leads"].global && byObj["Leads"].global.spend) || 0;
-    if (formLeads > 0 && waLeadTotal > 0) {
-      var totalLeads = formLeads + waLeadTotal;
-      var totalSpend = formSpend + (wa ? wa.spend : 0);
-      var blendedCpl = totalLeads > 0 && totalSpend > 0 ? (totalSpend / totalLeads) : 0;
-      subs.push(`<div class="rp-bofu-sub">
-        <div class="rp-bofu-sub-head">
-          <div class="rp-bofu-sub-title">Total Leads (blended)</div>
-          <div class="rp-bofu-sub-total">${fmtNum(totalLeads)}</div>
-        </div>
-        <div class="rp-bofu-sub-desc">${fmtNum(formLeads)} PSI Form Leads &middot; ${fmtNum(waLeadTotal)} WhatsApp qualified leads. Blended cost per lead combines the paid spend of both channels against the combined lead count so the top-line efficiency read is honest across the two paths.</div>
-        <div class="rp-bofu-sub-costline">Blended cost per lead: <strong>${blendedCpl > 0 ? fmtR(blendedCpl) : "n/a"}</strong> &middot; Combined spend: <strong>${fmtR(totalSpend)}</strong></div>
+        <div class="rp-bofu-sub-desc">New paid-media-driven WhatsApp conversations opened during the reporting period. Same 7-day attribution window Meta uses in Ads Manager.</div>
+        <div class="rp-bofu-sub-costline">Cost per conversation: <strong>${waCPC > 0 ? fmtR(waCPC) : "n/a"}</strong> &middot; Spend on this objective: <strong>${fmtR(wa.spend)}</strong></div>
+        ${waFunnelLine}
       </div>`);
     }
   }
@@ -1425,7 +1488,43 @@ function renderExecutiveSummary(opts) {
   var byObj = book.byObjective || {};
   var earnedTotal = opts.earnedTotal || 0;
   var totalFollows = earnedTotal > 0 ? earnedTotal : (byObj["Followers & Likes"] ? byObj["Followers & Likes"].global.result : 0);
-  var totalLeads = byObj["Leads"] ? byObj["Leads"].global.result : 0;
+  var formLeadsCountX = byObj["Leads"] ? byObj["Leads"].global.result : 0;
+  var formLeadsSpendX = byObj["Leads"] ? byObj["Leads"].global.spend : 0;
+  // Learnalot blends PSI Form Leads with WhatsApp qualified leads
+  // (manually recorded Custom Outcomes fired via CAPI) so the
+  // headline "Leads Captured" tile and the narrative reconcile with
+  // the dashboard's Total Leads (blended) tile. Non-Learnalot clients
+  // fall through with waLeadTotalX=0 → totalLeads == formLeadsCountX.
+  var _isLearnalotX = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  var waLeadTotalX = 0;
+  var waSpendX = 0;
+  if (_isLearnalotX) {
+    var _wa2 = book.whatsapp || null;
+    waSpendX = _wa2 ? (_wa2.spend || 0) : 0;
+    var _coListX = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
+    var _monthsInRangeX = {};
+    if (opts.from && opts.to) {
+      var _dX = new Date(opts.from + "T00:00:00Z");
+      var _eX = new Date(opts.to + "T00:00:00Z");
+      if (!isNaN(_dX.getTime()) && !isNaN(_eX.getTime())) {
+        while (_dX <= _eX) {
+          var _yX = _dX.getUTCFullYear();
+          var _mX = _dX.getUTCMonth() + 1;
+          _monthsInRangeX[_yX + "-" + (_mX < 10 ? "0" : "") + _mX] = 1;
+          _dX.setUTCMonth(_dX.getUTCMonth() + 1);
+        }
+      }
+    }
+    _coListX.forEach(function(o) {
+      if (!_monthsInRangeX[o.month]) return;
+      var isWA = /whatsapp|wapp|(^| )wa /i.test(String(o.label || ""));
+      if (isWA) waLeadTotalX += parseInt(o.count || 0, 10);
+    });
+  }
+  var totalLeads = formLeadsCountX + waLeadTotalX;
+  var totalLeadsSpendX = formLeadsSpendX + waSpendX;
+  var blendedCplX = totalLeads > 0 && totalLeadsSpendX > 0 ? (totalLeadsSpendX / totalLeads) : 0;
+  var isBlendedLeadsX = waLeadTotalX > 0 && formLeadsCountX > 0;
   var totalApp = byObj["Clicks to App Store"] ? byObj["Clicks to App Store"].global.result : 0;
   var totalLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.result : 0;
   var totalSpend = book.byStage.tofu.spend + book.byStage.mofu.spend + book.byStage.bofu.spend;
@@ -1445,7 +1544,17 @@ function renderExecutiveSummary(opts) {
   ];
   var narrative = [];
   narrative.push("Across " + fmtNum(g.campaignCount) + " campaign" + (g.campaignCount === 1 ? "" : "s") + ", " + fmtR(g.spend) + " was invested during " + escapeHtmlLocal(opts.periodDisplay) + ", generating " + fmtNum(g.impressions) + " impressions and " + fmtNum(g.reach) + " unique users reached at a blended " + fmtR(cpmOf(g)) + " CPM.");
-  if (totalLeads > 0) narrative.push(fmtNum(totalLeads) + " qualified lead" + (totalLeads === 1 ? "" : "s") + " were captured at " + fmtR(g.spend > 0 ? g.spend / totalLeads : 0) + " per lead.");
+  if (totalLeads > 0) {
+    if (isBlendedLeadsX) {
+      // Learnalot: name both paths in the narrative and use the
+      // blended CPL, so the sentence reconciles with the dashboard's
+      // Total Leads (blended) tile line-for-line.
+      narrative.push(fmtNum(totalLeads) + " qualified leads were captured (" + fmtNum(formLeadsCountX) + " PSI Form leads and " + fmtNum(waLeadTotalX) + " WhatsApp qualified leads) at a blended " + fmtR(blendedCplX) + " per lead.");
+    } else {
+      var _leadCpl = formLeadsSpendX > 0 && formLeadsCountX > 0 ? (formLeadsSpendX / formLeadsCountX) : (g.spend > 0 ? g.spend / totalLeads : 0);
+      narrative.push(fmtNum(totalLeads) + " qualified lead" + (totalLeads === 1 ? "" : "s") + " were captured at " + fmtR(_leadCpl) + " per lead.");
+    }
+  }
   if (totalFollows > 0) narrative.push("The community earned " + fmtNum(totalFollows) + " new follower" + (totalFollows === 1 ? "" : "s") + " and page like" + (totalFollows === 1 ? "" : "s") + ", each representing a permanent organic distribution channel that compounds beyond the paid window.");
   if (totalApp > 0) narrative.push(fmtNum(totalApp) + " users clicked through to their app store to download the app.");
   if (totalLp > 0) narrative.push(fmtNum(totalLp) + " users clicked through to the destination landing page from traffic campaigns.");
@@ -1480,11 +1589,21 @@ function renderExecutiveSummary(opts) {
           var sApp = byObj["Clicks to App Store"] ? byObj["Clicks to App Store"].global.spend : 0;
           var sLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.spend : 0;
           var out = "";
-          if (totalLeads > 0) out += `<div class="rp-outcome-tile">
-            <div class="rp-outcome-label">Leads Captured</div>
-            <div class="rp-outcome-value" style="color:#F43F5E;">${fmtNum(totalLeads)}</div>
-            <div class="rp-outcome-sub">${fmtR(sLeads / totalLeads)} per lead</div>
-          </div>`;
+          if (totalLeads > 0) {
+            // Learnalot: swap the tile to "Total Leads (blended)" so
+            // it matches the dashboard octet + Total Leads card. The
+            // per-lead sub is the blended CPL (form + WhatsApp spend
+            // / combined lead count).
+            var _tileLabel = isBlendedLeadsX ? "Total Leads (blended)" : "Leads Captured";
+            var _tileSub = isBlendedLeadsX
+              ? (fmtNum(formLeadsCountX) + " form + " + fmtNum(waLeadTotalX) + " WhatsApp &middot; " + (blendedCplX > 0 ? fmtR(blendedCplX) + " blended CPL" : "n/a"))
+              : (fmtR(sLeads / totalLeads) + " per lead");
+            out += `<div class="rp-outcome-tile">
+              <div class="rp-outcome-label">${_tileLabel}</div>
+              <div class="rp-outcome-value" style="color:#F43F5E;">${fmtNum(totalLeads)}</div>
+              <div class="rp-outcome-sub">${_tileSub}</div>
+            </div>`;
+          }
           if (totalFollows > 0) out += `<div class="rp-outcome-tile">
             <div class="rp-outcome-label">Community Growth</div>
             <div class="rp-outcome-value" style="color:#34D399;">+${fmtNum(totalFollows)}</div>
@@ -1552,8 +1671,35 @@ function renderClosingNote(opts) {
   // like reactions from non-follower campaigns.
   var followersBucket = book.byObjective && book.byObjective["Followers & Likes"] && book.byObjective["Followers & Likes"].global;
   var totalFollows = earnedTotal > 0 ? earnedTotal : (followersBucket ? followersBucket.result : 0);
+  // Learnalot: recap uses the blended lead total (form + WhatsApp
+  // qualified leads) so the closing page reconciles with the octet
+  // and the executive summary tile. Every other client keeps
+  // g.leads verbatim.
+  var _isLearnalotCN = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  var _formLeadsCountCN = (book.byObjective && book.byObjective["Leads"] && book.byObjective["Leads"].global.result) || 0;
+  var _waLeadTotalCN = 0;
+  if (_isLearnalotCN && Array.isArray(opts.customOutcomes) && opts.from && opts.to) {
+    var _monthsCN = {};
+    var _dCN = new Date(opts.from + "T00:00:00Z");
+    var _eCN = new Date(opts.to + "T00:00:00Z");
+    if (!isNaN(_dCN.getTime()) && !isNaN(_eCN.getTime())) {
+      while (_dCN <= _eCN) {
+        var _yCN = _dCN.getUTCFullYear();
+        var _mCN = _dCN.getUTCMonth() + 1;
+        _monthsCN[_yCN + "-" + (_mCN < 10 ? "0" : "") + _mCN] = 1;
+        _dCN.setUTCMonth(_dCN.getUTCMonth() + 1);
+      }
+    }
+    opts.customOutcomes.forEach(function(o) {
+      if (!_monthsCN[o.month]) return;
+      if (/whatsapp|wapp|(^| )wa /i.test(String(o.label || ""))) _waLeadTotalCN += parseInt(o.count || 0, 10);
+    });
+  }
+  var _totalLeadsCN = _formLeadsCountCN + _waLeadTotalCN;
   var quickRecap = [];
-  if (parseFloat(g.leads || 0) > 0) quickRecap.push(fmtNum(g.leads) + " leads");
+  if (_isLearnalotCN && _totalLeadsCN > 0) {
+    quickRecap.push(fmtNum(_totalLeadsCN) + " leads" + (_waLeadTotalCN > 0 && _formLeadsCountCN > 0 ? " (" + fmtNum(_formLeadsCountCN) + " form + " + fmtNum(_waLeadTotalCN) + " WhatsApp)" : ""));
+  } else if (parseFloat(g.leads || 0) > 0) quickRecap.push(fmtNum(g.leads) + " leads");
   if (totalFollows > 0) quickRecap.push("+" + fmtNum(totalFollows) + " community");
   // Use raw clicks as the app-store metric to match Summary tApp.
   var appClicks = (book.byObjective && book.byObjective["Clicks to App Store"] && book.byObjective["Clicks to App Store"].global.result) || 0;
