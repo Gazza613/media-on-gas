@@ -443,7 +443,7 @@ function renderTofuSection(opts) {
   var book = opts.book;
   var g = book.global;
   var globalKpis = [
-    { label: "Total Impressions", value: fmtNum(g.impressions), primary: true },
+    { label: "Total Ads Served", value: fmtNum(g.impressions), primary: true },
     { label: "Total Reach", value: fmtNum(g.reach), sub: "unique users" },
     { label: "Frequency", value: fmtNumDec(frequencyOf(g), 2) + "x", sub: "per user" },
     { label: "Blended CPM", value: fmtR(cpmOf(g)), sub: "cost per 1,000" }
@@ -1599,7 +1599,7 @@ img { max-width: 100%; display: block; }
 .rp-cover-foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; padding-top: 12mm; border-top: 1px solid var(--rp-line); }
 .rp-cover-foot-left, .rp-cover-foot-right { display: flex; flex-direction: column; gap: 2mm; }
 .rp-cover-foot-right { align-items: flex-end; text-align: right; }
-.rp-cover-agency-logo { width: 14mm; height: 14mm; border-radius: 50%; box-shadow: 0 0 8mm rgba(249,98,3,0.28); margin-bottom: 3mm; }
+.rp-cover-agency-logo { width: 14mm; height: 14mm; border-radius: 50%; margin-bottom: 3mm; }
 .rp-cover-label { font-size: 7pt; letter-spacing: 3px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 700; }
 .rp-cover-sender { font-size: 13pt; font-weight: 700; color: var(--rp-fg); font-family: var(--rp-font); }
 .rp-cover-sender-title { font-size: 10pt; color: var(--rp-fg-dim); font-style: italic; }
@@ -1812,25 +1812,16 @@ img { max-width: 100%; display: block; }
   min-height: 297mm;
   position: relative;
 }
-.rp-signoff::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0;
-  width: 60%; height: 60%;
-  background: radial-gradient(circle at top left, rgba(249,98,3,0.16), transparent 65%);
-  pointer-events: none;
-}
-.rp-signoff::after {
-  content: "";
-  position: absolute;
-  bottom: 0; right: 0;
-  width: 50%; height: 45%;
-  background: radial-gradient(circle at bottom right, rgba(255,61,0,0.10), transparent 60%);
-  pointer-events: none;
-}
+/* Radial overlays removed on the closing page. Chrome's PDF
+   rasteriser was rendering the semi-transparent radial gradient
+   with hard-edged banding around the GAS emblem where the gradient
+   sat directly behind it, producing a "shadow box" behind the
+   logo. Flat gradient background reads cleaner in print. */
 .rp-signoff-frame { position: relative; z-index: 1; padding: 28mm 28mm; display: flex; flex-direction: column; height: 297mm; }
 .rp-signoff-top { display: flex; flex-direction: column; align-items: flex-start; gap: 6mm; }
-.rp-signoff-emblem-logo { width: 18mm; height: 18mm; border-radius: 50%; box-shadow: 0 0 10mm rgba(249,98,3,0.35); }
+/* Radial glow removed — screen-friendly but printed as a chunky
+   orange halo behind the emblem. Kept the circular crop only. */
+.rp-signoff-emblem-logo { width: 18mm; height: 18mm; border-radius: 50%; }
 .rp-signoff-eyebrow { font-size: 9pt; letter-spacing: 6px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; }
 .rp-signoff-heart { margin-top: auto; margin-bottom: auto; padding: 20mm 0; max-width: 150mm; }
 .rp-signoff-title { font-family: var(--rp-font); font-size: 38pt; font-weight: 700; letter-spacing: -1px; line-height: 1.1; color: var(--rp-fg); margin-bottom: 10mm; }
