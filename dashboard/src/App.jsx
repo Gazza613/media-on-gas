@@ -7381,12 +7381,54 @@ export default function MediaOnGas(){
                 var totalLeadsCount=formLeadsCount+waLeadsCount;
                 var totalLeadsSpend=formLeadsSpend+waSpend;
                 var showTotalLeadsTile=learnalotInSel&&formLeadsCount>0&&waLeadsCount>0;
-                if(activeObjKeys.length===0&&coArr.length===0)return null;
-                var totalCards=activeObjKeys.length+coArr.length+(showConvRateTile?1:0)+(showTotalLeadsTile?1:0);
+                // Learnalot dedicated 8-tile layout: two rows of four
+                // single-metric callouts so the leads paths + WhatsApp
+                // funnel each get their own headline instead of being
+                // squeezed into composite tiles. When active, the
+                // Learnalot-specific tiles (PSI Form Leads, WhatsApp
+                // Conversations, WhatsApp PSI Leads Custom Outcome,
+                // Total Leads, Conv-to-Lead) are pulled out of the
+                // standard grid so they don't render twice.
+                var waEngaged3=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.engaged3||0):0;
+                var showLearnalotOctet=learnalotInSel&&(formLeadsCount>0||waLeadsCount>0||waConversations>0);
+                var formCpl=formLeadsCount>0?(formLeadsSpend/formLeadsCount):0;
+                var waCpl=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
+                var blendedCpl=totalLeadsCount>0?(totalLeadsSpend/totalLeadsCount):0;
+                var convToLeadRate=waConversations>0&&waLeadsCount>0?(waLeadsCount/waConversations*100):0;
+                var filteredObjKeys=showLearnalotOctet
+                  ?activeObjKeys.filter(function(k){return k!=="Leads"&&k!=="WhatsApp Conversations";})
+                  :activeObjKeys;
+                var filteredCoArr=showLearnalotOctet
+                  ?coArr.filter(function(o){return !waIsCap(o);})
+                  :coArr;
+                var showConvRateTileEff=showConvRateTile&&!showLearnalotOctet;
+                var showTotalLeadsTileEff=showTotalLeadsTile&&!showLearnalotOctet;
+                if(filteredObjKeys.length===0&&filteredCoArr.length===0&&!showLearnalotOctet)return null;
+                var totalCards=filteredObjKeys.length+filteredCoArr.length+(showConvRateTileEff?1:0)+(showTotalLeadsTileEff?1:0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
-                <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
-                  {activeObjKeys.map(function(objName){
+                {showLearnalotOctet&&(function(){
+                  var mkTile=function(k,label,valStr,accent,caption){
+                    return <div key={k} style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 18px 16px",border:"1px solid "+accent+"25",borderLeft:"3px solid "+accent}}>
+                      <div style={{fontSize:10,fontWeight:800,color:accent,fontFamily:ff,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>{label}</div>
+                      <div style={{fontSize:28,fontWeight:900,color:accent,fontFamily:fm,lineHeight:1,marginBottom:6}}>{valStr}</div>
+                      <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.4}}>{caption}</div>
+                    </div>;
+                  };
+                  var tiles=[
+                    mkTile("psi-form",     "PSI Form Leads",       fmt(formLeadsCount),            P.rose,   "Meta lead-form captures"),
+                    mkTile("cpl-form",     "CPL Form Leads",       formCpl>0?fR(formCpl):"—",      P.rose,   "form-campaign spend / leads"),
+                    mkTile("wa-leads",     "WhatsApp PSI Leads",   fmt(waLeadsCount),              P.orchid, "CAPI QualifiedLead events"),
+                    mkTile("wa-cpl",       "CPL WhatsApp Leads",   waCpl>0?fR(waCpl):"—",          P.orchid, "WhatsApp spend / leads"),
+                    mkTile("total-leads",  "Total Leads (blended)",fmt(totalLeadsCount),           P.solar,  fmt(formLeadsCount)+" form + "+fmt(waLeadsCount)+" WhatsApp"+(blendedCpl>0?" · "+fR(blendedCpl)+" blended CPL":"")),
+                    mkTile("wa-conv",      "WhatsApp Conversations",fmt(waConversations),          P.mint,   "conversations opened (7d)"),
+                    mkTile("wa-engaged",   "Engaged 3+ Messages",  fmt(waEngaged3),                P.mint,   waConversations>0?(waEngaged3/waConversations*100).toFixed(2)+"% of conversations":"3+ message exchanges"),
+                    mkTile("wa-conv-rate", "Conversion Ratio",     convToLeadRate>0?convToLeadRate.toFixed(2)+"%":"—",P.cyan,waLeadsCount>0&&waConversations>0?fmt(waLeadsCount)+" of "+fmt(waConversations)+" converted":"conversations → qualified leads")
+                  ];
+                  return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>{tiles}</div>;
+                })()}
+                {totalCards>0&&<div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
+                  {filteredObjKeys.map(function(objName){
                     var od=objectives4[objName];var oc=objCol4[objName]||P.ember;
                     // Learnalot-specific relabel: on this client, the
                     // Leads objective is exclusively PSI Lead Form leads
@@ -7424,7 +7466,7 @@ export default function MediaOnGas(){
                         {bmTag&&<span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:bmCol}}>{bmTag}</span>}
                       </div>
                     </div>;})}
-                  {coArr.map(function(o){
+                  {filteredCoArr.map(function(o){
                     var oc=P.orchid;
                     var count=Number(o.count||0);
                     var manualCost=(o.cost!=null&&o.cost!=="")?Number(o.cost):0;
@@ -7449,20 +7491,20 @@ export default function MediaOnGas(){
                       </div>
                     </div>;
                   })}
-                  {showTotalLeadsTile&&(function(){
+                  {showTotalLeadsTileEff&&(function(){
                     var oc=P.solar;
-                    var blendedCpl=totalLeadsCount>0?totalLeadsSpend/totalLeadsCount:0;
+                    var _bCpl=totalLeadsCount>0?totalLeadsSpend/totalLeadsCount:0;
                     return <div key="wa-total-leads" style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>Total Leads (blended)</span></div>
                       <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(totalLeadsCount)}</div>
                       <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>{fmt(formLeadsCount)} form + {fmt(waLeadsCount)} WhatsApp · from {fR(totalLeadsSpend)} invested</div>
                       <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>BLENDED COST PER LEAD</div><div style={{fontSize:18,fontWeight:900,color:blendedCpl>0?oc:P.caption,fontFamily:fm}}>{blendedCpl>0?fR(blendedCpl):"-"}</div></div>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>BLENDED COST PER LEAD</div><div style={{fontSize:18,fontWeight:900,color:_bCpl>0?oc:P.caption,fontFamily:fm}}>{_bCpl>0?fR(_bCpl):"-"}</div></div>
                         <span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:oc}}>BLENDED</span>
                       </div>
                     </div>;
                   })()}
-                  {showConvRateTile&&(function(){
+                  {showConvRateTileEff&&(function(){
                     // Conversation → Lead conversion. How many of the
                     // paid-media-driven WhatsApp conversations actually
                     // became a Qualified Lead (manual QualifiedLead event
@@ -7481,7 +7523,7 @@ export default function MediaOnGas(){
                       </div>
                     </div>;
                   })()}
-                </div>
+                </div>}
                 {(function(){var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
                 {(function(){
                   var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};
