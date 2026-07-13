@@ -7355,8 +7355,21 @@ export default function MediaOnGas(){
                   }
                 }
                 var coArr=(learnalotInSel&&Array.isArray(customOutcomes["learnalot"]))?customOutcomes["learnalot"].filter(function(o){return monthsInRange[o.month];}):[];
+                // For a WhatsApp-labelled outcome the "cost" is the paid
+                // spend of the WhatsApp campaign in the current selection
+                // (Cost per Lead = campaign spend / manually-recorded
+                // qualified leads), the manual `cost` field on the outcome
+                // is only used as a fallback if the WApp objective is not
+                // present in the selection. Also feed this into a synthetic
+                // conversion-rate tile below.
+                var waObjRec=objectives4["WhatsApp Conversations"]||null;
+                var waSpend=waObjRec?parseFloat(waObjRec.spend||0):0;
+                var waConversations=waObjRec?parseFloat(waObjRec.results||0):0;
+                var waIsCap=function(o){var s=String(o&&o.label||"").toLowerCase();return s.indexOf("whatsapp")>=0||s.indexOf("wapp")>=0||s.indexOf(" wa ")>=0;};
+                var waLeadsCount=coArr.reduce(function(t,o){return t+(waIsCap(o)?Number(o.count||0):0);},0);
+                var showConvRateTile=waConversations>0&&waLeadsCount>0;
                 if(activeObjKeys.length===0&&coArr.length===0)return null;
-                var totalCards=activeObjKeys.length+coArr.length;
+                var totalCards=activeObjKeys.length+coArr.length+(showConvRateTile?1:0);
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
@@ -7393,19 +7406,48 @@ export default function MediaOnGas(){
                     </div>;})}
                   {coArr.map(function(o){
                     var oc=P.orchid;
-                    var cost=(o.cost!=null&&o.cost!=="")?Number(o.cost):0;
                     var count=Number(o.count||0);
-                    var costPer=count>0&&cost>0?(cost/count):0;
+                    var manualCost=(o.cost!=null&&o.cost!=="")?Number(o.cost):0;
+                    // WhatsApp outcomes borrow the paid spend of the
+                    // WhatsApp campaign in the current selection (Cost
+                    // per Lead = campaign spend / manual leads count) so
+                    // the tile has a real CPL without the operator
+                    // having to key spend in twice. Non-WhatsApp
+                    // outcomes fall back to the manually entered cost.
+                    var isWA=waIsCap(o);
+                    var effCost=isWA&&waSpend>0?waSpend:manualCost;
+                    var costPer=count>0&&effCost>0?(effCost/count):0;
+                    var costLabel=isWA?"COST PER LEAD":"COST PER RESULT";
+                    var investedLine=effCost>0?("from "+fR(effCost)+" "+(isWA?"campaign spend":"invested")):"manually recorded";
                     return <div key={o.id} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{o.label}</span></div>
                       <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(count)}</div>
-                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>{cost>0?("from "+fR(cost)+" invested"):"manually recorded"}</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>{investedLine}</div>
                       <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>COST PER RESULT</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?oc:P.caption,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}</div></div>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{costLabel}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?oc:P.caption,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}</div></div>
                         <span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:oc}}>MANUAL</span>
                       </div>
                     </div>;
                   })}
+                  {showConvRateTile&&(function(){
+                    // Conversation → Lead conversion. How many of the
+                    // paid-media-driven WhatsApp conversations actually
+                    // became a Qualified Lead (manual QualifiedLead event
+                    // count / conversations_started_7d). Learnalot-only
+                    // right now, only shows when both metrics exist for
+                    // the current selection.
+                    var oc=P.cyan;
+                    var rate=waConversations>0?(waLeadsCount/waConversations*100):0;
+                    return <div key="wa-conv-rate" style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>Conversation to Lead</span></div>
+                      <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{rate.toFixed(2)}%</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>{fmt(waLeadsCount)} of {fmt(waConversations)} WhatsApp conversations</div>
+                      <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>QUALIFIED LEADS</div><div style={{fontSize:18,fontWeight:900,color:oc,fontFamily:fm}}>{fmt(waLeadsCount)}</div></div>
+                        <span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:oc}}>FUNNEL</span>
+                      </div>
+                    </div>;
+                  })()}
                 </div>
                 {(function(){var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};var objData=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;}).map(function(k){var od=objectives4[k];return{name:k.replace("Landing Page ","LP ").replace("App Store ","App ").replace("Followers & ","Foll/").replace("Community Reach","Comm Reach"),results:od.results,spend:od.spend,costPer:parseFloat(cpFor(k,od).toFixed(2)),color:objCol4[k]||P.ember};});if(objData.length<2)return null;return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>COST PER RESULT BY OBJECTIVE</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name="Cost Per Result" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;})()}
                 {(function(){
