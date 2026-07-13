@@ -33,6 +33,18 @@ var metaAccounts = [
 // occur (e.g. "PaidSocial" must never be classified as a Lead campaign).
 function objectiveFromName(name) {
   var n = (name || "").toLowerCase();
+  // WhatsApp Business messaging campaigns. Tested BEFORE the leads
+  // branch because Learnalot's WAPP campaigns literally include the
+  // word "Leads" in their name (GAS_Learnalot_META_Leads_WApp_...);
+  // the WhatsApp semantics (Messaging Conversations Started) are the
+  // right primary metric for these, and per-ad "leads" attribution
+  // sits behind a separate Custom Conversion in the ad account
+  // (fires as offsite_conversion.custom.<id> — the flow we probed for
+  // Learnalot 2026-07 and confirmed the WAPP campaign carries 171
+  // messaging_conversation_started_7d events).
+  if (n.indexOf("_wapp_") >= 0 || n.indexOf(" wapp ") >= 0 || n.indexOf("|wapp") >= 0
+      || n.indexOf("_whatsapp_") >= 0 || n.indexOf(" whatsapp ") >= 0 || n.indexOf("|whatsapp") >= 0
+      || n.indexOf("wapp_") >= 0 || n.indexOf("_wa_") >= 0 || n.indexOf("wa_msg") >= 0) return "whatsapp";
   if (n.indexOf("appinstal") >= 0 || n.indexOf("app install") >= 0 || n.indexOf("app_install") >= 0
       || n.indexOf("app-install") >= 0 || n.indexOf("app_campaign") >= 0 || n.indexOf("app campaign") >= 0
       || n.indexOf("appcampaign") >= 0 || n.indexOf("app_promo") >= 0 || n.indexOf("app promo") >= 0
@@ -426,6 +438,101 @@ export default async function handler(req, res) {
       if (lpAccRes.campaigns.length > 0 || lpAccRes.errors.length > 0) lpOut.push(lpAccRes);
     }
     res.status(200).json({ leadprobe: true, from: from, to: to, filter: lpFilter, campaignId: lpCid, account: lpAcct, hint: "Look at actionTypesReturned per campaign. caughtByHeuristic=true means our isLeadAction() will fold this action_type into the leads total. If your custom event's action_type has caughtByHeuristic=false, we need to extend the heuristic (or add a client-scoped custom lead action allow-list) to include it.", accounts: lpOut });
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ?dsprobe=1 — Admin-only diagnostic: probes Meta's dataset APIs
+  // to find where the QualifiedLead events live and whether they
+  // carry campaign attribution. Learnalot's dataset ID is
+  // 1035497215614649, event name QualifiedLead, integration
+  // Conversions API. Marketing Insights on the ad campaign showed
+  // ZERO events under any "lead"-substring action_type, so Meta is
+  // not attributing them via the ads-insights path. This probe
+  // hits multiple dataset endpoints to figure out which one CAN
+  // return them (and with what attribution structure).
+  //
+  // Query params:
+  //   &dataset=<numeric-id>  (required — try 1035497215614649 for
+  //                          Learnalot's learnalot.com Event Data)
+  //   &event=<event_name>    (optional filter, e.g. QualifiedLead)
+  // ═══════════════════════════════════════════════════════════════
+  if (req.query.dsprobe === "1" && isAdminOrSuperadmin(req.authPrincipal || {})) {
+    var dsId = String(req.query.dataset || "").trim();
+    var dsEvent = String(req.query.event || "").trim();
+    if (!dsId) {
+      res.status(400).json({ dsprobe: true, error: "missing &dataset=<numeric_dataset_id> query param — try &dataset=1035497215614649 for Learnalot" });
+      return;
+    }
+    var dsAttempts = [];
+    // Meta doesn't publish a single canonical "list dataset events"
+    // endpoint the way it does for /act/insights. We try the
+    // documented + known-to-work variants and report what each
+    // returns, so we can pick the survivor.
+    var candidates = [
+      { tag: "dataset/stats", url: "https://graph.facebook.com/v25.0/" + dsId + "/stats?start_time=" + Math.floor(new Date(from).getTime()/1000) + "&end_time=" + Math.floor(new Date(to).getTime()/1000) + "&aggregation=event&access_token=" + metaToken },
+      { tag: "dataset base fields", url: "https://graph.facebook.com/v25.0/" + dsId + "?fields=name,owner_business,data_use_setting,creation_time,last_fired_time,stats{event_name,event_count,event_source_url}&access_token=" + metaToken },
+      { tag: "dataset user_events", url: "https://graph.facebook.com/v25.0/" + dsId + "/user_events?limit=25&access_token=" + metaToken },
+      { tag: "dataset events", url: "https://graph.facebook.com/v25.0/" + dsId + "/events?limit=25&access_token=" + metaToken },
+      { tag: "dataset da_check", url: "https://graph.facebook.com/v25.0/" + dsId + "/da_checks?access_token=" + metaToken },
+      { tag: "dataset shared_accounts", url: "https://graph.facebook.com/v25.0/" + dsId + "/shared_accounts?access_token=" + metaToken },
+      { tag: "dataset activities", url: "https://graph.facebook.com/v25.0/" + dsId + "/activities?limit=25&access_token=" + metaToken },
+      { tag: "dataset stats(event,campaign,pixel_fire)", url: "https://graph.facebook.com/v25.0/" + dsId + "/stats?start_time=" + Math.floor(new Date(from).getTime()/1000) + "&end_time=" + Math.floor(new Date(to).getTime()/1000) + "&aggregation=event&event=" + encodeURIComponent(dsEvent || "QualifiedLead") + "&access_token=" + metaToken }
+    ];
+    for (var dsi = 0; dsi < candidates.length; dsi++) {
+      var cand = candidates[dsi];
+      try {
+        var dsR = await fetch(cand.url);
+        var dsJ = await dsR.json();
+        var summary = "";
+        if (dsJ && dsJ.error) summary = "META ERROR: " + (dsJ.error.message || dsJ.error.type) + " (code " + dsJ.error.code + (dsJ.error.error_subcode ? ", subcode " + dsJ.error.error_subcode : "") + ")";
+        else if (dsJ && Array.isArray(dsJ.data)) summary = "OK: " + dsJ.data.length + " rows";
+        else if (dsJ && dsJ.id) summary = "OK: object returned (keys: " + Object.keys(dsJ).join(", ") + ")";
+        else if (dsR.ok) summary = "OK: keys=" + Object.keys(dsJ || {}).join(",");
+        else summary = "HTTP " + dsR.status;
+        dsAttempts.push({
+          tag: cand.tag,
+          httpStatus: dsR.status,
+          summary: summary,
+          sample: dsJ && dsJ.data ? (Array.isArray(dsJ.data) ? dsJ.data.slice(0, 3) : dsJ.data) : dsJ
+        });
+      } catch (dse) {
+        dsAttempts.push({ tag: cand.tag, error: String(dse && dse.message || dse) });
+      }
+    }
+    // ALSO: try /act/insights with a wider action_report_time /
+    // action_attribution_windows / conversion event filter to see if
+    // there's a way to force custom-conversion events through the
+    // ads-insights pipe.
+    var insightsRetries = [];
+    for (var ari = 0; ari < metaAccounts.length; ari++) {
+      var acc2 = metaAccounts[ari];
+      var iurl = "https://graph.facebook.com/v25.0/" + acc2.id + "/insights?fields=campaign_id,campaign_name,actions&time_range=" + JSON.stringify({since: from, until: to}) + "&level=campaign&action_report_time=conversion&action_attribution_windows=%5B%221d_view%22%2C%227d_click%22%2C%2228d_click%22%5D&limit=200&access_token=" + metaToken;
+      try {
+        var iR = await fetch(iurl);
+        var iJ = await iR.json();
+        var wappRow = null;
+        (iJ.data || []).forEach(function(row) {
+          if (String(row.campaign_name || "").toLowerCase().indexOf("wapp") >= 0) wappRow = row;
+        });
+        insightsRetries.push({
+          account: acc2.name,
+          httpStatus: iR.status,
+          error: iJ && iJ.error ? (iJ.error.message || iJ.error.type) : null,
+          wappCampaignFound: !!wappRow,
+          wappActions: wappRow && wappRow.actions ? wappRow.actions : null
+        });
+      } catch (ie) { insightsRetries.push({ account: acc2.name, error: String(ie && ie.message || ie) }); }
+    }
+    res.status(200).json({
+      dsprobe: true,
+      datasetId: dsId,
+      eventNameFilter: dsEvent,
+      from: from, to: to,
+      hint: "Walk through datasetEndpointAttempts top-to-bottom looking for the first one whose summary starts 'OK:'. That's our answer for how to fetch these events. If everything errors, the token needs additional scopes on the dataset (typically ads_management + being a member of the dataset's business).",
+      datasetEndpointAttempts: dsAttempts,
+      insightsRetriesWithConversionAttribution: insightsRetries
+    });
     return;
   }
 

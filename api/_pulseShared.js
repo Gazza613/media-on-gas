@@ -117,6 +117,50 @@ export function extractLeadCount(actionsOrMap) {
   return grouped > 0 ? grouped : maxOther;
 }
 
+// WhatsApp / Messenger messaging metrics. Meta emits several action
+// types on a campaign whose Meta objective is OUTCOME_MESSAGES. The
+// primary one operators see in Ads Manager as "Messaging
+// conversations" is `onsite_conversion.messaging_conversation_started_7d`.
+// Related fields we surface for depth of engagement:
+//   - messaging_first_reply       (business first replied to a chat)
+//   - total_messaging_connection  (total unique WA/Messenger connections)
+//   - messaging_user_depth_3_message_send (user sent 3+ messages,
+//     "engaged conversation" proxy)
+// See project note: `messaging_first_reply` was previously folded
+// into `follows` inside adsets.js, silently inflating follower
+// counts on every messaging campaign. Reads via these helpers are
+// scoped and safe.
+export function extractMessagingConversations(actionsOrMap) {
+  return _extractMaxByType(actionsOrMap, "onsite_conversion.messaging_conversation_started_7d");
+}
+export function extractMessagingFirstReplies(actionsOrMap) {
+  return _extractMaxByType(actionsOrMap, "onsite_conversion.messaging_first_reply");
+}
+export function extractMessagingConnections(actionsOrMap) {
+  return _extractMaxByType(actionsOrMap, "onsite_conversion.total_messaging_connection");
+}
+export function extractMessagingEngaged3(actionsOrMap) {
+  // "Engaged conversation" = user sent at least 3 messages back to
+  // the business. The most commonly-cited qualified-conversation
+  // proxy in WhatsApp Business reporting.
+  return _extractMaxByType(actionsOrMap, "onsite_conversion.messaging_user_depth_3_message_send");
+}
+function _extractMaxByType(actionsOrMap, targetType) {
+  if (!actionsOrMap) return 0;
+  var isMap = !Array.isArray(actionsOrMap) && typeof actionsOrMap === "object";
+  var iter = isMap
+    ? Object.keys(actionsOrMap).map(function(k) { return { action_type: k, value: actionsOrMap[k] }; })
+    : actionsOrMap;
+  var target = String(targetType || "").toLowerCase();
+  var best = 0;
+  iter.forEach(function(a) {
+    var t = String((a && a.action_type) || "").toLowerCase();
+    var v = parseInt((a && a.value) || 0, 10) || 0;
+    if (t === target && v > best) best = v;
+  });
+  return best;
+}
+
 export function isAppInstallAction(actionType) {
   var t = String(actionType || "").toLowerCase();
   if (!t) return false;
