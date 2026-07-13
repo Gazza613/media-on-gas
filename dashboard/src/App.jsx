@@ -2344,7 +2344,7 @@ function CampaignAuditModal(props){
     if(f.id)body.id=f.id;
     fetch(props.apiBase+"/api/custom-outcomes",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
-      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();})
+      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();if(typeof props.onOutcomeSaved==="function")props.onOutcomeSaved();})
       .catch(function(){coBusy[1](false);coErr[1]("Connection error");});
   };
   var editCustomOutcome=function(o){
@@ -2355,7 +2355,7 @@ function CampaignAuditModal(props){
     if(!window.confirm("Delete outcome '"+label+"'? This cannot be undone."))return;
     fetch(props.apiBase+"/api/custom-outcomes?client="+CO_CLIENT+"&id="+encodeURIComponent(id),{method:"DELETE",headers:{"x-session-token":props.session||""}})
       .then(function(r){return r.json();})
-      .then(function(d){if(d&&d.ok){coMsg[1]("Deleted.");setTimeout(function(){coMsg[1]("");},1500);loadCustomOutcomes();}else coErr[1]((d&&d.error)||"Delete failed");})
+      .then(function(d){if(d&&d.ok){coMsg[1]("Deleted.");setTimeout(function(){coMsg[1]("");},1500);loadCustomOutcomes();if(typeof props.onOutcomeSaved==="function")props.onOutcomeSaved();}else coErr[1]((d&&d.error)||"Delete failed");})
       .catch(function(){coErr[1]("Connection error");});
   };
   useEffect(function(){if(props.open&&view[0]==="outcomes"&&props.isSuperadmin)loadCustomOutcomes();},[props.open,view[0],props.isSuperadmin]);
@@ -4186,6 +4186,9 @@ export default function MediaOnGas(){
   // /api/custom-outcomes and folded into the Objective Highlights grid on
   // the Summary tab.
   var coState=useState({}),customOutcomes=coState[0],setCustomOutcomes=coState[1];
+  // Bumped whenever a Custom Outcome is saved / deleted in Settings, so
+  // the Summary refetches immediately without a page reload.
+  var cor=useState(0),customOutcomesRev=cor[0],setCustomOutcomesRev=cor[1];
   // Ecommerce-tab loader quip. Separate rotation so the copy is about
   // sales/revenue/best-sellers, not generic platform pulling.
   var eq1=useState(QUIRKY_ECOMMERCE_LOADERS[0]),ecoQuip=eq1[0],setEcoQuip=eq1[1];
@@ -5312,11 +5315,11 @@ export default function MediaOnGas(){
   useEffect(function(){
     if(!isAuthed())return;
     if(tab!=="summary")return;
-    fetch(API+"/api/custom-outcomes?client=learnalot",{headers:authHeaders()})
+    fetch(API+"/api/custom-outcomes?client=learnalot"+(customOutcomesRev>0?"&fresh="+customOutcomesRev:""),{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){if(d&&d.ok&&Array.isArray(d.outcomes)){setCustomOutcomes(function(prev){var next=Object.assign({},prev);next[d.client||"learnalot"]=d.outcomes;return next;});}})
       .catch(function(){});
-  },[tab,session,viewToken]);
+  },[tab,session,viewToken,customOutcomesRev]);
 
   var benchmarks={
     meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
@@ -6639,7 +6642,7 @@ export default function MediaOnGas(){
         <div style={{marginTop:16,fontSize:10,color:P.caption,fontFamily:fm,fontStyle:"italic",letterSpacing:0.5}}>Refreshing re-pulls live data from Meta, TikTok, and Google, and loads the latest dashboard version.</div>
       </div>
     </div>}
-    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin} onKpiSaved={function(){setKpiRev(function(x){return x+1;});}}/>
+    <CampaignAuditModal open={showAudit} onClose={function(){setShowAudit(false);}} apiBase={API} session={session} dateFrom={df} dateTo={dt} isSuperadmin={isSuperadmin} onKpiSaved={function(){setKpiRev(function(x){return x+1;});}} onOutcomeSaved={function(){setCustomOutcomesRev(function(x){return x+1;});}}/>
     <AdPreviewModal ad={previewAd} onClose={function(){setPreviewAd(null);}} apiBase={API} session={viewToken?"":session} viewToken={viewToken} dateFrom={df} dateTo={dt}/>
     {/* Chat FAB + panel scoped to the Summary tab. The chat is grounded in
         Summary's snapshot, so showing the FAB on Deep Dive / Creative /
