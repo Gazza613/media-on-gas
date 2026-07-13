@@ -7707,8 +7707,13 @@ export default function MediaOnGas(){
                   the Optimisation tab also reads on Summary. Helper is
                   shared, so any tweak there flows here automatically.
                   showCommentary:false skips the momentum/attention block
-                  on Summary, kept only on the Optimisation tab. */}
-              {renderTrendlines({showCommentary:false})}
+                  on Summary, kept only on the Optimisation tab.
+                  Suppressed on Learnalot (admin + client) — the client's
+                  goal is lead capture across the two paths, which the
+                  octet + standRow already frame; the platform trend
+                  matrix adds visual noise without new signal for this
+                  client. */}
+              {!(function(){return (computed.allSelected||[]).some(function(c){var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");var cn=String(c.campaignName||"").toLowerCase();return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;});})()&&renderTrendlines({showCommentary:false})}
 
               {/* Placement Performance Assessment — sub-platform breakdown
                   showing where the budget is delivering and what each
