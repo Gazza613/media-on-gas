@@ -6,7 +6,7 @@ import { logEmailSend } from "./_audit.js";
 import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain, brandDisplayForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
-import { redisSetIfAbsent } from "./_pulseShared.js";
+import { redisSetIfAbsent, redisGetJson } from "./_pulseShared.js";
 import { buildReportHtml } from "./_reportBuilder.js";
 import { createHash } from "crypto";
 
@@ -1269,16 +1269,14 @@ export default async function handler(req, res) {
     var _canonSlugForCO = canonicalClientSlug(clientSlug);
     var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
     if (wantCustomOutcomes) {
-      extraFetches.push((async function() {
-        try {
-          var _cor = await fetch(origin + "/api/custom-outcomes?client=learnalot", {
-            headers: { "x-session-token": req.headers["x-session-token"] || "", "x-api-key": process.env.API_KEY || "" }
-          });
-          if (!_cor.ok) return [];
-          var _cod = await _cor.json();
-          return (_cod && Array.isArray(_cod.outcomes)) ? _cod.outcomes : [];
-        } catch (_) { return []; }
-      })());
+      // Read directly from Redis — going through /api/custom-outcomes
+      // triggers a second Vercel serverless invocation per PDF
+      // request (cold-start latency in the loop, hence the slow
+      // "Creating PDF" dialog). redisGetJson goes straight to Upstash
+      // over HTTP and returns in a couple hundred ms.
+      extraFetches.push(redisGetJson("client:outcomes:" + _canonSlugForCO).then(function(v) {
+        return Array.isArray(v) ? v : [];
+      }, function() { return []; }));
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
