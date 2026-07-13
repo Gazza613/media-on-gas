@@ -7,6 +7,7 @@ import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain, brandDisplayForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
 import { redisSetIfAbsent, redisGetJson } from "./_pulseShared.js";
+import { listOutcomesForSlug } from "./custom-outcomes.js";
 import { buildReportHtml } from "./_reportBuilder.js";
 import { createHash } from "crypto";
 
@@ -1269,33 +1270,19 @@ export default async function handler(req, res) {
     var _canonSlugForCO = canonicalClientSlug(clientSlug);
     var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
     if (wantCustomOutcomes) {
-      // Fetch via /api/custom-outcomes over HTTP. Was briefly switched
-      // to a direct redisGetJson read to skip the second serverless
-      // invocation, but the direct read was returning empty for the
-      // Learnalot key even though the endpoint reads it fine (still
-      // under investigation — likely env var scoping in this function
-      // context). The HTTP path adds ~500ms but is the same code the
-      // dashboard uses to render the WhatsApp PSI Leads tile, so
-      // the PDF reconciles with the Summary tab.
-      var _sessTokForCO = String(req.headers["x-session-token"] || "");
-      extraFetches.push((async function() {
-        try {
-          var _cor = await fetch(origin + "/api/custom-outcomes?client=" + encodeURIComponent(_canonSlugForCO), {
-            headers: { "x-session-token": _sessTokForCO }
-          });
-          if (!_cor.ok) {
-            try { console.warn("[email-share] custom-outcomes HTTP non-ok", _cor.status); } catch (_) {}
-            return [];
-          }
-          var _cod = await _cor.json();
-          var _list = (_cod && Array.isArray(_cod.outcomes)) ? _cod.outcomes : [];
-          try { console.log("[email-share] custom-outcomes HTTP", { slug: _canonSlugForCO, length: _list.length, sample: _list[0] || null }); } catch (_) {}
-          return _list;
-        } catch (err) {
-          try { console.error("[email-share] custom-outcomes HTTP error", err && err.message); } catch (_) {}
-          return [];
-        }
-      })());
+      // Call listOutcomesForSlug directly — same helper the endpoint
+      // uses, no HTTP loop-back, no auth surface to reason about.
+      // Earlier the direct redisGetJson read via _pulseShared returned
+      // empty in this function's context; using the custom-outcomes
+      // module's own reader eliminates any subtle credential-source or
+      // ES-module scoping difference between the two paths.
+      extraFetches.push(listOutcomesForSlug(_canonSlugForCO).then(function(list) {
+        try { console.log("[email-share] custom-outcomes direct", { slug: _canonSlugForCO, length: (list || []).length, sample: (list && list[0]) || null }); } catch (_) {}
+        return Array.isArray(list) ? list : [];
+      }, function(err) {
+        try { console.error("[email-share] custom-outcomes direct error", err && err.message); } catch (_) {}
+        return [];
+      }));
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];

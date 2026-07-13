@@ -69,6 +69,17 @@ async function listOutcomes(slug) {
   } catch (_) { return []; }
 }
 
+// Exported for email-share.js so the PDF report can fold Custom
+// Outcomes into the Learnalot leads octet using the SAME Redis read
+// the endpoint uses — no HTTP loop-back, no separate credentials
+// path, no auth surface to reason about. Slug should already be
+// canonical (via canonicalClientSlug) before the call.
+export async function listOutcomesForSlug(canonicalSlug) {
+  var s = String(canonicalSlug || "").trim();
+  if (!s) return [];
+  return listOutcomes(s);
+}
+
 async function saveOutcomes(slug, arr) {
   await redisCmd(["SET", storageKey(slug), JSON.stringify(arr || [])]);
 }
