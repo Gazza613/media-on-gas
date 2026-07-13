@@ -7381,7 +7381,7 @@ export default function MediaOnGas(){
                     // separate WhatsApp PSI Leads Custom Outcome tile),
                     // so the tile carries the more specific label. Every
                     // other client keeps the generic "Leads" label.
-                    var displayObjName=(learnalotInSel&&objName==="Leads")?"PSI Lead Form Leads":objName;
+                    var displayObjName=(learnalotInSel&&objName==="Leads")?"PSI Form Leads":objName;
                     // Community Reach reports CPM (cost per 1,000 reached)
                     // not the spend/reach raw fraction. Every other
                     // objective keeps the standard spend/result formula.
