@@ -1269,19 +1269,33 @@ export default async function handler(req, res) {
     var _canonSlugForCO = canonicalClientSlug(clientSlug);
     var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
     if (wantCustomOutcomes) {
-      // Read directly from Redis — going through /api/custom-outcomes
-      // triggers a second Vercel serverless invocation per PDF
-      // request (cold-start latency in the loop, hence the slow
-      // "Creating PDF" dialog). redisGetJson goes straight to Upstash
-      // over HTTP and returns in a couple hundred ms.
-      var _coKey = "client:outcomes:" + _canonSlugForCO;
-      extraFetches.push(redisGetJson(_coKey).then(function(v) {
-        try { console.log("[email-share] custom-outcomes fetch", { key: _coKey, isArray: Array.isArray(v), length: Array.isArray(v) ? v.length : (v == null ? "null" : "not-array"), sample: Array.isArray(v) && v.length ? v[0] : null }); } catch (_) {}
-        return Array.isArray(v) ? v : [];
-      }, function(err) {
-        try { console.error("[email-share] custom-outcomes fetch error", err && err.message); } catch (_) {}
-        return [];
-      }));
+      // Fetch via /api/custom-outcomes over HTTP. Was briefly switched
+      // to a direct redisGetJson read to skip the second serverless
+      // invocation, but the direct read was returning empty for the
+      // Learnalot key even though the endpoint reads it fine (still
+      // under investigation — likely env var scoping in this function
+      // context). The HTTP path adds ~500ms but is the same code the
+      // dashboard uses to render the WhatsApp PSI Leads tile, so
+      // the PDF reconciles with the Summary tab.
+      var _sessTokForCO = String(req.headers["x-session-token"] || "");
+      extraFetches.push((async function() {
+        try {
+          var _cor = await fetch(origin + "/api/custom-outcomes?client=" + encodeURIComponent(_canonSlugForCO), {
+            headers: { "x-session-token": _sessTokForCO }
+          });
+          if (!_cor.ok) {
+            try { console.warn("[email-share] custom-outcomes HTTP non-ok", _cor.status); } catch (_) {}
+            return [];
+          }
+          var _cod = await _cor.json();
+          var _list = (_cod && Array.isArray(_cod.outcomes)) ? _cod.outcomes : [];
+          try { console.log("[email-share] custom-outcomes HTTP", { slug: _canonSlugForCO, length: _list.length, sample: _list[0] || null }); } catch (_) {}
+          return _list;
+        } catch (err) {
+          try { console.error("[email-share] custom-outcomes HTTP error", err && err.message); } catch (_) {}
+          return [];
+        }
+      })());
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
