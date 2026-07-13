@@ -6892,17 +6892,19 @@ export default function MediaOnGas(){
             // (mirrors the shared _extractMaxByType logic in
             // api/_pulseShared.js). Used to route wapp/whatsapp campaigns
             // to their own "WhatsApp Conversations" tile.
-            var _msgConvOf=function(camp){
+            var _maxActionByType=function(camp,type){
               var acts=camp&&Array.isArray(camp.actions)?camp.actions:[];
-              var best=0;
+              var best=0,t=String(type).toLowerCase();
               for(var _a=0;_a<acts.length;_a++){
-                var t=String(acts[_a].action_type||"").toLowerCase();
-                if(t==="onsite_conversion.messaging_conversation_started_7d"){
+                if(String(acts[_a].action_type||"").toLowerCase()===t){
                   var v=parseFloat(acts[_a].value||0);if(v>best)best=v;
                 }
               }
               return best;
             };
+            var _msgConvOf=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_conversation_started_7d");};
+            var _msgFirstReplyOf=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_first_reply");};
+            var _msgEngaged3Of=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_user_depth_3_message_send");};
             var _isWhatsAppCamp=function(name){
               var s=String(name||"").toLowerCase();
               return s.indexOf("_wapp_")>=0||s.indexOf(" wapp ")>=0||s.indexOf("|wapp")>=0
@@ -6947,7 +6949,16 @@ export default function MediaOnGas(){
               objectives4[obj].spend+=parseFloat(camp.spend||0);objectives4[obj].clicks+=parseFloat(camp.clicks||0);objectives4[obj].imps+=parseFloat(camp.impressions||0);objectives4[obj].reach+=parseFloat(camp.reach||0);
               var result;
               if(obj==="Leads"){result=parseFloat(camp.leads||0);}
-              else if(obj==="WhatsApp Conversations"){result=_msgConvOf(camp);}
+              else if(obj==="WhatsApp Conversations"){
+                result=_msgConvOf(camp);
+                // Full funnel: conversations started → someone replied →
+                // engaged 3+ messages. Attached to the WhatsApp objective
+                // record so the Objective Highlights tile can show the
+                // reply / engaged rates alongside the headline count.
+                if(!objectives4[obj].wa)objectives4[obj].wa={firstReplies:0,engaged3:0};
+                objectives4[obj].wa.firstReplies+=_msgFirstReplyOf(camp);
+                objectives4[obj].wa.engaged3+=_msgEngaged3Of(camp);
+              }
               else if(obj==="Followers & Likes"){result=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);if(result===0&&camp.platform==="Instagram"){var igFL1=findIgGrowth(camp.campaignName,pages);if(igFL1>0)result=igFL1;}}
               else if(obj==="Community Reach"){result=parseFloat(camp.reach||0);}
               else{result=parseFloat(camp.clicks||0);}
@@ -7361,10 +7372,20 @@ export default function MediaOnGas(){
                     var cObjPrev=(compareComputed&&compareComputed.objectives&&compareComputed.objectives[objName])||null;
                     var prevResults=cObjPrev?cObjPrev.results:null;
                     var prevCostPer=cObjPrev&&cObjPrev.results>0?(objName==="Community Reach"?(cObjPrev.spend/cObjPrev.results*1000):(cObjPrev.spend/cObjPrev.results)):null;
+                    var _waSub=(objName==="WhatsApp Conversations"&&od.wa)?(function(){
+                      var fr=od.wa.firstReplies||0,e3=od.wa.engaged3||0;
+                      var frR=od.results>0?(fr/od.results*100):0;
+                      var e3R=od.results>0?(e3/od.results*100):0;
+                      var bits=[];
+                      if(fr>0)bits.push(fmt(fr)+" first replies ("+frR.toFixed(2)+"%)");
+                      if(e3>0)bits.push(fmt(e3)+" engaged 3+ ("+e3R.toFixed(2)+"%)");
+                      return bits.length?bits.join(" · "):"";
+                    })():"";
                     return <div key={objName} style={{background:"rgba(0,0,0,0.2)",borderRadius:14,padding:"20px 18px",border:"1px solid "+oc+"25"}}>
                       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14}}><span style={{width:10,height:10,borderRadius:"50%",background:oc}}></span><span style={{fontSize:10,fontWeight:800,color:oc,fontFamily:ff,letterSpacing:0.5}}>{objName}</span></div>
                       <div style={{fontSize:30,fontWeight:900,color:oc,fontFamily:fm,lineHeight:1,marginBottom:4}}>{fmt(od.results)}{prevResults!==null&&deltaChip(od.results,prevResults,false)}</div>
-                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:14}}>from {fR(od.spend)} invested</div>
+                      <div style={{fontSize:10,color:P.label,fontFamily:fm,marginBottom:_waSub?4:14}}>from {fR(od.spend)} invested</div>
+                      {_waSub&&<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginBottom:12,lineHeight:1.4}}>{_waSub}</div>}
                       <div style={{borderTop:"1px solid "+P.rule,paddingTop:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                         <div><div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:fm,letterSpacing:1}}>{objCL4[objName]||"COST PER"}</div><div style={{fontSize:18,fontWeight:900,color:costPer>0?bmCol:P.caption,fontFamily:fm}}>{costPer>0?fR(costPer):"-"}{costPer>0&&prevCostPer!==null&&deltaChip(costPer,prevCostPer,true)}</div></div>
                         {bmTag&&<span style={{fontSize:9,fontWeight:800,padding:"4px 10px",borderRadius:5,color:"#fff",background:bmCol}}>{bmTag}</span>}
