@@ -7,7 +7,6 @@ import { getSession } from "./auth.js";
 import { clientIdentity, registeredDomain, brandDisplayForSlug, canonicalClientSlug } from "./_clientIdentity.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
 import { redisSetIfAbsent, redisGetJson } from "./_pulseShared.js";
-import { listOutcomesForSlug } from "./custom-outcomes.js";
 import { buildReportHtml } from "./_reportBuilder.js";
 import { createHash } from "crypto";
 
@@ -1270,19 +1269,39 @@ export default async function handler(req, res) {
     var _canonSlugForCO = canonicalClientSlug(clientSlug);
     var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
     if (wantCustomOutcomes) {
-      // Call listOutcomesForSlug directly — same helper the endpoint
-      // uses, no HTTP loop-back, no auth surface to reason about.
-      // Earlier the direct redisGetJson read via _pulseShared returned
-      // empty in this function's context; using the custom-outcomes
-      // module's own reader eliminates any subtle credential-source or
-      // ES-module scoping difference between the two paths.
-      extraFetches.push(listOutcomesForSlug(_canonSlugForCO).then(function(list) {
-        try { console.log("[email-share] custom-outcomes direct", { slug: _canonSlugForCO, length: (list || []).length, sample: (list && list[0]) || null }); } catch (_) {}
-        return Array.isArray(list) ? list : [];
-      }, function(err) {
-        try { console.error("[email-share] custom-outcomes direct error", err && err.message); } catch (_) {}
-        return [];
-      }));
+      // Two-path fetch: redisGetJson via _pulseShared FIRST (fast, no
+      // second serverless invocation). If that returns empty in this
+      // handler's context (an observed edge case), fall through to the
+      // HTTP loop-back to /api/custom-outcomes — same endpoint the
+      // dashboard reads. Wrapped in a try so any parse/network error
+      // resolves to an empty array rather than failing the whole
+      // Promise.all + the whole PDF build.
+      var _coKey = "client:outcomes:" + _canonSlugForCO;
+      var _coHeader = String(req.headers["x-session-token"] || "");
+      extraFetches.push((async function() {
+        try {
+          var v1 = await redisGetJson(_coKey);
+          if (Array.isArray(v1) && v1.length > 0) {
+            try { console.log("[email-share] custom-outcomes via redis", { slug: _canonSlugForCO, length: v1.length }); } catch (_) {}
+            return v1;
+          }
+          try { console.log("[email-share] custom-outcomes redis returned empty, falling back to HTTP", { slug: _canonSlugForCO, v1Type: v1 == null ? "null" : typeof v1 }); } catch (_) {}
+          var r = await fetch(origin + "/api/custom-outcomes?client=" + encodeURIComponent(_canonSlugForCO), {
+            headers: { "x-session-token": _coHeader }
+          });
+          if (!r.ok) {
+            try { console.warn("[email-share] custom-outcomes HTTP non-ok", r.status); } catch (_) {}
+            return [];
+          }
+          var d = await r.json();
+          var list = (d && Array.isArray(d.outcomes)) ? d.outcomes : [];
+          try { console.log("[email-share] custom-outcomes via HTTP", { slug: _canonSlugForCO, length: list.length }); } catch (_) {}
+          return list;
+        } catch (err) {
+          try { console.error("[email-share] custom-outcomes fetch error", err && err.message); } catch (_) {}
+          return [];
+        }
+      })());
     }
     var results = await Promise.all(extraFetches);
     var summary = results[0];
