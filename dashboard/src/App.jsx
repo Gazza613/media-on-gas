@@ -373,78 +373,87 @@ function HomePage(){
   var gPurple='linear-gradient(135deg,#F43F5E 0%,#D946EF 45%,#A855F7 100%)';
   var goTo=function(){
     try{window.history.pushState({},"","/login");}catch(_){}
-    // Force re-render by dispatching a popstate so the App checks
-    // window.location.pathname again. Simpler than adding a router.
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
-  // Compact synthetic dashboard tiles for the side rails. Each is a
-  // small mock of an actual octet / audience / chart tile — quick
-  // visual proof of what the platform delivers, without shipping real
-  // screenshots. Rotated + faded on the edges so they read as an
-  // ambient collage, not a data claim.
-  var Tile=function(props){
-    return <div style={{background:"linear-gradient(160deg,rgba(15,8,26,0.95),rgba(11,6,25,0.9))",border:"1px solid rgba(168,85,247,0.18)",borderRadius:14,padding:"14px 16px",boxShadow:"0 20px 60px rgba(0,0,0,0.5),0 0 40px "+props.glow+"22",width:props.w||220,color:P.txt,transform:props.rot,fontFamily:fm}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-        <span style={{width:8,height:8,borderRadius:"50%",background:props.accent}}></span>
-        <span style={{fontSize:8,fontWeight:800,color:props.accent,letterSpacing:1.5,textTransform:"uppercase"}}>{props.label}</span>
-      </div>
-      {props.big&&<div style={{fontSize:24,fontWeight:900,color:props.accent,lineHeight:1,marginBottom:4}}>{props.big}</div>}
-      {props.sub&&<div style={{fontSize:9,color:P.caption,lineHeight:1.4}}>{props.sub}</div>}
-      {props.body}
-    </div>;
-  };
-  // Two mini-bar rows for the "Cost Per Lead by Path" mock.
-  var barRow=function(k,v,pct,accent){
-    return <div key={k} style={{marginBottom:6}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:P.label,marginBottom:2}}><span>{k}</span><span style={{color:accent,fontWeight:800}}>{v}</span></div>
-      <div style={{height:5,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}><div style={{width:pct+"%",height:"100%",background:accent}}></div></div>
-    </div>;
-  };
-  // Age split rows for the audience mock.
-  var ageRow=function(k,pct){
-    return <div key={k} style={{marginBottom:5}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:P.label,marginBottom:2}}><span>{k}</span><span>{pct}%</span></div>
-      <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:2,overflow:"hidden"}}><div style={{width:pct+"%",height:"100%",background:P.mint}}></div></div>
-    </div>;
-  };
-  var leftTiles=[
-    {rot:"rotate(-6deg) translate(-14px,-40px)",top:"6%",left:"3%",label:"TOTAL LEADS",big:"165",sub:"133 form + 32 WhatsApp",accent:P.solar,glow:P.solar},
-    {rot:"rotate(4deg)",top:"38%",left:"2%",label:"WHATSAPP CONVERSATIONS",big:"179",sub:"conversations opened (7d)",accent:P.mint,glow:P.mint},
-    {rot:"rotate(-3deg) translate(10px,0)",top:"70%",left:"4%",label:"COST PER LEAD BY PATH",accent:P.rose,glow:P.rose,body:<div style={{marginTop:8}}>{barRow("PSI Form","R7.22",32,P.rose)}{barRow("WhatsApp","R22.91",100,P.orchid)}</div>}
-  ];
-  var rightTiles=[
-    {rot:"rotate(6deg) translate(10px,-30px)",top:"6%",right:"3%",label:"CONVERSION RATIO",big:"17.88%",sub:"32 of 179 converted",accent:P.cyan,glow:P.cyan},
-    {rot:"rotate(-4deg)",top:"36%",right:"2%",label:"PSI FORM LEADS",big:"133",sub:"Meta lead-form captures · R7.22 CPL",accent:P.rose,glow:P.rose},
-    {rot:"rotate(5deg) translate(-14px,10px)",top:"66%",right:"4%",label:"WHATSAPP AUDIENCE",accent:P.mint,glow:P.mint,body:<div style={{marginTop:8}}>{ageRow("18-24",14)}{ageRow("25-34",33)}{ageRow("35-44",31)}{ageRow("45-54",19)}</div>}
-  ];
-  return <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at center,rgba(168,85,247,0.14) 0%,rgba(6,2,14,0) 60%),radial-gradient(ellipse at 50% 100%,rgba(249,98,3,0.10) 0%,rgba(6,2,14,0) 55%),#06020e",color:P.txt,fontFamily:ff,position:"relative",overflow:"hidden"}}>
-    {/* Subtle grid overlay */}
-    <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(rgba(168,85,247,0.05) 1px,transparent 1px)",backgroundSize:"38px 38px",pointerEvents:"none"}}></div>
+  // Typewriter effect for the tagline second line. Types
+  // "Metrics that Matter" character by character with a blinking
+  // cursor, holds when complete, then re-runs on a slow loop so the
+  // page keeps motion without demanding attention.
+  var _phrase="Metrics that Matter";
+  var typedState=useState("");
+  var typed=typedState[0],setTyped=typedState[1];
+  useEffect(function(){
+    var i=0;
+    var typeIv=null,restartTo=null;
+    var step=function(){
+      i+=1;
+      setTyped(_phrase.slice(0,i));
+      if(i>=_phrase.length){
+        clearInterval(typeIv);
+        // Hold the full phrase for ~4.5s, then wipe and re-type.
+        restartTo=setTimeout(function(){
+          i=0;setTyped("");
+          typeIv=setInterval(step,85);
+        },4500);
+      }
+    };
+    typeIv=setInterval(step,85);
+    return function(){if(typeIv)clearInterval(typeIv);if(restartTo)clearTimeout(restartTo);};
+  },[]);
+  return <div style={{minHeight:"100vh",background:"#06020e",color:P.txt,fontFamily:ff,position:"relative",overflow:"hidden"}}>
+    {/* Animated ambient gradient blobs — no borders, no cards, just
+        depth. Slow drift on the CSS keyframes below so the page
+        breathes without being distracting. */}
+    <div className="gas-blob gas-blob-a" aria-hidden="true"></div>
+    <div className="gas-blob gas-blob-b" aria-hidden="true"></div>
+    <div className="gas-blob gas-blob-c" aria-hidden="true"></div>
 
-    {/* Side tile rails — hidden on narrow viewports to avoid clutter */}
-    <div className="gas-home-rail" style={{position:"absolute",top:0,bottom:0,left:0,width:280,pointerEvents:"none"}}>
-      {leftTiles.map(function(t,i){return <div key={"L"+i} style={{position:"absolute",top:t.top,left:t.left,transform:t.rot,opacity:0.9}}><Tile {...t}/></div>;})}
-    </div>
-    <div className="gas-home-rail" style={{position:"absolute",top:0,bottom:0,right:0,width:280,pointerEvents:"none"}}>
-      {rightTiles.map(function(t,i){return <div key={"R"+i} style={{position:"absolute",top:t.top,right:t.right,transform:t.rot,opacity:0.9}}><Tile {...t}/></div>;})}
-    </div>
+    {/* Fine dot-grid overlay, super subtle. Gives the void some
+        surface texture in printed viewports too. */}
+    <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(rgba(168,85,247,0.06) 1px,transparent 1px)",backgroundSize:"42px 42px",pointerEvents:"none",zIndex:1}}></div>
 
     {/* Hero */}
-    <div style={{position:"relative",zIndex:2,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 24px",textAlign:"center"}}>
-      <div style={{width:96,height:96,borderRadius:"50%",background:"radial-gradient(circle at 30% 30%,#FF6B00 0%,#F96203 45%,#B72200 100%)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 10px 60px rgba(249,98,3,0.55),inset 0 -8px 24px rgba(0,0,0,0.4)",marginBottom:22}}>
-        <span style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:1,fontFamily:fm,textShadow:"0 2px 6px rgba(0,0,0,0.4)"}}>GAS</span>
+    <div style={{position:"relative",zIndex:3,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"56px 24px",textAlign:"center"}}>
+      {/* Real GAS emblem (public/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png).
+          Sits above the hero with a soft ember halo so the emblem's
+          transparent PNG edges blend into the void. */}
+      <div style={{position:"relative",marginBottom:26}}>
+        <div style={{position:"absolute",inset:-18,borderRadius:"50%",background:"radial-gradient(circle,rgba(249,98,3,0.35) 0%,rgba(249,98,3,0) 70%)",filter:"blur(8px)"}} aria-hidden="true"></div>
+        <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{position:"relative",width:104,height:104,display:"block",filter:"drop-shadow(0 8px 32px rgba(249,98,3,0.4))"}}/>
       </div>
-      <div style={{fontSize:15,fontWeight:700,letterSpacing:2,marginBottom:32,fontFamily:fm}}>
+      <div style={{fontSize:13,fontWeight:800,letterSpacing:4,marginBottom:34,fontFamily:fm,textTransform:"uppercase"}}>
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
       </div>
-      <h1 style={{fontSize:"clamp(48px,8vw,96px)",fontWeight:900,letterSpacing:"-3px",lineHeight:1.02,margin:0,marginBottom:12,fontFamily:fm}}>Report Your</h1>
-      <h1 style={{fontSize:"clamp(48px,8vw,96px)",fontWeight:900,letterSpacing:"-3px",lineHeight:1.02,margin:0,marginBottom:32,fontFamily:fm,background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Campaigns<span style={{color:"#67e8f9",WebkitTextFillColor:"#67e8f9"}}>|</span></h1>
-      <div style={{fontSize:15,color:P.label,fontFamily:ff,maxWidth:520,lineHeight:1.6,marginBottom:44,letterSpacing:0.3}}>Real-time dashboards, deep audience insights and client-ready reports across Meta, TikTok and Google.</div>
-      <button onClick={goTo} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px) scale(1.02)";e.currentTarget.style.boxShadow="0 18px 50px rgba(217,70,239,0.5)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0) scale(1)";e.currentTarget.style.boxShadow="0 12px 36px rgba(217,70,239,0.35)";}} style={{background:gPurple,border:"none",borderRadius:999,padding:"18px 44px",color:"#fff",fontSize:15,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,boxShadow:"0 12px 36px rgba(217,70,239,0.35)",transition:"transform 0.25s cubic-bezier(0.2,0.8,0.2,1),box-shadow 0.3s"}}>Get Started &nbsp;→</button>
+      <h1 style={{fontSize:"clamp(52px,8.5vw,112px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.02,margin:0,fontFamily:fm}}>Report Your</h1>
+      {/* Line 2 — typewriter, gradient-filled, blinking cursor. Uses
+          a min-height clamp so the layout doesn't shift as the text
+          types out. */}
+      <h1 style={{fontSize:"clamp(52px,8.5vw,112px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.06,margin:0,marginTop:6,marginBottom:34,fontFamily:fm,minHeight:"1.06em",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+        <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>{typed}</span>
+        <span aria-hidden="true" style={{display:"inline-block",width:"0.08em",minWidth:4,height:"0.9em",background:"linear-gradient(180deg,#F43F5E,#A855F7)",marginLeft:8,verticalAlign:"middle",animation:"gasCursorBlink 1s steps(1) infinite",borderRadius:2}}></span>
+      </h1>
+      <div style={{fontSize:16,color:P.label,fontFamily:ff,maxWidth:560,lineHeight:1.65,marginBottom:46,letterSpacing:0.2}}>Real-time dashboards, deep audience insights and client-ready reports across Meta, TikTok and Google.</div>
+      <button onClick={goTo} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px) scale(1.02)";e.currentTarget.style.boxShadow="0 20px 55px rgba(217,70,239,0.55)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0) scale(1)";e.currentTarget.style.boxShadow="0 14px 40px rgba(217,70,239,0.4)";}} style={{background:gPurple,border:"none",borderRadius:999,padding:"18px 46px",color:"#fff",fontSize:15,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,boxShadow:"0 14px 40px rgba(217,70,239,0.4)",transition:"transform 0.25s cubic-bezier(0.2,0.8,0.2,1),box-shadow 0.3s"}}>Get Started &nbsp;→</button>
+      <div style={{marginTop:52,display:"flex",gap:26,flexWrap:"wrap",justifyContent:"center",fontSize:11,color:P.caption,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>
+        <span>Meta</span><span style={{opacity:0.3}}>·</span>
+        <span>TikTok</span><span style={{opacity:0.3}}>·</span>
+        <span>Google</span><span style={{opacity:0.3}}>·</span>
+        <span>GA4</span><span style={{opacity:0.3}}>·</span>
+        <span>WhatsApp CAPI</span>
+      </div>
     </div>
 
-    <style>{"@media (max-width: 1100px){ .gas-home-rail{ display:none !important; } }"}</style>
+    <style>{`
+      @keyframes gasBlobDrift{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(40px,-30px) scale(1.08);}}
+      @keyframes gasBlobDriftAlt{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(-50px,30px) scale(1.05);}}
+      @keyframes gasBlobDriftSlow{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(20px,40px) scale(0.95);}}
+      @keyframes gasCursorBlink{0%,50%{opacity:1;}51%,100%{opacity:0;}}
+      .gas-blob{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;}
+      .gas-blob-a{width:520px;height:520px;top:-120px;left:-160px;background:radial-gradient(circle,rgba(217,70,239,0.32) 0%,rgba(217,70,239,0) 70%);animation:gasBlobDrift 18s ease-in-out infinite;}
+      .gas-blob-b{width:600px;height:600px;bottom:-200px;right:-200px;background:radial-gradient(circle,rgba(249,98,3,0.28) 0%,rgba(249,98,3,0) 70%);animation:gasBlobDriftAlt 22s ease-in-out infinite;}
+      .gas-blob-c{width:440px;height:440px;top:40%;left:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(168,85,247,0.18) 0%,rgba(168,85,247,0) 70%);animation:gasBlobDriftSlow 26s ease-in-out infinite;}
+    `}</style>
   </div>;
 }
 
