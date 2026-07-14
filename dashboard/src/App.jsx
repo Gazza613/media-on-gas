@@ -1659,13 +1659,20 @@ function ShareModal(props){
       if(c.campaignId)campaignIds.push(String(c.campaignId));
       if(c.campaignName)campaignNames.push(c.campaignName);
     });
-    // Include the client's Custom Outcomes (already loaded in the
-    // dashboard's state) so the PDF backend doesn't have to re-fetch
-    // Redis itself. This is the same data the dashboard renders in
-    // the Objective Highlights tiles, so PDF and Summary reconcile
-    // by construction.
-    var _slugLower=slug[0].trim().toLowerCase();
-    var _outcomesForSlug=(props.customOutcomes&&Array.isArray(props.customOutcomes[_slugLower]))?props.customOutcomes[_slugLower]:[];
+    // Include Custom Outcomes so the PDF backend doesn't re-fetch
+    // Redis. Look up by the slug's canonical form (strip non-a-z0-9
+    // + lowercase — matches server-side canonicalClientSlug), and
+    // fall back to the "learnalot" key unconditionally since the
+    // feature is Learnalot-scoped for now (bulletproofs the case
+    // where autoClient hasn't propagated to the slug field yet, or
+    // the slug was manually overridden). Same array the Summary
+    // octet renders from — PDF and Summary reconcile by construction.
+    var _slugLower=String(slug[0]||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+    var _outcomesForSlug=[];
+    if(props.customOutcomes){
+      if(_slugLower&&Array.isArray(props.customOutcomes[_slugLower]))_outcomesForSlug=props.customOutcomes[_slugLower];
+      else if(Array.isArray(props.customOutcomes.learnalot))_outcomesForSlug=props.customOutcomes.learnalot;
+    }
     return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim(),customOutcomes:_outcomesForSlug};
   };
   // Every field is compulsory except Cc and Bcc. requireEmail adds the
