@@ -782,10 +782,10 @@ function renderBofuSection(opts) {
     var _convToLead = _waConv > 0 && waLeadTotal > 0 ? (waLeadTotal / _waConv * 100) : 0;
     var _eng3Rate = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
     var _tile = function(label, value, sub, accent) {
-      return `<div class="rp-outcome-tile" style="border-left:3px solid ${accent};">
-        <div class="rp-outcome-label" style="color:${accent};">${label}</div>
-        <div class="rp-outcome-value" style="color:${accent};">${value}</div>
-        <div class="rp-outcome-sub">${sub}</div>
+      return `<div class="rp-outcome-tile" style="border-left:3px solid ${accent};padding:4mm 4mm;">
+        <div class="rp-outcome-label" style="color:${accent};white-space:normal;font-size:6.5pt;letter-spacing:1px;line-height:1.2;margin-bottom:2mm;min-height:5mm;">${label}</div>
+        <div class="rp-outcome-value" style="color:${accent};font-size:15pt;">${value}</div>
+        <div class="rp-outcome-sub" style="font-size:7.5pt;line-height:1.35;">${sub}</div>
       </div>`;
     };
     var COL = {
@@ -832,9 +832,9 @@ function renderBofuSection(opts) {
     _effPool.sort(function(a, b) { return a.v - b.v; });
     var _bestEff = _effPool[0] || null;
     var _standTile = function(label, value, accent) {
-      return `<div class="rp-outcome-tile" style="border-left:3px solid ${accent};">
-        <div class="rp-outcome-label" style="color:${accent};">${label}</div>
-        <div class="rp-outcome-value" style="font-size:14pt;color:var(--rp-fg);">${value}</div>
+      return `<div class="rp-outcome-tile" style="border-left:3px solid ${accent};padding:4mm 4mm;">
+        <div class="rp-outcome-label" style="color:${accent};white-space:normal;font-size:6.5pt;letter-spacing:1px;line-height:1.2;margin-bottom:2mm;min-height:5mm;">${label}</div>
+        <div class="rp-outcome-value" style="font-size:11pt;color:var(--rp-fg);white-space:normal;line-height:1.25;">${value}</div>
       </div>`;
     };
     var _standRow = `<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);margin-top:3mm;">

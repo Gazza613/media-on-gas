@@ -1269,36 +1269,43 @@ export default async function handler(req, res) {
     var _canonSlugForCO = canonicalClientSlug(clientSlug);
     var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
     if (wantCustomOutcomes) {
-      // Two-path fetch: redisGetJson via _pulseShared FIRST (fast, no
-      // second serverless invocation). If that returns empty in this
-      // handler's context (an observed edge case), fall through to the
-      // HTTP loop-back to /api/custom-outcomes — same endpoint the
-      // dashboard reads. Wrapped in a try so any parse/network error
-      // resolves to an empty array rather than failing the whole
-      // Promise.all + the whole PDF build.
+      // Inline Upstash REST fetch — replicates custom-outcomes.js's
+      // redisCmd byte-for-byte so if the dashboard endpoint reads the
+      // Learnalot key, this reads it too. No shared helpers, no
+      // cross-endpoint imports, no HTTP loop-back.
       var _coKey = "client:outcomes:" + _canonSlugForCO;
-      var _coHeader = String(req.headers["x-session-token"] || "");
+      var _coRedisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
+      var _coRedisTok = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
       extraFetches.push((async function() {
         try {
-          var v1 = await redisGetJson(_coKey);
-          if (Array.isArray(v1) && v1.length > 0) {
-            try { console.log("[email-share] custom-outcomes via redis", { slug: _canonSlugForCO, length: v1.length }); } catch (_) {}
-            return v1;
-          }
-          try { console.log("[email-share] custom-outcomes redis returned empty, falling back to HTTP", { slug: _canonSlugForCO, v1Type: v1 == null ? "null" : typeof v1 }); } catch (_) {}
-          var r = await fetch(origin + "/api/custom-outcomes?client=" + encodeURIComponent(_canonSlugForCO), {
-            headers: { "x-session-token": _coHeader }
-          });
-          if (!r.ok) {
-            try { console.warn("[email-share] custom-outcomes HTTP non-ok", r.status); } catch (_) {}
+          if (!_coRedisUrl || !_coRedisTok) {
+            console.warn("[email-share] custom-outcomes: redis creds missing", { hasUrl: !!_coRedisUrl, hasTok: !!_coRedisTok });
             return [];
           }
+          var _url = _coRedisUrl.replace(/\/$/, "");
+          var r = await fetch(_url, {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + _coRedisTok, "Content-Type": "application/json" },
+            body: JSON.stringify(["GET", _coKey])
+          });
+          console.log("[email-share] custom-outcomes upstash", { key: _coKey, status: r.status, ok: r.ok });
+          if (!r.ok) return [];
           var d = await r.json();
-          var list = (d && Array.isArray(d.outcomes)) ? d.outcomes : [];
-          try { console.log("[email-share] custom-outcomes via HTTP", { slug: _canonSlugForCO, length: list.length }); } catch (_) {}
-          return list;
+          if (!d || typeof d.result !== "string") {
+            console.log("[email-share] custom-outcomes upstash: no string result", { d: d && Object.keys(d), resultType: d && typeof d.result });
+            return [];
+          }
+          try {
+            var arr = JSON.parse(d.result);
+            var list = Array.isArray(arr) ? arr : [];
+            console.log("[email-share] custom-outcomes parsed", { length: list.length, firstLabel: list[0] && list[0].label });
+            return list;
+          } catch (e) {
+            console.error("[email-share] custom-outcomes parse error", e && e.message);
+            return [];
+          }
         } catch (err) {
-          try { console.error("[email-share] custom-outcomes fetch error", err && err.message); } catch (_) {}
+          console.error("[email-share] custom-outcomes fetch error", err && err.message);
           return [];
         }
       })());
