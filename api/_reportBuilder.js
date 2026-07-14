@@ -1330,6 +1330,134 @@ function renderAudienceSection(opts) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// SECTION: LEARNALOT — WHATSAPP AUDIENCE (LEARNALOT-ONLY)
+// ═══════════════════════════════════════════════════════════════════
+
+// Mirrors the dashboard's WhatsApp Audience panel line-for-line. The
+// CAPI QualifiedLead events can't be broken down individually, so the
+// panel shows the age / gender split of the WhatsApp conversations
+// that produced them (the closest available proxy). Only renders when
+// the report is for Learnalot AND demographics carry
+// messagingConversations from at least one WhatsApp campaign.
+function renderLearnalotWhatsAppAudience(opts) {
+  var isLearnalot = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  if (!isLearnalot) return "";
+  var demo = opts.demographics;
+  if (!demo || !Array.isArray(demo.ageGender)) return "";
+
+  var campaignsList = (opts.summary && opts.summary.campaigns) || [];
+  var selSet = {};
+  campaignsList.forEach(function(c) {
+    var cid = String(c.campaignId || "");
+    if (cid) selSet[cid] = true;
+    var raw = c.rawCampaignId || cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+    if (raw) selSet[raw] = true;
+  });
+  var inSel = function(r) {
+    var cid = String((r && r.campaignId) || "");
+    if (selSet[cid]) return true;
+    var raw = cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+    return !!selSet[raw];
+  };
+  var isWAppName = function(name) {
+    var s = String(name || "").toLowerCase();
+    return s.indexOf("_wapp_") >= 0 || s.indexOf("wapp_") >= 0 || s.indexOf("_whatsapp_") >= 0 || s.indexOf(" whatsapp ") >= 0;
+  };
+  var wappRows = demo.ageGender.filter(function(r) { return inSel(r) && isWAppName(r.campaignName); });
+  var bucketTotal = 0, byAge = {}, byGender = {};
+  wappRows.forEach(function(r) {
+    var mc = (r.results && r.results.messagingConversations) || 0;
+    if (mc <= 0) return;
+    bucketTotal += mc;
+    var age = r.age || "unknown";
+    var gen = String(r.gender || "unknown").toLowerCase();
+    byAge[age] = (byAge[age] || 0) + mc;
+    byGender[gen] = (byGender[gen] || 0) + mc;
+  });
+  if (bucketTotal <= 0) return "";
+
+  // Anchor the headline count on the max-across-placements campaign
+  // total (the same number the Objective Highlights tile shows) so
+  // the narrative reads consistent with the tile above.
+  var maxOfType = function(actions, type) {
+    var best = 0;
+    (actions || []).forEach(function(a) {
+      if (String(a.action_type || "").toLowerCase() === type && parseFloat(a.value || 0) > best) best = parseFloat(a.value || 0);
+    });
+    return best;
+  };
+  var headlineConv = 0;
+  campaignsList.forEach(function(c) {
+    if (!isWAppName(c.campaignName)) return;
+    headlineConv += maxOfType(c.actions, "onsite_conversion.messaging_conversation_started_7d");
+  });
+  if (headlineConv <= 0) headlineConv = bucketTotal;
+
+  var byObj = (opts.book && opts.book.byObjective) || {};
+  var formLeadsCount = (byObj["Leads"] && byObj["Leads"].global && byObj["Leads"].global.result) || 0;
+  var waLeadTotal = 0;
+  var coList = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
+  var monthsInRange = {};
+  if (opts.from && opts.to) {
+    var dR = new Date(opts.from + "T00:00:00Z");
+    var eR = new Date(opts.to + "T00:00:00Z");
+    if (!isNaN(dR.getTime()) && !isNaN(eR.getTime())) {
+      while (dR <= eR) {
+        var yR = dR.getUTCFullYear();
+        var mR = dR.getUTCMonth() + 1;
+        monthsInRange[yR + "-" + (mR < 10 ? "0" : "") + mR] = 1;
+        dR.setUTCMonth(dR.getUTCMonth() + 1);
+      }
+    }
+  }
+  coList.forEach(function(o) {
+    if (!monthsInRange[o.month]) return;
+    if (/whatsapp|wapp|(^| )wa /i.test(String(o.label || ""))) waLeadTotal += parseInt(o.count || 0, 10);
+  });
+  var convRate = headlineConv > 0 && waLeadTotal > 0 ? (waLeadTotal / headlineConv * 100) : 0;
+
+  var ageOrderWA = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+", "unknown"];
+  var ageBarsWA = ageOrderWA.filter(function(a) { return byAge[a]; }).map(function(a) {
+    var pct = bucketTotal > 0 ? (byAge[a] / bucketTotal * 100) : 0;
+    return `<div class="rp-bar-row">
+      <div class="rp-bar-label">${a}</div>
+      <div class="rp-bar-track"><div class="rp-bar-fill" style="width:${pct.toFixed(1)}%;background:#34D399;"></div></div>
+      <div class="rp-bar-value"><span class="rp-bar-pct">${pct.toFixed(2)}%</span></div>
+    </div>`;
+  }).join("");
+  var genderOrderWA = ["female", "male", "unknown"];
+  var genderBarsWA = genderOrderWA.filter(function(g) { return byGender[g]; }).map(function(g) {
+    var pct = bucketTotal > 0 ? (byGender[g] / bucketTotal * 100) : 0;
+    var label = g.charAt(0).toUpperCase() + g.slice(1);
+    return `<div class="rp-bar-row">
+      <div class="rp-bar-label">${label}</div>
+      <div class="rp-bar-track"><div class="rp-bar-fill" style="width:${pct.toFixed(1)}%;background:#34D399;"></div></div>
+      <div class="rp-bar-value"><span class="rp-bar-pct">${pct.toFixed(2)}%</span></div>
+    </div>`;
+  }).join("");
+
+  var caption = (formLeadsCount > 0 ? fmtNum(formLeadsCount) + " PSI Form leads have full demographic attribution. " : "")
+    + "The " + fmtNum(waLeadTotal) + " WhatsApp qualified leads can't be broken down individually, this is the audience of the "
+    + fmtNum(headlineConv) + " conversations that produced them"
+    + (convRate > 0 ? ", ~" + convRate.toFixed(2) + "% of which converted" : "")
+    + ". Age and gender shares below are proportional (each chart sums to 100% of the tagged conversations Meta returned per bucket).";
+
+  return `<section class="rp-page">
+    ${renderSectionHeader("04b", "Perfect Target Audience", "WhatsApp Audience", caption)}
+    <div class="rp-block-double">
+      <div class="rp-block">
+        <div class="rp-block-title">By Age Group</div>
+        <div class="rp-bars">${ageBarsWA || `<div class="rp-empty">No age data available.</div>`}</div>
+      </div>
+      <div class="rp-block">
+        <div class="rp-block-title">Gender Split</div>
+        <div class="rp-bars">${genderBarsWA || `<div class="rp-empty">No gender data available.</div>`}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // SECTION: BEST PERFORMING ADS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1815,6 +1943,7 @@ export function buildReportHtml(opts) {
     renderMofuSection(contentOpts),
     renderBofuSection(contentOpts),
     renderAudienceSection(contentOpts),
+    renderLearnalotWhatsAppAudience(contentOpts),
     renderTopAdsSection(contentOpts),
     renderExecutiveSummary(contentOpts),
     renderClosingNote(contentOpts)
