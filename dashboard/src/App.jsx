@@ -425,7 +425,7 @@ function HomePage(){
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
       </div>
-      <h1 style={{fontSize:"clamp(36px,6vw,78px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.02,margin:0,fontFamily:fm}}>Report Your</h1>
+      <h1 style={{fontSize:"clamp(36px,6vw,78px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.02,margin:0,fontFamily:fm}}>Data Insights</h1>
       {/* Line 2 — typewriter, gradient-filled, blinking cursor. Uses
           a min-height clamp so the layout doesn't shift as the text
           types out. */}
