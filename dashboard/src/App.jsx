@@ -425,23 +425,16 @@ function HomePage(){
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
       </div>
-      <h1 style={{fontSize:"clamp(52px,8.5vw,112px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.02,margin:0,fontFamily:fm}}>Report Your</h1>
+      <h1 style={{fontSize:"clamp(36px,6vw,78px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.02,margin:0,fontFamily:fm}}>Report Your</h1>
       {/* Line 2 — typewriter, gradient-filled, blinking cursor. Uses
           a min-height clamp so the layout doesn't shift as the text
           types out. */}
-      <h1 style={{fontSize:"clamp(52px,8.5vw,112px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.06,margin:0,marginTop:6,marginBottom:34,fontFamily:fm,minHeight:"1.06em",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+      <h1 style={{fontSize:"clamp(36px,6vw,78px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.06,margin:0,marginTop:6,marginBottom:34,fontFamily:fm,minHeight:"1.06em",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>{typed}</span>
         <span aria-hidden="true" style={{display:"inline-block",width:"0.08em",minWidth:4,height:"0.9em",background:"linear-gradient(180deg,#F43F5E,#A855F7)",marginLeft:8,verticalAlign:"middle",animation:"gasCursorBlink 1s steps(1) infinite",borderRadius:2}}></span>
       </h1>
-      <div style={{fontSize:16,color:P.label,fontFamily:ff,maxWidth:560,lineHeight:1.65,marginBottom:46,letterSpacing:0.2}}>Real-time dashboards, deep audience insights and client-ready reports across Meta, TikTok and Google.</div>
+      <div style={{fontSize:14,color:P.label,fontFamily:ff,maxWidth:"92vw",lineHeight:1.5,marginBottom:46,letterSpacing:0.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Real-time dashboards, deep audience insights and client-ready reports across Meta, TikTok and Google.</div>
       <button onClick={goTo} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px) scale(1.02)";e.currentTarget.style.boxShadow="0 20px 55px rgba(217,70,239,0.55)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0) scale(1)";e.currentTarget.style.boxShadow="0 14px 40px rgba(217,70,239,0.4)";}} style={{background:gPurple,border:"none",borderRadius:999,padding:"18px 46px",color:"#fff",fontSize:15,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,boxShadow:"0 14px 40px rgba(217,70,239,0.4)",transition:"transform 0.25s cubic-bezier(0.2,0.8,0.2,1),box-shadow 0.3s"}}>Get Started &nbsp;→</button>
-      <div style={{marginTop:52,display:"flex",gap:26,flexWrap:"wrap",justifyContent:"center",fontSize:11,color:P.caption,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>
-        <span>Meta</span><span style={{opacity:0.3}}>·</span>
-        <span>TikTok</span><span style={{opacity:0.3}}>·</span>
-        <span>Google</span><span style={{opacity:0.3}}>·</span>
-        <span>GA4</span><span style={{opacity:0.3}}>·</span>
-        <span>WhatsApp CAPI</span>
-      </div>
     </div>
 
     <style>{`
