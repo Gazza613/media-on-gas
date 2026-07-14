@@ -359,6 +359,95 @@ function SignupScreen(props){
   </div>);
 }
 
+// Marketing landing page. Renders only when the team lands on the
+// naked domain (media.gasmarketing.co.za, no path, no share token) and
+// they haven't authenticated. Get Started routes to /login.
+// Deep-link shares (?token / ?st / ?campaigns / /login / /signup) skip
+// this page entirely. Aligned to the "Studio on GAS" landing look:
+// centered hero, gradient CTA, angled tile cards flanking the hero
+// (dashboard tile screenshots done as inline CSS mock-ups so nothing
+// external needs to load).
+function HomePage(){
+  var fm='"Manrope","Inter",system-ui,sans-serif';
+  var ff='"Inter","Manrope",system-ui,sans-serif';
+  var gPurple='linear-gradient(135deg,#F43F5E 0%,#D946EF 45%,#A855F7 100%)';
+  var goTo=function(){
+    try{window.history.pushState({},"","/login");}catch(_){}
+    // Force re-render by dispatching a popstate so the App checks
+    // window.location.pathname again. Simpler than adding a router.
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+  // Compact synthetic dashboard tiles for the side rails. Each is a
+  // small mock of an actual octet / audience / chart tile — quick
+  // visual proof of what the platform delivers, without shipping real
+  // screenshots. Rotated + faded on the edges so they read as an
+  // ambient collage, not a data claim.
+  var Tile=function(props){
+    return <div style={{background:"linear-gradient(160deg,rgba(15,8,26,0.95),rgba(11,6,25,0.9))",border:"1px solid rgba(168,85,247,0.18)",borderRadius:14,padding:"14px 16px",boxShadow:"0 20px 60px rgba(0,0,0,0.5),0 0 40px "+props.glow+"22",width:props.w||220,color:P.txt,transform:props.rot,fontFamily:fm}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+        <span style={{width:8,height:8,borderRadius:"50%",background:props.accent}}></span>
+        <span style={{fontSize:8,fontWeight:800,color:props.accent,letterSpacing:1.5,textTransform:"uppercase"}}>{props.label}</span>
+      </div>
+      {props.big&&<div style={{fontSize:24,fontWeight:900,color:props.accent,lineHeight:1,marginBottom:4}}>{props.big}</div>}
+      {props.sub&&<div style={{fontSize:9,color:P.caption,lineHeight:1.4}}>{props.sub}</div>}
+      {props.body}
+    </div>;
+  };
+  // Two mini-bar rows for the "Cost Per Lead by Path" mock.
+  var barRow=function(k,v,pct,accent){
+    return <div key={k} style={{marginBottom:6}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:P.label,marginBottom:2}}><span>{k}</span><span style={{color:accent,fontWeight:800}}>{v}</span></div>
+      <div style={{height:5,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}><div style={{width:pct+"%",height:"100%",background:accent}}></div></div>
+    </div>;
+  };
+  // Age split rows for the audience mock.
+  var ageRow=function(k,pct){
+    return <div key={k} style={{marginBottom:5}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:P.label,marginBottom:2}}><span>{k}</span><span>{pct}%</span></div>
+      <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:2,overflow:"hidden"}}><div style={{width:pct+"%",height:"100%",background:P.mint}}></div></div>
+    </div>;
+  };
+  var leftTiles=[
+    {rot:"rotate(-6deg) translate(-14px,-40px)",top:"6%",left:"3%",label:"TOTAL LEADS",big:"165",sub:"133 form + 32 WhatsApp",accent:P.solar,glow:P.solar},
+    {rot:"rotate(4deg)",top:"38%",left:"2%",label:"WHATSAPP CONVERSATIONS",big:"179",sub:"conversations opened (7d)",accent:P.mint,glow:P.mint},
+    {rot:"rotate(-3deg) translate(10px,0)",top:"70%",left:"4%",label:"COST PER LEAD BY PATH",accent:P.rose,glow:P.rose,body:<div style={{marginTop:8}}>{barRow("PSI Form","R7.22",32,P.rose)}{barRow("WhatsApp","R22.91",100,P.orchid)}</div>}
+  ];
+  var rightTiles=[
+    {rot:"rotate(6deg) translate(10px,-30px)",top:"6%",right:"3%",label:"CONVERSION RATIO",big:"17.88%",sub:"32 of 179 converted",accent:P.cyan,glow:P.cyan},
+    {rot:"rotate(-4deg)",top:"36%",right:"2%",label:"PSI FORM LEADS",big:"133",sub:"Meta lead-form captures · R7.22 CPL",accent:P.rose,glow:P.rose},
+    {rot:"rotate(5deg) translate(-14px,10px)",top:"66%",right:"4%",label:"WHATSAPP AUDIENCE",accent:P.mint,glow:P.mint,body:<div style={{marginTop:8}}>{ageRow("18-24",14)}{ageRow("25-34",33)}{ageRow("35-44",31)}{ageRow("45-54",19)}</div>}
+  ];
+  return <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at center,rgba(168,85,247,0.14) 0%,rgba(6,2,14,0) 60%),radial-gradient(ellipse at 50% 100%,rgba(249,98,3,0.10) 0%,rgba(6,2,14,0) 55%),#06020e",color:P.txt,fontFamily:ff,position:"relative",overflow:"hidden"}}>
+    {/* Subtle grid overlay */}
+    <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(rgba(168,85,247,0.05) 1px,transparent 1px)",backgroundSize:"38px 38px",pointerEvents:"none"}}></div>
+
+    {/* Side tile rails — hidden on narrow viewports to avoid clutter */}
+    <div className="gas-home-rail" style={{position:"absolute",top:0,bottom:0,left:0,width:280,pointerEvents:"none"}}>
+      {leftTiles.map(function(t,i){return <div key={"L"+i} style={{position:"absolute",top:t.top,left:t.left,transform:t.rot,opacity:0.9}}><Tile {...t}/></div>;})}
+    </div>
+    <div className="gas-home-rail" style={{position:"absolute",top:0,bottom:0,right:0,width:280,pointerEvents:"none"}}>
+      {rightTiles.map(function(t,i){return <div key={"R"+i} style={{position:"absolute",top:t.top,right:t.right,transform:t.rot,opacity:0.9}}><Tile {...t}/></div>;})}
+    </div>
+
+    {/* Hero */}
+    <div style={{position:"relative",zIndex:2,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 24px",textAlign:"center"}}>
+      <div style={{width:96,height:96,borderRadius:"50%",background:"radial-gradient(circle at 30% 30%,#FF6B00 0%,#F96203 45%,#B72200 100%)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 10px 60px rgba(249,98,3,0.55),inset 0 -8px 24px rgba(0,0,0,0.4)",marginBottom:22}}>
+        <span style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:1,fontFamily:fm,textShadow:"0 2px 6px rgba(0,0,0,0.4)"}}>GAS</span>
+      </div>
+      <div style={{fontSize:15,fontWeight:700,letterSpacing:2,marginBottom:32,fontFamily:fm}}>
+        <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
+        <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
+      </div>
+      <h1 style={{fontSize:"clamp(48px,8vw,96px)",fontWeight:900,letterSpacing:"-3px",lineHeight:1.02,margin:0,marginBottom:12,fontFamily:fm}}>Report Your</h1>
+      <h1 style={{fontSize:"clamp(48px,8vw,96px)",fontWeight:900,letterSpacing:"-3px",lineHeight:1.02,margin:0,marginBottom:32,fontFamily:fm,background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Campaigns<span style={{color:"#67e8f9",WebkitTextFillColor:"#67e8f9"}}>|</span></h1>
+      <div style={{fontSize:15,color:P.label,fontFamily:ff,maxWidth:520,lineHeight:1.6,marginBottom:44,letterSpacing:0.3}}>Real-time dashboards, deep audience insights and client-ready reports across Meta, TikTok and Google.</div>
+      <button onClick={goTo} onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px) scale(1.02)";e.currentTarget.style.boxShadow="0 18px 50px rgba(217,70,239,0.5)";}} onMouseLeave={function(e){e.currentTarget.style.transform="translateY(0) scale(1)";e.currentTarget.style.boxShadow="0 12px 36px rgba(217,70,239,0.35)";}} style={{background:gPurple,border:"none",borderRadius:999,padding:"18px 44px",color:"#fff",fontSize:15,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1,boxShadow:"0 12px 36px rgba(217,70,239,0.35)",transition:"transform 0.25s cubic-bezier(0.2,0.8,0.2,1),box-shadow 0.3s"}}>Get Started &nbsp;→</button>
+    </div>
+
+    <style>{"@media (max-width: 1100px){ .gas-home-rail{ display:none !important; } }"}</style>
+  </div>;
+}
+
 function LoginScreen(props){
   var es=useState(""),loginErr=es[0],setLoginErr=es[1];
   var em=useState(""),email=em[0],setEmail=em[1];
@@ -3874,6 +3963,15 @@ function genFlags(m,t,camps){
 export default function MediaOnGas(){
   var au=useState(null),session=au[0],setSession=au[1];
   var ac=useState(true),authChecking=ac[0],setAuthChecking=ac[1];
+  // Bumped whenever browser history changes (Home → /login push,
+  // back/forward). Included in downstream state derived from
+  // window.location.pathname so the App re-evaluates the gate.
+  var pathTick=useState(0);
+  useEffect(function(){
+    var onPop=function(){pathTick[1](function(x){return x+1;});};
+    window.addEventListener("popstate",onPop);
+    return function(){window.removeEventListener("popstate",onPop);};
+  },[]);
   var ar=useState(null),authRole=ar[0],setAuthRole=ar[1];
   var ae=useState(""),authEmail=ae[0],setAuthEmail=ae[1];
   var an=useState(""),authName=an[0],setAuthName=an[1];
@@ -4328,7 +4426,13 @@ export default function MediaOnGas(){
     // shipped since their last login — Vercel serves index.html with
     // cache-control: no-cache, so the reload always pulls the latest bundle.
     // Client share-link viewers never call this path.
-    try{window.location.reload();}catch(_){}
+    // Navigate to / on the reload so /login doesn't linger in the URL
+    // bar after a successful sign-in (Home routing was added 2026-07;
+    // before that reload() was fine because there was only one URL).
+    try{
+      if(window.location.pathname==="/login")window.location.assign("/");
+      else window.location.reload();
+    }catch(_){}
   };
   var logSessionEnd=function(reason){
     var loginTs=parseInt(sessionStorage.getItem("gas_login_ts")||"0");
@@ -5427,6 +5531,19 @@ export default function MediaOnGas(){
   // Lives outside the session check so new invitees reach the form even
   // though they are not yet authenticated.
   if(window.location.pathname.indexOf("/signup")===0)return(<SignupScreen/>);
+  // Home / login routing: land on / (Home) unless the user is already
+  // authenticated (session), on a client-share link (viewToken or
+  // ?token / ?st / ?campaigns URL params), or explicitly at /login.
+  // Get Started on Home pushes /login and this branch flips to the
+  // LoginScreen. Post-login handleLogin reloads and the session check
+  // renders the main app regardless of URL.
+  if(!session&&!viewToken){
+    var _path=window.location.pathname;
+    var _params=window.location.search||"";
+    var _isDeepLink=_params.indexOf("token=")>=0||_params.indexOf("st=")>=0||_params.indexOf("campaigns=")>=0;
+    var _isLoginPath=_path==="/login"||_path.indexOf("/login")===0;
+    if(_path==="/"&&!_isDeepLink&&!_isLoginPath)return(<HomePage/>);
+  }
   if(!session&&!viewToken)return(<>
     <LoginScreen onLogin={handleLogin}/>
     {/* Coffee-break modal sits over the login screen when the team's
