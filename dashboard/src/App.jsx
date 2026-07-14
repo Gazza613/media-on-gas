@@ -1534,14 +1534,32 @@ function deriveClientNames(campaigns,activeOnly){
 }
 
 function ShareModal(props){
-  // ESC key dismisses the Share modal so the operator isn't trapped
-  // in it after DOWNLOAD PDF returns from the popup with focus back
-  // on the parent (a case where clicking the modal content did
-  // nothing and there was no visible ✕ button previously).
+  // Belt-and-braces close paths so the operator is never trapped in
+  // this modal:
+  //  1. Escape (window keydown + document keydown, capture phase, so
+  //     it survives focus being on the popup / an input inside).
+  //  2. Backdrop click (handled inline on the overlay div).
+  //  3. Explicit ✕ button top-right.
+  //  4. Document-level pointerdown outside the panel — a hard exit
+  //     even if the overlay's onClick was suppressed by a stacked
+  //     preview / dropdown layer.
+  var panelRef=useRef(null);
   useEffect(function(){
-    var onKey=function(e){if(e.key==="Escape"&&typeof props.onClose==="function")props.onClose();};
-    window.addEventListener("keydown",onKey);
-    return function(){window.removeEventListener("keydown",onKey);};
+    var doClose=function(){if(typeof props.onClose==="function")props.onClose();};
+    var onKey=function(e){if(e.key==="Escape"){doClose();}};
+    var onDown=function(e){
+      // Only close when the click landed OUTSIDE the panel.
+      var el=panelRef.current;
+      if(el&&e.target&&!el.contains(e.target)){doClose();}
+    };
+    window.addEventListener("keydown",onKey,true);
+    document.addEventListener("keydown",onKey,true);
+    document.addEventListener("pointerdown",onDown,true);
+    return function(){
+      window.removeEventListener("keydown",onKey,true);
+      document.removeEventListener("keydown",onKey,true);
+      document.removeEventListener("pointerdown",onDown,true);
+    };
   },[props.onClose]);
   // Derive client names; the dropdown only lists clients with an
   // actively-campaigning campaign. allClientNames keeps the full list
@@ -1909,8 +1927,8 @@ function ShareModal(props){
     </div>
   </div>}
   <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)",overflow:"auto",padding:"40px 16px"}} onClick={props.onClose}>
-    <div onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto",position:"relative"}}>
-      <button onClick={props.onClose} title="Close (Esc)" aria-label="Close" style={{position:"absolute",top:14,right:14,background:"transparent",border:"1px solid "+P.rule,borderRadius:10,width:34,height:34,color:P.label,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,lineHeight:1,zIndex:2}}>×</button>
+    <div ref={panelRef} onClick={function(e){e.stopPropagation();}} style={{background:P.cosmos,border:"1px solid "+P.rule,borderRadius:20,padding:32,width:560,maxWidth:"92vw",maxHeight:"calc(100vh - 80px)",overflowY:"auto",position:"relative"}}>
+      <button onClick={props.onClose} title="Close (Esc)" aria-label="Close" style={{position:"absolute",top:12,right:12,background:P.ember,border:"none",borderRadius:10,width:40,height:40,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,lineHeight:1,zIndex:5,boxShadow:"0 4px 14px rgba(249,98,3,0.35)"}}>×</button>
       <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Share with Client</div>
       <div style={{fontSize:12,color:P.label,marginBottom:20,lineHeight:1.6}}>Generates a signed URL scoped to this client. Read-only Summary view, locked to the campaigns you currently have selected. Clients open directly, no password required.</div>
 
