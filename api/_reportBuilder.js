@@ -1681,12 +1681,6 @@ function renderExecutiveSummary(opts) {
   var isBlendedLeadsX = waLeadTotalX > 0 && formLeadsCountX > 0;
   var totalApp = byObj["Clicks to App Store"] ? byObj["Clicks to App Store"].global.result : 0;
   var totalLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.result : 0;
-  var totalSpend = book.byStage.tofu.spend + book.byStage.mofu.spend + book.byStage.bofu.spend;
-  var stagePcts = {
-    tofu: totalSpend > 0 ? (book.byStage.tofu.spend / totalSpend * 100) : 0,
-    mofu: totalSpend > 0 ? (book.byStage.mofu.spend / totalSpend * 100) : 0,
-    bofu: totalSpend > 0 ? (book.byStage.bofu.spend / totalSpend * 100) : 0
-  };
   // Blended CTR mirrors dashboard's Summary tile (engagement-only,
   // awareness / community reach excluded per project semantics).
   var eng = book.engagement || { impressions: 0, clicks: 0, spend: 0 };
@@ -1712,7 +1706,6 @@ function renderExecutiveSummary(opts) {
   if (totalFollows > 0) narrative.push("The community earned " + fmtNum(totalFollows) + " new follower" + (totalFollows === 1 ? "" : "s") + " and page like" + (totalFollows === 1 ? "" : "s") + ", each representing a permanent organic distribution channel that compounds beyond the paid window.");
   if (totalApp > 0) narrative.push(fmtNum(totalApp) + " users clicked through to their app store to download the app.");
   if (totalLp > 0) narrative.push(fmtNum(totalLp) + " users clicked through to the destination landing page from traffic campaigns.");
-  if (totalSpend > 0) narrative.push("The funnel investment split ran " + stagePcts.tofu.toFixed(1) + "% top of funnel (awareness), " + stagePcts.mofu.toFixed(1) + "% middle (consideration), and " + stagePcts.bofu.toFixed(1) + "% bottom (conversion).");
   return `<section class="rp-page">
     ${renderSectionHeader("06", "Executive Summary", "Period In Review", "A comprehensive read of the reporting window, the investment split across the funnel, and the measurable outcomes each stage delivered.")}
     <div class="rp-block">
