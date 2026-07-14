@@ -1268,48 +1268,16 @@ export default async function handler(req, res) {
     // return an empty array.
     var _canonSlugForCO = canonicalClientSlug(clientSlug);
     var wantCustomOutcomes = wantReportData && _canonSlugForCO === "learnalot";
-    if (wantCustomOutcomes) {
-      // Inline Upstash REST fetch — replicates custom-outcomes.js's
-      // redisCmd byte-for-byte so if the dashboard endpoint reads the
-      // Learnalot key, this reads it too. No shared helpers, no
-      // cross-endpoint imports, no HTTP loop-back.
-      var _coKey = "client:outcomes:" + _canonSlugForCO;
-      var _coRedisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
-      var _coRedisTok = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
-      extraFetches.push((async function() {
-        try {
-          if (!_coRedisUrl || !_coRedisTok) {
-            console.warn("[email-share] custom-outcomes: redis creds missing", { hasUrl: !!_coRedisUrl, hasTok: !!_coRedisTok });
-            return [];
-          }
-          var _url = _coRedisUrl.replace(/\/$/, "");
-          var r = await fetch(_url, {
-            method: "POST",
-            headers: { "Authorization": "Bearer " + _coRedisTok, "Content-Type": "application/json" },
-            body: JSON.stringify(["GET", _coKey])
-          });
-          console.log("[email-share] custom-outcomes upstash", { key: _coKey, status: r.status, ok: r.ok });
-          if (!r.ok) return [];
-          var d = await r.json();
-          if (!d || typeof d.result !== "string") {
-            console.log("[email-share] custom-outcomes upstash: no string result", { d: d && Object.keys(d), resultType: d && typeof d.result });
-            return [];
-          }
-          try {
-            var arr = JSON.parse(d.result);
-            var list = Array.isArray(arr) ? arr : [];
-            console.log("[email-share] custom-outcomes parsed", { length: list.length, firstLabel: list[0] && list[0].label });
-            return list;
-          } catch (e) {
-            console.error("[email-share] custom-outcomes parse error", e && e.message);
-            return [];
-          }
-        } catch (err) {
-          console.error("[email-share] custom-outcomes fetch error", err && err.message);
-          return [];
-        }
-      })());
-    }
+    // Custom Outcomes now arrive INSIDE the request body from the
+    // dashboard (which already has them loaded in state for the
+    // Objective Highlights tiles). Every server-side fetch path we
+    // tried — shared _pulseShared helper, cross-endpoint import,
+    // HTTP loop-back, inline Upstash REST — returned empty for
+    // reasons still not diagnosed. Reading from the request body
+    // guarantees PDF and Summary reconcile by construction (same
+    // data source, computed once, sent once).
+    var customOutcomesFromBody = Array.isArray(body.customOutcomes) ? body.customOutcomes : [];
+    try { console.log("[email-share] custom-outcomes from body", { slug: _canonSlugForCO, length: customOutcomesFromBody.length, firstLabel: customOutcomesFromBody[0] && customOutcomesFromBody[0].label }); } catch (_) {}
     var results = await Promise.all(extraFetches);
     var summary = results[0];
     var topAds = results[1];
@@ -1317,7 +1285,7 @@ export default async function handler(req, res) {
     var _idx = 3;
     var placements = needPlacementsFetch ? (results[_idx++] || []) : [];
     var demographics = wantReportData ? (results[_idx++] || null) : null;
-    var customOutcomes = wantCustomOutcomes ? (results[_idx++] || []) : [];
+    var customOutcomes = customOutcomesFromBody;
 
     // The per-creative breakdown is intentionally NOT precomputed for
     // the email anymore: it is whole-ad / all-placements and cannot
