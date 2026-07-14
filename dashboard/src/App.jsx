@@ -408,6 +408,31 @@ function HomePage(){
     <div className="gas-blob gas-blob-b" aria-hidden="true"></div>
     <div className="gas-blob gas-blob-c" aria-hidden="true"></div>
 
+    {/* Matrix-style falling binary streams on the left and right
+        borders. Very low opacity, small monospace font, slow scroll.
+        Adds motion / a "we work with data" flavour without demanding
+        attention. Deterministic seed (index-based) instead of
+        Math.random so hydration is stable and every reload looks
+        the same. Hidden on narrow viewports so mobile keeps the
+        hero clean. */}
+    {(function(){
+      var cols=10;
+      var streams=[];
+      for(var c=0;c<cols;c++){
+        var s="";
+        for(var r=0;r<48;r++){s+=((c*7+r*3+r*r)%2)+"\n";}
+        streams.push(s);
+      }
+      return <>
+        <div className="gas-matrix gas-matrix-left" aria-hidden="true">
+          {streams.map(function(s,i){return <pre key={"ml"+i} className="gas-matrix-col" style={{left:(i*10)+"%",animationDelay:(-i*1.7)+"s",animationDuration:(18+((i*3)%12))+"s",opacity:0.06+((i*5)%10)/180}}>{s}</pre>;})}
+        </div>
+        <div className="gas-matrix gas-matrix-right" aria-hidden="true">
+          {streams.map(function(s,i){return <pre key={"mr"+i} className="gas-matrix-col" style={{right:(i*10)+"%",animationDelay:(-i*2.1)+"s",animationDuration:(20+((i*5)%14))+"s",opacity:0.06+((i*7)%10)/180}}>{s}</pre>;})}
+        </div>
+      </>;
+    })()}
+
     {/* Fine dot-grid overlay, super subtle. Gives the void some
         surface texture in printed viewports too. */}
     <div style={{position:"absolute",inset:0,backgroundImage:"radial-gradient(rgba(168,85,247,0.06) 1px,transparent 1px)",backgroundSize:"42px 42px",pointerEvents:"none",zIndex:1}}></div>
@@ -446,6 +471,12 @@ function HomePage(){
       .gas-blob-a{width:520px;height:520px;top:-120px;left:-160px;background:radial-gradient(circle,rgba(217,70,239,0.32) 0%,rgba(217,70,239,0) 70%);animation:gasBlobDrift 18s ease-in-out infinite;}
       .gas-blob-b{width:600px;height:600px;bottom:-200px;right:-200px;background:radial-gradient(circle,rgba(249,98,3,0.28) 0%,rgba(249,98,3,0) 70%);animation:gasBlobDriftAlt 22s ease-in-out infinite;}
       .gas-blob-c{width:440px;height:440px;top:40%;left:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(168,85,247,0.18) 0%,rgba(168,85,247,0) 70%);animation:gasBlobDriftSlow 26s ease-in-out infinite;}
+      @keyframes gasMatrixFall{0%{transform:translateY(-60%);}100%{transform:translateY(120%);}}
+      .gas-matrix{position:absolute;top:0;bottom:0;width:170px;pointer-events:none;overflow:hidden;z-index:1;mask-image:linear-gradient(180deg,transparent 0%,#000 12%,#000 88%,transparent 100%);-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 12%,#000 88%,transparent 100%);}
+      .gas-matrix-left{left:0;}
+      .gas-matrix-right{right:0;}
+      .gas-matrix-col{position:absolute;top:0;margin:0;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11px;line-height:1.65;color:#34D399;text-shadow:0 0 6px rgba(52,211,153,0.4);white-space:pre;animation-name:gasMatrixFall;animation-timing-function:linear;animation-iteration-count:infinite;}
+      @media (max-width:900px){.gas-matrix{display:none;}}
     `}</style>
   </div>;
 }
