@@ -425,11 +425,11 @@ function HomePage(){
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
       </div>
-      <h1 style={{fontSize:"clamp(29px,4.8vw,62px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.02,margin:0,fontFamily:fm}}>Data Insights</h1>
+      <h1 style={{fontSize:"clamp(29px,4.8vw,62px)",fontWeight:900,letterSpacing:"-0.5px",lineHeight:1.02,margin:0,fontFamily:fm}}>Data Insights</h1>
       {/* Line 2 — typewriter, gradient-filled, blinking cursor. Uses
           a min-height clamp so the layout doesn't shift as the text
           types out. */}
-      <h1 style={{fontSize:"clamp(29px,4.8vw,62px)",fontWeight:900,letterSpacing:"-3.2px",lineHeight:1.06,margin:0,marginTop:6,marginBottom:34,fontFamily:fm,minHeight:"1.06em",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+      <h1 style={{fontSize:"clamp(29px,4.8vw,62px)",fontWeight:900,letterSpacing:"-0.5px",lineHeight:1.06,margin:0,marginTop:6,marginBottom:34,fontFamily:fm,minHeight:"1.06em",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>{typed}</span>
         <span aria-hidden="true" style={{display:"inline-block",width:"0.08em",minWidth:4,height:"0.9em",background:"linear-gradient(180deg,#F43F5E,#A855F7)",marginLeft:8,verticalAlign:"middle",animation:"gasCursorBlink 1s steps(1) infinite",borderRadius:2}}></span>
       </h1>
