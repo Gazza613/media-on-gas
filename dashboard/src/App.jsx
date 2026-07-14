@@ -425,10 +425,10 @@ function HomePage(){
       }
       return <>
         <div className="gas-matrix gas-matrix-left" aria-hidden="true">
-          {streams.map(function(s,i){return <pre key={"ml"+i} className="gas-matrix-col" style={{left:(i*10)+"%",animationDelay:(-i*1.7)+"s",animationDuration:(12+((i*3)%8))+"s",opacity:0.28+((i*5)%10)/60}}>{s}</pre>;})}
+          {streams.map(function(s,i){return <pre key={"ml"+i} className="gas-matrix-col" style={{left:(i*10)+"%",animationDelay:(-i*1.7)+"s",animationDuration:(12+((i*3)%8))+"s",opacity:0.14+((i*5)%10)/90}}>{s}</pre>;})}
         </div>
         <div className="gas-matrix gas-matrix-right" aria-hidden="true">
-          {streams.map(function(s,i){return <pre key={"mr"+i} className="gas-matrix-col" style={{right:(i*10)+"%",animationDelay:(-i*2.1)+"s",animationDuration:(13+((i*5)%9))+"s",opacity:0.28+((i*7)%10)/60}}>{s}</pre>;})}
+          {streams.map(function(s,i){return <pre key={"mr"+i} className="gas-matrix-col" style={{right:(i*10)+"%",animationDelay:(-i*2.1)+"s",animationDuration:(13+((i*5)%9))+"s",opacity:0.14+((i*7)%10)/90}}>{s}</pre>;})}
         </div>
       </>;
     })()}
