@@ -2051,7 +2051,7 @@ img { max-width: 100%; display: block; }
 .rp-section-headline { flex: 1; }
 .rp-section-eyebrow { font-size: 8pt; letter-spacing: 4px; text-transform: uppercase; color: var(--rp-accent); font-weight: 800; margin-bottom: 3mm; }
 .rp-h1 { font-family: var(--rp-font); font-size: 22pt; font-weight: 900; letter-spacing: -0.6px; line-height: 1.1; color: var(--rp-fg); margin: 0 0 3mm 0; }
-.rp-lede { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.5; max-width: 155mm; }
+.rp-lede { font-size: 10pt; color: var(--rp-fg-dim); line-height: 1.5; max-width: 155mm; font-style: normal !important; font-weight: 400; font-stretch: normal; font-synthesis: none; }
 
 /* ─────────────── BLOCKS ─────────────── */
 .rp-block { margin-bottom: 6mm; page-break-inside: avoid; }
