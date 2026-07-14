@@ -5343,18 +5343,22 @@ export default function MediaOnGas(){
       .catch(function(){setEcoLoading(false);setEcoData(null);setEcoErr("Ecommerce request failed");});
   },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,selectedEcoClient,kpiRev]);
 
-  // Custom Outcomes fetch: pull once per Summary view. Currently only
-  // Learnalot has entries but the endpoint returns any slug we ask for
-  // (empty array if none). For client tokens the server auto-scopes and
-  // ignores the query param, so we still just ask by slug.
+  // Custom Outcomes fetch: pull once at auth-time so the data is
+  // available on every tab (previously gated to tab==="summary",
+  // which meant the Share modal opened from Deep Dive / Creative /
+  // Ecommerce sent an empty customOutcomes array to the PDF backend
+  // and the WhatsApp PSI Leads tile came out at 0). Currently only
+  // Learnalot has entries but the endpoint returns any slug we ask
+  // for (empty array if none). For client tokens the server
+  // auto-scopes and ignores the query param, so we still just ask
+  // by slug.
   useEffect(function(){
     if(!isAuthed())return;
-    if(tab!=="summary")return;
     fetch(API+"/api/custom-outcomes?client=learnalot"+(customOutcomesRev>0?"&fresh="+customOutcomesRev:""),{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){if(d&&d.ok&&Array.isArray(d.outcomes)){setCustomOutcomes(function(prev){var next=Object.assign({},prev);next[d.client||"learnalot"]=d.outcomes;return next;});}})
       .catch(function(){});
-  },[tab,session,viewToken,customOutcomesRev]);
+  },[session,viewToken,customOutcomesRev]);
 
   var benchmarks={
     meta:{cpm:{low:12,mid:18,high:25,label:"R12-R25"},cpc:{low:0.80,mid:1.50,high:3.00,label:"R0.80-R3.00"},ctr:{low:0.8,mid:1.2,high:2.0,label:"0.8%-2.0%"},cpf:{low:2.0,mid:4.0,high:8.0,label:"R2-R8"},cpl:{low:30,mid:75,high:100,label:"R30-R100"}},
