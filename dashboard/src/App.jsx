@@ -1656,31 +1656,28 @@ function deriveClientNames(campaigns,activeOnly){
 }
 
 function ShareModal(props){
-  // Belt-and-braces close paths so the operator is never trapped in
-  // this modal:
+  // Close paths so the operator is never trapped in this modal:
   //  1. Escape (window keydown + document keydown, capture phase, so
-  //     it survives focus being on the popup / an input inside).
+  //     it survives focus being on an input inside).
   //  2. Backdrop click (handled inline on the overlay div).
   //  3. Explicit ✕ button top-right.
-  //  4. Document-level pointerdown outside the panel — a hard exit
-  //     even if the overlay's onClick was suppressed by a stacked
-  //     preview / dropdown layer.
+  //
+  // NOTE: a previous version also had a document-level pointerdown
+  // listener that closed the modal whenever the click landed outside
+  // panelRef. That closed the modal on CONFIRM AND SEND because the
+  // preview overlay (where that button lives) is a sibling of
+  // panelRef, not a child — click fired pointerdown → close → panel
+  // unmounted before the click completed → "click send and nothing
+  // happens, no confirmation". Backdrop + ✕ + ESC are enough.
   var panelRef=useRef(null);
   useEffect(function(){
     var doClose=function(){if(typeof props.onClose==="function")props.onClose();};
     var onKey=function(e){if(e.key==="Escape"){doClose();}};
-    var onDown=function(e){
-      // Only close when the click landed OUTSIDE the panel.
-      var el=panelRef.current;
-      if(el&&e.target&&!el.contains(e.target)){doClose();}
-    };
     window.addEventListener("keydown",onKey,true);
     document.addEventListener("keydown",onKey,true);
-    document.addEventListener("pointerdown",onDown,true);
     return function(){
       window.removeEventListener("keydown",onKey,true);
       document.removeEventListener("keydown",onKey,true);
-      document.removeEventListener("pointerdown",onDown,true);
     };
   },[props.onClose]);
   // Derive client names; the dropdown only lists clients with an
