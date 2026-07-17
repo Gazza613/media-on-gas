@@ -4371,43 +4371,6 @@ export default function MediaOnGas(){
 
   useEffect(function(){
     var params=new URLSearchParams(window.location.search);
-    // Studio → Media single-sign-on handoff. Studio mints a short-lived
-    // JWT signed with the shared STUDIO_MEDIA_HANDOFF_SECRET and
-    // redirects users to /enter?st=<jwt>. Trade it for a normal Media
-    // session token, store it in sessionStorage, strip ?st= from the
-    // URL and land the user on the dashboard. Skipped if the user is
-    // already authed (sessionStorage.gas_session set) so a stale
-    // handoff link doesn't overwrite an active session.
-    var studioTok=params.get("st");
-    if(studioTok&&!sessionStorage.getItem("gas_session")){
-      setAuthChecking(true);
-      fetch(API+"/api/studio-handoff",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({token:studioTok})
-      })
-        .then(function(r){return r.ok?r.json():r.json().then(function(d){throw new Error(d&&d.error||"handoff_failed");});})
-        .then(function(d){
-          if(!d||!d.token)throw new Error("handoff_empty");
-          sessionStorage.setItem("gas_session",d.token);
-          sessionStorage.setItem("gas_role",d.role||"admin");
-          sessionStorage.setItem("gas_email",d.email||"");
-          sessionStorage.setItem("gas_name",d.name||"");
-          sessionStorage.setItem("gas_login_ts",String(Date.now()));
-          // Drop the ?st param and route to the root so the user lands
-          // on the dashboard the same way a fresh sign-in would.
-          try{window.location.replace("/");}catch(_){window.location.href="/";}
-        })
-        .catch(function(err){
-          console.warn("[handoff] rejected",err&&err.message);
-          // Bad or expired handoff token → show the normal login screen
-          // so the user can sign in manually. Strip the ?st= first so a
-          // refresh doesn't retry the same dead token.
-          try{window.history.replaceState({},"","/login");}catch(_){}
-          setAuthChecking(false);
-        });
-      return;
-    }
     var token=params.get("token");
     var camps=params.get("campaigns");
     if(camps){
@@ -5607,10 +5570,7 @@ export default function MediaOnGas(){
   if(!session&&!viewToken){
     var _path=window.location.pathname;
     var _params=window.location.search||"";
-    // ?st= is the Studio → Media handoff token; treat it like a
-    // deep link so the Home page doesn't flash before the handoff
-    // effect above swaps the token for a session and redirects to /.
-    var _isDeepLink=_params.indexOf("token=")>=0||_params.indexOf("st=")>=0||_params.indexOf("campaigns=")>=0||_path==="/enter"||_path.indexOf("/enter")===0;
+    var _isDeepLink=_params.indexOf("token=")>=0||_params.indexOf("st=")>=0||_params.indexOf("campaigns=")>=0;
     var _isLoginPath=_path==="/login"||_path.indexOf("/login")===0;
     if(_path==="/"&&!_isDeepLink&&!_isLoginPath)return(<HomePage/>);
   }
