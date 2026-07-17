@@ -47,7 +47,9 @@
     { "source": "/signup/", "destination": "/index.html" },
     { "source": "/signup/:path*", "destination": "/index.html" },
     { "source": "/login", "destination": "/index.html" },
-    { "source": "/login/", "destination": "/index.html" }
+    { "source": "/login/", "destination": "/index.html" },
+    { "source": "/enter", "destination": "/index.html" },
+    { "source": "/enter/", "destination": "/index.html" }
   ],
   "headers": [
     {
