@@ -87,7 +87,7 @@ var campaignsResponseCache = {};
 var CAMPAIGNS_RESPONSE_TTL_MS = 60 * 1000;
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
-var CAMPAIGNS_CACHE_VERSION = "v28-province-actionbk-fix";
+var CAMPAIGNS_CACHE_VERSION = "v29-province-breakdown-order";
 
 // Budget helpers.
 //   budgetMode = "lifetime" | "daily_inferred" | "daily_ongoing" | "infinite" | "unset"
@@ -791,7 +791,7 @@ export default async function handler(req, res) {
       // publisher_platform, region) is invalid" unless we suppress the
       // implicit action_type breakdown via action_breakdowns= empty.
       // Same fix demographics.js uses on the identical combo.
-      var _breakdowns = region ? "publisher_platform,region" : "publisher_platform";
+      var _breakdowns = region ? "region,publisher_platform" : "publisher_platform";
       // Meta's implicit action_type breakdown collides with region.
       // Send action_breakdowns=%5B%5D (URL-encoded empty JSON array)
       // to suppress it — the empty-string form action_breakdowns=
@@ -1187,7 +1187,7 @@ export default async function handler(req, res) {
         // Province filter: add ,region to the breakdown, suppress the
         // implicit action_type breakdown (Meta 400 combo), and
         // post-filter to fill in only rows that delivered in the region.
-        var _adSuppBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+        var _adSuppBreakdowns = region ? "region,publisher_platform" : "publisher_platform";
         var _adSuppActionBk = region ? "&action_breakdowns=%5B%5D" : "";
         var adSuppUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,campaign_name,impressions,reach,spend,clicks,actions&time_range=" + timeRange + "&level=ad&breakdowns=" + _adSuppBreakdowns + _adSuppActionBk + "&limit=500&access_token=" + metaToken;
         var adSuppRows = [];

@@ -251,7 +251,7 @@ export default async function handler(req, res) {
       // province is active. Suppress the implicit action_type
       // breakdown (Meta 400 combo with region + actions). Post-filter
       // so downstream aggregation only sees the province-scoped slice.
-      var _adBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+      var _adBreakdowns = region ? "region,publisher_platform" : "publisher_platform";
       var _adActionBk = region ? "&action_breakdowns=%5B%5D" : "";
       var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,ad_name,campaign_name,campaign_id,adset_name,adset_id,impressions,clicks,spend,cpc,cpm,ctr,reach,actions,video_avg_time_watched_actions,video_p100_watched_actions,video_play_actions,video_thruplay_watched_actions&time_range=" + timeRange + "&level=ad&breakdowns=" + _adBreakdowns + _adActionBk + "&limit=500&access_token=" + metaToken;
       // Follow paging.next so accounts with more than 500 ad rows don't silently drop data.
@@ -432,7 +432,7 @@ export default async function handler(req, res) {
       try {
         // Phase 1 province filter: add ,region, suppress the implicit
         // action_type breakdown (400 combo), post-filter.
-        var _actBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+        var _actBreakdowns = region ? "region,publisher_platform" : "publisher_platform";
         var _actActionBk = region ? "&action_breakdowns=%5B%5D" : "";
         var actUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,actions&time_range=" + timeRange + "&level=ad&breakdowns=" + _actBreakdowns + _actActionBk + "&limit=500&access_token=" + metaToken;
         var actRes = await fetch(actUrl);

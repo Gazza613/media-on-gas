@@ -50,7 +50,7 @@ export default async function handler(req, res) {
       // Phase 1 province filter: add ,region to the breakdown when
       // active; suppress the implicit action_type breakdown (400 combo
       // with region + actions in fields — mirrors demographics.js).
-      var _asBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+      var _asBreakdowns = region ? "region,publisher_platform" : "publisher_platform";
       var _asActionBk = region ? "&action_breakdowns=%5B%5D" : "";
       var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range=" + timeRange + "&breakdowns=" + _asBreakdowns + _asActionBk + "&limit=200&access_token=" + metaToken;
       // Collect all breakdown rows for this account first (paginated) so we

@@ -187,7 +187,7 @@ export default async function handler(req, res) {
         // Suppress the implicit action_type breakdown when region is
         // active — same Meta 400 "(action_type, publisher_platform,
         // region) invalid" edge demographics.js works around.
-        var _tsBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+        var _tsBreakdowns = region ? "region,publisher_platform" : "publisher_platform";
         var _tsActionBk = region ? "&action_breakdowns=%5B%5D" : "";
         var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=" + _tsBreakdowns + _tsActionBk + "&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Aggregate-truth call (no breakdown). Meta's publisher_platform
