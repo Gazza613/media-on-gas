@@ -184,8 +184,12 @@ export default async function handler(req, res) {
         // Phase 1 province filter: add ,region to the breakdown so
         // the returned rows can be post-filtered to the selected
         // province before feeding into the rescale + attribution logic.
+        // Suppress the implicit action_type breakdown when region is
+        // active — same Meta 400 "(action_type, publisher_platform,
+        // region) invalid" edge demographics.js works around.
         var _tsBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
-        var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=" + _tsBreakdowns + "&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
+        var _tsActionBk = region ? "&action_breakdowns=" : "";
+        var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=" + _tsBreakdowns + _tsActionBk + "&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Aggregate-truth call (no breakdown). Meta's publisher_platform
         // breakdown over-reports spend / impressions on cross-network
         // Advantage+ placements — the sum of the placement rows exceeds

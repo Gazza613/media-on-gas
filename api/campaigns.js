@@ -781,12 +781,15 @@ export default async function handler(req, res) {
     try {
       var timeRange = JSON.stringify({since: from, until: to});
       // Adds ,region to the breakdown when a province filter is active
-      // so each row carries a region field we can post-filter on. Meta
-      // accepts the combined breakdown at level=campaign — same combo
-      // demographics.js already uses (line ~158). Sums of the returned
-      // rows equal Meta's own region-scoped Ads Manager totals.
+      // so each row carries a region field we can post-filter on. When
+      // combined with the `actions` field, Meta 400s with "(#100)
+      // Current combination of data breakdown columns (action_type,
+      // publisher_platform, region) is invalid" unless we suppress the
+      // implicit action_type breakdown via action_breakdowns= empty.
+      // Same fix demographics.js uses on the identical combo.
       var _breakdowns = region ? "publisher_platform,region" : "publisher_platform";
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=" + _breakdowns + "&limit=500&access_token=" + metaToken;
+      var _actionBk = region ? "&action_breakdowns=" : "";
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=" + _breakdowns + _actionBk + "&limit=500&access_token=" + metaToken;
       // Follow paging.next to capture all rows, not just the first 500.
       var allMetaRows = [];
       var nextUrl = url;
@@ -813,7 +816,9 @@ export default async function handler(req, res) {
       // action attribution, page-like fallback) computes cleanly
       // against the province slice.
       if (region) {
+        var _preRegionCount = allMetaRows.length;
         allMetaRows = allMetaRows.filter(function(r) { return String(r.region || "") === region; });
+        console.log("[campaigns] region filter", { account: account.name, region: region, preFilter: _preRegionCount, postFilter: allMetaRows.length, sampleRegions: _preRegionCount > 0 ? (allMetaRows.length > 0 ? allMetaRows[0].region : "no matching rows — check sample: " + JSON.stringify(Object.keys((allMetaRows[0] || {})).slice(0, 5))) : "primary fetch returned 0 rows (likely 400 on breakdown combo — check warnings)" });
       }
 
       // Authoritative campaign-level reach (no breakdowns). Meta dedupes reach across
@@ -858,9 +863,11 @@ export default async function handler(req, res) {
         // Province filter: swap the no-breakdown reach fetch for a
         // region-broken one so the reach / spend / impressions / clicks
         // apportioned back onto FB / IG rows below only include the
-        // selected province. Post-filter to keep just the matching
-        // region row per campaign, same shape callers expect.
-        var reachBreakdown = region ? "&breakdowns=region" : "";
+        // selected province. Also suppress the implicit action_type
+        // breakdown when region is active (Meta 400s on
+        // (action_type, region) combos otherwise). Post-filter to keep
+        // just the matching region row per campaign.
+        var reachBreakdown = region ? "&breakdowns=region&action_breakdowns=" : "";
         var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks,actions&time_range=" + timeRange + "&level=campaign" + reachBreakdown + "&limit=500&access_token=" + metaToken;
         var rAll = [];
         var rNext = reachUrl;
@@ -1168,11 +1175,12 @@ export default async function handler(req, res) {
       // campaign level stay untouched so the authoritative-total
       // reconciliation below keeps working.
       try {
-        // Province filter: add ,region to the breakdown and post-filter
-        // so this ad-level backfill only fills in campaign / publisher
-        // rows that actually delivered in the selected region.
+        // Province filter: add ,region to the breakdown, suppress the
+        // implicit action_type breakdown (Meta 400 combo), and
+        // post-filter to fill in only rows that delivered in the region.
         var _adSuppBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
-        var adSuppUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,campaign_name,impressions,reach,spend,clicks,actions&time_range=" + timeRange + "&level=ad&breakdowns=" + _adSuppBreakdowns + "&limit=500&access_token=" + metaToken;
+        var _adSuppActionBk = region ? "&action_breakdowns=" : "";
+        var adSuppUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,campaign_name,impressions,reach,spend,clicks,actions&time_range=" + timeRange + "&level=ad&breakdowns=" + _adSuppBreakdowns + _adSuppActionBk + "&limit=500&access_token=" + metaToken;
         var adSuppRows = [];
         var adSuppNext = adSuppUrl;
         var adSuppGuard = 0;
