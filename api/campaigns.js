@@ -4,6 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { redisGetJson, redisSetJson, isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
+import { normalizeProvince } from "./_provinces.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
 // Settings → Objectives Audit) ahead of name + API logic. Returns the
@@ -130,6 +131,14 @@ export default async function handler(req, res) {
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-07";
+  // Phase 1 province filter: when ?region= is present and canonical,
+  // Meta rows are re-queried with breakdowns=region,publisher_platform
+  // and post-filtered to the matching region so every downstream
+  // aggregation runs against the province-scoped slice. TikTok /
+  // Google rows are excluded entirely from the response when a region
+  // is active (frontend surfaces a "Meta-only province filter"
+  // footnote on tiles that would otherwise show blended totals).
+  var region = normalizeProvince(req.query.region);
 
   // Reaction probe (internal staff only). Returns the RAW Meta response
   // for the reaction-breakdown call so we can SEE what Meta actually
@@ -771,7 +780,13 @@ export default async function handler(req, res) {
 
     try {
       var timeRange = JSON.stringify({since: from, until: to});
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+      // Adds ,region to the breakdown when a province filter is active
+      // so each row carries a region field we can post-filter on. Meta
+      // accepts the combined breakdown at level=campaign — same combo
+      // demographics.js already uses (line ~158). Sums of the returned
+      // rows equal Meta's own region-scoped Ads Manager totals.
+      var _breakdowns = region ? "publisher_platform,region" : "publisher_platform";
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&time_range=" + timeRange + "&level=campaign&breakdowns=" + _breakdowns + "&limit=500&access_token=" + metaToken;
       // Follow paging.next to capture all rows, not just the first 500.
       var allMetaRows = [];
       var nextUrl = url;
@@ -791,6 +806,14 @@ export default async function handler(req, res) {
         }
         if (pageData.data) allMetaRows = allMetaRows.concat(pageData.data);
         nextUrl = pageData.paging && pageData.paging.next ? pageData.paging.next : null;
+      }
+      // Province filter: keep only the rows matching the selected
+      // region. This runs BEFORE the per-campaign / per-placement
+      // aggregation below so every downstream metric (reach, spend,
+      // action attribution, page-like fallback) computes cleanly
+      // against the province slice.
+      if (region) {
+        allMetaRows = allMetaRows.filter(function(r) { return String(r.region || "") === region; });
       }
 
       // Authoritative campaign-level reach (no breakdowns). Meta dedupes reach across
@@ -832,7 +855,13 @@ export default async function handler(req, res) {
       var appInstallsNbMap = {};
       var landingPageViewsNbMap = {};
       try {
-        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        // Province filter: swap the no-breakdown reach fetch for a
+        // region-broken one so the reach / spend / impressions / clicks
+        // apportioned back onto FB / IG rows below only include the
+        // selected province. Post-filter to keep just the matching
+        // region row per campaign, same shape callers expect.
+        var reachBreakdown = region ? "&breakdowns=region" : "";
+        var reachUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,reach,spend,impressions,clicks,actions&time_range=" + timeRange + "&level=campaign" + reachBreakdown + "&limit=500&access_token=" + metaToken;
         var rAll = [];
         var rNext = reachUrl;
         var rGuard = 0;
@@ -843,6 +872,9 @@ export default async function handler(req, res) {
           var rJson = await rRes.json();
           if (rJson.data) rAll = rAll.concat(rJson.data);
           rNext = rJson.paging && rJson.paging.next ? rJson.paging.next : null;
+        }
+        if (region) {
+          rAll = rAll.filter(function(r) { return String(r.region || "") === region; });
         }
         rAll.forEach(function(row) {
           var cid = String(row.campaign_id);
@@ -1136,7 +1168,11 @@ export default async function handler(req, res) {
       // campaign level stay untouched so the authoritative-total
       // reconciliation below keeps working.
       try {
-        var adSuppUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,campaign_name,impressions,reach,spend,clicks,actions&time_range=" + timeRange + "&level=ad&breakdowns=publisher_platform&limit=500&access_token=" + metaToken;
+        // Province filter: add ,region to the breakdown and post-filter
+        // so this ad-level backfill only fills in campaign / publisher
+        // rows that actually delivered in the selected region.
+        var _adSuppBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+        var adSuppUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=ad_id,campaign_id,campaign_name,impressions,reach,spend,clicks,actions&time_range=" + timeRange + "&level=ad&breakdowns=" + _adSuppBreakdowns + "&limit=500&access_token=" + metaToken;
         var adSuppRows = [];
         var adSuppNext = adSuppUrl;
         var adSuppGuard = 0;
@@ -1147,6 +1183,9 @@ export default async function handler(req, res) {
           var adSuppJson = await adSuppRes.json();
           if (adSuppJson.data) adSuppRows = adSuppRows.concat(adSuppJson.data);
           adSuppNext = adSuppJson.paging && adSuppJson.paging.next ? adSuppJson.paging.next : null;
+        }
+        if (region) {
+          adSuppRows = adSuppRows.filter(function(r) { return String(r.region || "") === region; });
         }
         // Aggregate ad rows to (campaign_id, publisher_family).
         var adAgg = {};
@@ -1935,6 +1974,22 @@ export default async function handler(req, res) {
       }
     }
   } catch (gErr) { console.error("Google Ads error", gErr); warnings.push({ platform: "Google", stage: "ads", message: String(gErr && gErr.message || gErr) }); }
+
+  // Phase 1 province filter (Meta-only): when a region param was
+  // supplied, drop TikTok and Google campaigns from the response so
+  // the dashboard shows a clean province-scoped view. The frontend
+  // surfaces a "Province filter is Meta-only, TikTok / Google shown
+  // blended elsewhere" footnote on tiles that would otherwise appear
+  // empty. Phase 2 wires Google Ads' geographic_view; Phase 3 does
+  // TikTok best-effort.
+  if (region) {
+    var _preCount = allCampaigns.length;
+    allCampaigns = allCampaigns.filter(function(c) {
+      var p = String(c.platform || "").toLowerCase();
+      return p === "facebook" || p === "instagram" || p === "meta";
+    });
+    warnings.push({ platform: "All", stage: "province-filter", message: "Region filter '" + region + "' active — kept " + allCampaigns.length + " Meta campaign rows, dropped " + (_preCount - allCampaigns.length) + " TikTok / Google rows (Phase 1: Meta only)." });
+  }
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });
 

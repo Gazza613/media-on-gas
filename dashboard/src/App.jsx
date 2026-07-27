@@ -4,6 +4,12 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import CreateTab from "./CreateTab.jsx";
 import CommandCentre from "./CommandCentre.jsx";
 
+// SA province list for the top-bar Province filter. Values must match
+// Meta's region-breakdown strings exactly (also aligns with Google Ads
+// geo_target_region_name and TikTok's province naming for later
+// phases). Keep in sync with api/_provinces.js.
+var SA_PROVINCES=["Eastern Cape","Free State","Gauteng","KwaZulu-Natal","Limpopo","Mpumalanga","North West","Northern Cape","Western Cape"];
+
 // label and caption are the canonical tokens for client-visible secondary
 // text. Hard rule across the dashboard: every label uses P.label (white at
 // 70% opacity), every explanation / sub-copy uses P.caption (white at 58%
@@ -4031,6 +4037,13 @@ export default function MediaOnGas(){
   // the tab-change effect below.
   var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var de=useState(monthEnd),dt=de[0],setDt=de[1];
+  // Phase 1 province filter (Meta-only). Empty string = no filter (all
+  // regions blended, the default). When set, /api/campaigns re-queries
+  // Meta with breakdowns=region and post-filters, then strips TikTok /
+  // Google rows so the dashboard shows a clean Meta-scoped province
+  // view. Phase 2/3 will add Google + TikTok. The dropdown lives in
+  // the top control bar next to the date picker.
+  var pv=useState(""),province=pv[0],setProvince=pv[1];
   // Defensive: if the operator typed FROM > TO (typo / accidental
   // swap), normalise so downstream code never sees an inverted range
   // (Meta returns empty data on inverted time_range, and the cache
@@ -4817,7 +4830,7 @@ export default function MediaOnGas(){
       // rest of the session. Without the gate, a single 502 / 400
       // wrote the error JSON under summaryCache.campaigns[key] and
       // every subsequent visit short-circuited to that cached error.
-      fetch(API+"/api/campaigns?from="+df+"&to="+dt+((typeof window!=="undefined"&&window.location&&/[?&]fresh=1/.test(window.location.search))?"&fresh=1":""),{headers:h}).then(function(r){
+      fetch(API+"/api/campaigns?from="+df+"&to="+dt+(province?"&region="+encodeURIComponent(province):"")+((typeof window!=="undefined"&&window.location&&/[?&]fresh=1/.test(window.location.search))?"&fresh=1":""),{headers:h}).then(function(r){
         return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
       }).then(function(x){
         if(myGen!==fetchGenRef.current)return;
@@ -4880,7 +4893,7 @@ export default function MediaOnGas(){
     // scoped fetch and could briefly replace the trendline data with
     // a portfolio-wide aggregate.
   };
-  useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken]);
+  useEffect(function(){if(isAuthed()){fetchData();}},[df,dt,session,viewToken,province]);
   // (30s tick for the freshness chip moved into FreshnessChip below
   //  to avoid re-rendering the entire App every 30 seconds.)
   // No auto-refresh on tab return. The operator-side team flagged the
@@ -6792,6 +6805,14 @@ export default function MediaOnGas(){
           <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:9,padding:"6px 11px",color:showCampaigns?P.ember:P.label,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,13)} {selected.length} Campaigns</button>}
             <div style={{display:"flex",alignItems:"center",gap:4,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:"5px 9px"}}><span style={{fontSize:7.5,color:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>FROM</span><input type="date" value={df} onChange={function(e){setDf(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:11,fontFamily:fm,outline:"none",width:96,fontWeight:500}}/><div style={{width:8,height:1,background:"linear-gradient(90deg,"+P.ember+","+P.solar+")"}}/><span style={{fontSize:7.5,color:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>TO</span><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={{background:"transparent",border:"none",color:"#fff",fontSize:11,fontFamily:fm,outline:"none",width:96,fontWeight:500}}/></div>
+            {!isClient&&<div title={province?"Province filter is Meta-only (Phase 1). TikTok / Google are hidden while this is active.":"Filter every Meta metric to a single South African province. TikTok and Google will be excluded while a province is selected (Phase 1)."} style={{display:"flex",alignItems:"center",gap:5,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),borderRadius:9,padding:"5px 9px"}}>
+              <span style={{fontSize:7.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.5,fontWeight:700}}>PROVINCE</span>
+              <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11,fontFamily:fm,outline:"none",fontWeight:500,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:14,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
+                <option value="" style={{background:P.cosmos,color:"#fff"}}>All (blended)</option>
+                {SA_PROVINCES.map(function(p){return <option key={p} value={p} style={{background:P.cosmos,color:"#fff"}}>{p}</option>;})}
+              </select>
+              {province&&<button onClick={function(){setProvince("");}} title="Clear province filter" style={{background:"transparent",border:"none",color:P.orchid,fontSize:12,fontWeight:900,cursor:"pointer",padding:0,marginLeft:2,lineHeight:1}}>×</button>}
+            </div>}
             {/* Preset chips with short labels (7D / 30D / MTD / LM) so the
                 whole row fits on one line on a typical 1440px laptop. */}
             {(function(){var activePreset=matchPreset();var opts=[{k:"off",l:"OFF"},{k:"7d",l:"7D"},{k:"30d",l:"30D"},{k:"mtd",l:"MTD"},{k:"lm",l:"LM"}];return <div title="Quick date range — OFF (full current month, no comparison) / 7 Days / 30 Days / MTD / Last Month" style={{display:"flex",alignItems:"center",gap:2,background:P.glass,border:"1px solid "+P.rule,borderRadius:9,padding:2}}>
