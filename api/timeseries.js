@@ -4,6 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { isLeadAction, extractLeadCount } from "./_pulseShared.js";
+import { normalizeProvince } from "./_provinces.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -85,6 +86,13 @@ export default async function handler(req, res) {
   var to = req.query.to || "2026-04-30";
   var granularity = (req.query.granularity || "week").toLowerCase();
   if (granularity !== "week" && granularity !== "month" && granularity !== "day") granularity = "week";
+  // Phase 1 province filter (Meta-only). Same contract as /api/campaigns:
+  // when set, Meta rows are re-queried with ,region added to the
+  // breakdowns and post-filtered to the province; TikTok / Google
+  // fetches are skipped so the trendline matrix / Budget Pacing chart
+  // shows a clean Meta-scoped province view. Phase 2 wires Google,
+  // Phase 3 does TikTok best-effort.
+  var region = normalizeProvince(req.query.region);
 
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
@@ -173,7 +181,11 @@ export default async function handler(req, res) {
         };
         var timeRange = encodeURIComponent(JSON.stringify({ since: from, until: to }));
         var incr = granularity === "month" ? "monthly" : (granularity === "day" ? "1" : "7");
-        var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=publisher_platform&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
+        // Phase 1 province filter: add ,region to the breakdown so
+        // the returned rows can be post-filtered to the selected
+        // province before feeding into the rescale + attribution logic.
+        var _tsBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+        var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=" + _tsBreakdowns + "&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Aggregate-truth call (no breakdown). Meta's publisher_platform
         // breakdown over-reports spend / impressions on cross-network
         // Advantage+ placements — the sum of the placement rows exceeds
@@ -184,7 +196,11 @@ export default async function handler(req, res) {
         // totals reconcile with reconcile's fetchMetaTruth output while
         // the FB / IG platform split still populates the trendline
         // matrix from Meta's own breakdown proportions.
-        var insUrlAgg = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend,impressions,clicks&level=campaign&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
+        // Aggregate-truth call: also add ,region to the breakdown when
+        // a province is active so the rescale ceiling reflects province-
+        // only totals, not the whole-country aggregate.
+        var _tsAggBreakdowns = region ? "&breakdowns=region" : "";
+        var insUrlAgg = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend,impressions,clicks&level=campaign" + _tsAggBreakdowns + "&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Follow pagination for big date ranges / many campaigns.
         var metaAllRows = [];
         var metaAggRows = [];
@@ -208,6 +224,13 @@ export default async function handler(req, res) {
         ]);
         metaAllRows = _brokenAndAgg[0];
         metaAggRows = _brokenAndAgg[1];
+        // Province filter: drop any row not tagged to the selected
+        // region. Applies to BOTH the broken and aggregate pulls so
+        // the rescale ceiling below stays consistent.
+        if (region) {
+          metaAllRows = metaAllRows.filter(function(r) { return String(r.region || "") === region; });
+          metaAggRows = metaAggRows.filter(function(r) { return String(r.region || "") === region; });
+        }
 
         // Build the (campaign_id||date_start) → aggregate lookup so the
         // broken rows for that key can be capped / rescaled.
@@ -354,7 +377,10 @@ export default async function handler(req, res) {
   }
 
   /* TIKTOK, daily, aggregate server-side into weekly/monthly */
-  if (ttToken && ttAdvId) {
+  // Phase 1 province filter is Meta-only — skip TikTok entirely when a
+  // province is active. Phase 3 will wire TikTok's province_id
+  // dimension best-effort.
+  if (ttToken && ttAdvId && !region) {
     try {
       // Campaign objective map
       var ttCampObjMap = {};
@@ -409,7 +435,11 @@ export default async function handler(req, res) {
   }
 
   /* GOOGLE, daily, aggregate server-side */
-  try {
+  // Phase 1 province filter is Meta-only — skip Google entirely when
+  // a province is active. Phase 2 will wire geographic_view.
+  if (region) {
+    debug.google.skipped = "province filter active (Phase 1 Meta-only)";
+  } else try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
     var gRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;

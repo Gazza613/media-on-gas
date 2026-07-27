@@ -4873,7 +4873,7 @@ export default function MediaOnGas(){
       if(adsKey.ads){setAdsList(adsKey.ads);}
       if(Array.isArray(adsKey.noImpressionAds)){setNoImpAds(adsKey.noImpressionAds);}
     } else {
-      fetch(API+"/api/ads?from="+df+"&to="+dt,{headers:h}).then(function(r){
+      fetch(API+"/api/ads?from="+df+"&to="+dt+(province?"&region="+encodeURIComponent(province):""),{headers:h}).then(function(r){
         return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
       }).then(function(x){
         if(myGen!==fetchGenRef.current)return;
@@ -5070,12 +5070,12 @@ export default function MediaOnGas(){
     // view because the POS / Willowbrook lead campaigns from the
     // prior selection's response landed last and won the race.
     var cancelled=false;
-    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+effGran+idsQs,{headers:authHeaders()})
+    fetch(API+"/api/timeseries?from="+df+"&to="+dt+"&granularity="+effGran+idsQs+(province?"&region="+encodeURIComponent(province):""),{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){if(cancelled)return;if(d.series){setTimeseries(d);}})
       .catch(function(){});
     return function(){cancelled=true;};
-  },[df,dt,session,viewToken,tsGran,selected]);
+  },[df,dt,session,viewToken,tsGran,selected,province]);
   // Cache-busting hard reload, kept around for the idle-nudge "Refresh
   // Now" button which fires after a 15-min idle and explicitly WANTS a
   // full clean slate (re-authenticates the session and re-pulls the
