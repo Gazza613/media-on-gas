@@ -5491,11 +5491,11 @@ export default function MediaOnGas(){
     // and let the server force their own slug.
     var ecoFetchClient=selectedEcoClient||ecoClientName||"";
     var cq=isClient?"":("&client="+encodeURIComponent(ecoFetchClient));
-    fetch(API+"/api/ga4-ecommerce?from="+df+"&to="+dt+cq,{headers:authHeaders()})
+    fetch(API+"/api/ga4-ecommerce?from="+df+"&to="+dt+cq+(province?"&region="+encodeURIComponent(province):""),{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){setEcoLoading(false);if(d&&d.ok){setEcoData(d);}else{setEcoData(null);setEcoErr((d&&(d.reason||d.message||d.error))||"Ecommerce data unavailable");}})
       .catch(function(){setEcoLoading(false);setEcoData(null);setEcoErr("Ecommerce request failed");});
-  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,selectedEcoClient,kpiRev]);
+  },[ecoOn,tab,df,dt,session,viewToken,ecoClientName,selectedEcoClient,kpiRev,province]);
 
   // Custom Outcomes fetch: pull once at auth-time so the data is
   // available on every tab (previously gated to tab==="summary",
@@ -6801,6 +6801,15 @@ export default function MediaOnGas(){
               </span>
               <span style={{fontSize:9,fontWeight:800,color:"#4ade80",letterSpacing:2,textTransform:"uppercase"}}>Live</span>
             </div>
+            {!isClient&&<div title={province?"Meta + Google metrics on this dashboard are scoped to " + province + ". TikTok is hidden while this is active.":"Filter every Meta + Google metric to a single South African province. TikTok will be hidden while a province is selected."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:9,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),fontFamily:fm,flexShrink:0}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:province?P.orchid:P.caption}}/>
+              <span style={{fontSize:8.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.6,fontWeight:800,textTransform:"uppercase"}}>Province</span>
+              <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11,fontFamily:fm,outline:"none",fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:14,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
+                <option value="" style={{background:P.cosmos,color:"#fff"}}>All (blended)</option>
+                {SA_PROVINCES.map(function(p){return <option key={p} value={p} style={{background:P.cosmos,color:"#fff"}}>{p}</option>;})}
+              </select>
+              {province&&<button onClick={function(){setProvince("");}} title="Clear province filter" style={{background:"transparent",border:"none",color:P.orchid,fontSize:13,fontWeight:900,cursor:"pointer",padding:0,marginLeft:1,lineHeight:1}}>×</button>}
+            </div>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:9,padding:"6px 11px",color:showCampaigns?P.ember:P.label,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,13)} {selected.length} Campaigns</button>}
@@ -6833,26 +6842,16 @@ export default function MediaOnGas(){
       </div></div>
     </header>
 
-    {/* Province filter strip. Sits below the tab bar rather than
-        inside the top control row so the tabs stay on a single line
-        on typical viewports. Always visible for admins so the filter
-        is one click away on any tab. When a province is picked the
-        strip expands with a short "Phase 1 scope" note + a Clear
-        button. Hidden for client-share viewers. */}
-    {!isClient&&<div style={{maxWidth:1400,margin:"0 auto",padding:"8px 28px 0"}}>
-      <div title={province?"Meta metrics on this dashboard are scoped to " + province + ". TikTok / Google are hidden while this is active.":"Filter every Meta metric to a single South African province. TikTok and Google will be hidden while a province is selected (Phase 1)."} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:province?P.orchid+"12":"rgba(255,255,255,0.02)",border:"1px solid "+(province?P.orchid+"40":P.rule),borderRadius:10,fontFamily:fm,flexWrap:"wrap"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:province?P.orchid:P.caption,flexShrink:0}}/>
-          <span style={{fontSize:9.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.8,fontWeight:800,textTransform:"uppercase"}}>Province</span>
-          <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11.5,fontFamily:fm,outline:"none",fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:16,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
-            <option value="" style={{background:P.cosmos,color:"#fff"}}>All (blended)</option>
-            {SA_PROVINCES.map(function(p){return <option key={p} value={p} style={{background:P.cosmos,color:"#fff"}}>{p}</option>;})}
-          </select>
-        </div>
-        {province&&<>
-          <div style={{fontSize:11,color:P.label,lineHeight:1.5,flex:1,minWidth:200}}>Phase 1 scope: every Meta metric filtered to <strong style={{color:P.txt}}>{province}</strong>. TikTok and Google hidden while active. Community follower snapshots and manual Custom Outcomes stay whole-account.</div>
-          <button onClick={function(){setProvince("");}} style={{background:"transparent",border:"1px solid "+P.orchid+"55",borderRadius:6,padding:"4px 10px",color:P.orchid,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",flexShrink:0}}>Clear</button>
-        </>}
+    {/* Province filter footnote — only shown when a province is
+        active. The dropdown itself lives inline in the top nav bar
+        next to the LIVE chip so it's always in one place; this
+        strip just explains what's scoped and what stays blended.
+        Hidden for client-share viewers. */}
+    {!isClient&&province&&<div style={{maxWidth:1400,margin:"0 auto",padding:"8px 28px 0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:P.orchid+"12",border:"1px solid "+P.orchid+"40",borderRadius:10,fontFamily:fm,flexWrap:"wrap"}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:P.orchid,flexShrink:0}}/>
+        <div style={{fontSize:11,color:P.label,lineHeight:1.5,flex:1,minWidth:200}}>Every Meta and Google metric on this dashboard is scoped to <strong style={{color:P.txt}}>{province}</strong>. TikTok is hidden while active (Phase 3 pending). Community follower snapshots and manual Custom Outcomes are not regional and stay at whole-account totals.</div>
+        <button onClick={function(){setProvince("");}} style={{background:"transparent",border:"1px solid "+P.orchid+"55",borderRadius:6,padding:"4px 10px",color:P.orchid,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",flexShrink:0}}>Clear</button>
       </div>
     </div>}
 

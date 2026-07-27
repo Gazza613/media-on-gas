@@ -4,7 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { isLeadAction, extractLeadCount } from "./_pulseShared.js";
-import { normalizeProvince } from "./_provinces.js";
+import { normalizeProvince, googleGeoResourceForProvince } from "./_provinces.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -439,11 +439,7 @@ export default async function handler(req, res) {
   }
 
   /* GOOGLE, daily, aggregate server-side */
-  // Phase 1 province filter is Meta-only — skip Google entirely when
-  // a province is active. Phase 2 will wire geographic_view.
-  if (region) {
-    debug.google.skipped = "province filter active (Phase 1 Meta-only)";
-  } else try {
+  try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
     var gRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
@@ -458,7 +454,15 @@ export default async function handler(req, res) {
         // filter either, so aligning here keeps the ground-truth diff
         // clean. Historical spend on removed campaigns still belongs in
         // the reporting window.
-        var q = "SELECT campaign.id, campaign.name, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
+        //
+        // Phase 2 province filter: switch FROM campaign to
+        // geographic_view with a segments.geo_target_region clause when
+        // a region is active. geographic_view supports segments.date so
+        // the daily buckets survive intact.
+        var _gGeoResource = region ? googleGeoResourceForProvince(region) : "";
+        var _gFrom = _gGeoResource ? "geographic_view" : "campaign";
+        var _gRegionClause = _gGeoResource ? (" AND segments.geo_target_region = '" + _gGeoResource + "'") : "";
+        var q = "SELECT campaign.id, campaign.name, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM " + _gFrom + " WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'" + _gRegionClause;
         // Follow nextPageToken. Single-request Google fetches truncate on any
         // account with more than a page's worth of daily rows across the period.
         var gAllResults = [];

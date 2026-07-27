@@ -23,6 +23,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth } from "./_auth.js";
 import { getKpiProfile } from "./_clientKpiProfiles.js";
+import { normalizeProvince } from "./_provinces.js";
 
 var GA4 = "https://analyticsdata.googleapis.com/v1beta";
 
@@ -105,6 +106,14 @@ export default async function handler(req, res) {
 
   var from = String(req.query.from || "").trim();
   var to = String(req.query.to || "").trim();
+  // Phase 2 province filter. GA4 has a native `region` dimension that
+  // returns Google's region name for the visitor's location. For SA
+  // properties the values match the SA_PROVINCES list byte-for-byte
+  // ("Gauteng", "Western Cape", etc.), so an EXACT string filter on
+  // the province is all we need. When set, we wrap each request's
+  // dimensionFilter with an andGroup that combines the existing
+  // filter (if any) with the region filter.
+  var region = normalizeProvince(req.query.region);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
     var now = new Date();
     to = ymd(now);
@@ -141,7 +150,7 @@ export default async function handler(req, res) {
   var newsletterRegex = newsletterTokens.join("|");
   var newsletterPathMatch = newsletterTokens.join(", ") || newsletterPath;
 
-  var cacheKey = propertyId + "|" + from + "|" + to + "|" + nlEnd + "|" + newsletterEvent + "|" + newsletterPath;
+  var cacheKey = propertyId + "|" + from + "|" + to + "|" + nlEnd + "|" + newsletterEvent + "|" + newsletterPath + (region ? "|r=" + region : "");
   var hit = cache[cacheKey];
   if (hit && Date.now() - hit.ts < TTL_MS) { res.status(200).json(hit.payload); return; }
 
@@ -150,7 +159,22 @@ export default async function handler(req, res) {
 
   var dateRanges = [{ startDate: from, endDate: to }];
 
+  // Wraps an existing dimensionFilter with an andGroup that combines
+  // it with the region filter. Returns the region-only filter if the
+  // caller had none. No-op when region is empty (blended view).
+  var _regionFilter = region ? { filter: { fieldName: "region", stringFilter: { matchType: "EXACT", value: region } } } : null;
+  var withRegion = function(existingFilter) {
+    if (!_regionFilter) return existingFilter;
+    if (!existingFilter) return _regionFilter;
+    return { andGroup: { expressions: [existingFilter, _regionFilter] } };
+  };
+
   // One batched call, 5 report requests (GA4 batch cap).
+  // Phase 2 province filter: withRegion(...) wraps each request's
+  // dimensionFilter so ecommerce / paid-social / newsletter / event
+  // reads scope to the selected province. If withRegion is a no-op
+  // (blended), the batch shape is byte-identical to the pre-Phase-2
+  // version so behaviour outside a province filter is unchanged.
   var batchBody = {
     requests: [
       // 0. Site + ecommerce totals
@@ -159,7 +183,8 @@ export default async function handler(req, res) {
         metrics: [
           { name: "activeUsers" }, { name: "sessions" }, { name: "screenPageViews" },
           { name: "ecommercePurchases" }, { name: "purchaseRevenue" }
-        ]
+        ],
+        dimensionFilter: withRegion(undefined)
       },
       // 1. Newsletter signups. Preferred: views of the post-signup
       //    thank-you page (deterministic). Fallback: count of the
@@ -168,17 +193,17 @@ export default async function handler(req, res) {
         dateRanges: [{ startDate: from, endDate: nlEnd }],
         dimensions: [{ name: "pagePath" }],
         metrics: [{ name: "screenPageViews" }],
-        dimensionFilter: {
+        dimensionFilter: withRegion({
           filter: { fieldName: "pagePath", stringFilter: { matchType: "PARTIAL_REGEXP", value: newsletterRegex, caseSensitive: false } }
-        },
+        }),
         limit: 20
       } : {
         dateRanges: [{ startDate: from, endDate: nlEnd }],
         dimensions: [{ name: "eventName" }],
         metrics: [{ name: "eventCount" }],
-        dimensionFilter: newsletterEvent ? {
+        dimensionFilter: withRegion(newsletterEvent ? {
           filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: newsletterEvent } }
-        } : undefined,
+        } : undefined),
         limit: 5
       },
       // 2. Top products by revenue (sales winners)
@@ -187,6 +212,7 @@ export default async function handler(req, res) {
         dimensions: [{ name: "itemName" }],
         metrics: [{ name: "itemRevenue" }, { name: "itemsPurchased" }],
         orderBys: [{ metric: { metricName: "itemRevenue" }, desc: true }],
+        dimensionFilter: withRegion(undefined),
         limit: 8
       },
       // 3. Paid Social attributed revenue/transactions
@@ -194,9 +220,9 @@ export default async function handler(req, res) {
         dateRanges: dateRanges,
         dimensions: [{ name: "sessionDefaultChannelGroup" }],
         metrics: [{ name: "ecommercePurchases" }, { name: "purchaseRevenue" }, { name: "sessions" }],
-        dimensionFilter: {
+        dimensionFilter: withRegion({
           filter: { fieldName: "sessionDefaultChannelGroup", stringFilter: { matchType: "EXACT", value: "Paid Social" } }
-        },
+        }),
         limit: 5
       },
       // 4. Top event names (so the team can confirm the newsletter event)
@@ -205,6 +231,7 @@ export default async function handler(req, res) {
         dimensions: [{ name: "eventName" }],
         metrics: [{ name: "eventCount" }],
         orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+        dimensionFilter: withRegion(undefined),
         limit: 25
       }
     ]

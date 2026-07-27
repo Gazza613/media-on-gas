@@ -4,7 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { redisGetJson, redisSetJson, isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
-import { normalizeProvince } from "./_provinces.js";
+import { normalizeProvince, googleGeoResourceForProvince } from "./_provinces.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
 // Settings → Objectives Audit) ahead of name + API logic. Returns the
@@ -1839,7 +1839,18 @@ export default async function handler(req, res) {
         // campaign_budget.* joins on the campaign through Google's automatic
         // relation. amount_micros -> ZAR via /1,000,000. period = DAILY / CUSTOM
         // (CUSTOM with an end_date acts like a lifetime cap).
-        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, campaign.start_date, campaign.end_date, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, campaign_budget.amount_micros, campaign_budget.period, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
+        //
+        // Phase 2 province filter: when a region is active, switch the
+        // FROM clause to geographic_view and add a
+        // segments.geo_target_region = 'geoTargetConstants/<id>' filter.
+        // geographic_view exposes the same campaign.* / campaign_budget.*
+        // fields via Google's automatic joins, so downstream row parsing
+        // is unchanged. Client-report metrics (impressions / clicks / cost
+        // / conversions) come back scoped to the selected province.
+        var _gGeoResource = region ? googleGeoResourceForProvince(region) : "";
+        var _gFrom = _gGeoResource ? "geographic_view" : "campaign";
+        var _gRegionClause = _gGeoResource ? (" AND segments.geo_target_region = '" + _gGeoResource + "'") : "";
+        var gQuery = "SELECT campaign.name, campaign.id, campaign.status, campaign.start_date, campaign.end_date, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, campaign_budget.amount_micros, campaign_budget.period, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM " + _gFrom + " WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED'" + _gRegionClause + " ORDER BY metrics.cost_micros DESC";
         // Redis-backed Google Ads cache. The dashboard's pre-warm fires
         // /api/campaigns for ~13 different date ranges on mount (5
         // preset windows + 4 comparison windows + 5 Optimise tab
@@ -1851,7 +1862,9 @@ export default async function handler(req, res) {
         // pre-warms onto a single Google call per range, and serves
         // every follow-up within TTL from Redis. Bypass with
         // ?fresh=1 (operator-initiated REFRESH path).
-        var gCacheKey = "googleads:v1:" + gCustomerId + ":" + from + ":" + to;
+        // Cache key includes the province so per-region and blended
+        // responses don't overwrite each other in Redis.
+        var gCacheKey = "googleads:v1:" + gCustomerId + ":" + from + ":" + to + (region ? ":r=" + region : "");
         var gCached = req.query.fresh === "1" ? null : await redisGetJson(gCacheKey);
         var gResults = null;
         if (gCached && Array.isArray(gCached.results)) {
@@ -1983,20 +1996,17 @@ export default async function handler(req, res) {
     }
   } catch (gErr) { console.error("Google Ads error", gErr); warnings.push({ platform: "Google", stage: "ads", message: String(gErr && gErr.message || gErr) }); }
 
-  // Phase 1 province filter (Meta-only): when a region param was
-  // supplied, drop TikTok and Google campaigns from the response so
-  // the dashboard shows a clean province-scoped view. The frontend
-  // surfaces a "Province filter is Meta-only, TikTok / Google shown
-  // blended elsewhere" footnote on tiles that would otherwise appear
-  // empty. Phase 2 wires Google Ads' geographic_view; Phase 3 does
-  // TikTok best-effort.
+  // Phase 2 province filter: Meta rows are re-queried with region
+  // breakdown and post-filtered, Google rows come from
+  // geographic_view scoped to the province. Only TikTok is
+  // still excluded (Phase 3 will wire TikTok's province_id).
   if (region) {
     var _preCount = allCampaigns.length;
     allCampaigns = allCampaigns.filter(function(c) {
       var p = String(c.platform || "").toLowerCase();
-      return p === "facebook" || p === "instagram" || p === "meta";
+      return p === "facebook" || p === "instagram" || p === "meta" || p === "google" || p === "google display" || p === "google search" || p === "youtube" || p === "performance max" || p === "demand gen";
     });
-    warnings.push({ platform: "All", stage: "province-filter", message: "Region filter '" + region + "' active — kept " + allCampaigns.length + " Meta campaign rows, dropped " + (_preCount - allCampaigns.length) + " TikTok / Google rows (Phase 1: Meta only)." });
+    warnings.push({ platform: "All", stage: "province-filter", message: "Region filter '" + region + "' active — kept " + allCampaigns.length + " Meta / Google campaign rows, dropped " + (_preCount - allCampaigns.length) + " TikTok rows (Phase 2: TikTok pending)." });
   }
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });

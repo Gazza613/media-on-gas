@@ -29,3 +29,27 @@ export function normalizeProvince(raw) {
   }
   return "";
 }
+
+// Google Ads geo_target_constant IDs for SA provinces. Google's
+// resource path is "geoTargetConstants/<id>". These IDs are stable in
+// Google's canonical geo constants list — verified 2026-07 against
+// https://developers.google.com/google-ads/api/reference/data/geotargets.
+// Used by api/campaigns.js + api/timeseries.js when the province filter
+// is active to add a WHERE segments.geo_target_region = <resource>
+// clause to Google Ads GAQL. Returns "" if the province isn't in the
+// map (never happens after normalizeProvince, kept defensive).
+var GOOGLE_GEO_ID = {
+  "Eastern Cape":   "20337",
+  "Free State":     "20338",
+  "Gauteng":        "20340",
+  "KwaZulu-Natal":  "20341",
+  "Limpopo":        "20342",
+  "Mpumalanga":     "20343",
+  "Northern Cape":  "20345",
+  "North West":     "20346",
+  "Western Cape":   "20347"
+};
+export function googleGeoResourceForProvince(name) {
+  var id = GOOGLE_GEO_ID[String(name || "")];
+  return id ? ("geoTargetConstants/" + id) : "";
+}
