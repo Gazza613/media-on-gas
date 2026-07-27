@@ -6801,15 +6801,6 @@ export default function MediaOnGas(){
               </span>
               <span style={{fontSize:9,fontWeight:800,color:"#4ade80",letterSpacing:2,textTransform:"uppercase"}}>Live</span>
             </div>
-            {!isClient&&<div title={province?"Every Meta / TikTok / Google metric on this dashboard is scoped to " + province + ".":"Filter every Meta / TikTok / Google metric to a single South African province."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:9,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),fontFamily:fm,flexShrink:0}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:province?P.orchid:P.caption}}/>
-              <span style={{fontSize:8.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.6,fontWeight:800,textTransform:"uppercase"}}>Province</span>
-              <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11,fontFamily:fm,outline:"none",fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:14,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
-                <option value="" style={{background:P.cosmos,color:"#fff"}}>All (blended)</option>
-                {SA_PROVINCES.map(function(p){return <option key={p} value={p} style={{background:P.cosmos,color:"#fff"}}>{p}</option>;})}
-              </select>
-              {province&&<button onClick={function(){setProvince("");}} title="Clear province filter" style={{background:"transparent",border:"none",color:P.orchid,fontSize:13,fontWeight:900,cursor:"pointer",padding:0,marginLeft:1,lineHeight:1}}>×</button>}
-            </div>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
             {!isClient&&<button onClick={function(){setShowCampaigns(function(prev){return !prev;});}} style={{background:showCampaigns?P.ember+"15":P.glass,border:"1px solid "+(showCampaigns?P.ember+"50":P.rule),borderRadius:9,padding:"6px 11px",color:showCampaigns?P.ember:P.label,fontSize:10.5,fontWeight:700,fontFamily:fm,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>{Ic.chart(showCampaigns?P.ember:P.label,13)} {selected.length} Campaigns</button>}
@@ -6837,8 +6828,21 @@ export default function MediaOnGas(){
           </div>
         </div>
       </div>
-      <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1,alignItems:"center"}}>{tabs.map(function(tb){var isActive=tab===tb.id;var disabled=loading&&!isActive;return<button key={tb.id} disabled={disabled} title={disabled?"Loading your data, tabs unlock when the Summary finishes":undefined} onClick={function(){if(disabled)return;setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:isActive?P.ember+"10":"transparent",border:"none",borderBottom:isActive?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:disabled?"not-allowed":"pointer",color:isActive?P.ember:P.label,fontSize:13,fontWeight:isActive?800:500,fontFamily:ff,letterSpacing:0.3,opacity:disabled?0.35:1,transition:"opacity 0.2s ease"}}>{tb.icon}<span>{tb.label}</span></button>;})}
-      {loading&&<span style={{marginLeft:14,display:"inline-flex",alignItems:"center",gap:8,fontSize:10,fontFamily:fm,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}><span style={{width:10,height:10,border:"1.5px solid "+P.rule,borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>Loading, other tabs unlock once Summary lands</span>}
+      <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1,alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",gap:1,alignItems:"center",flexWrap:"wrap"}}>{tabs.map(function(tb){var isActive=tab===tb.id;var disabled=loading&&!isActive;return<button key={tb.id} disabled={disabled} title={disabled?"Loading your data, tabs unlock when the Summary finishes":undefined} onClick={function(){if(disabled)return;setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:isActive?P.ember+"10":"transparent",border:"none",borderBottom:isActive?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:disabled?"not-allowed":"pointer",color:isActive?P.ember:P.label,fontSize:13,fontWeight:isActive?800:500,fontFamily:ff,letterSpacing:0.3,opacity:disabled?0.35:1,transition:"opacity 0.2s ease"}}>{tb.icon}<span>{tb.label}</span></button>;})}
+        {loading&&<span style={{marginLeft:14,display:"inline-flex",alignItems:"center",gap:8,fontSize:10,fontFamily:fm,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}><span style={{width:10,height:10,border:"1.5px solid "+P.rule,borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>Loading, other tabs unlock once Summary lands</span>}</div>
+        {/* Province filter — lives at the far right of the tab row so
+            the top nav bar stays free for logo / date / preset chips /
+            Refresh / Settings / Share / Logout on a single line. */}
+        {!isClient&&<div title={province?"Every Meta / TikTok / Google metric on this dashboard is scoped to " + province + ".":"Filter every Meta / TikTok / Google metric to a single South African province."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:9,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),fontFamily:fm,flexShrink:0,alignSelf:"center"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:province?P.orchid:P.caption}}/>
+          <span style={{fontSize:8.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.6,fontWeight:800,textTransform:"uppercase"}}>Province</span>
+          <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11,fontFamily:fm,outline:"none",fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:14,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
+            <option value="" style={{background:P.cosmos,color:"#fff"}}>All (blended)</option>
+            {SA_PROVINCES.map(function(p){return <option key={p} value={p} style={{background:P.cosmos,color:"#fff"}}>{p}</option>;})}
+          </select>
+          {province&&<button onClick={function(){setProvince("");}} title="Clear province filter" style={{background:"transparent",border:"none",color:P.orchid,fontSize:13,fontWeight:900,cursor:"pointer",padding:0,marginLeft:1,lineHeight:1}}>×</button>}
+        </div>}
       </div></div>
     </header>
 
