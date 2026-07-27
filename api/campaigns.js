@@ -616,7 +616,11 @@ export default async function handler(req, res) {
   var overridesMap = await getOverrides();
   var overrideKeys = Object.keys(overridesMap || {}).sort();
   var overrideSig = overrideKeys.length === 0 ? "" : overrideKeys.map(function(k){return k+":"+overridesMap[k];}).join("|");
-  var cacheKey = CAMPAIGNS_CACHE_VERSION + "|" + from + "|" + to + "|ov:" + overrideSig;
+  // Cache key includes region so per-province and blended responses
+  // don't collide. Without this, a Limpopo request served the
+  // "All (blended)" cached response for the same date range and the
+  // tiles never changed.
+  var cacheKey = CAMPAIGNS_CACHE_VERSION + "|" + from + "|" + to + "|ov:" + overrideSig + (region ? "|r:" + region : "");
   var cached = req.query.fresh === "1" ? null : campaignsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };

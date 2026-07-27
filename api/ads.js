@@ -167,7 +167,9 @@ export default async function handler(req, res) {
 
   // Whole-response cache check: if we've served this exact date range within the last
   // 5 minutes on this warm instance, return immediately and skip every downstream fetch.
-  var cacheKey = from + "|" + to;
+  // Cache key includes region so per-province and blended responses
+  // don't collide (mirrors api/campaigns.js — same-cause fix).
+  var cacheKey = from + "|" + to + (region ? "|r:" + region : "");
   var cached = (debugFollows || freshOverride) ? null : adsResponseCache[cacheKey];
   if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
     var pCached = req.authPrincipal || { role: "admin" };
