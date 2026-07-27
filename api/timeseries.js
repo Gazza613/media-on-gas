@@ -174,18 +174,85 @@ export default async function handler(req, res) {
         var timeRange = encodeURIComponent(JSON.stringify({ since: from, until: to }));
         var incr = granularity === "month" ? "monthly" : (granularity === "day" ? "1" : "7");
         var insUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,actions&level=campaign&breakdowns=publisher_platform&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
+        // Aggregate-truth call (no breakdown). Meta's publisher_platform
+        // breakdown over-reports spend / impressions on cross-network
+        // Advantage+ placements — the sum of the placement rows exceeds
+        // the level=campaign aggregate by up to ~34% on MoMo, which
+        // showed up on the ground-truth reconcile as "daily spend sum
+        // dashboard 34% > source". Pull the unbroken aggregate here and
+        // use it to rescale the broken rows below so per-campaign per-day
+        // totals reconcile with reconcile's fetchMetaTruth output while
+        // the FB / IG platform split still populates the trendline
+        // matrix from Meta's own breakdown proportions.
+        var insUrlAgg = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_id,spend,impressions,clicks&level=campaign&time_range=" + timeRange + "&time_increment=" + incr + "&limit=500&access_token=" + metaToken;
         // Follow pagination for big date ranges / many campaigns.
         var metaAllRows = [];
-        var insNext = insUrl;
-        var insGuard = 0;
-        while (insNext && insGuard < 10) {
-          insGuard++;
-          var insRes = await fetch(insNext);
-          if (!insRes.ok) break;
-          var insData = await insRes.json();
-          if (insData.data) metaAllRows = metaAllRows.concat(insData.data);
-          insNext = insData.paging && insData.paging.next ? insData.paging.next : null;
-        }
+        var metaAggRows = [];
+        var fetchAllPages = async function(startUrl) {
+          var out = [];
+          var next = startUrl;
+          var guard = 0;
+          while (next && guard < 10) {
+            guard++;
+            var r = await fetch(next);
+            if (!r.ok) break;
+            var d = await r.json();
+            if (d.data) out = out.concat(d.data);
+            next = d.paging && d.paging.next ? d.paging.next : null;
+          }
+          return out;
+        };
+        var _brokenAndAgg = await Promise.all([
+          fetchAllPages(insUrl),
+          fetchAllPages(insUrlAgg)
+        ]);
+        metaAllRows = _brokenAndAgg[0];
+        metaAggRows = _brokenAndAgg[1];
+
+        // Build the (campaign_id||date_start) → aggregate lookup so the
+        // broken rows for that key can be capped / rescaled.
+        var aggByKey = {};
+        metaAggRows.forEach(function(r) {
+          var k = String(r.campaign_id || "") + "||" + String(r.date_start || "");
+          aggByKey[k] = {
+            spend: parseFloat(r.spend || 0),
+            impressions: parseInt(r.impressions || 0),
+            clicks: parseInt(r.clicks || 0)
+          };
+        });
+        // Group broken rows by (campaign_id||date_start) so we can compute
+        // the broken sum per key, then rescale each row's spend /
+        // impressions / clicks by (aggregate / broken_sum) whenever the
+        // broken sum exceeds the aggregate. actions are not rescaled —
+        // Meta's breakdown of actions is generally correct and rescaling
+        // it would distort the follower / lead attribution logic below.
+        var brokenByKey = {};
+        metaAllRows.forEach(function(r) {
+          var k = String(r.campaign_id || "") + "||" + String(r.date_start || "");
+          if (!brokenByKey[k]) brokenByKey[k] = [];
+          brokenByKey[k].push(r);
+        });
+        Object.keys(brokenByKey).forEach(function(k) {
+          var rows = brokenByKey[k];
+          var agg = aggByKey[k];
+          if (!agg) return;
+          var bs = 0, bi = 0, bc = 0;
+          rows.forEach(function(r) {
+            bs += parseFloat(r.spend || 0);
+            bi += parseInt(r.impressions || 0);
+            bc += parseInt(r.clicks || 0);
+          });
+          var sScale = bs > agg.spend && bs > 0 ? agg.spend / bs : 1;
+          var iScale = bi > agg.impressions && bi > 0 ? agg.impressions / bi : 1;
+          var cScale = bc > agg.clicks && bc > 0 ? agg.clicks / bc : 1;
+          if (sScale < 1 || iScale < 1 || cScale < 1) {
+            rows.forEach(function(r) {
+              r.spend = String(parseFloat(r.spend || 0) * sScale);
+              r.impressions = String(Math.round(parseInt(r.impressions || 0) * iScale));
+              r.clicks = String(Math.round(parseInt(r.clicks || 0) * cScale));
+            });
+          }
+        });
         metaAllRows.forEach(function(row) {
           var platform = tsMapPub(row.publisher_platform);
           if (!platform) return;
@@ -353,7 +420,11 @@ export default async function handler(req, res) {
       var tokenRes = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "client_id=" + gClientId + "&client_secret=" + gClientSecret + "&refresh_token=" + gRefreshToken + "&grant_type=refresh_token" });
       var tokenData = await tokenRes.json();
       if (tokenData.access_token) {
-        var q = "SELECT campaign.id, campaign.name, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED'";
+        // No campaign.status filter — reconcile's fetchGoogleTruth doesn't
+        // filter either, so aligning here keeps the ground-truth diff
+        // clean. Historical spend on removed campaigns still belongs in
+        // the reporting window.
+        var q = "SELECT campaign.id, campaign.name, campaign.advertising_channel_type, segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
         // Follow nextPageToken. Single-request Google fetches truncate on any
         // account with more than a page's worth of daily rows across the period.
         var gAllResults = [];
