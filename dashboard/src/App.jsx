@@ -4282,7 +4282,7 @@ export default function MediaOnGas(){
   var cd2=useState(false),communityDemoLoading=cd2[0],setCommunityDemoLoading=cd2[1];
   // Reset cached demo payload when date range changes so the tab fetches
   // fresh the next time it's opened.
-  useEffect(function(){setDemoData(null);setGoogleIntent(null);setCommunityDemo(null);setSelectedProvince(null);},[df,dt,selected.length]);
+  useEffect(function(){setDemoData(null);setGoogleIntent(null);setCommunityDemo(null);setSelectedProvince(null);},[df,dt,selected.length,province]);
   useEffect(function(){
     // Summary tab also renders per-stage demographic blocks under each
     // HIGHLIGHTS section, so fetch demoData whenever the user is on Summary
@@ -4293,11 +4293,11 @@ export default function MediaOnGas(){
     if(demoData||demoLoading)return;
     setDemoLoading(true);setDemoErr("");
     var h=authHeaders();
-    fetch(API+"/api/demographics?from="+df+"&to="+dt,{headers:h})
+    fetch(API+"/api/demographics?from="+df+"&to="+dt+(province?"&region="+encodeURIComponent(province):""),{headers:h})
       .then(function(r){return r.ok?r.json():{error:"HTTP "+r.status};})
       .then(function(d){setDemoLoading(false);if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
       .catch(function(err){setDemoLoading(false);setDemoErr("Connection error");console.error("Demo API error",err);});
-  },[tab,df,dt,session,viewToken,demoData,demoLoading]);
+  },[tab,df,dt,session,viewToken,demoData,demoLoading,province]);
   useEffect(function(){
     // Google intent fetch for Summary and Targeting persona cards. Admin-only
     // endpoint returns {available:false} for client tokens and the card

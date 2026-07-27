@@ -2,6 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, isCampaignAllowed } from "./_auth.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { redisGetJson, redisSetJson, extractLeadCount } from "./_pulseShared.js";
+import { normalizeProvince } from "./_provinces.js";
 
 // Demographics endpoint. Returns age × gender, province (region), device
 // and Google-only city breakdowns across Meta, TikTok and Google. The
@@ -20,7 +21,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v15-region-3dim-with-platform";
+var DEMO_CACHE_VERSION = "v16-province-filter";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -995,6 +996,15 @@ export default async function handler(req, res) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
     return res.status(400).json({ error: "from and to required as YYYY-MM-DD" });
   }
+  // Province filter: when set, the response is filtered so every row
+  // belongs to the selected region. The Meta / Google / TikTok demo
+  // fetches already query with region as a breakdown, so filtering
+  // post-fetch keeps only rows tagged to the chosen province. Result:
+  // the frontend's "Where" bubble map / ranked-provinces list shows
+  // a single-province 100% view (or hides itself since a one-row
+  // pie is meaningless), and the age / gender / device charts read
+  // as the demographic profile of that province specifically.
+  var region = normalizeProvince(req.query.region);
 
   var principal = req.authPrincipal || { role: "admin" };
   // Cache key must include the client's specific campaign allowlist, not just
@@ -1004,7 +1014,7 @@ export default async function handler(req, res) {
   var scopeKey = principal.role === "client"
     ? (principal.allowedCampaignIds || []).map(String).sort().join(",")
     : "admin";
-  var cacheKey = DEMO_CACHE_VERSION + "|" + from + "|" + to + "|" + (principal.role || "admin") + "|" + scopeKey;
+  var cacheKey = DEMO_CACHE_VERSION + "|" + from + "|" + to + "|" + (principal.role || "admin") + "|" + scopeKey + (region ? "|r:" + region : "");
   // ?fresh=1 bypasses the response cache so a stuck 5-min slot (e.g.
   // a cached response from a window when Google upstream was failing)
   // can be flushed without waiting for the TTL.
@@ -1053,6 +1063,35 @@ export default async function handler(req, res) {
       meta = { ageGender: meta.ageGender.filter(scope), region: meta.region.filter(scope), device: meta.device.filter(scope), ageGenderByRegion: (meta.ageGenderByRegion || []).filter(scope), deviceByRegion: (meta.deviceByRegion || []).filter(scope) };
       tt = { ageGender: tt.ageGender.filter(scope), region: tt.region.filter(scope), device: tt.device.filter(scope), ageGenderByRegion: (tt.ageGenderByRegion || []).filter(scope), deviceByRegion: (tt.deviceByRegion || []).filter(scope) };
       google = { ageGender: google.ageGender.filter(scope), region: google.region.filter(scope), device: google.device.filter(scope), city: google.city.filter(scope) };
+    }
+
+    // Province filter: scope every bucket to the selected region.
+    //
+    // The 2-dim (age,gender) and (device) rows Meta returns from the
+    // age-gender / device breakdowns don't carry a `region` field, so
+    // straight filtering would empty them. Instead we SWAP those
+    // buckets to the 3-dim (age-or-gender + region) and (device +
+    // region) rows filtered to the province — same downstream shape
+    // (age / gender / device), just province-scoped. Region rows
+    // filter to the single selected province row so the "Where"
+    // ranked list / map shows 100% of that province.
+    if (region) {
+      var regionMatch = function(row) { return String(row.region || "") === region; };
+      var applyRegion = function(bucket) {
+        var ageGender3D = (bucket.ageGenderByRegion || []).filter(regionMatch);
+        var device3D = (bucket.deviceByRegion || []).filter(regionMatch);
+        return {
+          ageGender: ageGender3D,  // 3-dim rows (age|gender × region) sub in for 2-dim ageGender
+          region: (bucket.region || []).filter(regionMatch),
+          device: device3D.length > 0 ? device3D : (bucket.device || []).filter(regionMatch),
+          ageGenderByRegion: ageGender3D,
+          deviceByRegion: device3D,
+          city: bucket.city ? bucket.city.filter(regionMatch) : []
+        };
+      };
+      meta = applyRegion(meta);
+      tt = applyRegion(tt);
+      google = applyRegion(google);
     }
 
     var response = {
