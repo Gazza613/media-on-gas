@@ -3,6 +3,7 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { extractLeadCount } from "./_pulseShared.js";
+import { normalizeProvince } from "./_provinces.js";
 
 // Placement-level performance breakdown. Pulls Meta insights with the
 // publisher_platform + platform_position breakdown so we can attribute
@@ -99,6 +100,10 @@ export default async function handler(req, res) {
 
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-30";
+  // Phase 1 province filter (Meta-only). Same contract as the other
+  // Meta endpoints: add ,region to breakdowns, suppress action_type
+  // (400 combo), post-filter, skip TikTok.
+  var region = normalizeProvince(req.query.region);
   var metaToken = process.env.META_ACCESS_TOKEN;
   var ttToken = process.env.TIKTOK_ACCESS_TOKEN;
   var ttAdvId = process.env.TIKTOK_ADVERTISER_ID;
@@ -171,7 +176,13 @@ export default async function handler(req, res) {
         var campPageLikeOpt = (await getPageLikeMaps(acc.id, metaToken)).plOpt || {};
 
         var timeRange = JSON.stringify({ since: from, until: to });
-        var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,impressions,clicks,spend,actions&breakdowns=publisher_platform,platform_position&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+        // Phase 1 province filter: add ,region → 3-dim breakdown
+        // (publisher_platform,platform_position,region). Meta accepts
+        // this combo when action_breakdowns is empty (400 combo
+        // (action_type, region) otherwise).
+        var _plBreakdowns = region ? "publisher_platform,platform_position,region" : "publisher_platform,platform_position";
+        var _plActionBk = region ? "&action_breakdowns=" : "";
+        var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,impressions,clicks,spend,actions&breakdowns=" + _plBreakdowns + _plActionBk + "&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
         var allRows = [];
         var next = url, guard = 0;
         while (next && guard < 12) {
@@ -181,6 +192,9 @@ export default async function handler(req, res) {
           var d = await r.json();
           if (d.data) allRows = allRows.concat(d.data);
           next = d.paging && d.paging.next ? d.paging.next : null;
+        }
+        if (region) {
+          allRows = allRows.filter(function(r) { return String(r.region || "") === region; });
         }
         // No-breakdown campaign truth for leads. Meta's placement
         // breakdown (publisher_platform + platform_position) attributes
@@ -214,7 +228,12 @@ export default async function handler(req, res) {
               || n.indexOf("momo pos") >= 0;
         };
         try {
-          var nbUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,actions&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
+          // Phase 1 province filter: add ,region breakdown +
+          // action_breakdowns= empty (400 combo with actions in
+          // fields). Post-filter so the truth cap reflects province-
+          // scoped lead totals.
+          var _nbBreakdown = region ? "&breakdowns=region&action_breakdowns=" : "";
+          var nbUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,actions&time_range=" + timeRange + "&level=campaign" + _nbBreakdown + "&limit=500&access_token=" + metaToken;
           var nbAll = [], nbNext = nbUrl, nbGuard = 0;
           while (nbNext && nbGuard < 10) {
             nbGuard++;
@@ -224,6 +243,7 @@ export default async function handler(req, res) {
             if (nbJson.data) nbAll = nbAll.concat(nbJson.data);
             nbNext = nbJson.paging && nbJson.paging.next ? nbJson.paging.next : null;
           }
+          if (region) nbAll = nbAll.filter(function(r) { return String(r.region || "") === region; });
           nbAll.forEach(function(row) {
             var cid = String(row.campaign_id || "");
             var truthLeads = extractLeadCount(row.actions || []);
@@ -335,7 +355,9 @@ export default async function handler(req, res) {
 
   // TikTok: one placement row, the For You Page is the only meaningful
   // surface and the API does not expose sub-placement breakdown.
-  if (ttToken && ttAdvId) {
+  // Phase 1 province filter is Meta-only: skip TikTok entirely when
+  // a province is active. Phase 3 wires TikTok's province_id.
+  if (ttToken && ttAdvId && !region) {
     try {
       var ttDims = encodeURIComponent(JSON.stringify(["campaign_id"]));
       var ttMetrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks", "follows"]));

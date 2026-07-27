@@ -4223,11 +4223,11 @@ export default function MediaOnGas(){
     });
     var allIds=ids.concat(extra);
     var idsQs=allIds.length>0?("&campaignIds="+encodeURIComponent(allIds.join(","))):"";
-    fetch(API+"/api/placements?from="+df+"&to="+dt+idsQs,{headers:authHeaders()})
+    fetch(API+"/api/placements?from="+df+"&to="+dt+idsQs+(province?"&region="+encodeURIComponent(province):""),{headers:authHeaders()})
       .then(function(r){return r.json();})
       .then(function(d){if(d&&d.placements)setPlacements(d.placements);})
       .catch(function(){});
-  },[df,dt,session,viewToken,selected]);
+  },[df,dt,session,viewToken,selected,province]);
   // IG follower-count snapshots (last 8 days) from /api/ig-snapshot.
   // Used to reconcile the live IG total on Community Growth against
   // historic counts captured by the daily 06:00 SAST cron, so the team
@@ -4859,7 +4859,7 @@ export default function MediaOnGas(){
     if(adsetKey){
       if(adsetKey.adsets){setAdsets(adsetKey.adsets);}
     } else {
-      fetch(API+"/api/adsets?from="+df+"&to="+dt,{headers:h}).then(function(r){
+      fetch(API+"/api/adsets?from="+df+"&to="+dt+(province?"&region="+encodeURIComponent(province):""),{headers:h}).then(function(r){
         return r.text().then(function(t){var d=null;try{d=t?JSON.parse(t):null;}catch(_){d=null;}return {ok:r.ok,d:d};});
       }).then(function(x){
         if(myGen!==fetchGenRef.current)return;
@@ -6840,6 +6840,19 @@ export default function MediaOnGas(){
       {loading&&<span style={{marginLeft:14,display:"inline-flex",alignItems:"center",gap:8,fontSize:10,fontFamily:fm,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}><span style={{width:10,height:10,border:"1.5px solid "+P.rule,borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>Loading, other tabs unlock once Summary lands</span>}
       </div></div>
     </header>
+
+    {/* Province filter footnote (Phase 1 Meta-only). Shows up as a
+        thin full-width strip below the header when a province is
+        active so the team knows why TikTok / Google tiles are empty
+        and that everything else is scoped to the chosen region. */}
+    {province&&<div style={{maxWidth:1400,margin:"0 auto",padding:"8px 28px 0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:P.orchid+"12",border:"1px solid "+P.orchid+"40",borderRadius:10,fontFamily:fm}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:P.orchid,flexShrink:0}}/>
+        <div style={{fontSize:11,fontWeight:800,color:P.orchid,letterSpacing:1.5,textTransform:"uppercase",flexShrink:0}}>Province: {province}</div>
+        <div style={{fontSize:11,color:P.label,lineHeight:1.5,flex:1}}>Phase 1 scope: every Meta metric on this dashboard is filtered to <strong style={{color:P.txt}}>{province}</strong>. TikTok and Google are hidden while this is active. Community follower snapshots and manual Custom Outcomes are not regional and stay at whole-account totals.</div>
+        <button onClick={function(){setProvince("");}} style={{background:"transparent",border:"1px solid "+P.orchid+"55",borderRadius:6,padding:"4px 10px",color:P.orchid,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",flexShrink:0}}>Clear</button>
+      </div>
+    </div>}
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} session={session} customOutcomes={customOutcomes}/>}
     {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}

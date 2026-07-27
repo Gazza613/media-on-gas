@@ -3,12 +3,18 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction, extractLeadCount } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
+import { normalizeProvince } from "./_provinces.js";
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
   if (!validateDates(req, res)) return;
   var from = req.query.from || "2026-04-01";
   var to = req.query.to || "2026-04-30";
+  // Phase 1 province filter (Meta-only). When ?region= is set: add
+  // ,region to every Meta insights breakdown, suppress the implicit
+  // action_type breakdown (400 combo), post-filter rows, and skip
+  // TikTok entirely. Phase 3 will wire TikTok's province_id.
+  var region = normalizeProvince(req.query.region);
   var metaToken = process.env.META_ACCESS_TOKEN;
   var metaAccounts = [
     { id: "act_8159212987434597", name: "MTN MoMo Meta" },
@@ -41,7 +47,12 @@ export default async function handler(req, res) {
       var campPageLikeOpt = (await getPageLikeMaps(account.id, metaToken)).plOpt || {};
 
       var timeRange = "{\"since\":\"" + from + "\",\"until\":\"" + to + "\"}";
-      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range=" + timeRange + "&breakdowns=publisher_platform&limit=200&access_token=" + metaToken;
+      // Phase 1 province filter: add ,region to the breakdown when
+      // active; suppress the implicit action_type breakdown (400 combo
+      // with region + actions in fields — mirrors demographics.js).
+      var _asBreakdowns = region ? "publisher_platform,region" : "publisher_platform";
+      var _asActionBk = region ? "&action_breakdowns=" : "";
+      var url = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=campaign_name,campaign_id,adset_name,adset_id,impressions,reach,frequency,spend,cpm,cpc,ctr,clicks,actions&level=adset&time_range=" + timeRange + "&breakdowns=" + _asBreakdowns + _asActionBk + "&limit=200&access_token=" + metaToken;
       // Collect all breakdown rows for this account first (paginated) so we
       // can run the no-breakdown authoritative totals pass below and scale
       // spend / impressions per adset to match. Without this, Meta's
@@ -54,6 +65,10 @@ export default async function handler(req, res) {
       var pGuard = 0;
       while (pageData && pageData.data && pGuard < 10) {
         pGuard++;
+        // Province filter: drop rows outside the selected region BEFORE
+        // the per-row loop so downstream aggregation sees the scoped
+        // slice only.
+        if (region) pageData.data = pageData.data.filter(function(r) { return String(r.region || "") === region; });
         for (var j = 0; j < pageData.data.length; j++) {
           var d = pageData.data[j];
           var pub = d.publisher_platform || "facebook";
@@ -122,7 +137,13 @@ export default async function handler(req, res) {
       // Reports tab shows, they always match campaign aggregates.
       var trueByAdset = {};
       try {
-        var trueUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=adset_id,spend,impressions,clicks&level=adset&time_range=" + timeRange + "&limit=500&access_token=" + metaToken;
+        // Phase 1 province filter: add ,region breakdown so the
+        // "authoritative" per-adset totals we scale to also reflect the
+        // selected province (no actions field here so no action_
+        // breakdowns fix needed). Post-filter to keep just the row
+        // matching the province per adset.
+        var _asTrueBreakdown = region ? "&breakdowns=region" : "";
+        var trueUrl = "https://graph.facebook.com/v25.0/" + account.id + "/insights?fields=adset_id,spend,impressions,clicks&level=adset&time_range=" + timeRange + _asTrueBreakdown + "&limit=500&access_token=" + metaToken;
         var trueNext = trueUrl;
         var trueGuard = 0;
         while (trueNext && trueGuard < 10) {
@@ -130,7 +151,9 @@ export default async function handler(req, res) {
           var tR = await fetch(trueNext);
           if (!tR.ok) break;
           var tJ = await tR.json();
-          (tJ.data || []).forEach(function(row) {
+          var _tRows = tJ.data || [];
+          if (region) _tRows = _tRows.filter(function(r) { return String(r.region || "") === region; });
+          _tRows.forEach(function(row) {
             trueByAdset[row.adset_id] = {
               spend: parseFloat(row.spend || 0),
               impressions: parseInt(row.impressions || 0),
@@ -203,7 +226,9 @@ export default async function handler(req, res) {
   }
 
   // TIKTOK ADSETS
-  try {
+  // Phase 1 province filter is Meta-only — skip TikTok entirely when
+  // a province is active. Phase 3 wires TikTok's province_id best-effort.
+  if (region) { /* skip */ } else try {
     var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&dimensions=[%22adgroup_id%22]&data_level=AUCTION_ADGROUP&metrics=[%22campaign_name%22,%22adgroup_name%22,%22campaign_id%22,%22spend%22,%22impressions%22,%22reach%22,%22clicks%22,%22ctr%22,%22cpc%22,%22cpm%22,%22follows%22,%22likes%22,%22profile_visits%22]&start_date=" + from + "&end_date=" + to + "&page_size=200";
     var ttR = await fetch(ttUrl, { headers: { "Access-Token": ttToken } });
     var ttData = await ttR.json();
@@ -240,7 +265,9 @@ export default async function handler(req, res) {
   } catch (err) { console.error("TikTok adsets error", err); }
 
   // GOOGLE ADS AD GROUPS
-  try {
+  // Phase 1 province filter is Meta-only — skip Google entirely when
+  // a province is active. Phase 2 wires geographic_view.
+  if (region) { /* skip */ } else try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
     var gRefreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
