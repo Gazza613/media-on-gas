@@ -1,6 +1,7 @@
 import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, isCampaignAllowed } from "./_auth.js";
 import { computeAssetBreakdown } from "./ad-assets.js";
+import { verifyToken } from "./_jwt.js";
 
 // Resolve a Meta or TikTok ad thumbnail to a fresh CDN URL, then 302-redirect
 // the client's <img> there. Mirrors the pattern in /api/ad-video: Meta and
@@ -209,7 +210,25 @@ export default async function handler(req, res) {
   // enough that real usage never trips it; still tight enough to stop a
   // scraper from hot-fetching every ad image in a tight loop.
   if (!(await rateLimit(req, res, { maxPerMin: 600, maxPerHour: 6000 }))) return;
-  if (!(await checkAuth(req, res))) return;
+
+  // Pulse-email tokens are admin-scoped JWTs signed by /_jwt but carry
+  // no `sub`, so checkAuth's client-Bearer branch (which requires sub)
+  // rejects them with 401 — that's why TikTok / Meta thumbnails render
+  // as broken images inside Gmail. Recognise the pulse-email scope
+  // explicitly here so the fix stays confined to the two endpoints
+  // (this + ad-video if ever wired) that need it, without opening the
+  // whole admin surface to query-token auth.
+  var _preToken = String(req.query.token || "").trim();
+  if (_preToken && !req.headers["x-session-token"] && !req.headers["x-api-key"]) {
+    try {
+      var _pePayload = verifyToken(_preToken);
+      if (_pePayload && _pePayload.role === "admin" && _pePayload.scope === "pulse-email") {
+        req.authPrincipal = { role: "admin", scope: "pulse-email" };
+      }
+    } catch (_) { /* fall through to normal checkAuth */ }
+  }
+
+  if (!req.authPrincipal && !(await checkAuth(req, res))) return;
 
   var platform = String(req.query.platform || "").toLowerCase();
   var adId = String(req.query.adId || req.query.id || "").trim();
