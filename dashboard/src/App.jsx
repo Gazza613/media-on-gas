@@ -6801,7 +6801,7 @@ export default function MediaOnGas(){
               </span>
               <span style={{fontSize:9,fontWeight:800,color:"#4ade80",letterSpacing:2,textTransform:"uppercase"}}>Live</span>
             </div>
-            {!isClient&&<div title={province?"Meta + Google metrics on this dashboard are scoped to " + province + ". TikTok is hidden while this is active.":"Filter every Meta + Google metric to a single South African province. TikTok will be hidden while a province is selected."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:9,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),fontFamily:fm,flexShrink:0}}>
+            {!isClient&&<div title={province?"Every Meta / TikTok / Google metric on this dashboard is scoped to " + province + ".":"Filter every Meta / TikTok / Google metric to a single South African province."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:9,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),fontFamily:fm,flexShrink:0}}>
               <span style={{width:6,height:6,borderRadius:"50%",background:province?P.orchid:P.caption}}/>
               <span style={{fontSize:8.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.6,fontWeight:800,textTransform:"uppercase"}}>Province</span>
               <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11,fontFamily:fm,outline:"none",fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:14,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
@@ -6850,7 +6850,7 @@ export default function MediaOnGas(){
     {!isClient&&province&&<div style={{maxWidth:1400,margin:"0 auto",padding:"8px 28px 0"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:P.orchid+"12",border:"1px solid "+P.orchid+"40",borderRadius:10,fontFamily:fm,flexWrap:"wrap"}}>
         <div style={{width:6,height:6,borderRadius:"50%",background:P.orchid,flexShrink:0}}/>
-        <div style={{fontSize:11,color:P.label,lineHeight:1.5,flex:1,minWidth:200}}>Every Meta and Google metric on this dashboard is scoped to <strong style={{color:P.txt}}>{province}</strong>. TikTok is hidden while active (Phase 3 pending). Community follower snapshots and manual Custom Outcomes are not regional and stay at whole-account totals.</div>
+        <div style={{fontSize:11,color:P.label,lineHeight:1.5,flex:1,minWidth:200}}>Every Meta, TikTok and Google metric on this dashboard is scoped to <strong style={{color:P.txt}}>{province}</strong>. Community follower snapshots and manual Custom Outcomes are not regional and stay at whole-account totals.</div>
         <button onClick={function(){setProvince("");}} style={{background:"transparent",border:"1px solid "+P.orchid+"55",borderRadius:6,padding:"4px 10px",color:P.orchid,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",flexShrink:0}}>Clear</button>
       </div>
     </div>}

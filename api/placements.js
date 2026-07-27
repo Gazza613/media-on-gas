@@ -3,7 +3,7 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { extractLeadCount } from "./_pulseShared.js";
-import { normalizeProvince } from "./_provinces.js";
+import { normalizeProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
 
 // Placement-level performance breakdown. Pulls Meta insights with the
 // publisher_platform + platform_position breakdown so we can attribute
@@ -355,11 +355,18 @@ export default async function handler(req, res) {
 
   // TikTok: one placement row, the For You Page is the only meaningful
   // surface and the API does not expose sub-placement breakdown.
-  // Phase 1 province filter is Meta-only: skip TikTok entirely when
-  // a province is active. Phase 3 wires TikTok's province_id.
-  if (ttToken && ttAdvId && !region) {
+  // Phase 3 province filter: resolve TikTok's location_id, add
+  // province_id to the dimensions, post-filter. Skip when the map
+  // can't be resolved.
+  var _ttPlRegionId = "";
+  if (region && ttToken && ttAdvId) {
+    try { _ttPlRegionId = await tiktokProvinceIdForProvince(region); } catch (_) {}
+  }
+  var _ttPlSkip = !!(region && !_ttPlRegionId);
+  if (ttToken && ttAdvId && !_ttPlSkip) {
     try {
-      var ttDims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+      var _ttPlDimList = _ttPlRegionId ? ["campaign_id", "province_id"] : ["campaign_id"];
+      var ttDims = encodeURIComponent(JSON.stringify(_ttPlDimList));
       var ttMetrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks", "follows"]));
       var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
       var ttPage = 1, ttList = [];
@@ -372,6 +379,11 @@ export default async function handler(req, res) {
         var totalPage = (ttJson.data && ttJson.data.page_info && ttJson.data.page_info.total_page) || 1;
         if (ttPage >= totalPage) break;
         ttPage++;
+      }
+      if (_ttPlRegionId) {
+        ttList = ttList.filter(function(r) {
+          return String((r.dimensions && r.dimensions.province_id) || "") === _ttPlRegionId;
+        });
       }
       ttList.forEach(function(row) {
         var cid = row.dimensions && row.dimensions.campaign_id;

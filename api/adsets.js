@@ -3,7 +3,7 @@ import { checkAuth } from "./_auth.js";
 import { validateDates } from "./_validate.js";
 import { isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction, extractLeadCount } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
-import { normalizeProvince } from "./_provinces.js";
+import { normalizeProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
 export default async function handler(req, res) {
   if (!(await rateLimit(req, res))) return;
   if (!(await checkAuth(req, res))) return;
@@ -226,12 +226,26 @@ export default async function handler(req, res) {
   }
 
   // TIKTOK ADSETS
-  // Phase 1 province filter is Meta-only — skip TikTok entirely when
-  // a province is active. Phase 3 wires TikTok's province_id best-effort.
-  if (region) { /* skip */ } else try {
-    var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&dimensions=[%22adgroup_id%22]&data_level=AUCTION_ADGROUP&metrics=[%22campaign_name%22,%22adgroup_name%22,%22campaign_id%22,%22spend%22,%22impressions%22,%22reach%22,%22clicks%22,%22ctr%22,%22cpc%22,%22cpm%22,%22follows%22,%22likes%22,%22profile_visits%22]&start_date=" + from + "&end_date=" + to + "&page_size=200";
+  // Phase 3 province filter: resolve TikTok's location_id, add
+  // province_id to the dimensions, post-filter to keep only rows
+  // matching the selected province. Skip TikTok entirely when the
+  // resolve fails (no map, credentials missing).
+  var _ttAdsetsRegionId = "";
+  if (region && ttToken && ttAdvId) {
+    try { _ttAdsetsRegionId = await tiktokProvinceIdForProvince(region); } catch (_) {}
+  }
+  if (region && !_ttAdsetsRegionId) { /* skip TikTok entirely */ } else try {
+    var _ttAdgroupDims = _ttAdsetsRegionId
+      ? encodeURIComponent(JSON.stringify(["adgroup_id", "province_id"]))
+      : encodeURIComponent(JSON.stringify(["adgroup_id"]));
+    var ttUrl = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&dimensions=" + _ttAdgroupDims + "&data_level=AUCTION_ADGROUP&metrics=[%22campaign_name%22,%22adgroup_name%22,%22campaign_id%22,%22spend%22,%22impressions%22,%22reach%22,%22clicks%22,%22ctr%22,%22cpc%22,%22cpm%22,%22follows%22,%22likes%22,%22profile_visits%22]&start_date=" + from + "&end_date=" + to + "&page_size=200";
     var ttR = await fetch(ttUrl, { headers: { "Access-Token": ttToken } });
     var ttData = await ttR.json();
+    if (ttData.data && ttData.data.list && _ttAdsetsRegionId) {
+      ttData.data.list = ttData.data.list.filter(function(r) {
+        return String((r.dimensions && r.dimensions.province_id) || "") === _ttAdsetsRegionId;
+      });
+    }
     if (ttData.data && ttData.data.list) {
       for (var ti = 0; ti < ttData.data.list.length; ti++) {
         var tt = ttData.data.list[ti];

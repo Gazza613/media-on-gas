@@ -4,7 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { isLeadAction, extractLeadCount } from "./_pulseShared.js";
-import { normalizeProvince, googleGeoResourceForProvince } from "./_provinces.js";
+import { normalizeProvince, googleGeoResourceForProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
 
 // Same account list as /api/ads, keep in sync
 var metaAccounts = [
@@ -381,10 +381,18 @@ export default async function handler(req, res) {
   }
 
   /* TIKTOK, daily, aggregate server-side into weekly/monthly */
-  // Phase 1 province filter is Meta-only — skip TikTok entirely when a
-  // province is active. Phase 3 will wire TikTok's province_id
-  // dimension best-effort.
-  if (ttToken && ttAdvId && !region) {
+  // Phase 3 province filter: TikTok supports a province_id dimension
+  // whose values are internal numeric strings. We resolve the SA
+  // province → TikTok-id map once via the /tool/region/ endpoint
+  // (cached 24h in Redis) and post-filter the daily rows by
+  // province_id. When the map can't be resolved (network / creds /
+  // shape change), we fall back to skipping TikTok gracefully.
+  var _ttRegionId = "";
+  if (region && ttToken && ttAdvId) {
+    try { _ttRegionId = await tiktokProvinceIdForProvince(region); } catch (_) {}
+  }
+  var _ttSkip = !!(region && !_ttRegionId);
+  if (ttToken && ttAdvId && !_ttSkip) {
     try {
       // Campaign objective map
       var ttCampObjMap = {};
@@ -396,7 +404,13 @@ export default async function handler(req, res) {
         if (ttCampData.data && ttCampData.data.list) ttCampData.data.list.forEach(function(c) { ttCampObjMap[String(c.campaign_id)] = c.objective_type; });
       } catch (e) {}
 
-      var ttDims = encodeURIComponent(JSON.stringify(["campaign_id", "stat_time_day"]));
+      // When a province is active, add province_id to the dimensions
+      // so each row carries the location. Post-filter to keep only
+      // rows matching _ttRegionId.
+      var _ttDimList = region
+        ? ["campaign_id", "stat_time_day", "province_id"]
+        : ["campaign_id", "stat_time_day"];
+      var ttDims = encodeURIComponent(JSON.stringify(_ttDimList));
       var ttMetrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes"]));
       var ttBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttDims + "&metrics=" + ttMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
       // Follow TikTok pagination, dropping pages 2+ undercounted large date ranges.
@@ -411,6 +425,15 @@ export default async function handler(req, res) {
         var ttTotalPage = (ttPageData.data && ttPageData.data.page_info && ttPageData.data.page_info.total_page) || 1;
         if (ttPage >= ttTotalPage) break;
         ttPage++;
+      }
+      // Province post-filter: TikTok returns province_id per row
+      // when included as a dimension; drop rows outside the selected
+      // province.
+      if (region && _ttRegionId) {
+        ttAllRows = ttAllRows.filter(function(r) {
+          var pid = String((r.dimensions && r.dimensions.province_id) || "");
+          return pid === _ttRegionId;
+        });
       }
       var ttData = { data: { list: ttAllRows } };
       if (ttData.data && ttData.data.list) {

@@ -4,7 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { redisGetJson, redisSetJson, isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
-import { normalizeProvince, googleGeoResourceForProvince } from "./_provinces.js";
+import { normalizeProvince, googleGeoResourceForProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
 // Settings → Objectives Audit) ahead of name + API logic. Returns the
@@ -1681,7 +1681,18 @@ export default async function handler(req, res) {
     });
   }
 
-  try {
+  // Phase 3 province filter resolve happens BEFORE the try so we can
+  // skip the whole TikTok block when a province is active but the
+  // TikTok location table couldn't be resolved for it. If the resolve
+  // fails, TikTok is skipped and a warning is emitted.
+  var _ttCampRegionResolve = "";
+  if (region && ttToken && ttAdvId) {
+    try { _ttCampRegionResolve = await tiktokProvinceIdForProvince(region); } catch (_) {}
+    if (!_ttCampRegionResolve) {
+      warnings.push({ platform: "TikTok", stage: "province-filter", message: "TikTok skipped for region '" + region + "' — TikTok location_id could not be resolved (check credentials / TikTok /tool/region/ response)." });
+    }
+  }
+  if (region && !_ttCampRegionResolve) { /* skip TikTok entirely */ } else try {
     var ttNames = {};
     var ttStatuses = {};
     var ttObjectives = {};
@@ -1745,7 +1756,13 @@ export default async function handler(req, res) {
       }
     }
 
-    var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+    // Add province_id to the dimensions when a region is active so
+    // each row carries the location and can be post-filtered below.
+    // _ttCampRegionResolve is guaranteed non-empty here (the skip
+    // branch above already handled the fail case).
+    var _ttCampRegionId = _ttCampRegionResolve;
+    var _ttCampDimList = _ttCampRegionId ? ["campaign_id", "province_id"] : ["campaign_id"];
+    var dims = encodeURIComponent(JSON.stringify(_ttCampDimList));
     // profile_visits is TikTok's "click into the profile" event and what
     // their Ads Manager UI uses as the click denominator for Follower
     // campaigns (which have no destination URL, so their `clicks` metric
@@ -1761,6 +1778,13 @@ export default async function handler(req, res) {
 
     try {
       var ttData = JSON.parse(ttRaw);
+      // Province post-filter — keep only the rows whose province_id
+      // matches the resolved TikTok location for the selected province.
+      if (region && _ttCampRegionId && ttData.data && ttData.data.list) {
+        ttData.data.list = ttData.data.list.filter(function(r) {
+          return String((r.dimensions && r.dimensions.province_id) || "") === _ttCampRegionId;
+        });
+      }
       if (ttData.data && ttData.data.list) {
         for (var n = 0; n < ttData.data.list.length; n++) {
           var tc = ttData.data.list[n];
@@ -1996,17 +2020,13 @@ export default async function handler(req, res) {
     }
   } catch (gErr) { console.error("Google Ads error", gErr); warnings.push({ platform: "Google", stage: "ads", message: String(gErr && gErr.message || gErr) }); }
 
-  // Phase 2 province filter: Meta rows are re-queried with region
-  // breakdown and post-filtered, Google rows come from
-  // geographic_view scoped to the province. Only TikTok is
-  // still excluded (Phase 3 will wire TikTok's province_id).
+  // Phase 3 province filter: Meta, Google and TikTok are all
+  // region-scoped now (Meta via region breakdown, Google via
+  // geographic_view, TikTok via province_id). Emit a summary
+  // warning with the row count so the operator can spot silently-
+  // empty responses (e.g. TikTok location_id not resolvable).
   if (region) {
-    var _preCount = allCampaigns.length;
-    allCampaigns = allCampaigns.filter(function(c) {
-      var p = String(c.platform || "").toLowerCase();
-      return p === "facebook" || p === "instagram" || p === "meta" || p === "google" || p === "google display" || p === "google search" || p === "youtube" || p === "performance max" || p === "demand gen";
-    });
-    warnings.push({ platform: "All", stage: "province-filter", message: "Region filter '" + region + "' active — kept " + allCampaigns.length + " Meta / Google campaign rows, dropped " + (_preCount - allCampaigns.length) + " TikTok rows (Phase 2: TikTok pending)." });
+    warnings.push({ platform: "All", stage: "province-filter", message: "Region filter '" + region + "' active — response contains " + allCampaigns.length + " region-scoped campaign rows across Meta / Google / TikTok." });
   }
 
   allCampaigns.sort(function(a, b) { return parseFloat(b.spend) - parseFloat(a.spend); });

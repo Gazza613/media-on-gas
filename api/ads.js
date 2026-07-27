@@ -4,7 +4,7 @@ import { validateDates } from "./_validate.js";
 import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { extractLeadCount } from "./_pulseShared.js";
-import { normalizeProvince } from "./_provinces.js";
+import { normalizeProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
 
 function overrideFor(overridesMap, campaignId) {
   if (!overridesMap || !campaignId) return null;
@@ -1266,11 +1266,17 @@ export default async function handler(req, res) {
   }));
 
   /* ═══ TIKTOK ═══ */
+  // Phase 3 province filter: resolve TikTok's location_id via
+  // /tool/region/ (24h Redis cache). If the resolve fails when a
+  // region is active, skip TikTok entirely rather than emit
+  // whole-country ads.
+  var _ttAdsRegionId = "";
+  if (region && ttToken && ttAdvId) {
+    try { _ttAdsRegionId = await tiktokProvinceIdForProvince(region); } catch (_) {}
+  }
+  var _ttAdsSkip = !!(region && !_ttAdsRegionId);
   try {
-    // Phase 1 province filter is Meta-only: skip the whole TikTok
-    // block when a province is active. Phase 3 will wire TikTok's
-    // province_id dimension best-effort.
-    if (ttToken && ttAdvId && !region) {
+    if (ttToken && ttAdvId && !_ttAdsSkip) {
       // Fetch campaigns with their objective_type
       var ttCampObjMap = {};
       try {
@@ -1331,7 +1337,10 @@ export default async function handler(req, res) {
       }
 
       // Ad-level insights
-      var ttDims = encodeURIComponent(JSON.stringify(["ad_id"]));
+      // Province filter: add province_id so we can drop rows outside
+      // the selected region below.
+      var _ttInsDimList = _ttAdsRegionId ? ["ad_id", "province_id"] : ["ad_id"];
+      var ttDims = encodeURIComponent(JSON.stringify(_ttInsDimList));
       // profile_visits is TikTok's click denominator for follower
       // campaigns at the per-ad level (mirrors the same field added
       // to api/campaigns.js). Without it ad cards for follower
@@ -1354,6 +1363,13 @@ export default async function handler(req, res) {
         if (ttPage >= ttTotalPage) break;
         ttPage++;
       }
+      // Province post-filter (ad-level): drop ad rows outside the
+      // selected TikTok province.
+      if (_ttAdsRegionId) {
+        ttAllIns = ttAllIns.filter(function(r) {
+          return String((r.dimensions && r.dimensions.province_id) || "") === _ttAdsRegionId;
+        });
+      }
       var ttInsData = { data: { list: ttAllIns } };
 
       // Authoritative campaign-level totals (no ad dimension). TikTok's
@@ -1364,7 +1380,10 @@ export default async function handler(req, res) {
       // apportion across the ad rows below.
       var ttCampTruth = {};
       try {
-        var ttCtDims = encodeURIComponent(JSON.stringify(["campaign_id"]));
+        // Province filter: add province_id + post-filter so the
+        // apportionment ceiling reflects province-only totals.
+        var _ttCtDimList = _ttAdsRegionId ? ["campaign_id", "province_id"] : ["campaign_id"];
+        var ttCtDims = encodeURIComponent(JSON.stringify(_ttCtDimList));
         var ttCtMetrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks"]));
         var ttCtBase = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + ttAdvId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + ttCtDims + "&metrics=" + ttCtMetrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
         var ttCtPage = 1;
@@ -1373,6 +1392,13 @@ export default async function handler(req, res) {
           if (!ttCtRes.ok) break;
           var ttCtData = await ttCtRes.json();
           var ttCtList = (ttCtData.data && ttCtData.data.list) || [];
+          // Province post-filter on the campaign-level truth so the
+          // apportionment ceiling doesn't include whole-country totals.
+          if (_ttAdsRegionId) {
+            ttCtList = ttCtList.filter(function(r) {
+              return String((r.dimensions && r.dimensions.province_id) || "") === _ttAdsRegionId;
+            });
+          }
           ttCtList.forEach(function(row) {
             var cid = String((row.dimensions || {}).campaign_id || "");
             if (!cid) return;
