@@ -181,7 +181,7 @@ export default async function handler(req, res) {
         // this combo when action_breakdowns is empty (400 combo
         // (action_type, region) otherwise).
         var _plBreakdowns = region ? "publisher_platform,platform_position,region" : "publisher_platform,platform_position";
-        var _plActionBk = region ? "&action_breakdowns=" : "";
+        var _plActionBk = region ? "&action_breakdowns=%5B%5D" : "";
         var url = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,impressions,clicks,spend,actions&breakdowns=" + _plBreakdowns + _plActionBk + "&time_range=" + timeRange + "&level=campaign&limit=500&access_token=" + metaToken;
         var allRows = [];
         var next = url, guard = 0;
@@ -232,7 +232,7 @@ export default async function handler(req, res) {
           // action_breakdowns= empty (400 combo with actions in
           // fields). Post-filter so the truth cap reflects province-
           // scoped lead totals.
-          var _nbBreakdown = region ? "&breakdowns=region&action_breakdowns=" : "";
+          var _nbBreakdown = region ? "&breakdowns=region&action_breakdowns=%5B%5D" : "";
           var nbUrl = "https://graph.facebook.com/v25.0/" + acc.id + "/insights?fields=campaign_id,campaign_name,actions&time_range=" + timeRange + "&level=campaign" + _nbBreakdown + "&limit=500&access_token=" + metaToken;
           var nbAll = [], nbNext = nbUrl, nbGuard = 0;
           while (nbNext && nbGuard < 10) {
