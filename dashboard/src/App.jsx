@@ -165,7 +165,11 @@ var API=window.location.origin;
 // pull; a background pre-warm useEffect populates non-active presets
 // 1.5s after the initial paint so the first toggle is also instant.
 var summaryCache = { campaigns: {}, adsets: {}, ads: {}, daily: {} };
-function summaryCacheKey(from, to) { return from + ".." + to; }
+// summaryCache is keyed by (from, to, region) so the "All (blended)"
+// response and each per-province response are stored separately —
+// otherwise switching to Limpopo returns the blended cache hit and
+// no re-fetch fires.
+function summaryCacheKey(from, to, region) { return from + ".." + to + (region ? "::r=" + region : ""); }
 // Find the smallest cached range whose [from..to] contains [df, dt],
 // so we can slice the daily breakdown client-side instead of fetching.
 // Returns the cache key (or null) — caller looks up campaigns + daily.
@@ -4783,7 +4787,7 @@ export default function MediaOnGas(){
   };
   var fetchData=function(){
     var h=authHeaders();
-    var key=summaryCacheKey(df,dt);
+    var key=summaryCacheKey(df,dt,province);
     // Generation counter to guard against stale in-flight fetches
     // overwriting newer state. Without this, rapidly toggling presets
     // or typing in FROM then TO created a race: an earlier slow fetch
@@ -4803,7 +4807,11 @@ export default function MediaOnGas(){
     var campaignsSource=null;
     if(summaryCache.campaigns[key]){
       campaignsSource=summaryCache.campaigns[key];
-    } else {
+    } else if(!province){
+      // Sub-range slicing only runs for the blended (no-province)
+      // view; the daily cache doesn't carry per-region breakdowns,
+      // so slicing it would produce whole-country numbers under a
+      // province key.
       var containerKey=findContainingCacheKey(df,dt);
       if(containerKey&&summaryCache.campaigns[containerKey]&&summaryCache.daily[containerKey]){
         var baseResp=summaryCache.campaigns[containerKey];
@@ -4913,6 +4921,12 @@ export default function MediaOnGas(){
   // a normal fetch on first toggle.
   useEffect(function(){
     if(!isAuthed())return;
+    // Skip pre-warm when a province filter is active — each preset
+    // range would need its own per-province fetch, and the operator
+    // typically only inspects one range while filtering. Keeping
+    // pre-warm for the blended view only avoids burning quota on
+    // ~20 province-scoped fetches per province change.
+    if(province)return;
     var timer=setTimeout(function(){
       var presetKeys=["7d","30d","mtd","lm"];
       var ranges=presetKeys.map(function(k){return presetRange(k);}).filter(Boolean);
@@ -5011,7 +5025,7 @@ export default function MediaOnGas(){
     // the chip data synchronously and skip the network round-trip.
     // This is the difference between "WoW chip appears in 100ms" and
     // "WoW chip dashes for 20s while Meta/TikTok/Google get pulled".
-    var cmpKey=summaryCacheKey(range.from,range.to);
+    var cmpKey=summaryCacheKey(range.from,range.to,province);
     var cached=summaryCache.campaigns[cmpKey];
     if(cached&&cached.campaigns){
       setCompareCampaigns(cached.campaigns);
@@ -5097,7 +5111,7 @@ export default function MediaOnGas(){
   // authenticated yet we fall back to the hard reload.
   var refreshData=function(){
     if(!isAuthed()){hardRefresh();return;}
-    var key=summaryCacheKey(df,dt);
+    var key=summaryCacheKey(df,dt,province);
     delete summaryCache.campaigns[key];
     delete summaryCache.adsets[key];
     delete summaryCache.ads[key];
