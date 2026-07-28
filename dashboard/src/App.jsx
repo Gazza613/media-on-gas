@@ -4,11 +4,6 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import CreateTab from "./CreateTab.jsx";
 import CommandCentre from "./CommandCentre.jsx";
 
-// SA province list for the top-bar Province filter. Values must match
-// Meta's region-breakdown strings exactly (also aligns with Google Ads
-// geo_target_region_name and TikTok's province naming for later
-// phases). Keep in sync with api/_provinces.js.
-var SA_PROVINCES=["Eastern Cape","Free State","Gauteng","KwaZulu-Natal","Limpopo","Mpumalanga","North West","Northern Cape","Western Cape"];
 
 // label and caption are the canonical tokens for client-visible secondary
 // text. Hard rule across the dashboard: every label uses P.label (white at
@@ -4041,13 +4036,12 @@ export default function MediaOnGas(){
   // the tab-change effect below.
   var ds=useState(monthStart),df=ds[0],setDf=ds[1];
   var de=useState(monthEnd),dt=de[0],setDt=de[1];
-  // Phase 1 province filter (Meta-only). Empty string = no filter (all
-  // regions blended, the default). When set, /api/campaigns re-queries
-  // Meta with breakdowns=region and post-filters, then strips TikTok /
-  // Google rows so the dashboard shows a clean Meta-scoped province
-  // view. Phase 2/3 will add Google + TikTok. The dropdown lives in
-  // the top control bar next to the date picker.
-  var pv=useState(""),province=pv[0],setProvince=pv[1];
+  // Province filter removed per team decision — the dashboard renders
+  // every metric whole-account/blended and never scopes to a single
+  // SA province. Backend endpoints still accept ?region= as dead code
+  // (harmless when never called) so the door stays open if we ever
+  // revive it, but nothing here sends the param and no UI exposes it.
+  var province="";
   // Defensive: if the operator typed FROM > TO (typo / accidental
   // swap), normalise so downstream code never sees an inverted range
   // (Meta returns empty data on inverted time_range, and the cache
@@ -6845,33 +6839,8 @@ export default function MediaOnGas(){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"0 28px"}}><div style={{display:"flex",gap:1,alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",gap:1,alignItems:"center",flexWrap:"wrap"}}>{tabs.map(function(tb){var isActive=tab===tb.id;var disabled=loading&&!isActive;return<button key={tb.id} disabled={disabled} title={disabled?"Loading your data, tabs unlock when the Summary finishes":undefined} onClick={function(){if(disabled)return;setTab(tb.id);}} style={{display:"flex",alignItems:"center",gap:5,background:isActive?P.ember+"10":"transparent",border:"none",borderBottom:isActive?"2px solid "+P.ember:"2px solid transparent",padding:"10px 18px",cursor:disabled?"not-allowed":"pointer",color:isActive?P.ember:P.label,fontSize:13,fontWeight:isActive?800:500,fontFamily:ff,letterSpacing:0.3,opacity:disabled?0.35:1,transition:"opacity 0.2s ease"}}>{tb.icon}<span>{tb.label}</span></button>;})}
         {loading&&<span style={{marginLeft:14,display:"inline-flex",alignItems:"center",gap:8,fontSize:10,fontFamily:fm,color:P.label,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}><span style={{width:10,height:10,border:"1.5px solid "+P.rule,borderTop:"1.5px solid "+P.ember,borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/>Loading, other tabs unlock once Summary lands</span>}</div>
-        {/* Province filter — lives at the far right of the tab row so
-            the top nav bar stays free for logo / date / preset chips /
-            Refresh / Settings / Share / Logout on a single line. */}
-        {!isClient&&<div title={province?"Every Meta / TikTok / Google metric on this dashboard is scoped to " + province + ".":"Filter every Meta / TikTok / Google metric to a single South African province."} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:9,background:province?P.orchid+"18":P.glass,border:"1px solid "+(province?P.orchid+"55":P.rule),fontFamily:fm,flexShrink:0,alignSelf:"center"}}>
-          <span style={{width:6,height:6,borderRadius:"50%",background:province?P.orchid:P.caption}}/>
-          <span style={{fontSize:8.5,color:province?P.orchid:P.label,fontFamily:fm,letterSpacing:1.6,fontWeight:800,textTransform:"uppercase"}}>Province</span>
-          <select value={province} onChange={function(e){setProvince(e.target.value);}} style={{background:"transparent",border:"none",color:province?P.orchid:"#fff",fontSize:11,fontFamily:fm,outline:"none",fontWeight:600,cursor:"pointer",appearance:"none",WebkitAppearance:"none",paddingRight:14,backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23ffffff88'/></svg>\")",backgroundRepeat:"no-repeat",backgroundPosition:"right center"}}>
-            <option value="" style={{background:P.cosmos,color:"#fff"}}>All (blended)</option>
-            {SA_PROVINCES.map(function(p){return <option key={p} value={p} style={{background:P.cosmos,color:"#fff"}}>{p}</option>;})}
-          </select>
-          {province&&<button onClick={function(){setProvince("");}} title="Clear province filter" style={{background:"transparent",border:"none",color:P.orchid,fontSize:13,fontWeight:900,cursor:"pointer",padding:0,marginLeft:1,lineHeight:1}}>×</button>}
-        </div>}
       </div></div>
     </header>
-
-    {/* Province filter footnote — only shown when a province is
-        active. The dropdown itself lives inline in the top nav bar
-        next to the LIVE chip so it's always in one place; this
-        strip just explains what's scoped and what stays blended.
-        Hidden for client-share viewers. */}
-    {!isClient&&province&&<div style={{maxWidth:1400,margin:"0 auto",padding:"8px 28px 0"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:P.orchid+"12",border:"1px solid "+P.orchid+"40",borderRadius:10,fontFamily:fm,flexWrap:"wrap"}}>
-        <div style={{width:6,height:6,borderRadius:"50%",background:P.orchid,flexShrink:0}}/>
-        <div style={{fontSize:11,color:P.label,lineHeight:1.5,flex:1,minWidth:200}}>Every Meta, TikTok and Google metric on this dashboard is scoped to <strong style={{color:P.txt}}>{province}</strong>. Community follower snapshots and manual Custom Outcomes are not regional and stay at whole-account totals.</div>
-        <button onClick={function(){setProvince("");}} style={{background:"transparent",border:"1px solid "+P.orchid+"55",borderRadius:6,padding:"4px 10px",color:P.orchid,fontSize:9.5,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.2,textTransform:"uppercase",flexShrink:0}}>Clear</button>
-      </div>
-    </div>}
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} session={session} customOutcomes={customOutcomes}/>}
     {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}
