@@ -757,8 +757,12 @@ function renderBofuSection(opts) {
   var formLeadsBucket = byObj["Leads"] && byObj["Leads"].global ? byObj["Leads"].global : null;
   var formLeadsCount = formLeadsBucket ? (formLeadsBucket.result || 0) : 0;
   var formLeadsSpend = formLeadsBucket ? (formLeadsBucket.spend || 0) : 0;
-  var _hasWaActivity = !!(wa && ((wa.conversations || 0) > 0 || (wa.engaged3 || 0) > 0 || (wa.spend || 0) > 0));
-  var showLearnalotOctet = _isLearnalot || waLeadTotal > 0 || _hasWaActivity;
+  // Octet triggers when the client is Learnalot (backwards-compat) or
+  // when customOutcomes contain WhatsApp QualifiedLeads for the report
+  // period. Previously also fired on any wa activity (spend / conversations
+  // / engaged3) but that lit up the octet for any client running WhatsApp
+  // campaigns, which is not what the two-path model represents.
+  var showLearnalotOctet = _isLearnalot || waLeadTotal > 0;
   try {
     console.log("[report] Two-path BoFu render", {
       slug: opts.clientSlug, from: opts.from, to: opts.to,

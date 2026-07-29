@@ -1793,9 +1793,16 @@ function ShareModal(props){
     // octet renders from — PDF and Summary reconcile by construction.
     var _slugLower=String(slug[0]||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
     var _outcomesForSlug=[];
-    if(props.customOutcomes){
-      if(_slugLower&&Array.isArray(props.customOutcomes[_slugLower]))_outcomesForSlug=props.customOutcomes[_slugLower];
-      else if(Array.isArray(props.customOutcomes.learnalot))_outcomesForSlug=props.customOutcomes.learnalot;
+    // Only pass customOutcomes when they belong to the CURRENT client's
+    // slug. Previously fell back to the "learnalot" key when the current
+    // slug had no entry, which was written as a safety net for Learnalot
+    // slug propagation but actively wrong for every other client, MTN
+    // MoMo's report rendered Learnalot's 633 WhatsApp leads in its
+    // objective outcomes tiles as a result. If the current slug has no
+    // custom outcomes, send an empty array so the server falls back to
+    // its standard single-path outcomes grid.
+    if(props.customOutcomes&&_slugLower&&Array.isArray(props.customOutcomes[_slugLower])){
+      _outcomesForSlug=props.customOutcomes[_slugLower];
     }
     return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim(),customOutcomes:_outcomesForSlug};
   };

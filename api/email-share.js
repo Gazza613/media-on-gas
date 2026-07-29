@@ -734,7 +734,14 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     }
   });
   var _formLeads = parseFloat(g.leads || 0);
-  var _showTwoPath = _waLeadTotal > 0 || _wa.conversations > 0 || _wa.engaged3 > 0 || _wa.spend > 0;
+  // Octet triggers only when the client actually has WhatsApp
+  // QualifiedLeads recorded in customOutcomes for the report period.
+  // Previously any campaign with _wapp_ in its name lit up the octet,
+  // which fired for clients that run WhatsApp campaigns but do not use
+  // the two-path (Form + CAPI QualifiedLeads) model. Combined with the
+  // dashboard's now-fixed learnalot fallback, that shipped Learnalot's
+  // 633 WhatsApp leads to MTN MoMo's email.
+  var _showTwoPath = _waLeadTotal > 0;
   if (_showTwoPath) {
     var _formCpl = _formLeads > 0 && _formSpend > 0 ? (_formSpend / _formLeads) : 0;
     var _waCpl = _waLeadTotal > 0 && _wa.spend > 0 ? (_wa.spend / _waLeadTotal) : 0;
@@ -913,7 +920,11 @@ function renderCommentaryBlock(summary, profile, extras) {
     }
   });
   var _formLeads2 = parseFloat(g.leads || 0);
-  var _hasTwoPath2 = _waLeadTotal2 > 0 || _wa2.conversations > 0 || _wa2.engaged3 > 0 || _wa2.spend > 0;
+  // Same gate as the octet override upstream: only trigger the blended
+  // commentary phrase when the client actually has WhatsApp qualified
+  // leads recorded in customOutcomes. Prevents non-two-path clients
+  // from getting a "0 form + 0 WhatsApp = 0 blended" phrase.
+  var _hasTwoPath2 = _waLeadTotal2 > 0;
   if (_hasTwoPath2) {
     var _totalLeads2 = _formLeads2 + _waLeadTotal2;
     var _totalSpend2 = _formSpend2 + _wa2.spend;
