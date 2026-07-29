@@ -681,6 +681,78 @@ function renderSummaryBlock(summary, profile, eco) {
   } else {
     outcomes = allOutcomes.filter(function(o) { return o.value > 0; });
   }
+  // Two-path leads override (Learnalot pattern). If the client has
+  // WhatsApp CAPI QualifiedLeads recorded in customOutcomes OR live
+  // WhatsApp Conversations / Engaged3 activity on messaging campaigns,
+  // replace the generic 4-tile outcome grid with the same 8-tile octet
+  // the dashboard's OBJECTIVE HIGHLIGHTS BOFU section renders. Keeps
+  // this email surface reconciled with dashboard + PDF report by
+  // construction — the client sees the same numbers everywhere.
+  var _coList = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
+  var _monthsInRange = {};
+  if (opts.from && opts.to) {
+    var _fd = new Date(opts.from + "T00:00:00Z");
+    var _td = new Date(opts.to + "T00:00:00Z");
+    if (!isNaN(_fd.getTime()) && !isNaN(_td.getTime())) {
+      while (_fd <= _td) {
+        var _y = _fd.getUTCFullYear();
+        var _m = _fd.getUTCMonth() + 1;
+        _monthsInRange[_y + "-" + (_m < 10 ? "0" : "") + _m] = 1;
+        _fd.setUTCMonth(_fd.getUTCMonth() + 1);
+      }
+    }
+  }
+  var _waLeadTotal = 0;
+  _coList.forEach(function(o) {
+    if (!_monthsInRange[o.month]) return;
+    if (/whatsapp|wapp|(^| )wa /i.test(String(o.label || ""))) _waLeadTotal += parseInt(o.count || 0, 10);
+  });
+  var _isWApp = function(n) {
+    var s = String(n || "").toLowerCase();
+    return s.indexOf("_wapp_") >= 0 || s.indexOf("wapp_") >= 0 || s.indexOf("_whatsapp_") >= 0 || s.indexOf(" whatsapp ") >= 0 || s.indexOf("_wa_") >= 0;
+  };
+  var _maxAct = function(actions, type) {
+    var best = 0; var t = String(type).toLowerCase();
+    (actions || []).forEach(function(a) {
+      if (String(a.action_type || "").toLowerCase() === t) {
+        var v = parseFloat(a.value || 0);
+        if (v > best) best = v;
+      }
+    });
+    return best;
+  };
+  var _wa = { spend: 0, conversations: 0, engaged3: 0 };
+  var _formSpend = 0;
+  (opts.campaigns || []).forEach(function(c) {
+    if (_isWApp(c.campaignName)) {
+      _wa.spend += parseFloat(c.spend || 0);
+      _wa.conversations += _maxAct(c.actions, "onsite_conversion.messaging_conversation_started_7d");
+      _wa.engaged3 += _maxAct(c.actions, "onsite_conversion.messaging_user_depth_3_message_send");
+    } else if (parseFloat(c.leads || 0) > 0) {
+      _formSpend += parseFloat(c.spend || 0);
+    }
+  });
+  var _formLeads = parseFloat(g.leads || 0);
+  var _showTwoPath = _waLeadTotal > 0 || _wa.conversations > 0 || _wa.engaged3 > 0 || _wa.spend > 0;
+  if (_showTwoPath) {
+    var _formCpl = _formLeads > 0 && _formSpend > 0 ? (_formSpend / _formLeads) : 0;
+    var _waCpl = _waLeadTotal > 0 && _wa.spend > 0 ? (_wa.spend / _waLeadTotal) : 0;
+    var _totalLeads = _formLeads + _waLeadTotal;
+    var _totalSpend = _formSpend + _wa.spend;
+    var _blendedCpl = _totalLeads > 0 ? (_totalSpend / _totalLeads) : 0;
+    var _convToLead = _wa.conversations > 0 && _waLeadTotal > 0 ? (_waLeadTotal / _wa.conversations * 100) : 0;
+    var _eng3Rate = _wa.conversations > 0 ? (_wa.engaged3 / _wa.conversations * 100) : 0;
+    outcomes = [
+      { label: "PSI Form Leads", value: _formLeads, display: fmtNum(_formLeads), cost: "Meta lead-form captures", accent: "#F43F5E" },
+      { label: "CPL Form Leads", value: _formCpl, display: _formCpl > 0 ? fmtR(_formCpl) : "—", cost: "form-campaign spend / leads", accent: "#F43F5E" },
+      { label: "WhatsApp PSI Leads", value: _waLeadTotal, display: fmtNum(_waLeadTotal), cost: "CAPI QualifiedLead events", accent: "#A855F7" },
+      { label: "CPL WhatsApp Leads", value: _waCpl, display: _waCpl > 0 ? fmtR(_waCpl) : "—", cost: "WhatsApp spend / leads", accent: "#A855F7" },
+      { label: "Total Leads (blended)", value: _totalLeads, display: fmtNum(_totalLeads), cost: fmtNum(_formLeads) + " form + " + fmtNum(_waLeadTotal) + " WhatsApp" + (_blendedCpl > 0 ? " · " + fmtR(_blendedCpl) + " blended CPL" : ""), accent: "#FFAA00" },
+      { label: "WhatsApp Conversations", value: _wa.conversations, display: fmtNum(_wa.conversations), cost: "conversations opened (7d)", accent: "#34D399" },
+      { label: "Engaged 3+ Messages", value: _wa.engaged3, display: fmtNum(_wa.engaged3), cost: _wa.conversations > 0 ? _eng3Rate.toFixed(2) + "% of conversations" : "3+ message exchanges", accent: "#34D399" },
+      { label: "Conversion Ratio", value: _convToLead, display: _convToLead > 0 ? _convToLead.toFixed(2) + "%" : "—", cost: _waLeadTotal > 0 && _wa.conversations > 0 ? fmtNum(_waLeadTotal) + " of " + fmtNum(_wa.conversations) + " converted" : "conversations → leads", accent: "#0891B2" }
+    ];
+  }
   var OUTCOME_TILE_HEIGHT = 110;
   var outcomeRows = "";
   // If only one outcome, render full-width. If 2+, use 2x2 (or 2x1 for exactly 2). Never render an empty tile.
@@ -1413,7 +1485,8 @@ export default async function handler(req, res) {
         clientLogo: clientLogo,
         pdf: wantPdfExtras,
         campaigns: (summary && summary.campaigns) || [],
-        placements: placements
+        placements: placements,
+        customOutcomes: customOutcomes
       });
     }
 
