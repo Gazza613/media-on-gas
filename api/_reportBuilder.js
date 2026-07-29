@@ -723,15 +723,18 @@ function renderBofuSection(opts) {
     columnLabel: "LP Clicks",
     resultKey: "click"
   }));
-  // Learnalot-specific layout for the leads section: mirrors the
-  // Summary tab's 8-tile octet + standRow + lead-first narrative +
-  // bar chart, so the PDF reads identically to the dashboard. Every
-  // other client keeps the standard renderBofuObjective sub for Leads.
+  // Two-path leads layout: 8-tile octet + standRow + lead-first narrative +
+  // bar chart, so the report reads identically to the dashboard Summary.
+  // Triggered whenever the client shows any two-path lead signal, either
+  // Meta CAPI WhatsApp QualifiedLeads recorded in customOutcomes, live
+  // WhatsApp Conversations activity from Meta's messaging actions, or a
+  // Learnalot slug (backwards-compat: keeps the octet rendering for their
+  // reports even in periods where all counts happen to be zero, so the
+  // layout stays consistent). Every other single-path client keeps the
+  // standard renderBofuObjective sub for Leads.
   var _isLearnalot = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
   var wa = book.whatsapp;
   var coList = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
-  // Compute the WhatsApp qualified-leads total from the custom outcomes
-  // whose month intersects the report window.
   var _monthsInRange = {};
   if (opts.from && opts.to) {
     var _d = new Date(opts.from + "T00:00:00Z");
@@ -754,18 +757,18 @@ function renderBofuSection(opts) {
   var formLeadsBucket = byObj["Leads"] && byObj["Leads"].global ? byObj["Leads"].global : null;
   var formLeadsCount = formLeadsBucket ? (formLeadsBucket.result || 0) : 0;
   var formLeadsSpend = formLeadsBucket ? (formLeadsBucket.spend || 0) : 0;
-  // Render the Learnalot octet whenever the report is FOR Learnalot
-  // (even if customOutcomes came back empty from Redis for that
-  // window). The tiles then show 0 / "—" rather than falling back to
-  // the standard vertical-sub layout that hides the leads picture.
-  var showLearnalotOctet = _isLearnalot;
+  var _hasWaActivity = !!(wa && ((wa.conversations || 0) > 0 || (wa.engaged3 || 0) > 0 || (wa.spend || 0) > 0));
+  var showLearnalotOctet = _isLearnalot || waLeadTotal > 0 || _hasWaActivity;
   try {
-    console.log("[report] Learnalot BoFu render", {
+    console.log("[report] Two-path BoFu render", {
       slug: opts.clientSlug, from: opts.from, to: opts.to,
       formLeadsCount: formLeadsCount, formLeadsSpend: formLeadsSpend,
-      waLeadTotal: waLeadTotal, coListLen: coList.length,
+      waLeadTotal: waLeadTotal, coListLen: coList.length, activeCoLen: activeCo.length,
       waConversations: (wa && wa.conversations) || 0,
-      isLearnalot: _isLearnalot
+      waEngaged3: (wa && wa.engaged3) || 0,
+      waSpend: (wa && wa.spend) || 0,
+      isLearnalot: _isLearnalot, hasWaActivity: _hasWaActivity,
+      showOctet: showLearnalotOctet
     });
   } catch (_) { /* logging is best-effort */ }
 
