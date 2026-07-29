@@ -562,9 +562,10 @@ function renderEcommerceBlock(eco) {
 
 // Render the KPI + platform + objective blocks. Table-based with inline styles so
 // Outlook, Gmail, Apple Mail, and mobile clients all render consistently.
-function renderSummaryBlock(summary, profile, eco) {
+function renderSummaryBlock(summary, profile, eco, extras) {
   if (!summary) return "";
   var g = summary.grand;
+  var opts = extras || {};
 
   var kpis = [
     { label: "Ads Served", value: fmtNum(g.impressions), sub: summary.campaignCount + " campaign" + (summary.campaignCount === 1 ? "" : "s"), accent: "#F96203" },
@@ -1081,7 +1082,12 @@ function buildEmailHtml(opts) {
   var personal = escapeHtml(opts.personalMessage || "").replace(/\n/g, "<br>");
   var senderName = escapeHtml(opts.senderName || "");
   var senderTitle = escapeHtml(opts.senderTitle || "");
-  var summaryBlock = renderSummaryBlock(opts.summary, opts.profile, opts.ecommerce);
+  var summaryBlock = renderSummaryBlock(opts.summary, opts.profile, opts.ecommerce, {
+    from: opts.from,
+    to: opts.to,
+    campaigns: opts.campaigns || (opts.summary && opts.summary.campaigns) || [],
+    customOutcomes: opts.customOutcomes || []
+  });
   var commentaryBlock = renderCommentaryBlock(opts.summary, opts.profile);
   // Share token (already URL-encoded inside shareUrl) lets the email's
   // <img> proxy calls authenticate as the client view on open.
