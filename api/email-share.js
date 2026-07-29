@@ -813,10 +813,11 @@ function renderSummaryBlock(summary, profile, eco, extras) {
 // Detection: the client KPI profile carries primaryKpis and a
 // benchmarkBand ("awareness" | "direct_response" | "default"). We
 // route the paragraph order from there.
-function renderCommentaryBlock(summary, profile) {
+function renderCommentaryBlock(summary, profile, extras) {
   if (!summary) return "";
   var g = summary.grand;
   var prof = profile || {};
+  var xopts = extras || {};
   var band = String(prof.benchmarkBand || "").toLowerCase();
   var primaryKpis = Array.isArray(prof.primaryKpis) ? prof.primaryKpis : [];
 
@@ -861,7 +862,72 @@ function renderCommentaryBlock(summary, profile) {
   var appStoreValue = parseFloat(g.appStoreClicks || 0);
   var lpClicksValue = parseFloat(g.landingPageClicks || 0);
   var outcomeParts = [];
-  if (g.leads > 0) outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.costPerLead) + " per lead");
+  // Two-path leads aggregate (Learnalot pattern): if the client has
+  // WhatsApp CAPI QualifiedLeads via customOutcomes OR live WhatsApp
+  // Conversations / Engaged3 activity on messaging campaigns, replace
+  // the "N leads at R X per lead" phrase with the blended "F form +
+  // W WhatsApp, T total at R X blended CPL" line so the commentary
+  // reconciles with the octet tiles above it.
+  var _coList2 = Array.isArray(xopts.customOutcomes) ? xopts.customOutcomes : [];
+  var _monthsInRange2 = {};
+  if (xopts.from && xopts.to) {
+    var _fd2 = new Date(xopts.from + "T00:00:00Z");
+    var _td2 = new Date(xopts.to + "T00:00:00Z");
+    if (!isNaN(_fd2.getTime()) && !isNaN(_td2.getTime())) {
+      while (_fd2 <= _td2) {
+        var _y2 = _fd2.getUTCFullYear();
+        var _m2 = _fd2.getUTCMonth() + 1;
+        _monthsInRange2[_y2 + "-" + (_m2 < 10 ? "0" : "") + _m2] = 1;
+        _fd2.setUTCMonth(_fd2.getUTCMonth() + 1);
+      }
+    }
+  }
+  var _waLeadTotal2 = 0;
+  _coList2.forEach(function(o) {
+    if (!_monthsInRange2[o.month]) return;
+    if (/whatsapp|wapp|(^| )wa /i.test(String(o.label || ""))) _waLeadTotal2 += parseInt(o.count || 0, 10);
+  });
+  var _isWApp2 = function(n) {
+    var s = String(n || "").toLowerCase();
+    return s.indexOf("_wapp_") >= 0 || s.indexOf("wapp_") >= 0 || s.indexOf("_whatsapp_") >= 0 || s.indexOf(" whatsapp ") >= 0 || s.indexOf("_wa_") >= 0;
+  };
+  var _maxAct2 = function(actions, type) {
+    var best = 0; var t = String(type).toLowerCase();
+    (actions || []).forEach(function(a) {
+      if (String(a.action_type || "").toLowerCase() === t) {
+        var v = parseFloat(a.value || 0);
+        if (v > best) best = v;
+      }
+    });
+    return best;
+  };
+  var _wa2 = { spend: 0, conversations: 0, engaged3: 0 };
+  var _formSpend2 = 0;
+  (xopts.campaigns || summary.campaigns || []).forEach(function(c) {
+    if (_isWApp2(c.campaignName)) {
+      _wa2.spend += parseFloat(c.spend || 0);
+      _wa2.conversations += _maxAct2(c.actions, "onsite_conversion.messaging_conversation_started_7d");
+      _wa2.engaged3 += _maxAct2(c.actions, "onsite_conversion.messaging_user_depth_3_message_send");
+    } else if (parseFloat(c.leads || 0) > 0) {
+      _formSpend2 += parseFloat(c.spend || 0);
+    }
+  });
+  var _formLeads2 = parseFloat(g.leads || 0);
+  var _hasTwoPath2 = _waLeadTotal2 > 0 || _wa2.conversations > 0 || _wa2.engaged3 > 0 || _wa2.spend > 0;
+  if (_hasTwoPath2) {
+    var _totalLeads2 = _formLeads2 + _waLeadTotal2;
+    var _totalSpend2 = _formSpend2 + _wa2.spend;
+    var _blendedCpl2 = _totalLeads2 > 0 ? (_totalSpend2 / _totalLeads2) : 0;
+    if (_totalLeads2 > 0) {
+      outcomeParts.push("<strong>" + fmtNum(_totalLeads2) + " blended leads</strong> (" + fmtNum(_formLeads2) + " form + " + fmtNum(_waLeadTotal2) + " WhatsApp)" + (_blendedCpl2 > 0 ? " at " + fmtR(_blendedCpl2) + " blended cost per lead" : ""));
+    }
+    if (_wa2.conversations > 0) {
+      var _eng3Rate2 = _wa2.conversations > 0 ? (_wa2.engaged3 / _wa2.conversations * 100) : 0;
+      outcomeParts.push("<strong>" + fmtNum(_wa2.conversations) + " WhatsApp conversations</strong> opened" + (_wa2.engaged3 > 0 ? ", " + fmtNum(_wa2.engaged3) + " reaching three or more message exchanges (" + _eng3Rate2.toFixed(2) + "% engagement rate)" : ""));
+    }
+  } else if (g.leads > 0) {
+    outcomeParts.push("<strong>" + fmtNum(g.leads) + " leads</strong> at " + fmtR(g.costPerLead) + " per lead");
+  }
   if (totalFollows > 0) outcomeParts.push("<strong>" + fmtNum(totalFollows) + " new followers</strong> at " + fmtR(g.costPerFollower) + " per follower");
   if (appStoreValue > 0) outcomeParts.push("<strong>" + fmtNum(appStoreValue) + " clicks to app store</strong> at " + fmtR(g.costPerAppStoreClick) + " per click");
   if (lpClicksValue > 0) outcomeParts.push("<strong>" + fmtNum(lpClicksValue) + " clicks to landing page</strong> at " + fmtR(g.costPerLandingPageClick) + " per click");
@@ -1088,7 +1154,12 @@ function buildEmailHtml(opts) {
     campaigns: opts.campaigns || (opts.summary && opts.summary.campaigns) || [],
     customOutcomes: opts.customOutcomes || []
   });
-  var commentaryBlock = renderCommentaryBlock(opts.summary, opts.profile);
+  var commentaryBlock = renderCommentaryBlock(opts.summary, opts.profile, {
+    from: opts.from,
+    to: opts.to,
+    campaigns: opts.campaigns || (opts.summary && opts.summary.campaigns) || [],
+    customOutcomes: opts.customOutcomes || []
+  });
   // Share token (already URL-encoded inside shareUrl) lets the email's
   // <img> proxy calls authenticate as the client view on open.
   var shareTok = String(opts.shareUrl || "").split("token=")[1] || "";
