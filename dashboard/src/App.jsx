@@ -7083,19 +7083,19 @@ export default function MediaOnGas(){
             var projSpend=dailySpend*totalDays2;
             var paceRatio=totalDays2>0?elapsedDays/totalDays2:1;
             var pacePct=Math.min(100,Math.round(paceRatio*100));
-            // blCpc + blCtr are the engagement-only blends used by the
-            // BLENDED COST PER CLICK + BLENDED CLICK THROUGH RATE tiles
-            // and every engagement narrative in this section. Excluding
-            // Community Reach / awareness here keeps the rate read
-            // honest, those campaigns deliver high impressions at sub-
-            // 1% CTR by design and would drag the engagement headline
-            // toward zero. Awareness narratives lower down read their
-            // own reach + CPM numbers directly and aren't affected.
-            // The executive summary's CPC (line ~6904 above) computes
-            // its own total-spend / total-clicks ratio inline so the
-            // "X impressions and Y clicks at Z CPC" math reconciles.
-            var blCpc=computed.blendedEngagementCpc||0;
-            var blCtr=computed.blendedEngagementCtr||0;
+            // blCpc + blCtr are the all-campaigns blends used by the
+            // BLENDED COST PER CLICK + BLENDED CLICK THROUGH RATE tiles.
+            // Uses total spend / total clicks / total impressions across
+            // every selected campaign so the numbers reconcile with what
+            // Meta / TikTok / Google would report on the platform side.
+            // Previously stripped awareness campaigns out of the denominator
+            // to isolate engagement-creative quality, but that made the
+            // chart bar (52%) diverge from the "Highest CTR" tile (29%)
+            // and neither reconciled with platform reports, undermining
+            // client trust in the numbers. Engagement-creative-only view
+            // moves to an internal-only chip if needed.
+            var blCpc=computed.totalClicks>0?(computed.totalSpend/computed.totalClicks):0;
+            var blCtr=computed.totalImps>0?(computed.totalClicks/computed.totalImps*100):0;
             // Blended frequency now includes Google's estimated 2x reach,
             // driven by api/campaigns.js which derives reach = imps/2 for
             // Google Display + YouTube. Keeps the blended number honest
@@ -7455,7 +7455,7 @@ export default function MediaOnGas(){
                 {secHead(P.mint,"ENGAGEMENT HIGHLIGHTS (MIDDLE OF THE FUNNEL)",Ic.bolt(P.mint,18))}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
                   <Glass accent={P.cyan} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>TOTAL CLICKS</div><div style={{fontSize:28,fontWeight:900,color:P.cyan,fontFamily:fm,lineHeight:1}}>{fmt(computed.totalClicks)}{deltaChip(computed.totalClicks,compareComputed&&compareComputed.totalClicks,false)}</div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:8}}>{sel.length+" campaigns"}</div></Glass>
-                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}} title="Awareness / Community Reach campaigns excluded. They deliver high impressions at sub-1% CTR by design and would drag this number toward zero without telling you anything about creative engagement.">{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
+                  <Glass accent={P.solar} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED CLICK THROUGH RATE %</div><div style={{fontSize:28,fontWeight:900,color:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{blCtr.toFixed(2)+"%"}{deltaChip(blCtr,compareComputed&&compareComputed.blendedCtr,false)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCtr>=1.4?P.mint:blCtr>=0.9?P.solar:P.rose}}>{blCtr>=1.4?"EXCELLENT":blCtr>=0.9?"GOOD":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}} title="Total clicks divided by total impressions across every selected campaign. Matches what Meta, TikTok and Google report on their own platforms.">{"industry benchmark: 0.9\u20131.4%"}</div></Glass>
                   <Glass accent={P.mint} hv={true} st={{padding:18,textAlign:"center"}}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:fm,letterSpacing:2,marginBottom:6}}>BLENDED COST PER CLICK</div><div style={{fontSize:28,fontWeight:900,color:blCpc>0&&blCpc<1.5?P.mint:blCpc<3?P.solar:P.rose,fontFamily:fm,lineHeight:1}}>{fR(blCpc)}{deltaChip(blCpc,compareComputed&&compareComputed.blendedCpc,true)}</div><div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,padding:"3px 10px",borderRadius:5,color:"#fff",background:blCpc>0&&blCpc<=benchmarks.meta.cpc.low?P.mint:blCpc<=benchmarks.meta.cpc.mid?P.solar:P.rose}}>{blCpc>0&&blCpc<=benchmarks.meta.cpc.low?"EXCELLENT":blCpc<=benchmarks.meta.cpc.mid?"GOOD":blCpc<=benchmarks.meta.cpc.high?"ON TRACK":"OPTIMISE"}</span></div><div style={{fontSize:9,color:P.label,fontFamily:fm,marginTop:6}} title="Awareness / Community Reach campaigns excluded so the CPC reflects engagement-creative efficiency, not reach-buy averages.">{"industry benchmark: "+benchmarks.meta.cpc.label}</div></Glass>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
@@ -7477,7 +7477,7 @@ export default function MediaOnGas(){
                   <div style={{height:300}}>
                     <div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>CLICK THROUGH RATE BY PLATFORM</div>
                     <ChartReveal><ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={sortedPlats.filter(function(pl){return platBreakEng[pl]&&platBreakEng[pl].clicks>0;}).map(function(pl){var pb=platBreakEng[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreakEng[pl]&&platBreakEng[pl].clicks>0;}).map(function(pl){var pb=platBreakEng[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
+                      <BarChart data={sortedPlats.filter(function(pl){return platBreak[pl]&&platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{name:platShort[pl]||pl,fullName:pl,ctr:pb.imps>0?parseFloat((pb.clicks/pb.imps*100).toFixed(2)):0,color:platCol4[pl]||P.ember};}).sort(function(a,b){return b.ctr-a.ctr;})} barSize={44} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:11,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return v+"%";}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="ctr" name="CTR" radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{sortedPlats.filter(function(pl){return platBreak[pl]&&platBreak[pl].clicks>0;}).map(function(pl){var pb=platBreak[pl];return{pl:pl,ctr:pb.imps>0?(pb.clicks/pb.imps*100):0};}).sort(function(a,b){return b.ctr-a.ctr;}).map(function(e,i){return <Cell key={i} fill={platCol4[e.pl]||P.ember}/>;})}<LabelList dataKey="ctr" position="top" formatter={function(v){return v+"%";}} style={lblStyle}/></Bar></BarChart>
                     </ResponsiveContainer></ChartReveal>
                   </div>
                 </div>

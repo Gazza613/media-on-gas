@@ -53,20 +53,30 @@ async function resolveMetaAdThumbnail(adId, token) {
       if (vr.ok) {
         var vd = await vr.json();
         if (vd.thumbnails && vd.thumbnails.data && vd.thumbnails.data.length > 0) {
+          // Prefer is_preferred=true first (Meta's auto-picked or advertiser-selected
+          // "good" frame — usually a mid-video frame that avoids the 0-second poster
+          // frame, which is often a black fade-in). Fall back to largest area when
+          // no thumbnail is flagged preferred. Previously area-first ranking always
+          // picked the 0-second frame regardless of Meta's flag, so videos that
+          // opened from black rendered as black card thumbnails.
+          var preferred = null;
+          var preferredArea = 0;
           var best = null;
           var bestArea = 0;
-          var bestIsPreferred = false;
           for (var ti = 0; ti < vd.thumbnails.data.length; ti++) {
             var t = vd.thumbnails.data[ti];
             if (!t.uri) continue;
             var area = parseInt(t.width || 0) * parseInt(t.height || 0);
-            var isPref = !!t.is_preferred;
-            if (area > bestArea || (area === bestArea && isPref && !bestIsPreferred)) {
+            if (t.is_preferred && area > preferredArea) {
+              preferred = t.uri;
+              preferredArea = area;
+            }
+            if (area > bestArea) {
               best = t.uri;
               bestArea = area;
-              bestIsPreferred = isPref;
             }
           }
+          if (preferred) return preferred;
           if (best) return best;
           if (vd.thumbnails.data[0].uri) return vd.thumbnails.data[0].uri;
         }

@@ -749,6 +749,16 @@ export default async function handler(req, res) {
       var pickThumbFromVideo = function(v) {
         if (!v || v.error) return { url: "", width: 0, height: 0 };
         if (v.thumbnails && v.thumbnails.data && v.thumbnails.data.length > 0) {
+          // is_preferred wins first (Meta's auto-picked or advertiser-selected
+          // "good" frame — usually mid-video, avoids the 0-second poster frame
+          // which is often a black fade-in and rendered as black card thumbnails
+          // downstream). Fall back to largest area when no thumbnail is flagged.
+          var preferred = v.thumbnails.data.filter(function(t) { return t.is_preferred && t.uri; }).sort(function(a, b) {
+            return (parseInt(b.width || 0, 10) * parseInt(b.height || 0, 10)) - (parseInt(a.width || 0, 10) * parseInt(a.height || 0, 10));
+          })[0];
+          if (preferred) {
+            return { url: preferred.uri, width: parseInt(preferred.width || 0, 10), height: parseInt(preferred.height || 0, 10) };
+          }
           var largest = v.thumbnails.data.slice().sort(function(a, b) {
             var aw = parseInt(a.width || 0, 10), ah = parseInt(a.height || 0, 10);
             var bw = parseInt(b.width || 0, 10), bh = parseInt(b.height || 0, 10);
@@ -763,7 +773,7 @@ export default async function handler(req, res) {
       // to individual fetches for just the ids in that batch.
       var fetchOneVideoThumb = async function(vid) {
         try {
-          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken);
+          var r = await fetch("https://graph.facebook.com/v25.0/" + vid + "?fields=picture,thumbnails{uri,height,width,is_preferred}&access_token=" + metaToken);
           var v = await r.json();
           var info = pickThumbFromVideo(v);
           if (info.url) { videoThumbs[vid] = info; cacheSet(videoThumbCache, vid, info); }
@@ -772,7 +782,7 @@ export default async function handler(req, res) {
       for (var vb = 0; vb < videoIdsToFetch.length; vb += 50) {
         var vBatch = videoIdsToFetch.slice(vb, vb + 50);
         try {
-          var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + vBatch.join(",") + "&fields=picture,thumbnails{uri,height,width}&access_token=" + metaToken;
+          var batchUrl = "https://graph.facebook.com/v25.0/?ids=" + vBatch.join(",") + "&fields=picture,thumbnails{uri,height,width,is_preferred}&access_token=" + metaToken;
           var bRes = await fetch(batchUrl);
           var bData = await bRes.json();
           if (bData && !bData.error) {
