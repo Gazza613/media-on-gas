@@ -1959,6 +1959,19 @@ export default async function handler(req, res) {
     response.googleDebug = googleDebug;
     if (typeof googleAssetDebug !== "undefined") response.googleAssetDebug = googleAssetDebug;
   }
+  // ?googleOnly=1 slices the response to Google-platform ads plus the
+  // debug bundles, so the diagnostic payload fits inside a browser tab
+  // buffer instead of getting truncated by the Meta / TikTok tail.
+  if (String(req.query.googleOnly || "") === "1") {
+    var googleAds = (allAds || []).filter(function(a) {
+      var p = String(a.platform || "").toLowerCase();
+      return p.indexOf("google") >= 0 || p.indexOf("youtube") >= 0 || p.indexOf("pmax") >= 0 || p.indexOf("demand") >= 0;
+    });
+    var slim = { ads: googleAds, total: googleAds.length, googleDebug: googleDebug };
+    if (typeof googleAssetDebug !== "undefined") slim.googleAssetDebug = googleAssetDebug;
+    res.status(200).json(slim);
+    return;
+  }
   // Cache the unfiltered (admin) response keyed by date range. Client-scoped filtering
   // happens after the cache read on every request so tokens cannot see wider data.
   adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
