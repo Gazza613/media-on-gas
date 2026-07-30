@@ -1700,9 +1700,38 @@ function ThumbOverrideModal(props){
     if(!u)return false;
     return /^https:\/\//i.test(u)||/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(u);
   };
+  // Extract the current <video> frame to a data URL. Same downscale
+  // path as file upload so payload sizes stay predictable. Returns
+  // the data URL or throws (canvas taint / no video).
+  var extractCurrentFrame=function(){
+    var video=videoRef.current;
+    if(!video)throw new Error("Video not ready");
+    if(video.readyState<2)throw new Error("Video still loading, wait a second then try again");
+    var vw=video.videoWidth,vh=video.videoHeight;
+    if(!vw||!vh)throw new Error("Could not read video dimensions");
+    var MAX=800;
+    var w=vw,h=vh;
+    if(w>MAX||h>MAX){var scale=Math.min(MAX/w,MAX/h);w=Math.round(w*scale);h=Math.round(h*scale);}
+    var canvas=document.createElement("canvas");
+    canvas.width=w;canvas.height=h;
+    var ctx=canvas.getContext("2d");
+    ctx.drawImage(video,0,0,w,h);
+    var dataUrl=canvas.toDataURL("image/jpeg",0.78);
+    if(dataUrl.length>300*1024)throw new Error("Captured frame is >300KB");
+    return dataUrl;
+  };
   var save=function(){
     var url=String(inputUrl||"").trim();
-    if(!isValidSrc(url)){setErrMsg("Provide an https:// URL or upload an image file");return;}
+    // If nothing's in the input yet but the video picker is loaded,
+    // auto-capture the current playhead frame and save that. Removes
+    // the two-step "capture then save" confusion, one click on Save
+    // now does the right thing whether the admin scrubbed the video,
+    // uploaded a file, or pasted a URL.
+    if(!isValidSrc(url)&&canPickFrame&&videoState.loaded){
+      try{url=extractCurrentFrame();setInputUrl(url);}
+      catch(err){setErrMsg("Could not capture the current frame: "+(err.message||"error"));return;}
+    }
+    if(!isValidSrc(url)){setErrMsg(canPickFrame?"Scrub the video to a moment and hit Save, or upload a replacement image":"Provide an https:// URL or upload an image file");return;}
     setSaving(true);setErrMsg("");
     fetch(props.apiBase+"/api/thumb-override",{method:"POST",headers:authHeaders(),body:JSON.stringify({adId:ad.adId,url:url})})
       .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
@@ -1754,30 +1783,12 @@ function ThumbOverrideModal(props){
     reader.onerror=function(){setErrMsg("Could not read that file");};
     reader.readAsDataURL(file);
   };
-  // Capture the current frame of the <video> element into a data URL.
-  // Downscales the same way file upload does (800px max, JPEG 78%) so
-  // captured frames and uploaded screenshots produce comparable payload
-  // sizes. Requires the video source to be same-origin (via ?proxy=1)
-  // otherwise canvas.toDataURL throws SecurityError on tainted canvas.
+  // Explicit "capture this frame" action for admins who want to preview
+  // the captured frame before saving. Save also auto-captures on click
+  // (see extractCurrentFrame + save above) so this button is optional.
   var captureFrame=function(){
-    var video=videoRef.current;
-    if(!video){setErrMsg("Video not ready");return;}
-    if(video.readyState<2){setErrMsg("Video still loading, try again in a second");return;}
-    var vw=video.videoWidth,vh=video.videoHeight;
-    if(!vw||!vh){setErrMsg("Could not read video dimensions");return;}
-    var MAX=800;
-    var w=vw,h=vh;
-    if(w>MAX||h>MAX){var scale=Math.min(MAX/w,MAX/h);w=Math.round(w*scale);h=Math.round(h*scale);}
-    var canvas=document.createElement("canvas");
-    canvas.width=w;canvas.height=h;
-    var ctx=canvas.getContext("2d");
-    try{
-      ctx.drawImage(video,0,0,w,h);
-      var dataUrl=canvas.toDataURL("image/jpeg",0.78);
-      if(dataUrl.length>300*1024){setErrMsg("Captured frame is >300KB, unusual for a video frame");return;}
-      setInputUrl(dataUrl);
-      setErrMsg("");
-    }catch(err){setErrMsg("Could not capture frame ("+(err.name||"error")+")");}
+    try{var dataUrl=extractCurrentFrame();setInputUrl(dataUrl);setErrMsg("");}
+    catch(err){setErrMsg("Could not capture frame: "+(err.message||err.name||"error"));}
   };
   if(!ad)return null;
   var previewSrc=isValidSrc(inputUrl)?inputUrl:"";
@@ -1836,7 +1847,11 @@ function ThumbOverrideModal(props){
       {errMsg&&<div style={{fontSize:11,color:"#F43F5E",marginBottom:12,fontFamily:"Helvetica,Arial,sans-serif"}}>{errMsg}</div>}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
         {currentUrl&&<button onClick={clear} disabled={saving} style={{background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:8,padding:"9px 16px",color:"#F43F5E",fontSize:11,fontWeight:800,fontFamily:"monospace",letterSpacing:1.5,cursor:saving?"wait":"pointer",textTransform:"uppercase"}}>Clear Override</button>}
-        <button onClick={save} disabled={saving||!isValidSrc(inputUrl)} style={{background:"#F96203",border:"none",borderRadius:8,padding:"9px 18px",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:(saving||!isValidSrc(inputUrl))?"not-allowed":"pointer",textTransform:"uppercase",opacity:(saving||!isValidSrc(inputUrl))?0.5:1}}>{saving?"Saving...":"Save Override"}</button>
+        {(function(){
+          var canSave=isValidSrc(inputUrl)||(canPickFrame&&videoState.loaded);
+          var label=isValidSrc(inputUrl)?"Save Override":(canPickFrame&&videoState.loaded)?"Use This Frame":"Save Override";
+          return <button onClick={save} disabled={saving||!canSave} style={{background:"#F96203",border:"none",borderRadius:8,padding:"9px 18px",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:(saving||!canSave)?"not-allowed":"pointer",textTransform:"uppercase",opacity:(saving||!canSave)?0.5:1}}>{saving?"Saving...":label}</button>;
+        })()}
       </div>
     </div>
   </div>;

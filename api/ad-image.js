@@ -311,6 +311,22 @@ export default async function handler(req, res) {
   try {
     var overrideUrl = await getThumbOverride(adId);
     if (overrideUrl) {
+      // https:// URLs get a 302 redirect (browser follows to the CDN).
+      // data:image/... URLs cannot be redirected to — browsers refuse
+      // to follow a redirect whose target is a data URL — so decode the
+      // base64 payload and stream the raw image bytes back with the
+      // right Content-Type. This is the path captured video frames and
+      // uploaded screenshots take through the proxy.
+      if (/^data:image\//i.test(overrideUrl)) {
+        var m = overrideUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+        if (m) {
+          var buf = Buffer.from(m[2], "base64");
+          res.setHeader("Content-Type", m[1]);
+          res.setHeader("Cache-Control", "private, max-age=60");
+          res.status(200).send(buf);
+          return;
+        }
+      }
       res.setHeader("Cache-Control", "private, max-age=60");
       res.redirect(302, overrideUrl);
       return;
