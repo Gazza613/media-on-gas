@@ -1661,23 +1661,30 @@ function deriveClientNames(campaigns,activeOnly){
 }
 
 function ThumbOverrideModal(props){
-  // Admin modal to replace an ad's thumbnail with either a pasted URL
-  // or an uploaded image file. Saves to Redis via /api/thumb-override;
-  // the URL / data URL wins over Meta / TikTok / Google native
-  // resolution everywhere (dashboard, share email, PDF). Used when a
-  // video ad opens from a black fade and Meta returns no is_preferred
-  // frame, when an RDA asset was deleted, or when the platform image
-  // is blocked by the browser (Google simgad hotlink protection).
+  // Admin modal to replace an ad's thumbnail. Three input paths, in
+  // order of usefulness for the common cases:
+  //   1. Video frame picker (Meta/TikTok video ads) — scrub the ad
+  //      video and click "Capture Frame" to lock in a mid-video
+  //      moment as the thumbnail. Fixes the black-fade-in problem
+  //      without needing an external screenshot tool.
+  //   2. File upload from computer — for static RDA / image ads
+  //      where the platform-served URL is broken (Google simgad
+  //      hotlink protection, deleted asset).
+  //   3. Paste URL — fallback for admins who already have a hosted
+  //      image URL somewhere.
   //
-  // Uploaded files are downscaled client-side via canvas to 800px on
-  // the long side and re-encoded to JPEG at ~78% quality so the base64
-  // data URL fits comfortably under 250KB. Sending a full-resolution
-  // creative directly would bloat every ads response by several MB.
+  // All three paths converge on a base64 data URL (< 300KB) or an
+  // https:// URL and save to Redis via /api/thumb-override. Uploaded /
+  // captured images are downscaled client-side via canvas to 800px on
+  // the long side and re-encoded to JPEG at ~78% quality so the payload
+  // fits comfortably under the server's 300KB cap.
   var ad=props.ad;
   var cu=useState(""),currentUrl=cu[0],setCurrentUrl=cu[1];
   var iu=useState(""),inputUrl=iu[0],setInputUrl=iu[1];
   var sv=useState(false),saving=sv[0],setSaving=sv[1];
   var er=useState(""),errMsg=er[0],setErrMsg=er[1];
+  var vs=useState({loading:false,error:"",loaded:false}),videoState=vs[0],setVideoState=vs[1];
+  var videoRef=useRef(null);
   var authHeaders=function(){var h={"Content-Type":"application/json"};if(props.session)h["x-session-token"]=props.session;return h;};
   useEffect(function(){
     if(!ad||!ad.adId)return;
@@ -1747,9 +1754,42 @@ function ThumbOverrideModal(props){
     reader.onerror=function(){setErrMsg("Could not read that file");};
     reader.readAsDataURL(file);
   };
+  // Capture the current frame of the <video> element into a data URL.
+  // Downscales the same way file upload does (800px max, JPEG 78%) so
+  // captured frames and uploaded screenshots produce comparable payload
+  // sizes. Requires the video source to be same-origin (via ?proxy=1)
+  // otherwise canvas.toDataURL throws SecurityError on tainted canvas.
+  var captureFrame=function(){
+    var video=videoRef.current;
+    if(!video){setErrMsg("Video not ready");return;}
+    if(video.readyState<2){setErrMsg("Video still loading, try again in a second");return;}
+    var vw=video.videoWidth,vh=video.videoHeight;
+    if(!vw||!vh){setErrMsg("Could not read video dimensions");return;}
+    var MAX=800;
+    var w=vw,h=vh;
+    if(w>MAX||h>MAX){var scale=Math.min(MAX/w,MAX/h);w=Math.round(w*scale);h=Math.round(h*scale);}
+    var canvas=document.createElement("canvas");
+    canvas.width=w;canvas.height=h;
+    var ctx=canvas.getContext("2d");
+    try{
+      ctx.drawImage(video,0,0,w,h);
+      var dataUrl=canvas.toDataURL("image/jpeg",0.78);
+      if(dataUrl.length>300*1024){setErrMsg("Captured frame is >300KB, unusual for a video frame");return;}
+      setInputUrl(dataUrl);
+      setErrMsg("");
+    }catch(err){setErrMsg("Could not capture frame ("+(err.name||"error")+")");}
+  };
   if(!ad)return null;
   var previewSrc=isValidSrc(inputUrl)?inputUrl:"";
   var platformSrc=ad.thumbnail||"";
+  var platLow=String(ad.platform||"").toLowerCase();
+  var videoPlatform=platLow.indexOf("instagram")>=0||platLow.indexOf("facebook")>=0?"meta":platLow.indexOf("tiktok")>=0?"tiktok":"";
+  // Show the video frame picker when we know the ad has a video source
+  // we can proxy. Meta and TikTok expose videoId; Google Display doesn't
+  // route through /api/ad-video (RDA ads are still images even for
+  // YouTube variants, which use YouTube thumbnails directly).
+  var canPickFrame=!!(ad.videoId&&videoPlatform);
+  var videoSrc=canPickFrame?(props.apiBase+"/api/ad-video?platform="+videoPlatform+"&id="+encodeURIComponent(ad.videoId)+"&adId="+encodeURIComponent(ad.adId)+"&proxy=1"+(props.session?"&st="+encodeURIComponent(props.session):"")):"";
   return <div onClick={function(e){if(e.target===e.currentTarget)props.onClose();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
     <div style={{background:"#0f0722",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,padding:26,maxWidth:560,width:"100%",boxShadow:"0 24px 60px rgba(0,0,0,0.6)",maxHeight:"90vh",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
@@ -1767,7 +1807,25 @@ function ThumbOverrideModal(props){
           <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",lineHeight:1.5,fontFamily:"Helvetica,Arial,sans-serif"}}>If this looks black, broken, or wrong, upload a replacement below. Screenshot the ad from Meta / TikTok / Google Ads Manager and pick it here.</div>
         </div>
       </div>}
-      <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:8}}>UPLOAD REPLACEMENT</div>
+      {canPickFrame&&<div style={{marginBottom:14,padding:12,background:"rgba(52,211,153,0.05)",borderRadius:10,border:"1px solid rgba(52,211,153,0.25)"}}>
+        <div style={{fontSize:10,color:"#34D399",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:8}}>PICK FRAME FROM VIDEO</div>
+        <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",lineHeight:1.5,marginBottom:8,fontFamily:"Helvetica,Arial,sans-serif"}}>Scrub the video to a moment past the black fade-in, then click Capture Frame.</div>
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          crossOrigin="anonymous"
+          controls
+          playsInline
+          preload="metadata"
+          style={{width:"100%",maxHeight:280,background:"#000",borderRadius:6,display:"block",marginBottom:8}}
+          onLoadedData={function(){setVideoState({loading:false,error:"",loaded:true});}}
+          onLoadStart={function(){setVideoState({loading:true,error:"",loaded:false});}}
+          onError={function(){setVideoState({loading:false,error:"could not load video",loaded:false});}}
+        />
+        {videoState.error&&<div style={{fontSize:10,color:"#F43F5E",marginBottom:6,fontFamily:"Helvetica,Arial,sans-serif"}}>Video failed to load. Meta CDN sometimes rate-limits — try again in a few seconds, or upload a screenshot below instead.</div>}
+        <button onClick={captureFrame} disabled={!videoState.loaded} style={{background:videoState.loaded?"#34D399":"rgba(255,255,255,0.1)",border:"none",borderRadius:6,padding:"8px 14px",color:videoState.loaded?"#062014":"rgba(255,255,255,0.4)",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:videoState.loaded?"pointer":"not-allowed",textTransform:"uppercase",width:"100%"}}>Capture Frame at Current Time</button>
+      </div>}
+      <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:8}}>{canPickFrame?"OR UPLOAD REPLACEMENT":"UPLOAD REPLACEMENT"}</div>
       <input type="file" accept="image/*" onChange={onFile} style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px dashed rgba(255,255,255,0.25)",borderRadius:8,color:"rgba(255,255,255,0.75)",fontSize:11,fontFamily:"monospace",boxSizing:"border-box",marginBottom:14,cursor:"pointer"}}/>
       <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6,marginTop:4}}>OR PASTE URL</div>
       <input type="text" value={/^data:/.test(inputUrl)?"":inputUrl} onChange={function(e){setInputUrl(e.target.value);}} placeholder="https://..." style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,color:"#fff",fontSize:11,fontFamily:"monospace",boxSizing:"border-box",marginBottom:14}}/>

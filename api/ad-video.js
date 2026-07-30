@@ -273,5 +273,33 @@ export default async function handler(req, res) {
     res.status(200).json({ url: resolved.url, type: resolved.type || "video" });
     return;
   }
+  // proxy=1 streams the video bytes through the function with CORS
+  // headers set, so a <video crossorigin="anonymous"> element can load
+  // it without the browser tainting the canvas. Used by the thumbnail
+  // override modal's video frame picker: without CORS, canvas.toDataURL
+  // throws SecurityError after drawing a frame from a cross-origin
+  // <video>. Meta and TikTok CDNs do not set Access-Control-Allow-Origin,
+  // so a straight 302 redirect wouldn't fix it, we have to fetch bytes
+  // ourselves and re-serve them under our origin. Not the default path
+  // because it consumes egress bandwidth per byte, only fires when
+  // explicitly requested.
+  if (req.query.proxy === "1") {
+    try {
+      var upstream = await fetch(resolved.url);
+      if (!upstream.ok) { res.status(upstream.status).end(); return; }
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", upstream.headers.get("Content-Type") || "video/mp4");
+      var upLen = upstream.headers.get("Content-Length");
+      if (upLen) res.setHeader("Content-Length", upLen);
+      res.setHeader("Cache-Control", "private, max-age=600");
+      var buf = Buffer.from(await upstream.arrayBuffer());
+      res.status(200).send(buf);
+      return;
+    } catch (proxyErr) {
+      console.error("ad-video proxy error", proxyErr);
+      res.status(502).json({ error: "Proxy failed" });
+      return;
+    }
+  }
   res.redirect(302, resolved.url);
 }
