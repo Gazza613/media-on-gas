@@ -5,6 +5,7 @@ import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { extractLeadCount } from "./_pulseShared.js";
 import { normalizeProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
+import { getThumbOverrides } from "./_thumbOverrides.js";
 
 function overrideFor(overridesMap, campaignId) {
   if (!overridesMap || !campaignId) return null;
@@ -1897,6 +1898,25 @@ export default async function handler(req, res) {
     googleDebug.hadError = String(gErr && gErr.message ? gErr.message : gErr);
     console.error("Google ads error", gErr);
   }
+
+  // Apply manual thumbnail overrides. Admin-set Redis map of adId → URL
+  // that wins over Meta / TikTok / Google resolution. Used when a video
+  // ad opens from black and Meta returns no is_preferred frame, or when
+  // an RDA asset was deleted and the fallback chain runs out. Fetched
+  // once here so the client-facing response (and the shared cache) all
+  // carry the override — a single Redis HGETALL, in-memory cached for
+  // 30s, so this stays cheap on hot paths.
+  try {
+    var thumbOverrides = await getThumbOverrides();
+    var overrideHits = 0;
+    if (thumbOverrides && Object.keys(thumbOverrides).length > 0) {
+      allAds.forEach(function(a) {
+        var ov = a && a.adId ? thumbOverrides[String(a.adId)] : null;
+        if (ov) { a.thumbnail = ov; a._thumbOverridden = true; overrideHits += 1; }
+      });
+    }
+    if (overrideHits > 0) { try { console.log("[ads] thumb overrides applied", overrideHits); } catch (_) {} }
+  } catch (ovErr) { console.error("[ads] thumb override merge error", ovErr); }
 
   var response = { ads: allAds, total: allAds.length, noImpressionAds: noImpressionAds };
   // Cache the unfiltered (admin) response keyed by date range. Client-scoped filtering

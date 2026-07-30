@@ -2,6 +2,7 @@ import { rateLimit } from "./_rateLimit.js";
 import { checkAuth, isCampaignAllowed } from "./_auth.js";
 import { computeAssetBreakdown } from "./ad-assets.js";
 import { verifyToken } from "./_jwt.js";
+import { getThumbOverride } from "./_thumbOverrides.js";
 
 // Resolve a Meta or TikTok ad thumbnail to a fresh CDN URL, then 302-redirect
 // the client's <img> there. Mirrors the pattern in /api/ad-video: Meta and
@@ -299,6 +300,22 @@ export default async function handler(req, res) {
       }
     } catch (_) { /* upstream lookup failed — fail closed below by not blocking, since this is a defence-in-depth on top of campaignId allowlist */ }
   }
+
+  // Manual thumbnail override, admin-set via /api/thumb-override. Wins
+  // over every platform resolution path so an ad whose Meta / TikTok /
+  // Google chain resolves to a black or broken image can be corrected
+  // without a code deploy. Checked BEFORE the resolveCache so a freshly-
+  // set override takes effect on the very next tile load — otherwise a
+  // stale 10-min cached URL would be served first and the admin would
+  // wait for TTL expiry to see their change.
+  try {
+    var overrideUrl = await getThumbOverride(adId);
+    if (overrideUrl) {
+      res.setHeader("Cache-Control", "private, max-age=60");
+      res.redirect(302, overrideUrl);
+      return;
+    }
+  } catch (_) { /* overrides are best-effort */ }
 
   // Winner mode gets its own cache slot so the winning-creative URL
   // never overwrites (or is served as) the default largest-asset URL.

@@ -1660,6 +1660,72 @@ function deriveClientNames(campaigns,activeOnly){
   return Object.keys(seen).sort().map(function(k){return seen[k];});
 }
 
+function ThumbOverrideModal(props){
+  // Admin modal to paste a custom thumbnail URL for a specific ad. Saves
+  // to Redis via /api/thumb-override; the URL wins over Meta / TikTok /
+  // Google native resolution everywhere (dashboard, share email, PDF).
+  // Used when a video ad opens from a black fade and Meta returns no
+  // is_preferred frame, or when an RDA asset was deleted and the fallback
+  // chain runs out.
+  var ad=props.ad;
+  var cu=useState(""),currentUrl=cu[0],setCurrentUrl=cu[1];
+  var iu=useState(""),inputUrl=iu[0],setInputUrl=iu[1];
+  var sv=useState(false),saving=sv[0],setSaving=sv[1];
+  var er=useState(""),errMsg=er[0],setErrMsg=er[1];
+  var authHeaders=function(){var h={"Content-Type":"application/json"};if(props.session)h["x-session-token"]=props.session;return h;};
+  useEffect(function(){
+    if(!ad||!ad.adId)return;
+    setErrMsg("");setInputUrl("");setCurrentUrl("");
+    fetch(props.apiBase+"/api/thumb-override?adId="+encodeURIComponent(ad.adId),{headers:authHeaders()})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){if(d&&d.url){setCurrentUrl(d.url);setInputUrl(d.url);}}).catch(function(){});
+    var esc=function(e){if(e.key==="Escape")props.onClose();};
+    window.addEventListener("keydown",esc,true);
+    return function(){window.removeEventListener("keydown",esc,true);};
+  },[ad&&ad.adId]);
+  var save=function(){
+    var url=String(inputUrl||"").trim();
+    if(!/^https:\/\//i.test(url)){setErrMsg("Paste an https:// image URL");return;}
+    setSaving(true);setErrMsg("");
+    fetch(props.apiBase+"/api/thumb-override",{method:"POST",headers:authHeaders(),body:JSON.stringify({adId:ad.adId,url:url})})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(x){setSaving(false);if(!x.ok){setErrMsg((x.data&&x.data.error)||"Save failed");return;}props.onSaved(url);props.onClose();})
+      .catch(function(){setSaving(false);setErrMsg("Network error");});
+  };
+  var clear=function(){
+    setSaving(true);setErrMsg("");
+    fetch(props.apiBase+"/api/thumb-override?adId="+encodeURIComponent(ad.adId),{method:"DELETE",headers:authHeaders()})
+      .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
+      .then(function(x){setSaving(false);if(!x.ok){setErrMsg((x.data&&x.data.error)||"Clear failed");return;}props.onSaved("");props.onClose();})
+      .catch(function(){setSaving(false);setErrMsg("Network error");});
+  };
+  if(!ad)return null;
+  var previewSrc=inputUrl&&/^https:\/\//i.test(inputUrl)?inputUrl:"";
+  return <div onClick={function(e){if(e.target===e.currentTarget)props.onClose();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{background:"#0f0722",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,padding:26,maxWidth:520,width:"100%",boxShadow:"0 24px 60px rgba(0,0,0,0.6)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+        <div>
+          <div style={{fontSize:11,color:"#F96203",letterSpacing:3,fontWeight:800,fontFamily:"monospace"}}>THUMBNAIL OVERRIDE</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,0.55)",fontFamily:"monospace",marginTop:6,wordBreak:"break-all"}} title={ad.adName}>{String(ad.adName||ad.adId).slice(0,80)}</div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace",marginTop:4}}>adId: {ad.adId}</div>
+        </div>
+        <button onClick={props.onClose} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"5px 10px",color:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:14}}>&times;</button>
+      </div>
+      <div style={{fontSize:11,color:"rgba(255,255,255,0.65)",lineHeight:1.6,marginBottom:16,fontFamily:"Helvetica,Arial,sans-serif"}}>Paste an https:// image URL. It wins over the platform-native thumbnail resolution everywhere the ad renders (dashboard, share email, PDF report). Clear to fall back to the default.</div>
+      <input type="text" value={inputUrl} onChange={function(e){setInputUrl(e.target.value);}} placeholder="https://..." style={{width:"100%",padding:"11px 13px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,color:"#fff",fontSize:12,fontFamily:"monospace",boxSizing:"border-box",marginBottom:14}}/>
+      {previewSrc&&<div style={{marginBottom:14,padding:8,background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)"}}>
+        <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6}}>PREVIEW</div>
+        <img src={previewSrc} alt="preview" style={{maxWidth:"100%",maxHeight:200,borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/>
+      </div>}
+      {errMsg&&<div style={{fontSize:11,color:"#F43F5E",marginBottom:12,fontFamily:"Helvetica,Arial,sans-serif"}}>{errMsg}</div>}
+      <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+        {currentUrl&&<button onClick={clear} disabled={saving} style={{background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:8,padding:"9px 16px",color:"#F43F5E",fontSize:11,fontWeight:800,fontFamily:"monospace",letterSpacing:1.5,cursor:saving?"wait":"pointer",textTransform:"uppercase"}}>Clear Override</button>}
+        <button onClick={save} disabled={saving||!inputUrl} style={{background:"#F96203",border:"none",borderRadius:8,padding:"9px 18px",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:(saving||!inputUrl)?"not-allowed":"pointer",textTransform:"uppercase",opacity:(saving||!inputUrl)?0.5:1}}>{saving?"Saving...":"Save Override"}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 function ShareModal(props){
   // Close paths so the operator is never trapped in this modal:
   //  1. Escape (window keydown + document keydown, capture phase, so
@@ -4181,6 +4247,13 @@ export default function MediaOnGas(){
   // "{N} Campaigns" button when they want to filter the selection.
   var sc=useState(false),showCampaigns=sc[0],setShowCampaigns=sc[1];
   var sm=useState(false),showShare=sm[0],setShowShare=sm[1];
+  // Manual thumbnail override modal state. When non-null, the modal is
+  // open for the ad in it. Admin-only, used to correct Meta / TikTok /
+  // Google thumbnails that resolve to black frames or 404s. The pasted
+  // URL is stored server-side in Redis and wins over platform resolution
+  // on every subsequent render (dashboard, share email, PDF).
+  var tom=useState(null),thumbOverrideAd=tom[0],setThumbOverrideAd=tom[1];
+  var tor=useState(0),thumbOverrideRev=tor[0],setThumbOverrideRev=tor[1];
   // Brief success toast after a share email is sent, shown near the top of
   // the summary view for 3.5s then fades out on its own.
   var sts=useState(false),showSentToast=sts[0],setShowSentToast=sts[1];
@@ -6850,6 +6923,20 @@ export default function MediaOnGas(){
     </header>
 
     {showShare&&<ShareModal onClose={function(){setShowShare(false);}} onSent={function(){setShowShare(false);setTab("summary");setShowSentToast(true);setTimeout(function(){setShowSentToast(false);},3500);}} selected={selected} campaigns={campaigns} dateFrom={df} dateTo={dt} apiBase={API} session={session} customOutcomes={customOutcomes}/>}
+    {thumbOverrideAd&&<ThumbOverrideModal ad={thumbOverrideAd} apiBase={API} session={session} onClose={function(){setThumbOverrideAd(null);}} onSaved={function(newUrl){
+      // Update the ad's thumbnail in-place in local state so the UI reflects
+      // the override immediately without waiting for a natural /api/ads refetch
+      // (server-side cache is 5-min TTL). Empty newUrl clears the local override.
+      setAdsList(function(prev){
+        return prev.map(function(a){
+          if(a.adId===thumbOverrideAd.adId){
+            return Object.assign({},a,{thumbnail:newUrl||"",_thumbOverridden:!!newUrl});
+          }
+          return a;
+        });
+      });
+      setThumbOverrideRev(function(r){return r+1;});
+    }}/>}
     {showSentToast&&<div style={{position:"fixed",top:28,left:"50%",transform:"translateX(-50%)",zIndex:2000,background:"linear-gradient(135deg,#10B981,#059669)",border:"1px solid #34D399",borderRadius:14,padding:"14px 28px",boxShadow:"0 12px 40px rgba(16,185,129,0.4)",display:"flex",alignItems:"center",gap:12,minWidth:320,animation:"none"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,color:"#059669"}}>{"\u2713"}</div><div style={{color:"#fff",fontSize:13,fontWeight:900,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Your report has been sent</div></div>}
     {showIdleNudge&&<div style={{position:"fixed",inset:0,zIndex:2100,background:"rgba(6,2,14,0.72)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 16px"}}>
       <div style={{width:420,maxWidth:"94vw",background:"linear-gradient(170deg,#0d0618 0%,#1a0b2e 100%)",border:"1px solid rgba(249,98,3,0.35)",borderRadius:18,padding:"28px 28px 22px",boxShadow:"0 30px 80px rgba(0,0,0,0.65),0 0 60px rgba(249,98,3,0.18)",textAlign:"center",animation:"gasEnter 0.45s cubic-bezier(0.2,0.8,0.2,1) both"}}>
@@ -9539,6 +9626,7 @@ export default function MediaOnGas(){
                   <div style={{position:"absolute",bottom:10,left:10,background:fmtMeta(ad.format).color,color:"#fff",padding:"4px 9px",borderRadius:5,fontSize:9,fontWeight:900,fontFamily:fm,letterSpacing:1,boxShadow:"0 2px 8px rgba(0,0,0,0.5)",zIndex:3}}>{fmtMeta(ad.format).label}</div>
                   {ad._scale&&<div style={{position:"absolute",bottom:10,right:10,background:P.mint,color:"#062014",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(52,211,153,0.45)",zIndex:3,textTransform:"uppercase"}}>{"\u25B2 SCALE"}</div>}
                   {ad._topPerformer&&<div style={{position:"absolute",bottom:10,right:10,background:P.warning,color:"#2a1605",padding:"4px 10px",borderRadius:5,fontSize:10,fontWeight:900,fontFamily:fm,letterSpacing:1.2,boxShadow:"0 2px 10px rgba(251,191,36,0.4)",zIndex:3,textTransform:"uppercase"}}>{"\u2605 TOP PERFORMER"}</div>}
+                  {!isClient&&ad.adId&&<button onClick={function(e){e.stopPropagation();setThumbOverrideAd(ad);}} title="Override thumbnail" style={{position:"absolute",top:10,right:60,zIndex:4,background:"rgba(0,0,0,0.65)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:6,padding:"3px 7px",color:"#fff",fontSize:10,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:0.5,boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>&#9998;</button>}
                 </div>
                 <div style={{padding:"12px 14px",flex:1,display:"flex",flexDirection:"column"}}>
                   <div style={{fontSize:9,color:P.label,fontFamily:fm,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ad.campaignName}>{ad.campaignName}</div>
