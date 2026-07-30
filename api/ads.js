@@ -1583,6 +1583,7 @@ export default async function handler(req, res) {
 
   /* ═══ GOOGLE DISPLAY / YOUTUBE ═══ */
   var googleDebug = { attempted: false, tokenOk: false, queryStatus: null, errorBody: "", resultCount: 0, hadError: null };
+  var googleAssetDebug = null;
   try {
     var gClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     var gClientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
@@ -1685,7 +1686,7 @@ export default async function handler(req, res) {
           });
           var assetUrlByRef = {};
           var assetYoutubeIdByRef = {};
-          var googleAssetDebug = { totalRefs: directAssetRefs.length, chunks: 0, resolved: 0, failedChunks: 0, sampleErrors: [] };
+          googleAssetDebug = { totalRefs: directAssetRefs.length, chunks: 0, resolved: 0, failedChunks: 0, sampleErrors: [] };
           // Chunk the direct asset IN clause. Previously joined every ref
           // into one query; on accounts with many RDAs each carrying
           // 10+ marketing_images, the IN clause exceeded Google Ads GAQL
@@ -1844,6 +1845,36 @@ export default async function handler(req, res) {
             else if (gObjective === "leads") { gResCount = clk; gResType = "clicks"; }
             else if (gObjective === "community_reach") { gResCount = parseInt(r.metrics && r.metrics.reach || 0) || parseInt(r.metrics && r.metrics.impressions || 0); gResType = "reach"; }
             else { gResCount = clk; gResType = "lp_clicks"; }
+            // Per-ad Google debug (only when ?debug=1). Captures what was
+            // available in the ad payload versus what was resolved to a
+            // URL by the direct asset lookup. Lets us tell at a glance
+            // whether an ad rendered black because (A) it had no image
+            // asset refs at all, (B) refs were present but the direct
+            // lookup didn't return URLs for them (deleted / different
+            // account / query truncation), (C) it's a video-only VRA
+            // that we don't handle, or (D) something else.
+            var _gDbg = null;
+            if (debugFollows) {
+              var _rdaDbg = ad.responsiveDisplayAd || {};
+              var _appDbg = ad.appAd || {};
+              var _vraDbg = ad.videoResponsiveAd || {};
+              var _countResolved = function(arr) { var t = 0, r2 = 0; (arr || []).forEach(function(m) { if (m && m.asset) { t += 1; if (assetUrlByRef[m.asset]) r2 += 1; } }); return t + "/" + r2; };
+              _gDbg = {
+                adType: adType,
+                thumbEmpty: !thumb,
+                assetViewImage: !!(adAssets && adAssets.image),
+                assetViewYoutube: !!(adAssets && adAssets.youtubeId),
+                rdaMarketing: _countResolved(_rdaDbg.marketingImages),
+                rdaSquareMarketing: _countResolved(_rdaDbg.squareMarketingImages),
+                rdaLogos: _countResolved(_rdaDbg.logoImages),
+                rdaSquareLogos: _countResolved(_rdaDbg.squareLogoImages),
+                rdaYoutube: (_rdaDbg.youtubeVideos || []).length,
+                appAdImages: _countResolved(_appDbg.images),
+                appAdYoutube: (_appDbg.youtubeVideos || []).length,
+                vraVideos: (_vraDbg.videos || []).length,
+                imageAdUrl: !!(ad.imageAd && ad.imageAd.imageUrl)
+              };
+            }
             allAds.push({
               platform: gPlatform,
               accountName: "MTN MoMo Google",
@@ -1851,6 +1882,7 @@ export default async function handler(req, res) {
               campaignName: r.campaign.name,
               adsetName: r.adGroup.name,
               adId: ad.id,
+              _debugGoogle: _gDbg,
               adName: (function(){
                 if (ad.name) return ad.name;
                 var rda = ad.responsiveDisplayAd || {};
@@ -1919,6 +1951,14 @@ export default async function handler(req, res) {
   } catch (ovErr) { console.error("[ads] thumb override merge error", ovErr); }
 
   var response = { ads: allAds, total: allAds.length, noImpressionAds: noImpressionAds };
+  // Expose Google debug bundles in the response when ?debug=1 so we can
+  // diagnose why RDA thumbnails end up empty without needing Vercel log
+  // access. Not cached, only returned on debug fetches so production
+  // responses stay lean.
+  if (debugFollows) {
+    response.googleDebug = googleDebug;
+    if (typeof googleAssetDebug !== "undefined") response.googleAssetDebug = googleAssetDebug;
+  }
   // Cache the unfiltered (admin) response keyed by date range. Client-scoped filtering
   // happens after the cache read on every request so tokens cannot see wider data.
   adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
