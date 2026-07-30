@@ -1661,12 +1661,18 @@ function deriveClientNames(campaigns,activeOnly){
 }
 
 function ThumbOverrideModal(props){
-  // Admin modal to paste a custom thumbnail URL for a specific ad. Saves
-  // to Redis via /api/thumb-override; the URL wins over Meta / TikTok /
-  // Google native resolution everywhere (dashboard, share email, PDF).
-  // Used when a video ad opens from a black fade and Meta returns no
-  // is_preferred frame, or when an RDA asset was deleted and the fallback
-  // chain runs out.
+  // Admin modal to replace an ad's thumbnail with either a pasted URL
+  // or an uploaded image file. Saves to Redis via /api/thumb-override;
+  // the URL / data URL wins over Meta / TikTok / Google native
+  // resolution everywhere (dashboard, share email, PDF). Used when a
+  // video ad opens from a black fade and Meta returns no is_preferred
+  // frame, when an RDA asset was deleted, or when the platform image
+  // is blocked by the browser (Google simgad hotlink protection).
+  //
+  // Uploaded files are downscaled client-side via canvas to 800px on
+  // the long side and re-encoded to JPEG at ~78% quality so the base64
+  // data URL fits comfortably under 250KB. Sending a full-resolution
+  // creative directly would bloat every ads response by several MB.
   var ad=props.ad;
   var cu=useState(""),currentUrl=cu[0],setCurrentUrl=cu[1];
   var iu=useState(""),inputUrl=iu[0],setInputUrl=iu[1];
@@ -1683,9 +1689,13 @@ function ThumbOverrideModal(props){
     window.addEventListener("keydown",esc,true);
     return function(){window.removeEventListener("keydown",esc,true);};
   },[ad&&ad.adId]);
+  var isValidSrc=function(u){
+    if(!u)return false;
+    return /^https:\/\//i.test(u)||/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(u);
+  };
   var save=function(){
     var url=String(inputUrl||"").trim();
-    if(!/^https:\/\//i.test(url)){setErrMsg("Paste an https:// image URL");return;}
+    if(!isValidSrc(url)){setErrMsg("Provide an https:// URL or upload an image file");return;}
     setSaving(true);setErrMsg("");
     fetch(props.apiBase+"/api/thumb-override",{method:"POST",headers:authHeaders(),body:JSON.stringify({adId:ad.adId,url:url})})
       .then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d};});})
@@ -1699,10 +1709,49 @@ function ThumbOverrideModal(props){
       .then(function(x){setSaving(false);if(!x.ok){setErrMsg((x.data&&x.data.error)||"Clear failed");return;}props.onSaved("");props.onClose();})
       .catch(function(){setSaving(false);setErrMsg("Network error");});
   };
+  // Downscale + re-encode uploaded image via canvas before storing.
+  // 800px on the long side + JPEG ~78% keeps the base64 payload under
+  // ~250KB even for a chunky screenshot, and 800px is well above what
+  // any ad card renders at (typically 200-400px), so no visual loss.
+  var onFile=function(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    if(!/^image\//.test(file.type||"")){setErrMsg("Pick an image file");return;}
+    if(file.size>10*1024*1024){setErrMsg("Image too large (10MB max before downscale)");return;}
+    setErrMsg("");
+    var reader=new FileReader();
+    reader.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        var MAX=800;
+        var w=img.width,h=img.height;
+        if(w>MAX||h>MAX){
+          var scale=Math.min(MAX/w,MAX/h);
+          w=Math.round(w*scale);h=Math.round(h*scale);
+        }
+        var canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        var ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,w,h);
+        var mime=(file.type==="image/png"||file.type==="image/gif")?"image/jpeg":file.type;
+        var dataUrl=canvas.toDataURL(mime==="image/png"?"image/png":"image/jpeg",0.78);
+        // Guard against pathological cases where re-encoding produces
+        // a still-huge payload (very complex images, non-photographic
+        // content). Server also enforces its own 300KB cap.
+        if(dataUrl.length>300*1024){setErrMsg("Downscaled image is still >300KB, try a smaller source");return;}
+        setInputUrl(dataUrl);
+      };
+      img.onerror=function(){setErrMsg("Could not read that image");};
+      img.src=reader.result;
+    };
+    reader.onerror=function(){setErrMsg("Could not read that file");};
+    reader.readAsDataURL(file);
+  };
   if(!ad)return null;
-  var previewSrc=inputUrl&&/^https:\/\//i.test(inputUrl)?inputUrl:"";
+  var previewSrc=isValidSrc(inputUrl)?inputUrl:"";
+  var platformSrc=ad.thumbnail||"";
   return <div onClick={function(e){if(e.target===e.currentTarget)props.onClose();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-    <div style={{background:"#0f0722",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,padding:26,maxWidth:520,width:"100%",boxShadow:"0 24px 60px rgba(0,0,0,0.6)"}}>
+    <div style={{background:"#0f0722",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,padding:26,maxWidth:560,width:"100%",boxShadow:"0 24px 60px rgba(0,0,0,0.6)",maxHeight:"90vh",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
         <div>
           <div style={{fontSize:11,color:"#F96203",letterSpacing:3,fontWeight:800,fontFamily:"monospace"}}>THUMBNAIL OVERRIDE</div>
@@ -1711,16 +1760,25 @@ function ThumbOverrideModal(props){
         </div>
         <button onClick={props.onClose} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"5px 10px",color:"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:14}}>&times;</button>
       </div>
-      <div style={{fontSize:11,color:"rgba(255,255,255,0.65)",lineHeight:1.6,marginBottom:16,fontFamily:"Helvetica,Arial,sans-serif"}}>Paste an https:// image URL. It wins over the platform-native thumbnail resolution everywhere the ad renders (dashboard, share email, PDF report). Clear to fall back to the default.</div>
-      <input type="text" value={inputUrl} onChange={function(e){setInputUrl(e.target.value);}} placeholder="https://..." style={{width:"100%",padding:"11px 13px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,color:"#fff",fontSize:12,fontFamily:"monospace",boxSizing:"border-box",marginBottom:14}}/>
-      {previewSrc&&<div style={{marginBottom:14,padding:8,background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)"}}>
-        <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6}}>PREVIEW</div>
+      {platformSrc&&<div style={{marginBottom:16,padding:10,background:"rgba(0,0,0,0.35)",borderRadius:10,border:"1px solid rgba(255,255,255,0.08)"}}>
+        <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6}}>CURRENT (FROM PLATFORM)</div>
+        <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+          <img src={platformSrc} alt="current" referrerPolicy="no-referrer" style={{width:90,height:90,objectFit:"cover",borderRadius:6,background:"#000",flexShrink:0}} onError={function(e){e.target.style.opacity=0.3;}}/>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",lineHeight:1.5,fontFamily:"Helvetica,Arial,sans-serif"}}>If this looks black, broken, or wrong, upload a replacement below. Screenshot the ad from Meta / TikTok / Google Ads Manager and pick it here.</div>
+        </div>
+      </div>}
+      <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:8}}>UPLOAD REPLACEMENT</div>
+      <input type="file" accept="image/*" onChange={onFile} style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px dashed rgba(255,255,255,0.25)",borderRadius:8,color:"rgba(255,255,255,0.75)",fontSize:11,fontFamily:"monospace",boxSizing:"border-box",marginBottom:14,cursor:"pointer"}}/>
+      <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6,marginTop:4}}>OR PASTE URL</div>
+      <input type="text" value={/^data:/.test(inputUrl)?"":inputUrl} onChange={function(e){setInputUrl(e.target.value);}} placeholder="https://..." style={{width:"100%",padding:"10px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,color:"#fff",fontSize:11,fontFamily:"monospace",boxSizing:"border-box",marginBottom:14}}/>
+      {previewSrc&&<div style={{marginBottom:14,padding:10,background:"rgba(52,211,153,0.06)",borderRadius:10,border:"1px solid rgba(52,211,153,0.25)"}}>
+        <div style={{fontSize:9,color:"#34D399",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6}}>REPLACEMENT PREVIEW</div>
         <img src={previewSrc} alt="preview" style={{maxWidth:"100%",maxHeight:200,borderRadius:6,display:"block"}} onError={function(e){e.target.style.display="none";}}/>
       </div>}
       {errMsg&&<div style={{fontSize:11,color:"#F43F5E",marginBottom:12,fontFamily:"Helvetica,Arial,sans-serif"}}>{errMsg}</div>}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
         {currentUrl&&<button onClick={clear} disabled={saving} style={{background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:8,padding:"9px 16px",color:"#F43F5E",fontSize:11,fontWeight:800,fontFamily:"monospace",letterSpacing:1.5,cursor:saving?"wait":"pointer",textTransform:"uppercase"}}>Clear Override</button>}
-        <button onClick={save} disabled={saving||!inputUrl} style={{background:"#F96203",border:"none",borderRadius:8,padding:"9px 18px",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:(saving||!inputUrl)?"not-allowed":"pointer",textTransform:"uppercase",opacity:(saving||!inputUrl)?0.5:1}}>{saving?"Saving...":"Save Override"}</button>
+        <button onClick={save} disabled={saving||!isValidSrc(inputUrl)} style={{background:"#F96203",border:"none",borderRadius:8,padding:"9px 18px",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:(saving||!isValidSrc(inputUrl))?"not-allowed":"pointer",textTransform:"uppercase",opacity:(saving||!isValidSrc(inputUrl))?0.5:1}}>{saving?"Saving...":"Save Override"}</button>
       </div>
     </div>
   </div>;
