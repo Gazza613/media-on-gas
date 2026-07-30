@@ -1606,7 +1606,7 @@ export default async function handler(req, res) {
         // total includes that spend. Filtering REMOVED here was undercounting
         // Creative spend on long-running campaigns whose ads had been deleted
         // since the period (Ground Truth Audit caught a -6.3% drift).
-        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.responsive_display_ad.long_headline, ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.app_ad.headlines, ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
+        var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.logo_images, ad_group_ad.ad.responsive_display_ad.square_logo_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.responsive_display_ad.long_headline, ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.app_ad.headlines, ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
         var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
@@ -1666,8 +1666,17 @@ export default async function handler(req, res) {
             var appAd = r.adGroupAd.ad.appAd || {};
             var vra = r.adGroupAd.ad.videoResponsiveAd || {};
             var collect = function(arr) { (arr || []).forEach(function(m) { if (m && m.asset && directAssetRefs.indexOf(m.asset) < 0) directAssetRefs.push(m.asset); }); };
+            // Every RDA asset slot the ad might carry. logoImages /
+            // squareLogoImages were previously missing from the fallback
+            // resolution chain, so RDAs whose marketing_images had all
+            // been paused or deleted rendered as black card thumbnails
+            // even when a logo asset was still active on the ad. Google
+            // Ads Manager renders these as an ad thumbnail when other
+            // slots are empty, so the dashboard should too.
             collect(rda.marketingImages);
             collect(rda.squareMarketingImages);
+            collect(rda.logoImages);
+            collect(rda.squareLogoImages);
             collect(rda.youtubeVideos);
             collect(appAd.images);
             collect(appAd.youtubeVideos);
@@ -1675,9 +1684,20 @@ export default async function handler(req, res) {
           });
           var assetUrlByRef = {};
           var assetYoutubeIdByRef = {};
-          if (directAssetRefs.length > 0) {
+          var googleAssetDebug = { totalRefs: directAssetRefs.length, chunks: 0, resolved: 0, failedChunks: 0, sampleErrors: [] };
+          // Chunk the direct asset IN clause. Previously joined every ref
+          // into one query; on accounts with many RDAs each carrying
+          // 10+ marketing_images, the IN clause exceeded Google Ads GAQL
+          // query length limits and returned no rows for the tail refs,
+          // which showed up as black card thumbnails for ads whose refs
+          // fell past the truncation point. 50 refs per chunk keeps every
+          // query under 4KB.
+          var CHUNK = 50;
+          for (var rc = 0; rc < directAssetRefs.length; rc += CHUNK) {
+            var chunk = directAssetRefs.slice(rc, rc + CHUNK);
+            googleAssetDebug.chunks += 1;
             try {
-              var refList = directAssetRefs.map(function(rn) { return "'" + rn + "'"; }).join(",");
+              var refList = chunk.map(function(rn) { return "'" + rn + "'"; }).join(",");
               var directQ = "SELECT asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name IN (" + refList + ")";
               var dRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
                 method: "POST",
@@ -1690,15 +1710,25 @@ export default async function handler(req, res) {
                   if (ar.asset && ar.asset.resourceName) {
                     if (ar.asset.imageAsset && ar.asset.imageAsset.fullSize && ar.asset.imageAsset.fullSize.url) {
                       assetUrlByRef[ar.asset.resourceName] = ar.asset.imageAsset.fullSize.url;
+                      googleAssetDebug.resolved += 1;
                     }
                     if (ar.asset.youtubeVideoAsset && ar.asset.youtubeVideoAsset.youtubeVideoId) {
                       assetYoutubeIdByRef[ar.asset.resourceName] = ar.asset.youtubeVideoAsset.youtubeVideoId;
                     }
                   }
                 });
+              } else {
+                googleAssetDebug.failedChunks += 1;
+                if (googleAssetDebug.sampleErrors.length < 2) {
+                  try { googleAssetDebug.sampleErrors.push((await dRes.text()).substring(0, 300)); } catch (_) {}
+                }
               }
-            } catch (dErr) { console.error("Google direct asset lookup error", dErr); }
+            } catch (dErr) {
+              googleAssetDebug.failedChunks += 1;
+              console.error("Google direct asset lookup chunk error", dErr);
+            }
           }
+          try { console.log("[ads] Google asset resolution", googleAssetDebug); } catch (_) {}
 
           (gData.results || []).forEach(function(r) {
             var ad = r.adGroupAd.ad;
@@ -1739,15 +1769,27 @@ export default async function handler(req, res) {
               thumb = ad.imageAd.imageUrl || "";
               preview = ad.imageAd.imageUrl || "";
               format = (thumb.toLowerCase().indexOf(".gif") >= 0) ? "GIF" : "STATIC";
-            } else if (rdaObj.marketingImages || rdaObj.squareMarketingImages || rdaObj.youtubeVideos) {
-              // Responsive Display: resolve marketing image refs to URLs via our direct lookup
+            } else if (rdaObj.marketingImages || rdaObj.squareMarketingImages || rdaObj.logoImages || rdaObj.squareLogoImages || rdaObj.youtubeVideos) {
+              // Responsive Display: resolve every asset slot Google might
+              // populate on the ad, in visual-quality order. Previously
+              // stopped at marketingImages / squareMarketingImages, so
+              // RDAs whose marketing_images had been paused / deleted /
+              // never served (Google's auto-optimizer often runs logo-
+              // only variants for some placements) fell through to an
+              // empty thumb and rendered as black cards. Falling back
+              // through logoImages / squareLogoImages first fixes those
+              // cards without touching any ad that already had a marketing
+              // image resolved.
               var rdaYt = firstYoutubeFrom(rdaObj.youtubeVideos);
               if (rdaYt) {
                 thumb = "https://img.youtube.com/vi/" + rdaYt + "/hqdefault.jpg";
                 preview = "https://www.youtube.com/watch?v=" + rdaYt;
                 format = "MP4";
               } else {
-                thumb = firstUrlFrom(rdaObj.marketingImages) || firstUrlFrom(rdaObj.squareMarketingImages);
+                thumb = firstUrlFrom(rdaObj.marketingImages) ||
+                        firstUrlFrom(rdaObj.squareMarketingImages) ||
+                        firstUrlFrom(rdaObj.logoImages) ||
+                        firstUrlFrom(rdaObj.squareLogoImages);
                 preview = thumb;
                 format = "RESPONSIVE";
               }
