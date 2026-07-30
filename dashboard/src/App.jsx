@@ -1309,6 +1309,14 @@ function AdPreviewModal(props){
     // random largest asset.
     var winQ=(mixedCapable&&platformKey==="meta")?"&winner=1":"";
     proxyImage=props.apiBase+"/api/ad-image?platform="+platformKey+"&adId="+encodeURIComponent(ad.adId)+(campaignIdParam?("&campaignId="+encodeURIComponent(campaignIdParam)):"")+winQ+authQs;
+  } else if(ad.thumbnail&&(platformLow.indexOf("google")>=0||platformLow.indexOf("youtube")>=0||platformLow.indexOf("pmax")>=0||platformLow.indexOf("demand")>=0)&&!/^data:image\//i.test(ad.thumbnail)){
+    // Google preview: same reason as thumbFor above, tpc.googlesyndication
+    // .com blocks cross-origin <img> loads from our origin so the full
+    // preview modal shows PREVIEW UNAVAILABLE even though the URL is
+    // valid. Route through /api/ad-image?platform=google&url=... which
+    // fetches the CDN server-side and streams bytes back same-origin.
+    // Data URL overrides bypass since they're already inline.
+    proxyImage=props.apiBase+"/api/ad-image?platform=google&adId="+encodeURIComponent(ad.adId||"anon")+"&url="+encodeURIComponent(ad.thumbnail)+authQs;
   }
   var imageSrc=proxyImage||ad.thumbnail||"";
   // A clicked breakdown creative's own thumbnail overrides the hero
