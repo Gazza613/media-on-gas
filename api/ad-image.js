@@ -250,7 +250,52 @@ export default async function handler(req, res) {
   var wantWinner = platform === "meta" && !!String(req.query.winner || "").trim();
 
   if (!adId) { res.status(400).json({ error: "adId required" }); return; }
-  if (platform !== "meta" && platform !== "tiktok") { res.status(400).json({ error: "platform must be meta or tiktok" }); return; }
+  if (platform !== "meta" && platform !== "tiktok" && platform !== "google") { res.status(400).json({ error: "platform must be meta, tiktok, or google" }); return; }
+
+  // Google path: the frontend passes ?url=<google_cdn_url> because Google
+  // Display RDA thumbnails resolve at the ad_group_ad_asset query time in
+  // api/ads.js and get baked into ad.thumbnail. The tpc.googlesyndication
+  // .com CDN blocks cross-origin <img> loads from our origin (still failed
+  // after referrerPolicy=no-referrer, so the block is stricter than just
+  // Referer). We fetch the URL server-side and stream the bytes back so
+  // the browser sees it as coming from our own origin. Strict URL allow-
+  // list so this can't be turned into an open proxy.
+  if (platform === "google") {
+    var gRawUrl = String(req.query.url || "").trim();
+    var GOOGLE_CDN_ALLOWLIST = /^https:\/\/(tpc\.googlesyndication\.com|s0\.2mdn\.net|googleads\.g\.doubleclick\.net|[a-z0-9-]+\.googleusercontent\.com|img\.youtube\.com)\//i;
+    if (!GOOGLE_CDN_ALLOWLIST.test(gRawUrl)) { res.status(400).json({ error: "url must be a Google ad-serving CDN URL" }); return; }
+    try {
+      // Manual override still wins over the platform URL.
+      var gOv = await getThumbOverride(adId);
+      if (gOv) {
+        if (/^data:image\//i.test(gOv)) {
+          var gM = gOv.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+          if (gM) {
+            res.setHeader("Content-Type", gM[1]);
+            res.setHeader("Cache-Control", "private, max-age=60");
+            res.status(200).send(Buffer.from(gM[2], "base64"));
+            return;
+          }
+        }
+        res.setHeader("Cache-Control", "private, max-age=60");
+        res.redirect(302, gOv);
+        return;
+      }
+      var gResp = await fetch(gRawUrl);
+      if (!gResp.ok) { res.status(gResp.status).end(); return; }
+      res.setHeader("Content-Type", gResp.headers.get("Content-Type") || "image/jpeg");
+      var gLen = gResp.headers.get("Content-Length");
+      if (gLen) res.setHeader("Content-Length", gLen);
+      res.setHeader("Cache-Control", "private, max-age=600");
+      var gBuf = Buffer.from(await gResp.arrayBuffer());
+      res.status(200).send(gBuf);
+      return;
+    } catch (gErr) {
+      console.error("[ad-image] Google proxy error", gErr);
+      res.status(502).json({ error: "Google proxy failed" });
+      return;
+    }
+  }
 
   // Client-scope guard matches /api/ad-video. Two checks for clients:
   //   1. The supplied campaignId must be in the principal's allowlist

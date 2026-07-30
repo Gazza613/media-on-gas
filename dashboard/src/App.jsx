@@ -4739,7 +4739,23 @@ export default function MediaOnGas(){
   var thumbFor=function(ad){
     if(!ad)return "";
     var pLow=String(ad.platform||"").toLowerCase();
-    var pKey=pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0?"meta":pLow.indexOf("tiktok")>=0?"tiktok":"";
+    var isGoogle=pLow.indexOf("google")>=0||pLow.indexOf("youtube")>=0||pLow.indexOf("pmax")>=0||pLow.indexOf("demand")>=0;
+    var pKey=pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0?"meta":pLow.indexOf("tiktok")>=0?"tiktok":isGoogle?"google":"";
+    // Data URL overrides (captured video frames, uploaded screenshots)
+    // ship inline in ad.thumbnail. Use them directly, no proxy needed.
+    if(ad.thumbnail&&/^data:image\//i.test(ad.thumbnail))return ad.thumbnail;
+    // Google path: route the tpc.googlesyndication.com URL through our
+    // own /api/ad-image proxy so the browser sees the request as
+    // same-origin. Google's CDN blocks cross-origin <img> loads from
+    // media.gasmarketing.co.za even with referrerPolicy=no-referrer,
+    // so the raw URL renders black. YouTube thumbnails (img.youtube.com)
+    // don't have this issue but go through the same path anyway for
+    // consistency, cheap since youtube.com URLs don't get blocked.
+    if(pKey==="google"){
+      if(!ad.thumbnail)return "";
+      var gAuth=(viewToken?("&token="+encodeURIComponent(viewToken)):"")+(!viewToken&&session?("&st="+encodeURIComponent(session)):"");
+      return API+"/api/ad-image?platform=google&adId="+encodeURIComponent(ad.adId||"anon")+"&url="+encodeURIComponent(ad.thumbnail)+gAuth;
+    }
     if(!pKey||!ad.adId)return ad.thumbnail||"";
     var isMixed=(pKey==="meta"&&(String(ad.format||"").toUpperCase()==="MIXED"||ad.multiCreative));
     // Fast path: fresh raw thumbnail, no winner re-selection needed.
@@ -4761,7 +4777,7 @@ export default function MediaOnGas(){
     if(!ad)return false;
     if(ad.thumbnail)return true;
     var pLow=String(ad.platform||"").toLowerCase();
-    return !!(ad.adId&&(pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0||pLow.indexOf("tiktok")>=0));
+    return !!(ad.adId&&(pLow.indexOf("instagram")>=0||pLow.indexOf("facebook")>=0||pLow.indexOf("tiktok")>=0||pLow.indexOf("google")>=0||pLow.indexOf("youtube")>=0));
   };
 
   // Idle logout: 15 minutes of no activity ends an admin or team-member session.
