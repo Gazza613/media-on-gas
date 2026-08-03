@@ -359,7 +359,23 @@ function formatPeriod(from, to) {
 function resolveThumb(ad, origin, shareToken, size) {
   if (!ad) return "";
   var pl = String(ad.platform || "").toLowerCase();
-  var pk = (pl.indexOf("facebook") >= 0 || pl.indexOf("instagram") >= 0) ? "meta" : (pl.indexOf("tiktok") >= 0 ? "tiktok" : "");
+  var isGoogle = pl.indexOf("google") >= 0 || pl.indexOf("youtube") >= 0 || pl.indexOf("pmax") >= 0 || pl.indexOf("demand") >= 0;
+  var pk = (pl.indexOf("facebook") >= 0 || pl.indexOf("instagram") >= 0) ? "meta" : (pl.indexOf("tiktok") >= 0 ? "tiktok" : isGoogle ? "google" : "");
+  // Data URL overrides (captured video frames, uploaded screenshots)
+  // ship inline in ad.thumbnail. Render directly, no proxy needed.
+  if (ad.thumbnail && /^data:image\//i.test(ad.thumbnail)) return ad.thumbnail;
+  // Google path: route the raw tpc.googlesyndication.com URL through
+  // /api/ad-image?platform=google&url=... so the PDF popup fetches
+  // it same-origin. Google's ad-serving CDN blocks cross-origin <img>
+  // loads with a 200-but-blank / 403 response, same failure mode the
+  // dashboard hit before commit 5225539. Without this the Google
+  // Display cards in Section 05 render dark thumbnails just like the
+  // dashboard did pre-fix. YouTube thumbs (img.youtube.com) also
+  // route through the same proxy for consistency.
+  if (pk === "google" && ad.thumbnail && origin) {
+    var gAuth = shareToken ? ("&token=" + shareToken) : "";
+    return origin + "/api/ad-image?platform=google&adId=" + encodeURIComponent(ad.adId || "anon") + "&url=" + encodeURIComponent(ad.thumbnail) + gAuth;
+  }
   if (!pk || !ad.adId) return ad.thumbnail || "";
   var isMixed = pk === "meta" && (String(ad.format || "").toUpperCase() === "MIXED" || ad.multiCreative);
   // Fast path: raw thumbnail is present and the ad is not a MIXED
@@ -369,12 +385,6 @@ function resolveThumb(ad, origin, shareToken, size) {
   if (!origin || !shareToken) return ad.thumbnail || "";
   var cid = String(ad.campaignId || "").replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
   var win = isMixed ? "&winner=1" : "";
-  // URL format IDENTICAL to dashboard thumbFor (App.jsx ~4236). No
-  // &raw=1 (that was the email-only byte-streaming flag that made the
-  // proxy return application/octet-stream inside the PDF popup and
-  // some images silently failed). Plain token auth lets the endpoint
-  // 302-redirect to the real CDN URL, which is what the dashboard
-  // relies on and displays reliably.
   return origin + "/api/ad-image?platform=" + pk + "&adId=" + encodeURIComponent(ad.adId) + (cid ? ("&campaignId=" + encodeURIComponent(cid)) : "") + win + "&token=" + shareToken;
 }
 
