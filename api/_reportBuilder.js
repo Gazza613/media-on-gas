@@ -852,12 +852,11 @@ function renderBofuSection(opts) {
         var pctOfPrev = prevVal > 0 ? (st.val / prevVal * 100) : null;
         var prevColor = pctOfPrev === null ? COL.mint : (pctOfPrev >= 50 ? COL.mint : (pctOfPrev >= 25 ? COL.solar : COL.rose));
         var prevLabel = pctOfPrev === null ? "starting point" : (pctOfPrev.toFixed(2) + "% of previous");
-        return `<div style="display:grid;grid-template-columns:50mm 1fr 45mm;align-items:center;gap:4mm;margin-bottom:2.5mm;">
+        return `<div style="display:grid;grid-template-columns:50mm 22mm 1fr 45mm;align-items:center;gap:4mm;margin-bottom:2.5mm;">
           <div style="font-size:9pt;font-weight:800;color:var(--rp-fg);letter-spacing:0.3px;">${escapeHtmlLocal(st.label)}</div>
-          <div style="position:relative;height:6mm;background:rgba(255,255,255,0.05);border-radius:1.5mm;overflow:hidden;">
-            <div style="position:absolute;inset:0 auto 0 0;width:${Math.max(pctOfTop, 2).toFixed(1)}%;background:linear-gradient(90deg,${COL.mint},${COL.mint}70);border-radius:1.5mm;display:flex;align-items:center;padding-left:2.5mm;">
-              <span style="font-size:9pt;font-weight:900;color:#062014;font-variant-numeric:tabular-nums;">${fmtNum(st.val)}</span>
-            </div>
+          <div style="font-size:11pt;font-weight:900;color:${COL.mint};font-variant-numeric:tabular-nums;text-align:right;">${fmtNum(st.val)}</div>
+          <div style="position:relative;height:4mm;background:rgba(255,255,255,0.05);border-radius:1mm;overflow:hidden;">
+            <div style="position:absolute;inset:0 auto 0 0;width:${Math.max(pctOfTop, 1).toFixed(1)}%;background:linear-gradient(90deg,${COL.mint},${COL.mint}70);border-radius:1mm;"></div>
           </div>
           <div style="font-size:7.5pt;color:var(--rp-fg-dim);text-align:right;line-height:1.35;">
             <div style="color:${prevColor};font-weight:800;font-size:8pt;">${prevLabel}</div>

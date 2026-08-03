@@ -7926,12 +7926,11 @@ export default function MediaOnGas(){
                         var pctOfTop=funnelTop>0?(st.val/funnelTop*100):0;
                         var prevVal=i>0?funnelStages[i-1].val:0;
                         var pctOfPrev=prevVal>0?(st.val/prevVal*100):null;
-                        return <div key={st.key} style={{display:"grid",gridTemplateColumns:"180px 1fr 160px",alignItems:"center",gap:14}}>
+                        return <div key={st.key} style={{display:"grid",gridTemplateColumns:"180px 90px 1fr 160px",alignItems:"center",gap:14}}>
                           <div style={{fontSize:11,color:P.txt,fontWeight:800,fontFamily:fm,letterSpacing:0.5}}>{st.label}</div>
-                          <div style={{position:"relative",height:26,background:"rgba(255,255,255,0.04)",borderRadius:6,overflow:"hidden"}}>
-                            <div style={{position:"absolute",inset:"0 auto 0 0",width:Math.max(pctOfTop,2)+"%",background:"linear-gradient(90deg,"+P.mint+","+P.mint+"70)",borderRadius:6,display:"flex",alignItems:"center",paddingLeft:10}}>
-                              <span style={{fontSize:12,fontWeight:900,color:"#062014",fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{fmt(st.val)}</span>
-                            </div>
+                          <div style={{fontSize:15,fontWeight:900,color:P.mint,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{fmt(st.val)}</div>
+                          <div style={{position:"relative",height:14,background:"rgba(255,255,255,0.04)",borderRadius:4,overflow:"hidden"}}>
+                            <div style={{position:"absolute",inset:"0 auto 0 0",width:Math.max(pctOfTop,1)+"%",background:"linear-gradient(90deg,"+P.mint+","+P.mint+"70)",borderRadius:4}}/>
                           </div>
                           <div style={{fontSize:10,color:P.caption,fontFamily:fm,textAlign:"right",lineHeight:1.35}}>
                             {pctOfPrev!==null?<div style={{color:pctOfPrev>=50?P.mint:pctOfPrev>=25?P.solar:P.rose,fontWeight:800,fontSize:11}}>{pctOfPrev.toFixed(2)+"% of previous"}</div>:<div style={{color:P.mint,fontWeight:800,fontSize:11}}>starting point</div>}
