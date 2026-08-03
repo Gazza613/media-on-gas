@@ -581,30 +581,30 @@ function renderTofuSection(opts) {
 function renderMofuSection(opts) {
   var book = opts.book;
   var g = book.global;
-  // Blended CTR + CPC use ENGAGEMENT-ONLY totals (exclude Awareness /
-  // Community Reach campaigns) to match the dashboard's Summary tab
-  // BLENDED CLICK THROUGH RATE tile. Total Clicks + Total Spend stay
-  // as the FULL grand totals to match the dashboard's TOTAL CLICKS
-  // tile (App.jsx computed.totalClicks = tc2 = mt+tt+gd, all camps).
-  // Reading engagement-only here made the report tile under-count by
-  // ~3k clicks vs the dashboard on windows with awareness spend.
-  var eng = book.engagement || { impressions: 0, clicks: 0, spend: 0 };
+  // Blended CTR + CPC use ALL-CAMPAIGNS math so the tile reconciles
+  // with what Meta / TikTok / Google report on their own platforms
+  // and with the dashboard's Summary Blended CTR tile (2026-07-30 fix,
+  // App.jsx blCtr = totalClicks / totalImps). Previously used
+  // engagement-only totals (awareness campaigns stripped from the
+  // denominator) which inflated TikTok's CTR to 53% when the platform
+  // itself reports ~30%, a client-trust problem in the PDF.
   var globalKpis = [
     { label: "Total Clicks", value: fmtNum(g.clicks), primary: true, sub: "all campaigns" },
-    { label: "Blended CTR", value: fmtPct(engagementCtrOf(eng)), sub: "awareness excl." },
-    { label: "Blended CPC", value: fmtR(engagementCpcOf(eng)), sub: "awareness excl." },
+    { label: "Blended CTR", value: fmtPct(ctrOf(g)), sub: "all campaigns" },
+    { label: "Blended CPC", value: fmtR(cpcOf(g)), sub: "all campaigns" },
     { label: "Total Spend", value: fmtR(g.spend), sub: "all campaigns" }
   ];
-  // Per-platform table reads engagement-only clicks / CTR / CPC to
-  // match the dashboard's Engagement bars chart (App.jsx ~9376).
-  // Impressions + frequency + spend stay full-mix.
-  var engBP = book.engagementByPlatform || {};
+  // Per-platform table reads ALL-CAMPAIGNS clicks / CTR / CPC too so
+  // the row values reconcile with what each platform's UI reports.
+  // Impressions + frequency + spend already came from the full-mix
+  // book.byPlatform bucket, so switching clicks + CTR + CPC to the
+  // same source keeps every row's numbers consistent by construction.
   var columns = [
     { key: "platform", label: "Platform", align: "left" },
     { key: "impressions", label: "Impressions", format: "int" },
-    { key: "clicks", label: "Clicks", format: "int", compute: function(row, key) { var e = engBP[key] || {}; return e.clicks || 0; } },
-    { key: "ctr", label: "CTR", format: "%", compute: function(row, key) { return engagementCtrOf(engBP[key]); } },
-    { key: "cpc", label: "CPC", format: "R", compute: function(row, key) { return engagementCpcOf(engBP[key]); } },
+    { key: "clicks", label: "Clicks", format: "int" },
+    { key: "ctr", label: "CTR", format: "%", compute: function(row) { return ctrOf(row); } },
+    { key: "cpc", label: "CPC", format: "R", compute: function(row) { return cpcOf(row); } },
     { key: "freq", label: "Frequency", format: "freq", compute: frequencyOf },
     { key: "spend", label: "Spend", format: "R" }
   ];
@@ -612,24 +612,25 @@ function renderMofuSection(opts) {
   // action types the ads are asking the audience to take rather than
   // generic engagement description.
   var lede = "The intent-capture layer. This stage takes audiences who now recognise the brand and asks them to take the action their campaign objective calls for, whether that is a click through to a landing page, a click to the app store to download the app, a like or follow of the brand's social pages, or a click through to a lead form.";
-  // Two-paragraph Performance Insights. Engagement-only reads so the
-  // narrative matches the tile above (awareness excluded).
-  var platforms = Object.keys(engBP).sort(function(a, b) { return engagementCtrOf(engBP[b]) - engagementCtrOf(engBP[a]); });
-  var gCtr = engagementCtrOf(eng);
-  var gCpc = engagementCpcOf(eng);
+  // Two-paragraph Performance Insights. All-campaigns reads so the
+  // narrative matches the tile above and the per-platform table.
+  var bp = book.byPlatform || {};
+  var platforms = Object.keys(bp).sort(function(a, b) { return ctrOf(bp[b]) - ctrOf(bp[a]); });
+  var gCtr = ctrOf(g);
+  var gCpc = cpcOf(g);
   var p1 = "", p2 = "";
   if (platforms.length) {
     var best = platforms[0];
-    var bestCtr = engagementCtrOf(engBP[best]);
-    var bestCpc = engagementCpcOf(engBP[best]);
+    var bestCtr = ctrOf(bp[best]);
+    var bestCpc = cpcOf(bp[best]);
     var readCtr = gCtr >= 1.2 ? "strong click-through performance" : gCtr >= 0.8 ? "healthy click-through performance sitting inside the 0.8% to 1.2% consideration benchmark" : "click-through performance below the 0.8% consideration benchmark, indicating creative fatigue or a message-audience mismatch is worth investigating";
     p1 = fmtNum(g.clicks) + " clicks were captured across the reporting window at a blended click-through rate of " + fmtPct(gCtr) + " and a blended cost-per-click of " + fmtR(gCpc) + ". That reads as " + readCtr + ". " + escapeHtmlLocal(best) + " led the platforms at " + fmtPct(bestCtr) + " CTR and " + fmtR(bestCpc) + " CPC, indicating the strongest creative-audience resonance for this window's message and audience combination.";
     var cheapest = platforms.slice().sort(function(a, b) {
-      var ca = engagementCpcOf(engBP[a]) || Infinity;
-      var cb = engagementCpcOf(engBP[b]) || Infinity;
+      var ca = cpcOf(bp[a]) || Infinity;
+      var cb = cpcOf(bp[b]) || Infinity;
       return ca - cb;
     })[0];
-    var cheapestNote = cheapest && cheapest !== best ? escapeHtmlLocal(cheapest) + " delivered the lowest cost-per-click at " + fmtR(engagementCpcOf(engBP[cheapest])) + ", a candidate for scale in the next window if the audience quality holds. " : "";
+    var cheapestNote = cheapest && cheapest !== best ? escapeHtmlLocal(cheapest) + " delivered the lowest cost-per-click at " + fmtR(cpcOf(bp[cheapest])) + ", a candidate for scale in the next window if the audience quality holds. " : "";
     p2 = cheapestNote + "CTR by itself is a diagnostic metric, not a business outcome. It tells the story of whether the audience is leaning in when they see the ad, which is the necessary precursor to the conversion outcomes measured in Section 03. A window with strong CTR at the middle of the funnel typically converts more efficiently at the bottom, since intent has already been captured. Weak middle-of-funnel CTR is the earliest signal that the awareness above needs a creative or audience adjustment before it can reliably convert.";
   }
   var insight = p1 ? (p1 + "</p><p class=\"rp-body\">" + p2) : p2;
@@ -1759,14 +1760,14 @@ function renderExecutiveSummary(opts) {
   var isBlendedLeadsX = waLeadTotalX > 0 && formLeadsCountX > 0;
   var totalApp = byObj["Clicks to App Store"] ? byObj["Clicks to App Store"].global.result : 0;
   var totalLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.result : 0;
-  // Blended CTR mirrors dashboard's Summary tile (engagement-only,
-  // awareness / community reach excluded per project semantics).
-  var eng = book.engagement || { impressions: 0, clicks: 0, spend: 0 };
+  // Blended CTR uses ALL-CAMPAIGNS math (2026-07-30 fix) so the tile
+  // reconciles with dashboard Summary + MOFU Global Click Headlines
+  // and matches what each platform reports on its own UI.
   var kpis = [
     { label: "Media Spend", value: fmtR(g.spend), primary: true },
     { label: "Impressions", value: fmtNum(g.impressions), sub: fmtNumDec(frequencyOf(g), 2) + "x frequency" },
     { label: "Reach", value: fmtNum(g.reach), sub: "unique users" },
-    { label: "Blended CTR", value: fmtPct(engagementCtrOf(eng)), sub: "awareness excluded" }
+    { label: "Blended CTR", value: fmtPct(ctrOf(g)), sub: "all campaigns" }
   ];
   var narrative = [];
   narrative.push("Across " + fmtNum(g.campaignCount) + " campaign" + (g.campaignCount === 1 ? "" : "s") + ", " + fmtR(g.spend) + " was invested during " + escapeHtmlLocal(opts.periodDisplay) + ", generating " + fmtNum(g.impressions) + " impressions and " + fmtNum(g.reach) + " unique users reached at a blended " + fmtR(cpmOf(g)) + " CPM.");
