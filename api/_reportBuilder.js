@@ -2437,6 +2437,11 @@ img { max-width: 100%; display: block; }
 </style>
 </head>
 <body>
+<div id="gas-print-bar" style="position:fixed;top:16px;right:16px;z-index:99999;display:flex;gap:8px;align-items:center;font-family:Helvetica,Arial,sans-serif;">
+  <div id="gas-print-status" style="background:rgba(0,0,0,0.7);color:#fff;font-size:11px;letter-spacing:1px;font-weight:800;padding:8px 12px;border-radius:6px;">Preparing report...</div>
+  <button id="gas-print-btn" type="button" onclick="try{window.focus();window.print();}catch(_){alert('Popup lost focus. Click inside this window and press Ctrl+P (Cmd+P on Mac), then choose Save as PDF.');}" style="background:#F96203;color:#fff;border:none;padding:9px 16px;border-radius:6px;font-size:11px;font-weight:900;letter-spacing:2px;cursor:pointer;text-transform:uppercase;font-family:inherit;box-shadow:0 4px 14px rgba(249,98,3,0.35);">Save as PDF</button>
+</div>
+<style>@media print{#gas-print-bar{display:none !important;}}</style>
 ${pages}
 <script>
 // Print trigger lives INSIDE the child window so it fires
@@ -2449,30 +2454,44 @@ ${pages}
 // so a slow ad-image proxy doesn't hold the print dialog hostage.
 (function(){
   var printed = false;
+  var status = document.getElementById("gas-print-status");
+  function setStatus(msg){ if (status) status.textContent = msg; }
   function doPrint(){
     if (printed) return;
     printed = true;
-    try { window.focus(); window.print(); } catch(_) {}
+    setStatus("Opening save dialog...");
+    try { window.focus(); window.print(); }
+    catch(_) { setStatus("Auto-print blocked. Click Save as PDF."); }
   }
   function whenImagesReady(cb, timeoutMs){
     var imgs = Array.prototype.slice.call(document.images || []);
     if (!imgs.length) { cb(); return; }
-    var remaining = imgs.length;
+    var total = imgs.length;
+    var remaining = total;
     var done = false;
-    function tick(){ if (--remaining <= 0 && !done) { done = true; cb(); } }
+    function tick(){
+      remaining -= 1;
+      var loaded = total - remaining;
+      setStatus("Loading images " + loaded + "/" + total + "...");
+      if (remaining <= 0 && !done) { done = true; cb(); }
+    }
     imgs.forEach(function(img){
       if (img.complete) { tick(); return; }
       img.addEventListener("load", tick, { once: true });
       img.addEventListener("error", tick, { once: true });
     });
-    setTimeout(function(){ if (!done) { done = true; cb(); } }, timeoutMs || 6000);
+    setTimeout(function(){ if (!done) { done = true; cb(); } }, timeoutMs || 8000);
   }
   function start(){
+    setStatus("Rendering layout...");
     // Longer settle so layout metrics, custom fonts, and image sizing
     // are all done before Chrome's print snapshot fires. Empty-PDF
     // reports on Windows traced back to a 300ms settle that fired
     // before some rp-obj-plat blocks had finished laying out.
-    whenImagesReady(function(){ setTimeout(doPrint, 1500); }, 6000);
+    whenImagesReady(function(){
+      setStatus("Ready. Opening dialog...");
+      setTimeout(doPrint, 1500);
+    }, 8000);
   }
   if (document.readyState === "complete") start();
   else window.addEventListener("load", start);
@@ -2484,7 +2503,21 @@ ${pages}
   // fallback because it was closing the tab BEFORE the PDF write
   // completed on some machines, producing a 0-byte / empty PDF.
   window.addEventListener("afterprint", function(){
+    setStatus("Saved. Closing...");
     setTimeout(function(){ try { window.close(); } catch(_) {} }, 3000);
+  });
+
+  // Ctrl+P / Cmd+P keyboard shortcut as an always-available fallback,
+  // no matter the auto-print state. Chrome usually catches this natively
+  // but scoping the listener here guarantees the doPrint() path fires
+  // even if the popup was opened with restricted permissions.
+  document.addEventListener("keydown", function(e){
+    var isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+    if ((isMac ? e.metaKey : e.ctrlKey) && String(e.key).toLowerCase() === "p") {
+      e.preventDefault();
+      printed = false;
+      doPrint();
+    }
   });
 })();
 </script>
