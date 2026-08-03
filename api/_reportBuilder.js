@@ -1682,34 +1682,34 @@ function renderTopAdsSection(opts) {
   }
 
   var TOP_N = 5;
-  // Emit each PLATFORM as its own rp-page. Team feedback (2026-08)
-  // flagged that stacking 3 platform blocks x 5 cards on one A4
-  // portrait page caused the browser to page-break the trailing
-  // platform blocks off to unlabeled overflow pages, so Community
-  // Reach FB / IG appeared missing when they were actually rendering
-  // on pages the reader treated as unrelated. Per-platform pages
-  // guarantee every platform gets a titled, self-contained page and
-  // matches the reference PDF's per-platform layout.
+  // Emit each KPI subsection as ONE rp-page with all its platform
+  // blocks stacked vertically (per 2026-08 team feedback: "put all
+  // platforms on the same page per object"). Cards + platform head
+  // sizing is tuned tight in CSS below so up to 4 platform blocks
+  // x 5 cards each fit on a single A4 portrait page. If a specific
+  // subsection genuinely overflows (5 platforms all active with a
+  // full 5 cards each), page-break-inside: avoid on the platform
+  // block keeps the break clean at a platform boundary.
   var sectionPages = objSections.filter(function(sec) {
     if (!bucket[sec.key]) return false;
     return sec.platforms.some(function(plat) { return bucket[sec.key][plat] && bucket[sec.key][plat].length > 0; });
-  }).reduce(function(pages, sec) {
-    sec.platforms.filter(function(plat) {
+  }).map(function(sec) {
+    var platBlocks = sec.platforms.filter(function(plat) {
       return bucket[sec.key][plat] && bucket[sec.key][plat].length > 0;
-    }).forEach(function(plat) {
+    }).map(function(plat) {
       var pMeta = platMeta[plat] || { label: plat, accent: "#64748B" };
       var ads = bucket[sec.key][plat].slice().sort(sec.sort).slice(0, TOP_N);
       var cards = ads.map(function(a, i) { return renderAdCard(a, i + 1, sec, plat); }).join("");
-      pages.push(`<section class="rp-page">
-        ${renderSectionHeader("05", "Creative Read", sec.title + " &middot; " + pMeta.label, sec.criterion)}
-        <div class="rp-topad-plat-block">
-          <div class="rp-topad-plat-head" style="background:${pMeta.accent};">${escapeHtmlLocal(pMeta.label)} <span class="rp-topad-plat-count">&middot; ${ads.length} ${ads.length === 1 ? "ad" : "ads"}</span></div>
-          <div class="rp-topad-cards">${cards}</div>
-        </div>
-      </section>`);
-    });
-    return pages;
-  }, []);
+      return `<div class="rp-topad-plat-block">
+        <div class="rp-topad-plat-head" style="background:${pMeta.accent};">${escapeHtmlLocal(pMeta.label)} <span class="rp-topad-plat-count">&middot; ${ads.length} ${ads.length === 1 ? "ad" : "ads"}</span></div>
+        <div class="rp-topad-cards">${cards}</div>
+      </div>`;
+    }).join("");
+    return `<section class="rp-page">
+      ${renderSectionHeader("05", "Creative Read", sec.title, sec.criterion)}
+      ${platBlocks}
+    </section>`;
+  });
 
   return sectionPages.join("\n");
 }
@@ -2217,38 +2217,40 @@ img { max-width: 100%; display: block; }
 .rp-persona-hero-age { font-size: 30pt; font-weight: 900; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
 .rp-persona-hero-caption { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; margin-top: 3mm; }
 /* ─────────────── SECTION 05: TOP ADS BY OBJECTIVE (new layout) ───────────────
-   Info-equivalent card design mirroring the dashboard's TOP ADS PER
-   PLATFORM tiles. Each subsection lives on its own rp-page so no card
-   is clipped by a mid-page break. 5 cards per platform strip on A4
-   portrait; card widths ~35mm are tight but readable at these font
-   sizes. Cards wrap if a platform has fewer than 5 ads. */
-.rp-topad-plat-block { margin-bottom: 6mm; page-break-inside: avoid; }
-.rp-topad-plat-head { color: #fff; font-size: 10pt; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; border-radius: 2mm; padding: 2.5mm 4mm; margin-bottom: 3mm; }
-.rp-topad-plat-count { font-size: 8pt; font-weight: 700; letter-spacing: 1px; opacity: 0.75; text-transform: none; }
-.rp-topad-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2.5mm; }
-.rp-topad-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 2mm; overflow: hidden; display: flex; flex-direction: column; page-break-inside: avoid; }
+   All-platforms-per-subsection layout (2026-08 team spec). Each KPI
+   gets ONE page with every active platform stacked vertically as a
+   labeled block, 5 cards per block. Card sizing is tight to fit up
+   to 4 platform blocks x 5 cards on a single A4 portrait page. If
+   a subsection genuinely has 5 active platforms + 5 cards each,
+   page-break-inside: avoid on the platform block keeps the break
+   clean at a platform boundary rather than mid-card. */
+.rp-topad-plat-block { margin-bottom: 3mm; page-break-inside: avoid; }
+.rp-topad-plat-head { color: #fff; font-size: 8.5pt; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 1.5mm; padding: 1.6mm 3mm; margin-bottom: 1.8mm; }
+.rp-topad-plat-count { font-size: 7pt; font-weight: 700; letter-spacing: 0.6px; opacity: 0.75; text-transform: none; }
+.rp-topad-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.6mm; }
+.rp-topad-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 1.5mm; overflow: hidden; display: flex; flex-direction: column; page-break-inside: avoid; }
 .rp-topad-thumb { position: relative; width: 100%; padding-top: 100%; overflow: hidden; }
 .rp-topad-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.rp-topad-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 7pt; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
-.rp-topad-rank { position: absolute; top: 1.5mm; left: 1.5mm; background: rgba(255,255,255,0.22); color: #fff; padding: 0.6mm 1.6mm; border-radius: 1mm; font-size: 7pt; font-weight: 900; letter-spacing: 0.4px; }
-.rp-topad-fmt { position: absolute; bottom: 1.5mm; left: 1.5mm; color: #fff; padding: 0.6mm 1.6mm; border-radius: 1mm; font-size: 6pt; font-weight: 900; letter-spacing: 0.6px; text-transform: uppercase; }
-.rp-topad-badge { position: absolute; bottom: 1.5mm; right: 1.5mm; padding: 0.6mm 1.6mm; border-radius: 1mm; font-size: 6pt; font-weight: 900; letter-spacing: 0.6px; text-transform: uppercase; }
-.rp-topad-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: radial-gradient(ellipse at center, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%); padding: 2mm 3mm; border-radius: 2mm; text-align: center; min-width: 22mm; }
-.rp-topad-overlay-lbl { color: rgba(255,255,255,0.85); font-size: 5.5pt; font-weight: 900; letter-spacing: 1px; margin-bottom: 0.6mm; }
-.rp-topad-overlay-val { color: #fff; font-size: 14pt; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
-.rp-topad-overlay-sub { color: rgba(255,255,255,0.88); font-size: 5.5pt; font-weight: 700; margin-top: 0.6mm; letter-spacing: 0.3px; }
-.rp-topad-body { padding: 2mm 2mm 2.5mm; display: flex; flex-direction: column; gap: 1.5mm; }
-.rp-topad-name { font-size: 6.5pt; font-weight: 800; color: var(--rp-fg); line-height: 1.3; word-break: break-word; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 7mm; }
-.rp-topad-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm; font-size: 6pt; }
-.rp-topad-metric { display: flex; flex-direction: column; gap: 0.4mm; }
-.rp-topad-metric-lbl { color: var(--rp-fg-mute); font-size: 5pt; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; }
-.rp-topad-metric-val { color: var(--rp-fg); font-size: 7pt; font-weight: 900; font-variant-numeric: tabular-nums; }
-.rp-topad-footer { display: flex; justify-content: space-between; font-size: 5.8pt; color: var(--rp-fg-mute); font-weight: 700; letter-spacing: 0.3px; padding-top: 1mm; border-top: 1px solid var(--rp-line); }
-.rp-topad-watch { font-size: 5.5pt; color: var(--rp-fg-mute); font-weight: 800; letter-spacing: 0.6px; padding: 0.8mm 0 0.2mm; text-align: center; background: rgba(255,255,255,0.03); border-radius: 1mm; margin-top: 0.5mm; }
-.rp-topad-cont-head { padding: 5mm 0 6mm; border-bottom: 1px solid var(--rp-line); margin-bottom: 5mm; }
-.rp-topad-cont-eyebrow { font-size: 8pt; letter-spacing: 3px; font-weight: 900; text-transform: uppercase; margin-bottom: 2mm; }
-.rp-topad-cont-title { font-size: 20pt; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 2mm; }
-.rp-topad-cont-crit { font-size: 9pt; color: var(--rp-fg-mute); line-height: 1.5; }
+.rp-topad-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 6.5pt; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+.rp-topad-rank { position: absolute; top: 1mm; left: 1mm; background: rgba(255,255,255,0.22); color: #fff; padding: 0.4mm 1.2mm; border-radius: 0.8mm; font-size: 6pt; font-weight: 900; letter-spacing: 0.3px; }
+.rp-topad-fmt { position: absolute; bottom: 1mm; left: 1mm; color: #fff; padding: 0.4mm 1.2mm; border-radius: 0.8mm; font-size: 5.5pt; font-weight: 900; letter-spacing: 0.4px; text-transform: uppercase; }
+.rp-topad-badge { position: absolute; bottom: 1mm; right: 1mm; padding: 0.4mm 1.2mm; border-radius: 0.8mm; font-size: 5.5pt; font-weight: 900; letter-spacing: 0.4px; text-transform: uppercase; }
+.rp-topad-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: radial-gradient(ellipse at center, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%); padding: 1.4mm 2mm; border-radius: 1.5mm; text-align: center; min-width: 18mm; }
+.rp-topad-overlay-lbl { color: rgba(255,255,255,0.85); font-size: 5pt; font-weight: 900; letter-spacing: 0.6px; margin-bottom: 0.4mm; }
+.rp-topad-overlay-val { color: #fff; font-size: 11pt; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.rp-topad-overlay-sub { color: rgba(255,255,255,0.88); font-size: 5pt; font-weight: 700; margin-top: 0.4mm; letter-spacing: 0.2px; }
+.rp-topad-body { padding: 1.4mm 1.6mm 1.8mm; display: flex; flex-direction: column; gap: 1mm; }
+.rp-topad-name { font-size: 5.8pt; font-weight: 800; color: var(--rp-fg); line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 6mm; }
+.rp-topad-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8mm; font-size: 5.5pt; }
+.rp-topad-metric { display: flex; flex-direction: column; gap: 0.3mm; }
+.rp-topad-metric-lbl { color: var(--rp-fg-mute); font-size: 4.5pt; font-weight: 800; letter-spacing: 0.3px; text-transform: uppercase; }
+.rp-topad-metric-val { color: var(--rp-fg); font-size: 6pt; font-weight: 900; font-variant-numeric: tabular-nums; }
+.rp-topad-footer { display: flex; justify-content: space-between; font-size: 5pt; color: var(--rp-fg-mute); font-weight: 700; letter-spacing: 0.2px; padding-top: 0.8mm; border-top: 1px solid var(--rp-line); }
+.rp-topad-watch { display: none; }
+.rp-topad-cont-head { display: none; }
+.rp-topad-cont-eyebrow { display: none; }
+.rp-topad-cont-title { display: none; }
+.rp-topad-cont-crit { display: none; }
 
 .rp-persona-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; padding: 3mm 4mm 3mm; border-bottom: 1px solid var(--rp-line); }
 .rp-persona-strip-tile { background: rgba(0,0,0,0.25); border-radius: 2mm; padding: 3mm; text-align: center; }
