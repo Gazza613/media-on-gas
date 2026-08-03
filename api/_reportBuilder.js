@@ -1536,18 +1536,27 @@ function renderTopAdsSection(opts) {
   // Landing Page (the doc's spec). Uses ad.platform strings directly,
   // not the platformFamily fold, so YouTube / Search / Pmax rows do
   // NOT leak into the Landing Page Google slot.
+  // Platform allowlists now include Google Display on every KPI (2026-08
+  // team update: "do not forget Google as an objective result on these
+  // ad previews"). Google Display platform blocks auto-drop when the
+  // client had no Google Display ads for that KPI, so this doesn't
+  // pollute clients that only run Meta + TikTok. YouTube included where
+  // it's a natural fit (awareness / reach objectives). Google Search is
+  // deliberately omitted since search ads are text-only and have no
+  // creative thumbnail.
   var objSections = [
-    { key: "leads",           title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,          resultLabel: "leads",           costLabel: "per lead",           criterion: "Ranked by leads captured and cost per lead.",                       platforms: ["Facebook", "Instagram", "TikTok"] },
-    { key: "appinstall",      title: "Clicks to App Store", accent: "#4599FF", sort: appInstallSort,    resultLabel: "store clicks",    costLabel: "per store click",    criterion: "Ranked by app store clicks and cost per store click.",              platforms: ["Facebook", "Instagram", "TikTok"] },
-    { key: "followers",       title: "Followers",           accent: "#34D399", sort: followerSort,      resultLabel: "follows",         costLabel: "per follow",         criterion: "Ranked by followers and page likes gained. Not by general clicks.", platforms: ["Facebook", "Instagram", "TikTok"] },
-    { key: "landingpage",     title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,   resultLabel: "LP clicks",       costLabel: "per LP click",       criterion: "Ranked by landing page clicks. Landing-page destination campaigns only.", platforms: ["Facebook", "Instagram", "Google Display"] },
-    { key: "community_reach", title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultLabel: "reached",        costLabel: "per 1,000 reached",  criterion: "Ranked by unique community reach at the most efficient CPM.",       platforms: ["Facebook", "Instagram", "TikTok"] }
+    { key: "leads",           title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,          resultLabel: "leads",           costLabel: "per lead",           criterion: "Ranked by leads captured and cost per lead.",                       platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
+    { key: "appinstall",      title: "Clicks to App Store", accent: "#4599FF", sort: appInstallSort,    resultLabel: "store clicks",    costLabel: "per store click",    criterion: "Ranked by app store clicks and cost per store click.",              platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
+    { key: "followers",       title: "Followers",           accent: "#34D399", sort: followerSort,      resultLabel: "follows",         costLabel: "per follow",         criterion: "Ranked by followers and page likes gained. Not by general clicks.", platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
+    { key: "landingpage",     title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,   resultLabel: "LP clicks",       costLabel: "per LP click",       criterion: "Ranked by landing page clicks. Landing-page destination campaigns only.", platforms: ["Facebook", "Instagram", "TikTok", "Google Display", "YouTube"] },
+    { key: "community_reach", title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultLabel: "reached",        costLabel: "per 1,000 reached",  criterion: "Ranked by unique community reach at the most efficient CPM.",       platforms: ["Facebook", "Instagram", "TikTok", "Google Display", "YouTube"] }
   ];
   var platMeta = {
     "Facebook":       { label: "Facebook",       accent: "#4599FF", cta: "View Facebook Ad" },
     "Instagram":      { label: "Instagram",      accent: "#E1306C", cta: "View Instagram Ad" },
     "TikTok":         { label: "TikTok",         accent: "#00F2EA", cta: "View TikTok Ad" },
-    "Google Display": { label: "Google Display", accent: "#34A853", cta: "View Google Ad" }
+    "Google Display": { label: "Google Display", accent: "#34A853", cta: "View Google Ad" },
+    "YouTube":        { label: "YouTube",        accent: "#FF0000", cta: "View YouTube Ad" }
   };
 
   var adResult = function(a, section) {
@@ -1673,40 +1682,34 @@ function renderTopAdsSection(opts) {
   }
 
   var TOP_N = 5;
-  // Emit each KPI subsection as its own rp-page so subsections break
-  // to new pages cleanly. Empty sections auto-drop (Learnalot's leads
-  // section only appears for Learnalot; MTN MoMo's leads section
-  // auto-drops since they run no lead campaigns).
+  // Emit each PLATFORM as its own rp-page. Team feedback (2026-08)
+  // flagged that stacking 3 platform blocks x 5 cards on one A4
+  // portrait page caused the browser to page-break the trailing
+  // platform blocks off to unlabeled overflow pages, so Community
+  // Reach FB / IG appeared missing when they were actually rendering
+  // on pages the reader treated as unrelated. Per-platform pages
+  // guarantee every platform gets a titled, self-contained page and
+  // matches the reference PDF's per-platform layout.
   var sectionPages = objSections.filter(function(sec) {
     if (!bucket[sec.key]) return false;
     return sec.platforms.some(function(plat) { return bucket[sec.key][plat] && bucket[sec.key][plat].length > 0; });
-  }).map(function(sec, idx) {
-    var platBlocks = sec.platforms.filter(function(plat) {
+  }).reduce(function(pages, sec) {
+    sec.platforms.filter(function(plat) {
       return bucket[sec.key][plat] && bucket[sec.key][plat].length > 0;
-    }).map(function(plat) {
+    }).forEach(function(plat) {
       var pMeta = platMeta[plat] || { label: plat, accent: "#64748B" };
       var ads = bucket[sec.key][plat].slice().sort(sec.sort).slice(0, TOP_N);
       var cards = ads.map(function(a, i) { return renderAdCard(a, i + 1, sec, plat); }).join("");
-      return `<div class="rp-topad-plat-block">
-        <div class="rp-topad-plat-head" style="background:${pMeta.accent};">${escapeHtmlLocal(pMeta.label)} <span class="rp-topad-plat-count">&middot; ${ads.length} ${ads.length === 1 ? "ad" : "ads"}</span></div>
-        <div class="rp-topad-cards">${cards}</div>
-      </div>`;
-    }).join("");
-    // First subsection also carries the Section 05 header; subsequent
-    // subsections get a lighter continuation header so the reader
-    // knows they're still in Section 05.
-    var header = idx === 0
-      ? renderSectionHeader("05", "Creative Read", sec.title, sec.criterion)
-      : `<div class="rp-topad-cont-head">
-          <div class="rp-topad-cont-eyebrow" style="color:${sec.accent};">Section 05 &middot; Creative Read (continued)</div>
-          <div class="rp-topad-cont-title" style="color:${sec.accent};">${escapeHtmlLocal(sec.title)}</div>
-          <div class="rp-topad-cont-crit">${escapeHtmlLocal(sec.criterion)}</div>
-        </div>`;
-    return `<section class="rp-page">
-      ${header}
-      ${platBlocks}
-    </section>`;
-  });
+      pages.push(`<section class="rp-page">
+        ${renderSectionHeader("05", "Creative Read", sec.title + " &middot; " + pMeta.label, sec.criterion)}
+        <div class="rp-topad-plat-block">
+          <div class="rp-topad-plat-head" style="background:${pMeta.accent};">${escapeHtmlLocal(pMeta.label)} <span class="rp-topad-plat-count">&middot; ${ads.length} ${ads.length === 1 ? "ad" : "ads"}</span></div>
+          <div class="rp-topad-cards">${cards}</div>
+        </div>
+      </section>`);
+    });
+    return pages;
+  }, []);
 
   return sectionPages.join("\n");
 }
