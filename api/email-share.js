@@ -138,16 +138,26 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile
     if (!r.ok) { console.warn("[email-share] /api/ads internal fetch failed", r.status); return null; }
     var d = await r.json();
     var all = d.ads || [];
-    // Ads store raw campaignId (no suffix) with platform on a separate field.
-    // Allowlist carries suffixed IDs (e.g. "123_facebook"). Reconstruct the
-    // suffixed virtual-id per ad from rawId + platform family, then exact match.
-    // For TikTok/Google (no FB/IG split) the virtualCid equals the raw id.
-    var idSet = {}; campaignIds.forEach(function(x) { idSet[String(x)] = true; });
+    // Ads store raw campaignId (no prefix or suffix) with platform on a
+    // separate field. Allowlist carries the dashboard's virtual IDs:
+    //   Meta   -> "<raw>_facebook" / "<raw>_instagram"
+    //   Google -> "google_<raw>"
+    //   TikTok -> "<raw>"
+    // Normalise both sides to the raw numeric id, then exact-match. This
+    // is the same normalisation pattern api/ads.js uses when filtering
+    // its own response for client tokens. Previously only Meta suffixes
+    // were reconstructed, which silently dropped every Google Display
+    // ad from the report's Section 05 (the report showed FB/IG/TT but
+    // Google was missing from every KPI page even though it had ads).
+    var idSet = {};
+    campaignIds.forEach(function(x) {
+      var s = String(x || "");
+      var rawId = s.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
+      if (rawId) idSet[rawId] = true;
+    });
     var filtered = all.filter(function(a) {
-      var raw = String(a.campaignId || "");
-      var plat = String(a.platform || "").toLowerCase();
-      var virtualCid = (plat === "facebook" || plat === "instagram") ? (raw + "_" + plat) : raw;
-      return idSet[virtualCid] === true;
+      var raw = String(a.campaignId || "").replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
+      return idSet[raw] === true;
     });
     if (filtered.length === 0) return null;
     // Two paths for headline metric:
