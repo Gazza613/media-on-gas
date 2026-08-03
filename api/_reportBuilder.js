@@ -1468,12 +1468,26 @@ function renderLearnalotWhatsAppAudience(opts) {
 // SECTION: BEST PERFORMING ADS
 // ═══════════════════════════════════════════════════════════════════
 
-// Best Performing Ads — mirrors dashboard's TOP ADS PER OBJECTIVE
-// (BY PLATFORM) (App.jsx ~8598 objSections + ~7620 platGroups + the
-// per-objective sort fns). Buckets by a.objective (the canonical
-// key set by /api/ads.js), NOT by name inference, so ads land in
-// the same section on both surfaces. Uses a.results (also set by
-// /api/ads.js) as the primary rank field, matching dashboard sorts.
+// Best Performing Ads — Section 05 of the client PDF. Mirrors the
+// dashboard's TOP ADS PER OBJECTIVE (By Platform) buckets: one
+// subsection per KPI, one platform strip per subsection, top 5 ads
+// per platform ranked by the KPI-specific metric. Each subsection
+// breaks to its own page (or continues to the next page when the
+// cards don't fit) so no card gets clipped by a mid-page break.
+//
+// Ranking rules (from the MTN MoMo PDF requirements doc, 2026-08):
+//   Clicks to App Store  → app store clicks (FB, IG, TikTok)
+//   Followers            → followers / page likes gained (FB, IG, TikTok)
+//   Landing Page         → landing page clicks (FB, IG, Google Display)
+//   Community Reach      → unique community reach (FB, IG, TikTok)
+//   Lead Generation      → leads captured (retained for Learnalot etc,
+//                          auto-drops when the client has no lead ads)
+//
+// The card visual is INFO-EQUIVALENT to the dashboard card (same data
+// points, PDF-optimised layout) rather than a pixel replica: big
+// result overlay on the thumbnail, format pill, SCALE/TOP badge,
+// full ad name, impressions + cost-per-result grid, spend + CTR,
+// avg watch on videos.
 function renderTopAdsSection(opts) {
   var top = opts.topAds;
   var raw = (top && Array.isArray(top.raw) && top.raw.length) ? top.raw
@@ -1482,9 +1496,9 @@ function renderTopAdsSection(opts) {
   var origin = opts.origin;
   var shareToken = opts.shareToken;
 
-  // Sort fns ported verbatim from dashboard (App.jsx ~7639 leadSort,
-  // ~7646 engagementSort, ~7655 landingPageSort, ~7663 communityReachSort).
-  var IMP_FLOOR = 5000;
+  // KPI-specific sorts. Each ranks by the primary result metric
+  // specified in the requirements doc: never by generic clicks for
+  // Followers / LP / Community Reach.
   var leadSort = function(a, b) {
     if (b.results !== a.results) return b.results - a.results;
     var ac = a.results > 0 ? a.spend / a.results : Infinity;
@@ -1492,16 +1506,19 @@ function renderTopAdsSection(opts) {
     if (ac !== bc) return ac - bc;
     return b.impressions - a.impressions;
   };
-  var engagementSort = function(a, b) {
-    var aQ = a.impressions >= IMP_FLOOR ? 0 : 1;
-    var bQ = b.impressions >= IMP_FLOOR ? 0 : 1;
-    if (aQ !== bQ) return aQ - bQ;
-    if (b.clicks !== a.clicks) return b.clicks - a.clicks;
-    return b.ctr - a.ctr;
-  };
+  // App Store sort: prioritise ads that actually drove store clicks.
+  // Uses a.results (store_clicks or install conversion count set by
+  // api/ads.js for objective=appinstall), NOT generic total clicks.
+  // Previously used engagementSort which sorted by all clicks + CTR
+  // with a 5K impression floor — that ranked ads with high raw click
+  // volume even when few of those clicks reached the app store.
+  var appInstallSort = leadSort;
+  var followerSort = leadSort;
   var landingPageSort = function(a, b) {
-    if (b.clicks !== a.clicks) return b.clicks - a.clicks;
-    return b.ctr - a.ctr;
+    var aLp = parseFloat(a.results || a.landingPageClicks || a.clicks || 0);
+    var bLp = parseFloat(b.results || b.landingPageClicks || b.clicks || 0);
+    if (bLp !== aLp) return bLp - aLp;
+    return parseFloat(b.ctr || 0) - parseFloat(a.ctr || 0);
   };
   var communityReachSort = function(a, b) {
     var aR = parseFloat(a.results || a.reach || 0), bR = parseFloat(b.results || b.reach || 0);
@@ -1511,25 +1528,27 @@ function renderTopAdsSection(opts) {
     return acpm - bcpm;
   };
 
-  // Section config keyed by CANONICAL objective ("leads" / "appinstall"
-  // / "followers" / "landingpage" / "community_reach"), matching
-  // dashboard's a.objective bucketing.
+  // Section config keyed by CANONICAL objective (a.objective set by
+  // api/ads.js). `platforms` lists the EXACT ad.platform values allowed
+  // per section — this is how "Google Display" gets filtered out of
+  // App Store / Followers / Community Reach and only appears under
+  // Landing Page (the doc's spec). Uses ad.platform strings directly,
+  // not the platformFamily fold, so YouTube / Search / Pmax rows do
+  // NOT leak into the Landing Page Google slot.
   var objSections = [
-    { key: "leads",           title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,           resultLabel: "leads",        criterion: "Ranked by leads captured and cost per lead." },
-    { key: "appinstall",      title: "Clicks to App Store", accent: "#4599FF", sort: engagementSort,     resultLabel: "store clicks", criterion: "Ranked by clicks and CTR (minimum 5,000 impressions)." },
-    { key: "followers",       title: "Followers",           accent: "#34D399", sort: leadSort,           resultLabel: "follows",      criterion: "Ranked by community earned and cost per follow." },
-    { key: "landingpage",     title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,    resultLabel: "LP clicks",    criterion: "Ranked by clicks to the landing page." },
-    { key: "community_reach", title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultLabel: "reached",      criterion: "Ranked by unique users reached at the most efficient CPM." }
+    { key: "leads",           title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,          resultLabel: "leads",           costLabel: "per lead",           criterion: "Ranked by leads captured and cost per lead.",                       platforms: ["Facebook", "Instagram", "TikTok"] },
+    { key: "appinstall",      title: "Clicks to App Store", accent: "#4599FF", sort: appInstallSort,    resultLabel: "store clicks",    costLabel: "per store click",    criterion: "Ranked by app store clicks and cost per store click.",              platforms: ["Facebook", "Instagram", "TikTok"] },
+    { key: "followers",       title: "Followers",           accent: "#34D399", sort: followerSort,      resultLabel: "follows",         costLabel: "per follow",         criterion: "Ranked by followers and page likes gained. Not by general clicks.", platforms: ["Facebook", "Instagram", "TikTok"] },
+    { key: "landingpage",     title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,   resultLabel: "LP clicks",       costLabel: "per LP click",       criterion: "Ranked by landing page clicks. Landing-page destination campaigns only.", platforms: ["Facebook", "Instagram", "Google Display"] },
+    { key: "community_reach", title: "Community Reach",     accent: "#FFAA00", sort: communityReachSort, resultLabel: "reached",        costLabel: "per 1,000 reached",  criterion: "Ranked by unique community reach at the most efficient CPM.",       platforms: ["Facebook", "Instagram", "TikTok"] }
   ];
-  var platGroups = [
-    { key: "Facebook",   label: "Facebook",   accent: "#4599FF" },
-    { key: "Instagram",  label: "Instagram",  accent: "#E1306C" },
-    { key: "TikTok",     label: "TikTok",     accent: "#00F2EA" },
-    { key: "Google Ads", label: "Google Ads", accent: "#34A853" }
-  ];
-  // Per-card result value. Uses a.results (dashboard's objective-
-  // appropriate result count already set by /api/ads.js), fallback to
-  // objective-specific fields only if results is zero.
+  var platMeta = {
+    "Facebook":       { label: "Facebook",       accent: "#4599FF", cta: "View Facebook Ad" },
+    "Instagram":      { label: "Instagram",      accent: "#E1306C", cta: "View Instagram Ad" },
+    "TikTok":         { label: "TikTok",         accent: "#00F2EA", cta: "View TikTok Ad" },
+    "Google Display": { label: "Google Display", accent: "#34A853", cta: "View Google Ad" }
+  };
+
   var adResult = function(a, section) {
     var res = parseFloat(a.results || 0);
     if (res > 0) return res;
@@ -1538,55 +1557,98 @@ function renderTopAdsSection(opts) {
     if (section.key === "community_reach") return parseFloat(a.reach || 0);
     return parseFloat(a.clicks || 0);
   };
+  var costPerResult = function(a, section, result) {
+    if (section.key === "community_reach") {
+      return parseFloat(a.impressions || 0) > 0 ? (parseFloat(a.spend || 0) / parseFloat(a.impressions || 0) * 1000) : 0;
+    }
+    return result > 0 ? (parseFloat(a.spend || 0) / result) : 0;
+  };
+  var formatLabel = function(a) {
+    var f = String(a.format || "").toUpperCase();
+    if (f === "MP4" || f === "VIDEO") return "VIDEO";
+    if (f === "STATIC" || f === "IMAGE") return "STATIC";
+    if (f === "CAROUSEL") return "CAROUSEL";
+    if (f === "MIXED" || a.multiCreative) return "MIXED";
+    if (f === "RESPONSIVE") return "RESPONSIVE";
+    if (f === "TEXT") return "TEXT";
+    return f || "STATIC";
+  };
+  var formatColor = function(fmt) {
+    switch (fmt) {
+      case "VIDEO": return "#EC4899";
+      case "STATIC": return "#F97316";
+      case "CAROUSEL": return "#8B5CF6";
+      case "MIXED": return "#A855F7";
+      case "RESPONSIVE": return "#F97316";
+      case "TEXT": return "#64748B";
+      default: return "#64748B";
+    }
+  };
 
-  var renderAdCard = function(a, rank, section) {
+  var renderAdCard = function(a, rank, section, plat) {
     var thumb = resolveThumb(a, origin, shareToken, 100);
-    var pAccent = platformAccent(platformFamily(a.platform));
+    var pMeta = platMeta[plat] || { accent: "#64748B", cta: "View Ad" };
     var result = adResult(a, section);
+    var cost = costPerResult(a, section, result);
     var spend = parseFloat(a.spend || 0);
     var ctr = parseFloat(a.ctr || 0);
-    // Per-ad label override for IG follower rows (dashboard shows
-    // "clicks to follow" / "profile visits" because Meta doesn't
-    // attribute the follow action to the ad itself).
-    var label = a._igFollower ? "clicks to follow" : section.resultLabel;
-    return `<div class="rp-creative-card">
-      <div class="rp-creative-thumb" style="background:linear-gradient(135deg,${pAccent}55,${pAccent}15);">
-        ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : `<div class="rp-creative-fallback">${escapeHtmlLocal(a.platform || "AD")}</div>`}
-        <div class="rp-creative-rank" style="background:${section.accent};">#${rank}</div>
-      </div>
-      <div class="rp-creative-body">
-        <div class="rp-creative-name">${escapeHtmlLocal(a.adName || "Untitled")}</div>
-        <div class="rp-creative-metrics">
-          <div><strong>${fmtR(spend)}</strong> spent</div>
-          <div><strong>${result > 0 ? fmtNum(result) : "-"}</strong> ${escapeHtmlLocal(label)}</div>
-          <div><strong>${fmtPct(ctr)}</strong> CTR</div>
+    var imps = parseFloat(a.impressions || 0);
+    var fmt = formatLabel(a);
+    var fmtCol = formatColor(fmt);
+    // IG follower rows label swap — Meta doesn't attribute the follow
+    // to the ad, so we display link clicks with the "profile visits"
+    // label (matches dashboard behaviour).
+    var resLabel = a._igFollower ? "profile visits" : section.resultLabel;
+    var costLabel = a._igFollower ? "per profile visit" : section.costLabel;
+    var isTop3 = rank <= 3;
+    var badgeText = isTop3 ? "▲ SCALE" : "★ TOP";
+    var badgeBg = isTop3 ? "#34D399" : "#FBBF24";
+    var badgeFg = isTop3 ? "#062014" : "#2a1605";
+    var avgWatch = parseFloat(a.videoAvgWatchSec || 0);
+    var isVideo = fmt === "VIDEO";
+    return `<div class="rp-topad-card">
+      <div class="rp-topad-thumb" style="background:linear-gradient(135deg,${pMeta.accent}55,${pMeta.accent}15 55%,#0a0618);">
+        ${thumb ? `<img src="${escapeHtmlLocal(thumb)}" alt="" onerror="this.style.display='none'"/>` : `<div class="rp-topad-fallback">${escapeHtmlLocal(plat)}</div>`}
+        <div class="rp-topad-rank">#${rank}</div>
+        <div class="rp-topad-fmt" style="background:${fmtCol};">${escapeHtmlLocal(fmt)}</div>
+        <div class="rp-topad-badge" style="background:${badgeBg};color:${badgeFg};">${badgeText}</div>
+        <div class="rp-topad-overlay">
+          <div class="rp-topad-overlay-lbl">${escapeHtmlLocal(resLabel.toUpperCase())}</div>
+          <div class="rp-topad-overlay-val">${result > 0 ? fmtNum(result) : "—"}</div>
+          ${cost > 0 ? `<div class="rp-topad-overlay-sub">${fmtR(cost)} ${escapeHtmlLocal(costLabel)}</div>` : ""}
         </div>
+      </div>
+      <div class="rp-topad-body">
+        <div class="rp-topad-name" title="${escapeHtmlLocal(a.adName || "Untitled")}">${escapeHtmlLocal(a.adName || "Untitled")}</div>
+        <div class="rp-topad-metrics">
+          <div class="rp-topad-metric"><span class="rp-topad-metric-lbl">IMPRESSIONS</span><span class="rp-topad-metric-val">${fmtNum(imps)}</span></div>
+          <div class="rp-topad-metric"><span class="rp-topad-metric-lbl">${escapeHtmlLocal(costLabel.toUpperCase())}</span><span class="rp-topad-metric-val">${cost > 0 ? fmtR(cost) : "—"}</span></div>
+        </div>
+        <div class="rp-topad-footer"><span>${fmtR(spend)} spent</span><span>${fmtPct(ctr)} CTR</span></div>
+        ${isVideo && avgWatch > 0 ? `<div class="rp-topad-watch">AVG WATCH ${avgWatch.toFixed(1)}s</div>` : ""}
       </div>
     </div>`;
   };
 
-  // Bucket by CANONICAL objective (a.objective) then platform.
-  // Matches dashboard's byObj construction (App.jsx ~8611) so the same
-  // ads land in the same sections here as they do on the Summary tab.
+  // Bucket by CANONICAL objective + EXACT ad.platform (not platformFamily
+  // fold). Exact platform matching means "Google Display" and "YouTube"
+  // stay as separate buckets — critical for the Landing Page section
+  // which must only show Google Display, not any Google Ads family
+  // member. FB/IG/TT platforms are already at the leaf platform name,
+  // so the exact match works for them too.
   var bucket = {};
   raw.forEach(function(a) {
     var obj = String(a.objective || "landingpage").toLowerCase();
-    // Fold any awareness objective flavour into community_reach so
-    // reach-tagged awareness ads still show up on the Community
-    // Reach section.
     if (obj === "awareness") obj = "community_reach";
-    var plat = platformFamily(a.platform);
+    var plat = String(a.platform || "");
     if (!bucket[obj]) bucket[obj] = {};
     if (!bucket[obj][plat]) bucket[obj][plat] = [];
     bucket[obj][plat].push(a);
   });
-  // Followers bucket dedupe — dashboard collapses same-ad rows that
-  // came in as separate FB and IG publisher-split rows down to one
-  // entry (App.jsx ~8624), keeping the row with the highest
-  // impressions so a single ad isn't double-listed in the Follower
-  // section. Applied per-platform so the FB row and IG row for one
-  // creative both survive (different platforms), but two rows of
-  // the same ad on the same platform collapse to one.
+  // Followers dedupe (per-platform) — one ad can appear as multiple
+  // publisher-split rows (FB + IG). Keep the row with the highest
+  // impressions on each platform so a single creative doesn't take
+  // multiple slots on the same platform's top-5 list.
   if (bucket.followers) {
     Object.keys(bucket.followers).forEach(function(pl) {
       var seen = {};
@@ -1598,12 +1660,10 @@ function renderTopAdsSection(opts) {
       bucket.followers[pl] = Object.keys(seen).map(function(k) { return seen[k]; });
     });
   }
-  // Followers on Instagram — Meta does not attribute the follow to
-  // the ad (the follow happens on the profile AFTER a click), so the
-  // dashboard swaps IG follower rows to show link clicks with the
-  // "profile visits" label (App.jsx ~8634). Rewrite the metric here
-  // in place so the sort function and the card render both see the
-  // corrected values.
+  // IG follower rewrite — Meta books the follow action to the profile
+  // (post-click) not the ad. Dashboard shows profile-visits (link
+  // clicks) as the metric for IG follower rows. Mirror that here so
+  // the sort and card display both see the corrected values.
   if (bucket.followers && bucket.followers.Instagram) {
     bucket.followers.Instagram = bucket.followers.Instagram.map(function(a) {
       var ck = parseFloat(a.clicks || 0);
@@ -1611,32 +1671,43 @@ function renderTopAdsSection(opts) {
     });
   }
 
-  var sections = objSections.filter(function(sec) {
-    return bucket[sec.key] && Object.keys(bucket[sec.key]).some(function(p) { return bucket[sec.key][p].length > 0; });
-  }).map(function(sec) {
-    var platBlocks = platGroups.filter(function(pg) {
-      return bucket[sec.key][pg.key] && bucket[sec.key][pg.key].length > 0;
-    }).map(function(pg) {
-      var ads = bucket[sec.key][pg.key].slice().sort(sec.sort).slice(0, 3);
-      var cards = ads.map(function(a, i) { return renderAdCard(a, i + 1, sec); }).join("");
-      return `<div class="rp-obj-plat-block">
-        <div class="rp-obj-plat-head" style="background:${pg.accent};">${escapeHtmlLocal(pg.label)}</div>
-        <div class="rp-obj-plat-cards">${cards}</div>
+  var TOP_N = 5;
+  // Emit each KPI subsection as its own rp-page so subsections break
+  // to new pages cleanly. Empty sections auto-drop (Learnalot's leads
+  // section only appears for Learnalot; MTN MoMo's leads section
+  // auto-drops since they run no lead campaigns).
+  var sectionPages = objSections.filter(function(sec) {
+    if (!bucket[sec.key]) return false;
+    return sec.platforms.some(function(plat) { return bucket[sec.key][plat] && bucket[sec.key][plat].length > 0; });
+  }).map(function(sec, idx) {
+    var platBlocks = sec.platforms.filter(function(plat) {
+      return bucket[sec.key][plat] && bucket[sec.key][plat].length > 0;
+    }).map(function(plat) {
+      var pMeta = platMeta[plat] || { label: plat, accent: "#64748B" };
+      var ads = bucket[sec.key][plat].slice().sort(sec.sort).slice(0, TOP_N);
+      var cards = ads.map(function(a, i) { return renderAdCard(a, i + 1, sec, plat); }).join("");
+      return `<div class="rp-topad-plat-block">
+        <div class="rp-topad-plat-head" style="background:${pMeta.accent};">${escapeHtmlLocal(pMeta.label)} <span class="rp-topad-plat-count">&middot; ${ads.length} ${ads.length === 1 ? "ad" : "ads"}</span></div>
+        <div class="rp-topad-cards">${cards}</div>
       </div>`;
     }).join("");
-    return `<div class="rp-obj-section" style="border-color:${sec.accent}55;">
-      <div class="rp-obj-section-head" style="border-left-color:${sec.accent};">
-        <div class="rp-obj-section-title" style="color:${sec.accent};">${escapeHtmlLocal(sec.title)}</div>
-        <div class="rp-obj-section-crit">${escapeHtmlLocal(sec.criterion)}</div>
-      </div>
+    // First subsection also carries the Section 05 header; subsequent
+    // subsections get a lighter continuation header so the reader
+    // knows they're still in Section 05.
+    var header = idx === 0
+      ? renderSectionHeader("05", "Creative Read", sec.title, sec.criterion)
+      : `<div class="rp-topad-cont-head">
+          <div class="rp-topad-cont-eyebrow" style="color:${sec.accent};">Section 05 &middot; Creative Read (continued)</div>
+          <div class="rp-topad-cont-title" style="color:${sec.accent};">${escapeHtmlLocal(sec.title)}</div>
+          <div class="rp-topad-cont-crit">${escapeHtmlLocal(sec.criterion)}</div>
+        </div>`;
+    return `<section class="rp-page">
+      ${header}
       ${platBlocks}
-    </div>`;
-  }).join("");
+    </section>`;
+  });
 
-  return `<section class="rp-page">
-    ${renderSectionHeader("05", "Creative Read", "Best Performing Ads", "Top 3 ads per platform for every campaign objective this window. Layout and ranking rules mirror the Summary tab's Top Ads Per Objective (By Platform) section on the live dashboard exactly, so the same ads appear in the same order on both surfaces.")}
-    ${sections}
-  </section>`;
+  return sectionPages.join("\n");
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2141,6 +2212,40 @@ img { max-width: 100%; display: block; }
 .rp-persona-hero { padding: 4mm 4mm 3mm; text-align: center; border-bottom: 1px solid var(--rp-line); }
 .rp-persona-hero-age { font-size: 30pt; font-weight: 900; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
 .rp-persona-hero-caption { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; margin-top: 3mm; }
+/* ─────────────── SECTION 05: TOP ADS BY OBJECTIVE (new layout) ───────────────
+   Info-equivalent card design mirroring the dashboard's TOP ADS PER
+   PLATFORM tiles. Each subsection lives on its own rp-page so no card
+   is clipped by a mid-page break. 5 cards per platform strip on A4
+   portrait; card widths ~35mm are tight but readable at these font
+   sizes. Cards wrap if a platform has fewer than 5 ads. */
+.rp-topad-plat-block { margin-bottom: 6mm; page-break-inside: avoid; }
+.rp-topad-plat-head { color: #fff; font-size: 10pt; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; border-radius: 2mm; padding: 2.5mm 4mm; margin-bottom: 3mm; }
+.rp-topad-plat-count { font-size: 8pt; font-weight: 700; letter-spacing: 1px; opacity: 0.75; text-transform: none; }
+.rp-topad-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2.5mm; }
+.rp-topad-card { background: var(--rp-card-strong); border: 1px solid var(--rp-line); border-radius: 2mm; overflow: hidden; display: flex; flex-direction: column; page-break-inside: avoid; }
+.rp-topad-thumb { position: relative; width: 100%; padding-top: 100%; overflow: hidden; }
+.rp-topad-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rp-topad-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 7pt; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
+.rp-topad-rank { position: absolute; top: 1.5mm; left: 1.5mm; background: rgba(255,255,255,0.22); color: #fff; padding: 0.6mm 1.6mm; border-radius: 1mm; font-size: 7pt; font-weight: 900; letter-spacing: 0.4px; }
+.rp-topad-fmt { position: absolute; bottom: 1.5mm; left: 1.5mm; color: #fff; padding: 0.6mm 1.6mm; border-radius: 1mm; font-size: 6pt; font-weight: 900; letter-spacing: 0.6px; text-transform: uppercase; }
+.rp-topad-badge { position: absolute; bottom: 1.5mm; right: 1.5mm; padding: 0.6mm 1.6mm; border-radius: 1mm; font-size: 6pt; font-weight: 900; letter-spacing: 0.6px; text-transform: uppercase; }
+.rp-topad-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: radial-gradient(ellipse at center, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0) 100%); padding: 2mm 3mm; border-radius: 2mm; text-align: center; min-width: 22mm; }
+.rp-topad-overlay-lbl { color: rgba(255,255,255,0.85); font-size: 5.5pt; font-weight: 900; letter-spacing: 1px; margin-bottom: 0.6mm; }
+.rp-topad-overlay-val { color: #fff; font-size: 14pt; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.rp-topad-overlay-sub { color: rgba(255,255,255,0.88); font-size: 5.5pt; font-weight: 700; margin-top: 0.6mm; letter-spacing: 0.3px; }
+.rp-topad-body { padding: 2mm 2mm 2.5mm; display: flex; flex-direction: column; gap: 1.5mm; }
+.rp-topad-name { font-size: 6.5pt; font-weight: 800; color: var(--rp-fg); line-height: 1.3; word-break: break-word; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 7mm; }
+.rp-topad-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm; font-size: 6pt; }
+.rp-topad-metric { display: flex; flex-direction: column; gap: 0.4mm; }
+.rp-topad-metric-lbl { color: var(--rp-fg-mute); font-size: 5pt; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; }
+.rp-topad-metric-val { color: var(--rp-fg); font-size: 7pt; font-weight: 900; font-variant-numeric: tabular-nums; }
+.rp-topad-footer { display: flex; justify-content: space-between; font-size: 5.8pt; color: var(--rp-fg-mute); font-weight: 700; letter-spacing: 0.3px; padding-top: 1mm; border-top: 1px solid var(--rp-line); }
+.rp-topad-watch { font-size: 5.5pt; color: var(--rp-fg-mute); font-weight: 800; letter-spacing: 0.6px; padding: 0.8mm 0 0.2mm; text-align: center; background: rgba(255,255,255,0.03); border-radius: 1mm; margin-top: 0.5mm; }
+.rp-topad-cont-head { padding: 5mm 0 6mm; border-bottom: 1px solid var(--rp-line); margin-bottom: 5mm; }
+.rp-topad-cont-eyebrow { font-size: 8pt; letter-spacing: 3px; font-weight: 900; text-transform: uppercase; margin-bottom: 2mm; }
+.rp-topad-cont-title { font-size: 20pt; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 2mm; }
+.rp-topad-cont-crit { font-size: 9pt; color: var(--rp-fg-mute); line-height: 1.5; }
+
 .rp-persona-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; padding: 3mm 4mm 3mm; border-bottom: 1px solid var(--rp-line); }
 .rp-persona-strip-tile { background: rgba(0,0,0,0.25); border-radius: 2mm; padding: 3mm; text-align: center; }
 .rp-persona-strip-label { font-size: 7pt; letter-spacing: 1.5px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; margin-bottom: 2mm; }
