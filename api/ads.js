@@ -35,7 +35,13 @@ var cacheSet = function(store, key, value) {
 // refreshing or opening the dashboard in multiple tabs within that window gets an
 // instant return, skipping the whole 5-15s fan-out across Meta / TikTok / Google.
 var adsResponseCache = {};
-var ADS_RESPONSE_TTL_MS = 5 * 60 * 1000;
+// Ads response cache TTL. Bumped 5 min -> 15 min on 2026-08 to
+// take pressure off Meta's app-level rate limit. Every dashboard
+// load, PDF generation, share email and date-range flip previously
+// re-hit Meta after 5 minutes; at 15 min the same window covers a
+// normal team review session so only the first user in triggers
+// a live fetch. Bust with ?fresh=1.
+var ADS_RESPONSE_TTL_MS = 15 * 60 * 1000;
 
 var metaAccounts = [
   { name: "MTN MoMo", id: "act_8159212987434597" },

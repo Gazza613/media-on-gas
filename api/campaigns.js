@@ -84,7 +84,54 @@ var campaignsResponseCache = {};
 // every request, so the extra load is bounded and the operator no
 // longer sees Objective Highlights lag Placement Performance by a
 // few minutes when new leads land mid-window.
-var CAMPAIGNS_RESPONSE_TTL_MS = 60 * 1000;
+// Campaigns response cache TTL. Bumped 60s -> 15 min on 2026-08 to
+// take pressure off Meta's app-level rate limit ("Application request
+// limit reached" banner). Every dashboard load, PDF generation, share
+// email and date-range flip previously re-hit Meta after 60 seconds;
+// at 15 min the same window covers a normal team review session so
+// only the first user in triggers a live fetch. Bust with ?fresh=1.
+var CAMPAIGNS_RESPONSE_TTL_MS = 15 * 60 * 1000;
+
+// Meta rate-limit-aware fetch. Retries once with a 30-second wait
+// when Meta returns "Application request limit reached" or a similar
+// rate-limit envelope (error codes 4 / 17 / 613). Logs the
+// X-Business-Use-Case-Usage header when present so we can see how
+// close we run to Meta's app-level budget over time. Falls through
+// to the caller with the original error object on any non-rate-limit
+// failure or after the retry also fails, so downstream warning /
+// warnings.push behaviour is unchanged.
+async function metaFetchWithRetry(url) {
+  var attempt = async function() {
+    var r = await fetch(url);
+    var usage = r.headers && r.headers.get && r.headers.get("x-business-use-case-usage");
+    if (usage) {
+      try {
+        var parsed = JSON.parse(usage);
+        var accts = Object.keys(parsed || {});
+        if (accts.length > 0) {
+          var first = parsed[accts[0]];
+          if (Array.isArray(first) && first[0]) {
+            var u = first[0];
+            var high = Math.max(parseFloat(u.call_count || 0), parseFloat(u.total_cputime || 0), parseFloat(u.total_time || 0));
+            if (high > 60) console.warn("[meta] rate-limit usage high", { pct: high.toFixed(1), account: accts[0], estimated_time_to_regain_access: u.estimated_time_to_regain_access || 0 });
+          }
+        }
+      } catch (_) { /* header parse best-effort */ }
+    }
+    return r;
+  };
+  var r = await attempt();
+  if (r.ok) return r;
+  var body = null;
+  try { body = await r.clone().json(); } catch (_) { /* not JSON */ }
+  var code = body && body.error && body.error.code;
+  var msg = body && body.error && (body.error.message || body.error.error_user_msg) || "";
+  var isRateLimit = code === 4 || code === 17 || code === 613 || /application request limit|rate limit|too many calls/i.test(String(msg));
+  if (!isRateLimit) return r;
+  console.warn("[meta] rate limit hit, waiting 30s before retry", { code: code, msg: msg.substring(0, 120) });
+  await new Promise(function(resolve) { setTimeout(resolve, 30000); });
+  return await attempt();
+}
 // Bump this when the classification logic changes so any pre-existing
 // cache entries on warm function instances are treated as stale.
 var CAMPAIGNS_CACHE_VERSION = "v29-province-breakdown-order";
@@ -805,7 +852,7 @@ export default async function handler(req, res) {
       var pageGuard = 0;
       while (nextUrl && pageGuard < 10) {
         pageGuard++;
-        var pageRes = await fetch(nextUrl);
+        var pageRes = await metaFetchWithRetry(nextUrl);
         var pageData = await pageRes.json();
         // Defensive: Meta returns HTTP 200 with an `error` envelope on
         // permission / scope failures, and HTTP 4xx with the same shape
