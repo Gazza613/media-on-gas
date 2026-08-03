@@ -2703,7 +2703,7 @@ function CampaignAuditModal(props){
   var coBusy=useState(false);
   var coErr=useState("");
   var coMsg=useState("");
-  var coForm=useState({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});
+  var coForm=useState({id:"",label:"WhatsApp PSI Leads",month:"",count:"",uniqueUsers:"",cost:"",campaignHint:"",note:""});
   var loadCustomOutcomes=function(){
     coLoading[1](true);coErr[1]("");
     fetch(props.apiBase+"/api/custom-outcomes?client="+CO_CLIENT,{headers:{"x-session-token":props.session||""}})
@@ -2718,15 +2718,15 @@ function CampaignAuditModal(props){
     if(!/^\d{4}-\d{2}$/.test(f.month)){coErr[1]("Month must be YYYY-MM.");return;}
     if(f.count===""||isNaN(parseInt(f.count,10))||parseInt(f.count,10)<0){coErr[1]("Count must be a non-negative integer.");return;}
     coBusy[1](true);coErr[1]("");coMsg[1]("");
-    var body={client:CO_CLIENT,label:f.label.trim(),month:f.month,count:parseInt(f.count,10),cost:f.cost===""?null:parseFloat(f.cost),campaignHint:(f.campaignHint||"").trim(),note:(f.note||"").trim()};
+    var body={client:CO_CLIENT,label:f.label.trim(),month:f.month,count:parseInt(f.count,10),uniqueUsers:f.uniqueUsers===""?null:parseInt(f.uniqueUsers,10),cost:f.cost===""?null:parseFloat(f.cost),campaignHint:(f.campaignHint||"").trim(),note:(f.note||"").trim()};
     if(f.id)body.id=f.id;
     fetch(props.apiBase+"/api/custom-outcomes",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(d){return{status:r.status,data:d};});})
-      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();if(typeof props.onOutcomeSaved==="function")props.onOutcomeSaved();})
+      .then(function(x){coBusy[1](false);if(x.status>=400){coErr[1]((x.data&&x.data.error)||"Save failed");return;}coMsg[1]("Saved.");setTimeout(function(){coMsg[1]("");},2000);coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",uniqueUsers:"",cost:"",campaignHint:"",note:""});loadCustomOutcomes();if(typeof props.onOutcomeSaved==="function")props.onOutcomeSaved();})
       .catch(function(){coBusy[1](false);coErr[1]("Connection error");});
   };
   var editCustomOutcome=function(o){
-    coForm[1]({id:o.id,label:o.label||"",month:o.month||"",count:String(o.count==null?"":o.count),cost:o.cost==null?"":String(o.cost),campaignHint:o.campaignHint||"",note:o.note||""});
+    coForm[1]({id:o.id,label:o.label||"",month:o.month||"",count:String(o.count==null?"":o.count),uniqueUsers:o.uniqueUsers==null?"":String(o.uniqueUsers),cost:o.cost==null?"":String(o.cost),campaignHint:o.campaignHint||"",note:o.note||""});
     coMsg[1]("");coErr[1]("");
   };
   var deleteCustomOutcome=function(id,label){
@@ -3634,7 +3634,7 @@ function CampaignAuditModal(props){
         var hdr={padding:"10px",textAlign:"left",fontSize:9,fontWeight:800,color:P.ember,letterSpacing:2,textTransform:"uppercase",borderBottom:"1px solid "+P.rule,background:"rgba(249,98,3,0.12)"};
         var cell={padding:"9px 10px",fontSize:11,color:P.txt,fontFamily:fm,borderBottom:"1px solid "+P.rule};
         var setF=function(patch){coForm[1](Object.assign({},f,patch));};
-        var resetForm=function(){coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",cost:"",campaignHint:"",note:""});};
+        var resetForm=function(){coForm[1]({id:"",label:"WhatsApp PSI Leads",month:"",count:"",uniqueUsers:"",cost:"",campaignHint:"",note:""});};
         return <div style={{padding:"18px 22px",overflowY:"auto",flex:1,minHeight:0}}>
           <div style={{fontSize:12,color:P.label,fontFamily:fm,marginBottom:12,lineHeight:1.5}}>
             Client: <span style={{color:P.txt,fontWeight:700}}>Learnalot</span>. These entries surface as extra tiles on the Summary tab when the tile month falls in the selected date range.
@@ -3642,12 +3642,14 @@ function CampaignAuditModal(props){
 
           <div style={{background:"rgba(15,8,26,0.55)",border:"1px solid "+P.rule,borderRadius:12,padding:16,marginBottom:18}}>
             <div style={{fontSize:11,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",color:P.ember,marginBottom:12}}>{f.id?"Edit outcome":"Add outcome"}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1.4fr 0.8fr 0.7fr 0.9fr",gap:12,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"1.4fr 0.8fr 0.7fr 0.9fr 0.9fr",gap:12,marginBottom:12}}>
               <div><label style={lbl}>Label</label><input style={inp} value={f.label} onChange={function(e){setF({label:e.target.value});}} placeholder="WhatsApp PSI Leads"/></div>
               <div><label style={lbl}>Month (YYYY-MM)</label><input style={inp} value={f.month} onChange={function(e){setF({month:e.target.value});}} placeholder="2026-07"/></div>
-              <div><label style={lbl}>Count</label><input style={inp} value={f.count} onChange={function(e){setF({count:e.target.value});}} placeholder="8" inputMode="numeric"/></div>
+              <div><label style={lbl}>Event count</label><input style={inp} value={f.count} onChange={function(e){setF({count:e.target.value});}} placeholder="975" inputMode="numeric"/></div>
+              <div><label style={lbl}>Unique users (optional)</label><input style={inp} value={f.uniqueUsers} onChange={function(e){setF({uniqueUsers:e.target.value});}} placeholder="587" inputMode="numeric"/></div>
               <div><label style={lbl}>Cost (R, optional)</label><input style={inp} value={f.cost} onChange={function(e){setF({cost:e.target.value});}} placeholder="688.80" inputMode="decimal"/></div>
             </div>
+            <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginBottom:12,lineHeight:1.5}}>Event count = total CAPI events fired for the month. Unique users = distinct people who fired the event (from Meta Events Manager → Dataset). Recording both lets the dashboard show &quot;975 events / 587 unique users&quot; so the ratio between conversations and qualified leads reconciles cleanly.</div>
             <div style={{marginBottom:12}}><label style={lbl}>Campaign hint (optional)</label><input style={inp} value={f.campaignHint} onChange={function(e){setF({campaignHint:e.target.value});}} placeholder="GAS_Learnalot_META_Leads_WApp_PSI_July_2026"/></div>
             <div style={{marginBottom:12}}><label style={lbl}>Note (optional)</label><input style={inp} value={f.note} onChange={function(e){setF({note:e.target.value});}} placeholder="Source: Meta dataset UI (Conversions API)"/></div>
             {coErr[0]&&<div style={{fontSize:11,color:"#ff6b6b",fontFamily:fm,marginBottom:8}}>{coErr[0]}</div>}
@@ -3664,7 +3666,7 @@ function CampaignAuditModal(props){
               <div style={{border:"1px solid "+P.rule,borderRadius:12,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
                   <thead><tr>
-                    <th style={hdr}>Label</th><th style={hdr}>Month</th><th style={hdr}>Count</th><th style={hdr}>Cost</th><th style={hdr}>Hint</th><th style={hdr}></th>
+                    <th style={hdr}>Label</th><th style={hdr}>Month</th><th style={hdr}>Events</th><th style={hdr}>Unique Users</th><th style={hdr}>Cost</th><th style={hdr}>Hint</th><th style={hdr}></th>
                   </tr></thead>
                   <tbody>
                     {coList[0].slice().sort(function(a,b){return String(b.month).localeCompare(String(a.month));}).map(function(o){
@@ -3672,6 +3674,7 @@ function CampaignAuditModal(props){
                         <td style={cell}>{o.label}</td>
                         <td style={cell}>{o.month}</td>
                         <td style={cell}>{o.count}</td>
+                        <td style={cell}>{o.uniqueUsers!=null&&o.uniqueUsers!==""?o.uniqueUsers:"—"}</td>
                         <td style={cell}>{o.cost!=null&&o.cost!==""?("R "+Number(o.cost).toFixed(2)):"—"}</td>
                         <td style={Object.assign({},cell,{fontSize:10,color:P.label,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})} title={o.campaignHint||""}>{o.campaignHint||"—"}</td>
                         <td style={Object.assign({},cell,{textAlign:"right",whiteSpace:"nowrap"})}>
@@ -7834,6 +7837,13 @@ export default function MediaOnGas(){
                 var waConversations=waObjRec?parseFloat(waObjRec.results||0):0;
                 var waIsCap=function(o){var s=String(o&&o.label||"").toLowerCase();return s.indexOf("whatsapp")>=0||s.indexOf("wapp")>=0||s.indexOf(" wa ")>=0;};
                 var waLeadsCount=coArr.reduce(function(t,o){return t+(waIsCap(o)?Number(o.count||0):0);},0);
+                // Unique-users companion count from Meta Events Manager
+                // (optional per-outcome field). Sum across the same
+                // WhatsApp-tagged outcomes in the window so the tile can
+                // read "975 events / 587 unique users" when both are set.
+                // Zero means the client hasn't recorded the unique-users
+                // number yet, in which case the tile just shows events.
+                var waUniqueUsers=coArr.reduce(function(t,o){return t+(waIsCap(o)&&o.uniqueUsers!=null?Number(o.uniqueUsers||0):0);},0);
                 var showConvRateTile=waConversations>0&&waLeadsCount>0;
                 // Total (blended) leads tile — only shown on Learnalot,
                 // and only when BOTH lead-form leads (Meta Marketing API,
@@ -7901,7 +7911,7 @@ export default function MediaOnGas(){
                     mkTile("total-leads",  "Total Leads (Blended)",fmt(totalLeadsCount),           P.solar,  fmt(formLeadsCount)+" form + "+fmt(waLeadsCount)+" WhatsApp"),
                     mkTile("blended-cpl",  "Blended CPL",          blendedCpl>0?fR(blendedCpl):"—",P.solar,  "combined spend / total leads"),
                     mkTile("psi-form",     "PSI Form Leads",       fmt(formLeadsCount),            P.rose,   formCpl>0?fR(formCpl)+" per form lead":"Meta lead-form captures"),
-                    mkTile("wa-leads",     "WhatsApp Leads",       fmt(waLeadsCount),              P.orchid, waCpl>0?fR(waCpl)+" per WhatsApp lead":"CAPI QualifiedLead events")
+                    mkTile("wa-leads",     "WhatsApp Leads",       fmt(waLeadsCount),              P.orchid, (waUniqueUsers>0?fmt(waUniqueUsers)+" unique users":"CAPI QualifiedLead events")+(waCpl>0?" · "+fR(waCpl)+" per lead":""))
                   ];
                   // ── Row 2: WhatsApp message funnel ──────────────────
                   // Reach → Conversations → First Reply → Engaged 3+.

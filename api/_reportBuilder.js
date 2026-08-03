@@ -761,9 +761,13 @@ function renderBofuSection(opts) {
   }
   var activeCo = coList.filter(function(o) { return _monthsInRange[o.month]; });
   var waLeadTotal = 0;
+  var waUniqueUsers = 0;
   activeCo.forEach(function(o) {
     var isWA = /whatsapp|wapp|(^| )wa /i.test(String(o.label || ""));
-    if (isWA) waLeadTotal += parseInt(o.count || 0, 10);
+    if (isWA) {
+      waLeadTotal += parseInt(o.count || 0, 10);
+      if (o.uniqueUsers != null) waUniqueUsers += parseInt(o.uniqueUsers || 0, 10);
+    }
   });
   var formLeadsBucket = byObj["Leads"] && byObj["Leads"].global ? byObj["Leads"].global : null;
   var formLeadsCount = formLeadsBucket ? (formLeadsBucket.result || 0) : 0;
@@ -830,7 +834,7 @@ function renderBofuSection(opts) {
       + _tile("Total Leads (Blended)",fmtNum(_totalLeads),                  fmtNum(formLeadsCount) + " form + " + fmtNum(waLeadTotal) + " WhatsApp", COL.solar)
       + _tile("Blended CPL",          _blendedCpl > 0 ? fmtR(_blendedCpl) : "&mdash;", "combined spend / total leads",          COL.solar)
       + _tile("PSI Form Leads",       fmtNum(formLeadsCount),               _formCpl > 0 ? fmtR(_formCpl) + " per form lead" : "Meta lead-form captures", COL.rose)
-      + _tile("WhatsApp Leads",       fmtNum(waLeadTotal),                  _waCpl > 0 ? fmtR(_waCpl) + " per WhatsApp lead" : "CAPI QualifiedLead events", COL.orchid)
+      + _tile("WhatsApp Leads",       fmtNum(waLeadTotal),                  (waUniqueUsers > 0 ? fmtNum(waUniqueUsers) + " unique users" : "CAPI QualifiedLead events") + (_waCpl > 0 ? " &middot; " + fmtR(_waCpl) + " per lead" : ""), COL.orchid)
       + '</div>';
 
     // ── Row 2: WhatsApp Message Funnel (staged bars) ────────────

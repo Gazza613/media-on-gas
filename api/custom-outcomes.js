@@ -151,6 +151,16 @@ export default async function handler(req, res) {
     if (isNaN(count) || count < 0) { res.status(400).json({ error: "count must be non-negative integer" }); return; }
     var cost = body.cost === undefined || body.cost === null || body.cost === "" ? null : parseFloat(body.cost);
     if (cost !== null && (isNaN(cost) || cost < 0)) { res.status(400).json({ error: "cost must be non-negative number" }); return; }
+    // Optional uniqueUsers field (2026-08): the count of DISTINCT
+    // users who fired the qualifying event, versus `count` which is
+    // the total EVENT count. Sourced from Meta Events Manager's
+    // Dataset UI where CAPI events show both totals side by side.
+    // Recording both lets the dashboard reconcile inflated event
+    // counts (one user firing multiple qualifying events per
+    // conversation) against the real number of unique qualified
+    // people — e.g. "975 events / 587 unique users" for Learnalot.
+    var uniqueUsers = body.uniqueUsers === undefined || body.uniqueUsers === null || body.uniqueUsers === "" ? null : parseInt(body.uniqueUsers, 10);
+    if (uniqueUsers !== null && (isNaN(uniqueUsers) || uniqueUsers < 0)) { res.status(400).json({ error: "uniqueUsers must be non-negative integer" }); return; }
     var campaignHint = String(body.campaignHint || "").trim().slice(0, 200);
     var note = String(body.note || "").trim().slice(0, 500);
 
@@ -163,7 +173,8 @@ export default async function handler(req, res) {
         if (arr[u].id === id) {
           arr[u] = Object.assign({}, arr[u], {
             label: label, month: month, count: count,
-            cost: cost, campaignHint: campaignHint, note: note,
+            cost: cost, uniqueUsers: uniqueUsers,
+            campaignHint: campaignHint, note: note,
             updatedBy: principal.email || principal.sub || "",
             updatedAt: new Date(Date.now()).toISOString()
           });
@@ -173,7 +184,7 @@ export default async function handler(req, res) {
       }
       if (!found) arr.push({
         id: id, label: label, month: month, count: count, cost: cost,
-        campaignHint: campaignHint, note: note,
+        uniqueUsers: uniqueUsers, campaignHint: campaignHint, note: note,
         createdBy: principal.email || principal.sub || "",
         createdAt: new Date(Date.now()).toISOString()
       });
@@ -181,7 +192,7 @@ export default async function handler(req, res) {
       arr.push({
         id: newId(),
         label: label, month: month, count: count, cost: cost,
-        campaignHint: campaignHint, note: note,
+        uniqueUsers: uniqueUsers, campaignHint: campaignHint, note: note,
         createdBy: principal.email || principal.sub || "",
         createdAt: new Date(Date.now()).toISOString()
       });
