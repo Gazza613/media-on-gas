@@ -7375,6 +7375,14 @@ export default function MediaOnGas(){
             var _msgConvOf=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_conversation_started_7d");};
             var _msgFirstReplyOf=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_first_reply");};
             var _msgEngaged3Of=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_user_depth_3_message_send");};
+            // Additional Meta messaging counters exposed on the Learnalot
+            // BOFU raw-counter table (2026-08). Kept as separate helpers
+            // so the funnel above and the raw table below draw from the
+            // same source and stay in sync.
+            var _msgEngaged2Of=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_user_depth_2_message_send");};
+            var _msgDepth5Of=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_user_depth_5_message_send");};
+            var _msgConnectionOf=function(camp){return _maxActionByType(camp,"onsite_conversion.total_messaging_connection");};
+            var _msgRepliedOf=function(camp){return _maxActionByType(camp,"onsite_conversion.messaging_conversation_replied_7d");};
             var _isWhatsAppCamp=function(name){
               var s=String(name||"").toLowerCase();
               return s.indexOf("_wapp_")>=0||s.indexOf(" wapp ")>=0||s.indexOf("|wapp")>=0
@@ -7425,9 +7433,13 @@ export default function MediaOnGas(){
                 // engaged 3+ messages. Attached to the WhatsApp objective
                 // record so the Objective Highlights tile can show the
                 // reply / engaged rates alongside the headline count.
-                if(!objectives4[obj].wa)objectives4[obj].wa={firstReplies:0,engaged3:0};
+                if(!objectives4[obj].wa)objectives4[obj].wa={firstReplies:0,engaged3:0,engaged2:0,depth5Thresholds:0,connections:0,replied7d:0};
                 objectives4[obj].wa.firstReplies+=_msgFirstReplyOf(camp);
                 objectives4[obj].wa.engaged3+=_msgEngaged3Of(camp);
+                objectives4[obj].wa.engaged2+=_msgEngaged2Of(camp);
+                objectives4[obj].wa.depth5Thresholds+=_msgDepth5Of(camp);
+                objectives4[obj].wa.connections+=_msgConnectionOf(camp);
+                objectives4[obj].wa.replied7d+=_msgRepliedOf(camp);
               }
               else if(obj==="Followers & Likes"){result=parseFloat(camp.pageLikes||0)+parseFloat(camp.follows||0);if(result===0&&camp.platform==="Instagram"){var igFL1=findIgGrowth(camp.campaignName,pages);if(igFL1>0)result=igFL1;}}
               else if(obj==="Community Reach"){result=parseFloat(camp.reach||0);}
@@ -7959,10 +7971,52 @@ export default function MediaOnGas(){
                     mkTile("wa-cost-engaged", "Cost per Engaged 3+",  waCostPerEngaged>0?fR(waCostPerEngaged):"—",P.mint, "spend / conversations reaching 3+ messages"),
                     mkTile("wa-engage-rate",  "Engagement Rate",      waEngagementRate>0?waEngagementRate.toFixed(2)+"%":"—",P.cyan, fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages")
                   ]:[];
+                  // ── Row 4: Meta Raw Messaging Counters (temporary
+                  // transparency panel added 2026-08 while the CAPI
+                  // over-firing on Learnalot's WhatsApp bot is being
+                  // audited; each qualified user currently triggers
+                  // multiple CAPI events, inflating the leads count vs
+                  // Meta's messaging depth counters). Surfaces every
+                  // messaging counter Meta returns so the team can
+                  // reconcile against their bot logs.
+                  var waConn=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.connections||0):0;
+                  var waEngaged2=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.engaged2||0):0;
+                  var waDepth5=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.depth5Thresholds||0):0;
+                  var waReplied7d=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.replied7d||0):0;
+                  var rawCounters=[
+                    {label:"Total Messaging Connections",val:waConn,          note:"New user-business connections, no window cap"},
+                    {label:"Conversations Started (7d)", val:waConversations, note:"Conversations attributed within 7 days of ad click"},
+                    {label:"First Reply Sent",           val:waFirstReplies,  note:"User sent first response to the bot"},
+                    {label:"2+ Messages Exchanged",      val:waEngaged2,      note:"Users who reached the 2-message depth threshold"},
+                    {label:"3+ Messages Exchanged",      val:waEngaged3,      note:"Users who reached the 3-message depth threshold"},
+                    {label:"5+ Message Thresholds Hit",  val:waDepth5,        note:"Counts each 5-message threshold cross, NOT unique users"},
+                    {label:"Conversation Replied (7d)",  val:waReplied7d,     note:"Meta counter that rarely fires reliably"}
+                  ];
+                  var hasAnyRawCounter=rawCounters.some(function(r){return r.val>0;});
+                  var rawCountersBlock=hasAnyRawCounter?<div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 20px 18px",border:"1px solid "+P.rule,borderLeft:"3px solid "+P.cyan,marginTop:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12,flexWrap:"wrap",gap:8}}>
+                      <div style={{fontSize:10,fontWeight:800,color:P.cyan,fontFamily:ff,letterSpacing:1.5,textTransform:"uppercase"}}>Meta Messaging Raw Counters</div>
+                      <div style={{fontSize:10,color:P.caption,fontFamily:fm,letterSpacing:0.3}}>every messaging metric Meta returns, for reconciliation</div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1.4fr 90px 2fr",gap:8,fontSize:11,fontFamily:fm}}>
+                      <div style={{color:P.label,fontWeight:800,fontSize:9,letterSpacing:1.2,textTransform:"uppercase",paddingBottom:6,borderBottom:"1px solid "+P.rule}}>Metric</div>
+                      <div style={{color:P.label,fontWeight:800,fontSize:9,letterSpacing:1.2,textTransform:"uppercase",paddingBottom:6,borderBottom:"1px solid "+P.rule,textAlign:"right"}}>Value</div>
+                      <div style={{color:P.label,fontWeight:800,fontSize:9,letterSpacing:1.2,textTransform:"uppercase",paddingBottom:6,borderBottom:"1px solid "+P.rule}}>Note</div>
+                      {rawCounters.map(function(r,i){var last=i===rawCounters.length-1;var bb=last?"none":"1px dotted "+P.rule;return [
+                        <div key={r.label+"-m"} style={{color:P.txt,fontWeight:700,padding:"7px 0",borderBottom:bb}}>{r.label}</div>,
+                        <div key={r.label+"-v"} style={{color:r.val>0?P.txt:P.caption,fontWeight:900,padding:"7px 0",borderBottom:bb,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmt(r.val)}</div>,
+                        <div key={r.label+"-n"} style={{color:P.caption,fontSize:10,padding:"7px 0",borderBottom:bb,lineHeight:1.4}}>{r.note}</div>
+                      ];})}
+                    </div>
+                    <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.5}}>
+                      <strong style={{color:P.txt,fontWeight:800}}>Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users. CAPI Qualified Leads above are captured independently by the bot and reconcile against the "Unique Users" column in Meta Events Manager, not against these depth counters.
+                    </div>
+                  </div>:null;
                   return <div style={{marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>{summaryTiles}</div>
                     {funnelBlock}
                     {efficiencyTiles.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginTop:14}}>{efficiencyTiles}</div>}
+                    {rawCountersBlock}
                   </div>;
                 })()}
                 {totalCards>0&&<div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>

@@ -283,7 +283,7 @@ function aggregateBook(campaigns, pages) {
   // campaign's actions array (same 7d window Meta uses in Ads
   // Manager). Consumed by renderBofuSection to emit the WhatsApp PSI
   // Leads sub when the report is for Learnalot.
-  var whatsapp = { spend: 0, impressions: 0, clicks: 0, reach: 0, conversations: 0, firstReplies: 0, engaged3: 0, campaignCount: 0 };
+  var whatsapp = { spend: 0, impressions: 0, clicks: 0, reach: 0, conversations: 0, firstReplies: 0, engaged3: 0, engaged2: 0, depth5Thresholds: 0, connections: 0, replied7d: 0, campaignCount: 0 };
   var _isWApp = function(name) {
     var s = String(name || "").toLowerCase();
     return s.indexOf("_wapp_") >= 0 || s.indexOf("wapp_") >= 0 || s.indexOf("_whatsapp_") >= 0 || s.indexOf(" whatsapp ") >= 0 || s.indexOf("_wa_") >= 0;
@@ -308,6 +308,10 @@ function aggregateBook(campaigns, pages) {
     whatsapp.conversations += _maxActionByType(c.actions, "onsite_conversion.messaging_conversation_started_7d");
     whatsapp.firstReplies += _maxActionByType(c.actions, "onsite_conversion.messaging_first_reply");
     whatsapp.engaged3 += _maxActionByType(c.actions, "onsite_conversion.messaging_user_depth_3_message_send");
+    whatsapp.engaged2 += _maxActionByType(c.actions, "onsite_conversion.messaging_user_depth_2_message_send");
+    whatsapp.depth5Thresholds += _maxActionByType(c.actions, "onsite_conversion.messaging_user_depth_5_message_send");
+    whatsapp.connections += _maxActionByType(c.actions, "onsite_conversion.total_messaging_connection");
+    whatsapp.replied7d += _maxActionByType(c.actions, "onsite_conversion.messaging_conversation_replied_7d");
     whatsapp.campaignCount += 1;
   });
   book.whatsapp = whatsapp;
@@ -886,7 +890,50 @@ function renderBofuSection(opts) {
         + _tile("Engagement Rate",       _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan)
         + '</div>';
     }
-    _octet = _octet + _funnelBlock + _efficiencyBlock;
+
+    // ── Row 4: Meta Messaging Raw Counters ─────────────────────
+    // Full transparency table (2026-08 addition) mirroring the
+    // dashboard's raw-counters panel. Surfaces every messaging
+    // counter Meta returns so the reader can reconcile the CAPI
+    // Qualified Leads count against Meta's messaging depth data.
+    var _rawCounters = [
+      { label: "Total Messaging Connections", val: (wa && wa.connections)      || 0, note: "New user-business connections, no window cap" },
+      { label: "Conversations Started (7d)",  val: _waConv,                          note: "Conversations attributed within 7 days of ad click" },
+      { label: "First Reply Sent",            val: (wa && wa.firstReplies)     || 0, note: "User sent first response to the bot" },
+      { label: "2+ Messages Exchanged",       val: (wa && wa.engaged2)         || 0, note: "Users who reached the 2-message depth threshold" },
+      { label: "3+ Messages Exchanged",       val: _waEng3,                          note: "Users who reached the 3-message depth threshold" },
+      { label: "5+ Message Thresholds Hit",   val: (wa && wa.depth5Thresholds) || 0, note: "Counts each 5-message threshold cross, NOT unique users" },
+      { label: "Conversation Replied (7d)",   val: (wa && wa.replied7d)        || 0, note: "Meta counter that rarely fires reliably" }
+    ];
+    var _hasAnyRaw = _rawCounters.some(function(r) { return r.val > 0; });
+    var _rawBlock = "";
+    if (_hasAnyRaw) {
+      var _rawRows = _rawCounters.map(function(r) {
+        return `<tr>
+          <td style="padding:3mm 3mm 3mm 0;font-size:8.5pt;color:var(--rp-fg);font-weight:700;border-top:1px dotted var(--rp-line);">${escapeHtmlLocal(r.label)}</td>
+          <td style="padding:3mm 3mm;font-size:9pt;color:${r.val > 0 ? "var(--rp-fg)" : "var(--rp-fg-mute)"};font-weight:900;font-variant-numeric:tabular-nums;text-align:right;border-top:1px dotted var(--rp-line);white-space:nowrap;">${fmtNum(r.val)}</td>
+          <td style="padding:3mm 0 3mm 3mm;font-size:7.5pt;color:var(--rp-fg-mute);line-height:1.4;border-top:1px dotted var(--rp-line);">${escapeHtmlLocal(r.note)}</td>
+        </tr>`;
+      }).join("");
+      _rawBlock = `<div class="rp-bofu-sub" style="page-break-inside:avoid;margin-top:4mm;">
+        <div class="rp-bofu-sub-head" style="display:flex;justify-content:space-between;align-items:baseline;">
+          <div class="rp-bofu-sub-title" style="color:${COL.cyan};">Meta Messaging Raw Counters</div>
+          <div style="font-size:8pt;color:var(--rp-fg-dim);">every messaging metric Meta returns, for reconciliation</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-top:2mm;">
+          <thead><tr>
+            <th style="text-align:left;font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:var(--rp-fg-mute);font-weight:900;padding:0 3mm 2mm 0;border-bottom:1px solid var(--rp-line);">Metric</th>
+            <th style="text-align:right;font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:var(--rp-fg-mute);font-weight:900;padding:0 3mm 2mm 3mm;border-bottom:1px solid var(--rp-line);">Value</th>
+            <th style="text-align:left;font-size:7pt;letter-spacing:1.5px;text-transform:uppercase;color:var(--rp-fg-mute);font-weight:900;padding:0 0 2mm 3mm;border-bottom:1px solid var(--rp-line);">Note</th>
+          </tr></thead>
+          <tbody>${_rawRows}</tbody>
+        </table>
+        <div style="margin-top:3mm;padding-top:2.5mm;border-top:1px solid var(--rp-line);font-size:7.5pt;color:var(--rp-fg-mute);line-height:1.5;">
+          <strong style="color:var(--rp-fg);font-weight:800;">Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users. CAPI Qualified Leads above are captured independently by the bot and reconcile against the "Unique Users" column in Meta Events Manager, not against these depth counters.
+        </div>
+      </div>`;
+    }
+    _octet = _octet + _funnelBlock + _efficiencyBlock + _rawBlock;
 
     // ── COST PER LEAD BY PATH — mini horizontal bar comparison ────
     var _barCap = Math.max(_formCpl, _waCpl) || 1;
