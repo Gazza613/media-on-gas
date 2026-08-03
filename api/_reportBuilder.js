@@ -810,16 +810,80 @@ function renderBofuSection(opts) {
       rose: "#F43F5E", orchid: "#A855F7", solar: "#FFAA00",
       mint: "#34D399", cyan: "#0891B2", ember: "#F96203"
     };
+    // Mirror the dashboard's 2026-08 Learnalot BOFU redesign:
+    //   1. Blended leads summary (4 tiles, headline)
+    //   2. WhatsApp Message Funnel (staged horizontal bars)
+    //   3. Efficiency tiles (Cost per Conv, Cost per Engaged 3+,
+    //      Engagement Rate)
+    // Qualified Leads deliberately live OUTSIDE the funnel because
+    // CAPI events (custom outcomes) aren't strictly a subset of Meta's
+    // 7-day messaging_conversation_started_7d counter — they use a
+    // different attribution window and a different data source, so
+    // showing them as a funnel stage produced misleading >100% rates.
+    var _waReach = wa ? (wa.reach || 0) : 0;
+    var _waFirstReplies = wa ? (wa.firstReplies || 0) : 0;
+    var _waCostPerConv = _waConv > 0 && _waSpend > 0 ? (_waSpend / _waConv) : 0;
+    var _waCostPerEng = _waEng3 > 0 && _waSpend > 0 ? (_waSpend / _waEng3) : 0;
+
+    // ── Row 1: Blended leads summary (4 tiles) ──────────────────
     var _octet = '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);">'
-      + _tile("PSI Form Leads",       fmtNum(formLeadsCount),               "Meta lead-form captures",       COL.rose)
-      + _tile("CPL Form Leads",       _formCpl > 0 ? fmtR(_formCpl) : "&mdash;", "form-campaign spend / leads", COL.rose)
-      + _tile("WhatsApp PSI Leads",   fmtNum(waLeadTotal),                  "CAPI QualifiedLead events",     COL.orchid)
-      + _tile("CPL WhatsApp Leads",   _waCpl > 0 ? fmtR(_waCpl) : "&mdash;", "WhatsApp spend / leads",       COL.orchid)
-      + _tile("Total Leads (blended)",fmtNum(_totalLeads),                  fmtNum(formLeadsCount) + " form + " + fmtNum(waLeadTotal) + " WhatsApp" + (_blendedCpl > 0 ? " &middot; " + fmtR(_blendedCpl) + " blended CPL" : ""), COL.solar)
-      + _tile("WhatsApp Conversations",fmtNum(_waConv),                     "conversations opened (7d)",     COL.mint)
-      + _tile("Engaged 3+ Messages",  fmtNum(_waEng3),                      _waConv > 0 ? _eng3Rate.toFixed(2) + "% of conversations" : "3+ message exchanges", COL.mint)
-      + _tile("Conversion Ratio",     _convToLead > 0 ? _convToLead.toFixed(2) + "%" : "&mdash;", waLeadTotal > 0 && _waConv > 0 ? fmtNum(waLeadTotal) + " of " + fmtNum(_waConv) + " converted" : "conversations &rarr; leads", COL.cyan)
+      + _tile("Total Leads (Blended)",fmtNum(_totalLeads),                  fmtNum(formLeadsCount) + " form + " + fmtNum(waLeadTotal) + " WhatsApp", COL.solar)
+      + _tile("Blended CPL",          _blendedCpl > 0 ? fmtR(_blendedCpl) : "&mdash;", "combined spend / total leads",          COL.solar)
+      + _tile("PSI Form Leads",       fmtNum(formLeadsCount),               _formCpl > 0 ? fmtR(_formCpl) + " per form lead" : "Meta lead-form captures", COL.rose)
+      + _tile("WhatsApp Leads",       fmtNum(waLeadTotal),                  _waCpl > 0 ? fmtR(_waCpl) + " per WhatsApp lead" : "CAPI QualifiedLead events", COL.orchid)
       + '</div>';
+
+    // ── Row 2: WhatsApp Message Funnel (staged bars) ────────────
+    // Reach -> Conversations -> First Reply -> Engaged 3+. Skips
+    // stages with zero data so the funnel doesn't show ghost columns.
+    // All four stages come from Meta's internally-consistent messaging
+    // attribution so the % cascade never exceeds 100.
+    var _funnelStages = [];
+    if (_waReach > 0) _funnelStages.push({ label: "Reach",                 val: _waReach,       sub: "unique people who saw the ad" });
+    _funnelStages.push({                     label: "Conversations Opened",val: _waConv,        sub: "tapped WhatsApp to start a chat" });
+    if (_waFirstReplies > 0) _funnelStages.push({ label: "First Reply Sent",val: _waFirstReplies,sub: "got past the initial greeting" });
+    _funnelStages.push({                     label: "Engaged 3+ Messages", val: _waEng3,        sub: "three or more messages exchanged" });
+    var _fTop = _funnelStages.length ? _funnelStages[0].val : 0;
+    var _funnelBlock = "";
+    if (_funnelStages.length >= 2 && _fTop > 0) {
+      var _fRows = _funnelStages.map(function(st, i) {
+        var pctOfTop = _fTop > 0 ? (st.val / _fTop * 100) : 0;
+        var prevVal = i > 0 ? _funnelStages[i - 1].val : 0;
+        var pctOfPrev = prevVal > 0 ? (st.val / prevVal * 100) : null;
+        var prevColor = pctOfPrev === null ? COL.mint : (pctOfPrev >= 50 ? COL.mint : (pctOfPrev >= 25 ? COL.solar : COL.rose));
+        var prevLabel = pctOfPrev === null ? "starting point" : (pctOfPrev.toFixed(2) + "% of previous");
+        return `<div style="display:grid;grid-template-columns:50mm 1fr 45mm;align-items:center;gap:4mm;margin-bottom:2.5mm;">
+          <div style="font-size:9pt;font-weight:800;color:var(--rp-fg);letter-spacing:0.3px;">${escapeHtmlLocal(st.label)}</div>
+          <div style="position:relative;height:6mm;background:rgba(255,255,255,0.05);border-radius:1.5mm;overflow:hidden;">
+            <div style="position:absolute;inset:0 auto 0 0;width:${Math.max(pctOfTop, 2).toFixed(1)}%;background:linear-gradient(90deg,${COL.mint},${COL.mint}70);border-radius:1.5mm;display:flex;align-items:center;padding-left:2.5mm;">
+              <span style="font-size:9pt;font-weight:900;color:#062014;font-variant-numeric:tabular-nums;">${fmtNum(st.val)}</span>
+            </div>
+          </div>
+          <div style="font-size:7.5pt;color:var(--rp-fg-dim);text-align:right;line-height:1.35;">
+            <div style="color:${prevColor};font-weight:800;font-size:8pt;">${prevLabel}</div>
+            <div style="margin-top:0.5mm;">${escapeHtmlLocal(st.sub)}</div>
+          </div>
+        </div>`;
+      }).join("");
+      _funnelBlock = `<div class="rp-bofu-sub" style="page-break-inside:avoid;margin-top:4mm;">
+        <div class="rp-bofu-sub-head" style="display:flex;justify-content:space-between;align-items:baseline;">
+          <div class="rp-bofu-sub-title" style="color:${COL.mint};">WhatsApp Message Funnel</div>
+          <div style="font-size:8pt;color:var(--rp-fg-dim);">drop-off between stages, engagement quality signal</div>
+        </div>
+        <div style="margin-top:3mm;">${_fRows}</div>
+      </div>`;
+    }
+
+    // ── Row 3: WhatsApp efficiency tiles (3) ────────────────────
+    var _efficiencyBlock = "";
+    if (_waConv > 0 || _waEng3 > 0) {
+      _efficiencyBlock = '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(3,1fr);margin-top:3mm;">'
+        + _tile("Cost per Conversation", _waCostPerConv > 0 ? fmtR(_waCostPerConv) : "&mdash;", "WhatsApp spend / conversations opened", COL.mint)
+        + _tile("Cost per Engaged 3+",   _waCostPerEng > 0 ? fmtR(_waCostPerEng) : "&mdash;", "spend / conversations reaching 3+ messages", COL.mint)
+        + _tile("Engagement Rate",       _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan)
+        + '</div>';
+    }
+    _octet = _octet + _funnelBlock + _efficiencyBlock;
 
     // ── COST PER LEAD BY PATH — mini horizontal bar comparison ────
     var _barCap = Math.max(_formCpl, _waCpl) || 1;
