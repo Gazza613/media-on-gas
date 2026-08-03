@@ -7875,6 +7875,20 @@ export default function MediaOnGas(){
                 return <div style={{background:P.glass,borderRadius:18,padding:"6px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>
                 {secHead(P.rose,"OBJECTIVE HIGHLIGHTS (BOTTOM OF THE FUNNEL)",Ic.target(P.rose,18))}
                 {showLearnalotOctet&&(function(){
+                  // Learnalot BOFU layout (2026-08 redesign per client
+                  // feedback): the old 8-tile octet mixed two-path lead
+                  // totals with WhatsApp funnel stages on one row and
+                  // included a misleading "Conversion Ratio" that read
+                  // >100% (CAPI events > 7d conv counter). Replaced with
+                  // three logically separated blocks:
+                  //   1. Blended leads summary (headline for both paths)
+                  //   2. WhatsApp message funnel (Reach -> Conv -> First
+                  //      Reply -> Engaged 3+), staged bars showing drop-
+                  //      off between each stage. Qualified leads sit
+                  //      OUTSIDE the funnel because CAPI fires
+                  //      independently of the 7-day conversation counter.
+                  //   3. WhatsApp efficiency tiles: Cost per Conv, Cost
+                  //      per Engaged, Engagement Rate.
                   var mkTile=function(k,label,valStr,accent,caption){
                     return <div key={k} style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 18px 16px",border:"1px solid "+accent+"25",borderLeft:"3px solid "+accent}}>
                       <div style={{fontSize:10,fontWeight:800,color:accent,fontFamily:ff,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>{label}</div>
@@ -7882,17 +7896,65 @@ export default function MediaOnGas(){
                       <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.4}}>{caption}</div>
                     </div>;
                   };
-                  var tiles=[
-                    mkTile("psi-form",     "PSI Form Leads",       fmt(formLeadsCount),            P.rose,   "Meta lead-form captures"),
-                    mkTile("cpl-form",     "CPL Form Leads",       formCpl>0?fR(formCpl):"—",      P.rose,   "form-campaign spend / leads"),
-                    mkTile("wa-leads",     "WhatsApp PSI Leads",   fmt(waLeadsCount),              P.orchid, "CAPI QualifiedLead events"),
-                    mkTile("wa-cpl",       "CPL WhatsApp Leads",   waCpl>0?fR(waCpl):"—",          P.orchid, "WhatsApp spend / leads"),
-                    mkTile("total-leads",  "Total Leads (blended)",fmt(totalLeadsCount),           P.solar,  fmt(formLeadsCount)+" form + "+fmt(waLeadsCount)+" WhatsApp"+(blendedCpl>0?" · "+fR(blendedCpl)+" blended CPL":"")),
-                    mkTile("wa-conv",      "WhatsApp Conversations",fmt(waConversations),          P.mint,   "conversations opened (7d)"),
-                    mkTile("wa-engaged",   "Engaged 3+ Messages",  fmt(waEngaged3),                P.mint,   waConversations>0?(waEngaged3/waConversations*100).toFixed(2)+"% of conversations":"3+ message exchanges"),
-                    mkTile("wa-conv-rate", "Conversion Ratio",     convToLeadRate>0?convToLeadRate.toFixed(2)+"%":"—",P.cyan,waLeadsCount>0&&waConversations>0?fmt(waLeadsCount)+" of "+fmt(waConversations)+" converted":"conversations → qualified leads")
+                  // ── Row 1: Blended leads summary ────────────────────
+                  var summaryTiles=[
+                    mkTile("total-leads",  "Total Leads (Blended)",fmt(totalLeadsCount),           P.solar,  fmt(formLeadsCount)+" form + "+fmt(waLeadsCount)+" WhatsApp"),
+                    mkTile("blended-cpl",  "Blended CPL",          blendedCpl>0?fR(blendedCpl):"—",P.solar,  "combined spend / total leads"),
+                    mkTile("psi-form",     "PSI Form Leads",       fmt(formLeadsCount),            P.rose,   formCpl>0?fR(formCpl)+" per form lead":"Meta lead-form captures"),
+                    mkTile("wa-leads",     "WhatsApp Leads",       fmt(waLeadsCount),              P.orchid, waCpl>0?fR(waCpl)+" per WhatsApp lead":"CAPI QualifiedLead events")
                   ];
-                  return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>{tiles}</div>;
+                  // ── Row 2: WhatsApp message funnel ──────────────────
+                  // Reach → Conversations → First Reply → Engaged 3+.
+                  // Widths scale to the top-of-funnel value so drop-off
+                  // reads visually. Skip stages with zero data so the
+                  // funnel doesn't show ghost columns.
+                  var waReach=waObjRec?parseFloat(waObjRec.reach||0):0;
+                  var waFirstReplies=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.firstReplies||0):0;
+                  var funnelStages=[];
+                  if(waReach>0)funnelStages.push({key:"reach",label:"Reach",val:waReach,sub:"unique people who saw the ad"});
+                  funnelStages.push({key:"conv",label:"Conversations Opened",val:waConversations,sub:"tapped WhatsApp to start a chat"});
+                  if(waFirstReplies>0)funnelStages.push({key:"reply",label:"First Reply Sent",val:waFirstReplies,sub:"got past the initial greeting"});
+                  funnelStages.push({key:"eng",label:"Engaged 3+ Messages",val:waEngaged3,sub:"three or more messages exchanged"});
+                  var funnelTop=funnelStages.length?funnelStages[0].val:0;
+                  var funnelBlock=funnelStages.length>=2?<div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 20px 18px",border:"1px solid "+P.mint+"25",borderLeft:"3px solid "+P.mint,marginTop:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:14}}>
+                      <div style={{fontSize:10,fontWeight:800,color:P.mint,fontFamily:ff,letterSpacing:1.5,textTransform:"uppercase"}}>WhatsApp Message Funnel</div>
+                      <div style={{fontSize:10,color:P.caption,fontFamily:fm,letterSpacing:0.3}}>drop-off between stages, engagement quality signal</div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {funnelStages.map(function(st,i){
+                        var pctOfTop=funnelTop>0?(st.val/funnelTop*100):0;
+                        var prevVal=i>0?funnelStages[i-1].val:0;
+                        var pctOfPrev=prevVal>0?(st.val/prevVal*100):null;
+                        return <div key={st.key} style={{display:"grid",gridTemplateColumns:"180px 1fr 160px",alignItems:"center",gap:14}}>
+                          <div style={{fontSize:11,color:P.txt,fontWeight:800,fontFamily:fm,letterSpacing:0.5}}>{st.label}</div>
+                          <div style={{position:"relative",height:26,background:"rgba(255,255,255,0.04)",borderRadius:6,overflow:"hidden"}}>
+                            <div style={{position:"absolute",inset:"0 auto 0 0",width:Math.max(pctOfTop,2)+"%",background:"linear-gradient(90deg,"+P.mint+","+P.mint+"70)",borderRadius:6,display:"flex",alignItems:"center",paddingLeft:10}}>
+                              <span style={{fontSize:12,fontWeight:900,color:"#062014",fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{fmt(st.val)}</span>
+                            </div>
+                          </div>
+                          <div style={{fontSize:10,color:P.caption,fontFamily:fm,textAlign:"right",lineHeight:1.35}}>
+                            {pctOfPrev!==null?<div style={{color:pctOfPrev>=50?P.mint:pctOfPrev>=25?P.solar:P.rose,fontWeight:800,fontSize:11}}>{pctOfPrev.toFixed(2)+"% of previous"}</div>:<div style={{color:P.mint,fontWeight:800,fontSize:11}}>starting point</div>}
+                            <div style={{marginTop:2}}>{st.sub}</div>
+                          </div>
+                        </div>;
+                      })}
+                    </div>
+                  </div>:null;
+                  // ── Row 3: WhatsApp efficiency tiles ────────────────
+                  var waCostPerConv=waConversations>0&&waSpend>0?(waSpend/waConversations):0;
+                  var waCostPerEngaged=waEngaged3>0&&waSpend>0?(waSpend/waEngaged3):0;
+                  var waEngagementRate=waConversations>0?(waEngaged3/waConversations*100):0;
+                  var efficiencyTiles=(waConversations>0||waEngaged3>0)?[
+                    mkTile("wa-cost-conv",    "Cost per Conversation",waCostPerConv>0?fR(waCostPerConv):"—",   P.mint, "WhatsApp spend / conversations opened"),
+                    mkTile("wa-cost-engaged", "Cost per Engaged 3+",  waCostPerEngaged>0?fR(waCostPerEngaged):"—",P.mint, "spend / conversations reaching 3+ messages"),
+                    mkTile("wa-engage-rate",  "Engagement Rate",      waEngagementRate>0?waEngagementRate.toFixed(2)+"%":"—",P.cyan, fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages")
+                  ]:[];
+                  return <div style={{marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>{summaryTiles}</div>
+                    {funnelBlock}
+                    {efficiencyTiles.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginTop:14}}>{efficiencyTiles}</div>}
+                  </div>;
                 })()}
                 {totalCards>0&&<div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(4,totalCards)+",1fr)",gap:14,marginBottom:20}}>
                   {filteredObjKeys.map(function(objName){
