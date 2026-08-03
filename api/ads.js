@@ -6,6 +6,7 @@ import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { extractLeadCount } from "./_pulseShared.js";
 import { normalizeProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
 import { getThumbOverrides } from "./_thumbOverrides.js";
+import { isClosedPeriod, getSnapshot, setSnapshot, clearSnapshot } from "./_snapshotCache.js";
 
 function overrideFor(overridesMap, campaignId) {
   if (!overridesMap || !campaignId) return null;
@@ -177,38 +178,57 @@ export default async function handler(req, res) {
   // Cache key includes region so per-province and blended responses
   // don't collide (mirrors api/campaigns.js — same-cause fix).
   var cacheKey = from + "|" + to + (region ? "|r:" + region : "");
-  var cached = (debugFollows || freshOverride) ? null : adsResponseCache[cacheKey];
-  if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
-    var pCached = req.authPrincipal || { role: "admin" };
-    if (pCached.role === "client") {
-      var cIds = (pCached.allowedCampaignIds || []).map(String);
-      // Strict ID-only match. Tokens carry the dashboard's suffixed form
-      // (e.g. `120247_facebook`, `google_12345`) but the ad rows in the
-      // cache carry the raw Meta / TikTok / Google numeric id, so the
-      // filter must strip both _facebook/_instagram and google_ on both
-      // sides of the comparison. Without the google_ strip every Google
-      // ad was filtered out on cache-hit responses (the fresh-fetch path
-      // at the bottom of this file already does this — they must match).
+  // Helper to serve a cached / snapshot ads response with the same
+  // client-scope filter that would apply to a live response. Same
+  // pattern as api/campaigns.js — kept local because the id-scoping
+  // rules (Meta suffix + google_ prefix + raw fallback) are ads-
+  // specific.
+  var serveCachedAds = function(data) {
+    var pC = req.authPrincipal || { role: "admin" };
+    if (pC.role === "client") {
+      var cIds = (pC.allowedCampaignIds || []).map(String);
       var allowed = {};
       cIds.forEach(function(x) {
         var s = String(x);
         allowed[s] = true;
         allowed[s.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "")] = true;
       });
-      var cFiltered = (cached.data.ads || []).filter(function(a) {
+      var cFiltered = (data.ads || []).filter(function(a) {
         var cid = String(a.campaignId || "");
         var rawCid = cid.replace(/_(facebook|instagram)$/, "").replace(/^google_/, "");
         return allowed[cid] === true || allowed[rawCid] === true;
       });
-      var cFilteredNoImps = (cached.data.noImpressionAds || []).filter(function(a) {
+      var cFilteredNoImps = (data.noImpressionAds || []).filter(function(a) {
         var cid = String(a.campaign_id || "");
         return allowed[cid] === true;
       });
       res.status(200).json({ ads: cFiltered, total: cFiltered.length, noImpressionAds: cFilteredNoImps });
     } else {
-      res.status(200).json(cached.data);
+      res.status(200).json(data);
     }
+  };
+  var cached = (debugFollows || freshOverride) ? null : adsResponseCache[cacheKey];
+  if (cached && Date.now() - cached.ts < ADS_RESPONSE_TTL_MS) {
+    serveCachedAds(cached.data);
     return;
+  }
+  // Closed-period snapshot check — same mechanism as api/campaigns.js.
+  // If the requested `to` date is more than 3 days in the past, we
+  // serve the ads response from Redis instead of re-hitting Meta /
+  // TikTok / Google. Warms the in-memory cache too.
+  if (!freshOverride && !debugFollows && isClosedPeriod(to)) {
+    var snap = await getSnapshot("ads|" + cacheKey);
+    if (snap) {
+      console.log("[ads] snapshot hit", { from: from, to: to, region: region || "" });
+      adsResponseCache[cacheKey] = { data: snap, ts: Date.now() };
+      serveCachedAds(snap);
+      return;
+    }
+  }
+  // ?fresh=1 evicts the snapshot so a manual refresh doesn't fetch
+  // live only to be shadowed by a stale snapshot next time.
+  if (freshOverride && isClosedPeriod(to)) {
+    clearSnapshot("ads|" + cacheKey);
   }
 
   var allAds = [];
@@ -1981,6 +2001,12 @@ export default async function handler(req, res) {
   // Cache the unfiltered (admin) response keyed by date range. Client-scoped filtering
   // happens after the cache read on every request so tokens cannot see wider data.
   adsResponseCache[cacheKey] = { data: response, ts: Date.now() };
+  // Closed-period snapshot write. Only persist to Redis when the range
+  // is fully settled — current-period fetches are still short-TTL only
+  // so mid-day delivery updates surface within 15 min. Fire-and-forget.
+  if (isClosedPeriod(to)) {
+    setSnapshot("ads|" + cacheKey, response);
+  }
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
     var ids = (principal.allowedCampaignIds || []).map(String);

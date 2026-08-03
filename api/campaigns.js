@@ -5,6 +5,7 @@ import { getOverrides, displayToCanonical } from "./_objectiveOverrides.js";
 import { redisGetJson, redisSetJson, isLeadAction, isAppInstallAction, isPageLikeAction, isLandingPageViewAction } from "./_pulseShared.js";
 import { getPageLikeMaps } from "./_pageLikeOpt.js";
 import { normalizeProvince, googleGeoResourceForProvince, tiktokProvinceIdForProvince } from "./_provinces.js";
+import { isClosedPeriod, getSnapshot, setSnapshot, clearSnapshot } from "./_snapshotCache.js";
 
 // Helper for classifier call sites. Resolves a manual override (set via
 // Settings → Objectives Audit) ahead of name + API logic. Returns the
@@ -668,23 +669,46 @@ export default async function handler(req, res) {
   // "All (blended)" cached response for the same date range and the
   // tiles never changed.
   var cacheKey = CAMPAIGNS_CACHE_VERSION + "|" + from + "|" + to + "|ov:" + overrideSig + (region ? "|r:" + region : "");
-  var cached = req.query.fresh === "1" ? null : campaignsResponseCache[cacheKey];
-  if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
-    var pCached = req.authPrincipal || { role: "admin" };
-    if (pCached.role === "client") {
-      // Strict exact-match on suffixed campaignId only. No raw-ID fallback
-      // (which pulled the other publisher variant) and no name fallback
-      // (which could cross-match same-named campaigns across clients).
-      // Tokens are issued with suffixed IDs so this is lossless.
-      var cIdSet = {}; (pCached.allowedCampaignIds || []).forEach(function(x) { cIdSet[String(x)] = true; });
-      var filtered = (cached.data.campaigns || []).filter(function(c) {
+  // Helper to serve a cached / snapshot response with the same
+  // client-scope filter that would apply to a live response. Used
+  // for both the in-memory hit and the closed-period snapshot hit
+  // paths so the filter logic stays in one place.
+  var serveCached = function(data) {
+    var pC = req.authPrincipal || { role: "admin" };
+    if (pC.role === "client") {
+      var cIdSet = {}; (pC.allowedCampaignIds || []).forEach(function(x) { cIdSet[String(x)] = true; });
+      var filtered = (data.campaigns || []).filter(function(c) {
         return cIdSet[String(c.campaignId || "")] === true;
       });
-      res.status(200).json({ totalCampaigns: filtered.length, dateFrom: cached.data.dateFrom, dateTo: cached.data.dateTo, campaigns: filtered, pages: filterPagesForPrincipal(cached.data.pages, pCached), warnings: cached.data.warnings });
+      res.status(200).json({ totalCampaigns: filtered.length, dateFrom: data.dateFrom, dateTo: data.dateTo, campaigns: filtered, pages: filterPagesForPrincipal(data.pages, pC), warnings: data.warnings });
     } else {
-      res.status(200).json(cached.data);
+      res.status(200).json(data);
     }
+  };
+  var cached = req.query.fresh === "1" ? null : campaignsResponseCache[cacheKey];
+  if (cached && Date.now() - cached.ts < CAMPAIGNS_RESPONSE_TTL_MS) {
+    serveCached(cached.data);
     return;
+  }
+  // Closed-period snapshot check. If the requested `to` date is more
+  // than 3 days in the past, Meta / TikTok / Google's data for that
+  // range is effectively locked (attribution windows have settled),
+  // so we serve from the Redis snapshot instead of re-hitting the
+  // platform APIs. Warms the in-memory cache on hit so subsequent
+  // requests in this Fluid Compute instance skip Redis too.
+  if (req.query.fresh !== "1" && isClosedPeriod(to)) {
+    var snap = await getSnapshot("campaigns|" + cacheKey);
+    if (snap) {
+      console.log("[campaigns] snapshot hit", { from: from, to: to, region: region || "" });
+      campaignsResponseCache[cacheKey] = { data: snap, ts: Date.now() };
+      serveCached(snap);
+      return;
+    }
+  }
+  // ?fresh=1 explicitly evicts the snapshot so a manual refresh doesn't
+  // fetch live only to be shadowed by a stale snapshot on the next request.
+  if (req.query.fresh === "1" && isClosedPeriod(to)) {
+    clearSnapshot("campaigns|" + cacheKey);
   }
 
   var allCampaigns = [];
@@ -2228,6 +2252,13 @@ export default async function handler(req, res) {
   });
   var fullResponse = { totalCampaigns: allCampaigns.length, dateFrom: from, dateTo: to, campaigns: allCampaigns, pages: pageData, warnings: warnings, objectiveDiagnostic: _objDiag, metaSupplementDiag: supplementDiag, conversionCapDiag: conversionCapDiag };
   campaignsResponseCache[cacheKey] = { data: fullResponse, ts: Date.now() };
+  // Closed-period snapshot write. Only persist to Redis when the range
+  // is fully settled AND the live fetch didn't hit a fatal warning
+  // (partial data would poison the snapshot for every future request).
+  // Fire-and-forget; the response is already going out.
+  if (isClosedPeriod(to) && (!warnings || warnings.length === 0)) {
+    setSnapshot("campaigns|" + cacheKey, fullResponse);
+  }
 
   var principal = req.authPrincipal || { role: "admin" };
   if (principal.role === "client") {
