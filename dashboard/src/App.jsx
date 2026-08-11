@@ -2087,6 +2087,22 @@ function ShareModal(props){
       }
     }
     err[1]("");pdfBusy[1](true);
+    // Diagnostic (open DevTools console to see) — logs what
+    // customOutcomes are being shipped in the PDF request body. Lets
+    // us confirm at a glance whether the empty-body case is a state
+    // problem (nothing in customOutcomes) or a build problem
+    // (something in state but not in the payload).
+    try {
+      var _debugCustom = (props.customOutcomes && Array.isArray(props.customOutcomes[_slugLowerCheck])) ? props.customOutcomes[_slugLowerCheck] : [];
+      console.log("[gas.downloadPdf] shipping", {
+        slug: slug[0],
+        slugNormalised: _slugLowerCheck,
+        customOutcomesKeys: props.customOutcomes ? Object.keys(props.customOutcomes) : [],
+        customOutcomesForSlugCount: _debugCustom.length,
+        customOutcomesForSlugFirst: _debugCustom[0] || null,
+        dateFrom: props.dateFrom, dateTo: props.dateTo
+      });
+    } catch (_) {}
     // Open the target window SYNCHRONOUSLY as part of the click
     // gesture. Chrome/Safari popup blockers reject window.open() that
     // fires from an async continuation (i.e. after fetch resolves),
