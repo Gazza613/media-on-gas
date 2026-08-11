@@ -1997,6 +1997,23 @@ function ShareModal(props){
     // the slug was manually overridden). Same array the Summary
     // octet renders from — PDF and Summary reconcile by construction.
     var _slugLower=String(slug[0]||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+    // Canonicalise the slug to a customOutcomes key. The slug field
+    // sometimes arrives as the raw campaign name (e.g.
+    // "GAS_Learnalot_META_Leads_WApp_PSI_July/Aug_2026") which
+    // normalises to a long string that doesn't match any client key.
+    // Walk the known customOutcomes keys and match ANY that appears
+    // as a substring in the normalised slug. Fixes the class of
+    // "customOutcomes = 0 in PDF despite dashboard showing them"
+    // bugs where the slug carried the campaign name instead of the
+    // client canonical key.
+    var _canonKey = _slugLower;
+    if (props.customOutcomes && typeof props.customOutcomes === "object") {
+      var _coKeys = Object.keys(props.customOutcomes);
+      for (var _ci = 0; _ci < _coKeys.length; _ci++) {
+        var _ck = String(_coKeys[_ci] || "").toLowerCase();
+        if (_ck && _slugLower.indexOf(_ck) >= 0) { _canonKey = _ck; break; }
+      }
+    }
     var _outcomesForSlug=[];
     // Only pass customOutcomes when they belong to the CURRENT client's
     // slug. Previously fell back to the "learnalot" key when the current
@@ -2006,8 +2023,8 @@ function ShareModal(props){
     // objective outcomes tiles as a result. If the current slug has no
     // custom outcomes, send an empty array so the server falls back to
     // its standard single-path outcomes grid.
-    if(props.customOutcomes&&_slugLower&&Array.isArray(props.customOutcomes[_slugLower])){
-      _outcomesForSlug=props.customOutcomes[_slugLower];
+    if(props.customOutcomes&&_canonKey&&Array.isArray(props.customOutcomes[_canonKey])){
+      _outcomesForSlug=props.customOutcomes[_canonKey];
     }
     // Pre-compute Learnalot BOFU values IN THE BROWSER using exactly
     // the same aggregation the dashboard's Summary tab uses, then ship
@@ -2018,7 +2035,7 @@ function ShareModal(props){
     // WhatsApp Leads" bugs where the aggregation reproduced
     // differently on the server than in the browser.
     var _bofuOverride = null;
-    if (_slugLower === "learnalot" && _outcomesForSlug.length > 0) {
+    if (_canonKey === "learnalot" && _outcomesForSlug.length > 0) {
       var _fromM = String(props.dateFrom || "").slice(0, 7);
       var _toM = String(props.dateTo || "").slice(0, 7);
       var _months = {};
@@ -2104,8 +2121,21 @@ function ShareModal(props){
     // slug lookup fell through to empty), the PDF's WhatsApp Leads tile
     // will render as 0 and blended CPL will be wildly overstated. Bail
     // out with a clear message rather than shipping a misleading PDF.
+    // Same substring-tolerant canonicalisation as buildCampaignPayload
+    // so the pre-flight check catches the case where slug is the raw
+    // campaign name ("GAS_Learnalot_META_Leads_WApp_..."). Walks the
+    // customOutcomes keys and matches any key that appears as a
+    // substring in the normalised slug.
     var _slugLowerCheck=String(slug[0]||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
-    if(_slugLowerCheck==="learnalot"){
+    var _canonKeyCheck=_slugLowerCheck;
+    if(props.customOutcomes&&typeof props.customOutcomes==="object"){
+      var _kks=Object.keys(props.customOutcomes);
+      for(var _kki=0;_kki<_kks.length;_kki++){
+        var _kkk=String(_kks[_kki]||"").toLowerCase();
+        if(_kkk&&_slugLowerCheck.indexOf(_kkk)>=0){_canonKeyCheck=_kkk;break;}
+      }
+    }
+    if(_canonKeyCheck==="learnalot"){
       var _coCheck=props.customOutcomes&&Array.isArray(props.customOutcomes.learnalot)?props.customOutcomes.learnalot:[];
       if(_coCheck.length===0){
         err[1]("Learnalot custom outcomes have not loaded yet. Wait a few seconds for the WhatsApp Leads data to arrive, then retry — otherwise the PDF will render 0 WhatsApp Leads and an inflated blended CPL.");
@@ -2128,10 +2158,11 @@ function ShareModal(props){
     // problem (nothing in customOutcomes) or a build problem
     // (something in state but not in the payload).
     try {
-      var _debugCustom = (props.customOutcomes && Array.isArray(props.customOutcomes[_slugLowerCheck])) ? props.customOutcomes[_slugLowerCheck] : [];
+      var _debugCustom = (props.customOutcomes && Array.isArray(props.customOutcomes[_canonKeyCheck])) ? props.customOutcomes[_canonKeyCheck] : [];
       console.log("[gas.downloadPdf] shipping", {
         slug: slug[0],
         slugNormalised: _slugLowerCheck,
+        resolvedKey: _canonKeyCheck,
         customOutcomesKeys: props.customOutcomes ? Object.keys(props.customOutcomes) : [],
         customOutcomesForSlugCount: _debugCustom.length,
         customOutcomesForSlugFirst: _debugCustom[0] || null,
