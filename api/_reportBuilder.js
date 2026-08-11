@@ -773,6 +773,19 @@ function renderBofuSection(opts) {
       if (o.uniqueUsers != null) waUniqueUsers += parseInt(o.uniqueUsers || 0, 10);
     }
   });
+  // Pre-computed override from the dashboard's Summary calc (2026-08
+  // architectural fix). When the dashboard ships waLeadTotal +
+  // waUniqueUsers directly, use those values verbatim rather than
+  // relying on server-side aggregation to reproduce the browser's
+  // math. Guarantees PDF matches dashboard by construction, no
+  // month-filter or label-regex mismatch to debug.
+  if (opts.learnalotBofuOverride && opts.learnalotBofuOverride.waLeadTotal > 0) {
+    waLeadTotal = parseInt(opts.learnalotBofuOverride.waLeadTotal, 10) || 0;
+    if (opts.learnalotBofuOverride.waUniqueUsers != null) {
+      waUniqueUsers = parseInt(opts.learnalotBofuOverride.waUniqueUsers, 10) || 0;
+    }
+    try { console.log("[report] BoFu override applied", { waLeadTotal: waLeadTotal, waUniqueUsers: waUniqueUsers }); } catch (_) {}
+  }
   var formLeadsBucket = byObj["Leads"] && byObj["Leads"].global ? byObj["Leads"].global : null;
   var formLeadsCount = formLeadsBucket ? (formLeadsBucket.result || 0) : 0;
   var formLeadsSpend = formLeadsBucket ? (formLeadsBucket.spend || 0) : 0;

@@ -1540,7 +1540,13 @@ export default async function handler(req, res) {
     // guarantees PDF and Summary reconcile by construction (same
     // data source, computed once, sent once).
     var customOutcomesFromBody = Array.isArray(body.customOutcomes) ? body.customOutcomes : [];
-    try { console.log("[email-share] custom-outcomes from body", { slug: _canonSlugForCO, length: customOutcomesFromBody.length, firstLabel: customOutcomesFromBody[0] && customOutcomesFromBody[0].label }); } catch (_) {}
+    // Pre-computed Learnalot BOFU override (2026-08). Dashboard ships
+    // waLeadTotal + waUniqueUsers directly instead of relying on
+    // server-side re-aggregation of the raw customOutcomes. Guarantees
+    // the PDF's WhatsApp Leads tile matches the dashboard by
+    // construction — no month-filter mismatch, no label-regex to break.
+    var learnalotBofuOverride = (body.learnalotBofuOverride && typeof body.learnalotBofuOverride === "object") ? body.learnalotBofuOverride : null;
+    try { console.log("[email-share] custom-outcomes from body", { slug: _canonSlugForCO, length: customOutcomesFromBody.length, firstLabel: customOutcomesFromBody[0] && customOutcomesFromBody[0].label, bofuOverride: learnalotBofuOverride }); } catch (_) {}
     var results = await Promise.all(extraFetches);
     var summary = results[0];
     var topAds = results[1];
@@ -1655,7 +1661,11 @@ export default async function handler(req, res) {
         // UI, not accessible over any public Marketing API path). The
         // report builder folds these into the BoFu Leads section and
         // headline outcome tile when present.
-        customOutcomes: customOutcomes
+        customOutcomes: customOutcomes,
+        // Pre-computed override from the dashboard's Summary calc.
+        // Wins over raw customOutcomes aggregation so PDF matches the
+        // dashboard by construction. See downloadPdf in App.jsx.
+        learnalotBofuOverride: learnalotBofuOverride
       });
     } else {
       html = buildEmailHtml({

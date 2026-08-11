@@ -2009,7 +2009,42 @@ function ShareModal(props){
     if(props.customOutcomes&&_slugLower&&Array.isArray(props.customOutcomes[_slugLower])){
       _outcomesForSlug=props.customOutcomes[_slugLower];
     }
-    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim(),customOutcomes:_outcomesForSlug};
+    // Pre-compute Learnalot BOFU values IN THE BROWSER using exactly
+    // the same aggregation the dashboard's Summary tab uses, then ship
+    // as bofuOverride. Server uses these values verbatim rather than
+    // re-aggregating from raw customOutcomes. Same numbers appear on
+    // dashboard and PDF by construction, no server-side month-filter
+    // or label-regex to break. Fixes the class of "PDF shows 0
+    // WhatsApp Leads" bugs where the aggregation reproduced
+    // differently on the server than in the browser.
+    var _bofuOverride = null;
+    if (_slugLower === "learnalot" && _outcomesForSlug.length > 0) {
+      var _fromM = String(props.dateFrom || "").slice(0, 7);
+      var _toM = String(props.dateTo || "").slice(0, 7);
+      var _months = {};
+      if (/^\d{4}-\d{2}$/.test(_fromM) && /^\d{4}-\d{2}$/.test(_toM)) {
+        var _sy = parseInt(_fromM.slice(0,4),10), _sm = parseInt(_fromM.slice(5,7),10);
+        var _ey = parseInt(_toM.slice(0,4),10),   _em = parseInt(_toM.slice(5,7),10);
+        var _cy = _sy, _cm = _sm;
+        while (_cy < _ey || (_cy === _ey && _cm <= _em)) {
+          _months[_cy + "-" + (_cm < 10 ? "0" : "") + _cm] = 1;
+          _cm++; if (_cm > 12) { _cm = 1; _cy++; }
+        }
+      }
+      var _waRe = /whatsapp|wapp|(^| )wa /i;
+      var _waCountX = 0, _waUniqueX = 0, _waCostX = 0;
+      _outcomesForSlug.forEach(function(o) {
+        if (!_months[String(o.month || "")]) return;
+        if (!_waRe.test(String(o.label || ""))) return;
+        _waCountX += parseInt(o.count || 0, 10);
+        if (o.uniqueUsers != null) _waUniqueX += parseInt(o.uniqueUsers || 0, 10);
+        if (o.cost != null) _waCostX += parseFloat(o.cost || 0);
+      });
+      if (_waCountX > 0) {
+        _bofuOverride = { waLeadTotal: _waCountX, waUniqueUsers: _waUniqueX, waManualCost: _waCostX };
+      }
+    }
+    return {clientSlug:slug[0].trim(),campaignIds:campaignIds,campaignNames:campaignNames,from:props.dateFrom,to:props.dateTo,expiresInDays:expiry[0],personalMessage:personalMsg[0].trim(),senderName:senderName[0].trim(),senderTitle:senderTitle[0].trim(),recipientName:recipientName[0].trim(),customOutcomes:_outcomesForSlug,learnalotBofuOverride:_bofuOverride};
   };
   // Every field is compulsory except Cc and Bcc. requireEmail adds the
   // recipient-address check for the actual send/preview (Link Only has
@@ -2135,13 +2170,31 @@ function ShareModal(props){
     // performance, campaign detail, top creatives, recommendations,
     // and sign-off page. Distinct from the inbox email HTML.
     payload.mode="report";
+    // Close the share modal immediately once the popup is open and the
+    // fetch has fired. Previously the modal stayed open for the full
+    // fetch duration + a 600ms delay, which read as "the share box
+    // hangs and gets stuck once the PDF is in preview mode". Popup
+    // shows its own loading spinner while the fetch runs, so the
+    // modal has nothing left to display anyway.
+    try{ props.onClose && props.onClose(); }catch(_) {}
     fetch(props.apiBase+"/api/email-share",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-session-token":props.session||""},
       body:JSON.stringify(payload)
     }).then(function(r){return r.json();}).then(function(d){
       pdfBusy[1](false);
-      if(!(d&&d.ok&&d.html)){try{w.close();}catch(_){}err[1]((d&&d.error)||"Could not build PDF");return;}
+      if(!(d&&d.ok&&d.html)){
+        // Show error in the popup itself since the share modal is
+        // already closed. Popup stays visible with the error text so
+        // the operator sees what went wrong instead of a silent close.
+        try {
+          var _errMsg = (d && d.error) || "Could not build PDF";
+          w.document.open();
+          w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Report failed</title><style>html,body{margin:0;padding:40px;background:#0F1820;color:#FFFBF8;font-family:Helvetica,Arial,sans-serif;text-align:center;}h1{color:#F43F5E;font-size:22px;letter-spacing:2px;text-transform:uppercase;}p{color:rgba(255,251,248,0.65);line-height:1.6;max-width:520px;margin:14px auto;}code{background:rgba(244,63,94,0.15);padding:8px 14px;border-radius:6px;color:#F43F5E;display:inline-block;margin-top:10px;font-size:12px;}</style></head><body><h1>Report could not be built</h1><p>The report generator returned an error. You can safely close this window and try again.</p><code>' + String(_errMsg).replace(/[<>&]/g, "") + '</code></body></html>');
+          w.document.close();
+        } catch (_) {}
+        return;
+      }
       // Deliberately do NOT populate shareUrl / expiresAt from a PDF
       // response, or the modal flips into the "email draft is ready"
       // view underneath the popup — which reads as the "email-type
@@ -2176,17 +2229,13 @@ function ShareModal(props){
             try{ w.focus(); w.print(); }catch(_){/* popup closed */}
           },900);
         }
-        // Auto-close the share modal once the PDF popup has the report
-        // HTML written to it. Previously the modal stayed open behind
-        // the popup with pdfBusy state cleared, which read as "the
-        // share box hangs and gets stuck once the PDF is in preview
-        // mode" to the operator. Short delay lets the popup focus the
-        // print dialog first so the close doesn't yank focus away.
-        setTimeout(function(){ try{ props.onClose && props.onClose(); }catch(_) {} }, 600);
+        // Modal was already closed when the fetch fired (see above).
+        // Popup shows the print dialog on top of a rendered report.
       }catch(e){
-        err[1]("Could not write report into new window: "+(e&&e.message||"unknown"));
+        // Can't write to popup, log to console since modal is gone.
+        try { console.error("[gas.downloadPdf] popup write failed", e); } catch(_) {}
       }
-    }).catch(function(){pdfBusy[1](false);try{w.close();}catch(_){}err[1]("Connection error");});
+    }).catch(function(){pdfBusy[1](false);try{w.close();}catch(_){}});
   };
   var confirmSend=function(){
     err[1]("");busy[1](true);emailSent[1](false);
