@@ -902,8 +902,7 @@ function renderBofuSection(opts) {
       { label: "First Reply Sent",            val: (wa && wa.firstReplies)     || 0, note: "User sent first response to the bot" },
       { label: "2+ Messages Exchanged",       val: (wa && wa.engaged2)         || 0, note: "Users who reached the 2-message depth threshold" },
       { label: "3+ Messages Exchanged",       val: _waEng3,                          note: "Users who reached the 3-message depth threshold" },
-      { label: "5+ Message Thresholds Hit",   val: (wa && wa.depth5Thresholds) || 0, note: "Counts each 5-message threshold cross, NOT unique users" },
-      { label: "Conversation Replied (7d)",   val: (wa && wa.replied7d)        || 0, note: "Meta counter that rarely fires reliably" }
+      { label: "5+ Message Thresholds Hit",   val: (wa && wa.depth5Thresholds) || 0, note: "Counts each 5-message threshold cross, NOT unique users" }
     ];
     var _hasAnyRaw = _rawCounters.some(function(r) { return r.val > 0; });
     var _rawBlock = "";

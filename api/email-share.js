@@ -714,9 +714,13 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     }
   }
   var _waLeadTotal = 0;
+  var _waUniqueUsers = 0;
   _coList.forEach(function(o) {
     if (!_monthsInRange[o.month]) return;
-    if (/whatsapp|wapp|(^| )wa /i.test(String(o.label || ""))) _waLeadTotal += parseInt(o.count || 0, 10);
+    if (/whatsapp|wapp|(^| )wa /i.test(String(o.label || ""))) {
+      _waLeadTotal += parseInt(o.count || 0, 10);
+      if (o.uniqueUsers != null) _waUniqueUsers += parseInt(o.uniqueUsers || 0, 10);
+    }
   });
   var _isWApp = function(n) {
     var s = String(n || "").toLowerCase();
@@ -732,13 +736,22 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     });
     return best;
   };
-  var _wa = { spend: 0, conversations: 0, engaged3: 0 };
+  // Full wa aggregate mirroring _reportBuilder.js book.whatsapp so the
+  // email surface can render the same funnel + efficiency + raw
+  // counters block the dashboard and PDF show.
+  var _wa = { spend: 0, reach: 0, conversations: 0, firstReplies: 0, engaged2: 0, engaged3: 0, depth5: 0, connections: 0, replied7d: 0 };
   var _formSpend = 0;
   (opts.campaigns || []).forEach(function(c) {
     if (_isWApp(c.campaignName)) {
       _wa.spend += parseFloat(c.spend || 0);
+      _wa.reach += parseFloat(c.reach || 0);
       _wa.conversations += _maxAct(c.actions, "onsite_conversion.messaging_conversation_started_7d");
+      _wa.firstReplies += _maxAct(c.actions, "onsite_conversion.messaging_first_reply");
+      _wa.engaged2 += _maxAct(c.actions, "onsite_conversion.messaging_user_depth_2_message_send");
       _wa.engaged3 += _maxAct(c.actions, "onsite_conversion.messaging_user_depth_3_message_send");
+      _wa.depth5 += _maxAct(c.actions, "onsite_conversion.messaging_user_depth_5_message_send");
+      _wa.connections += _maxAct(c.actions, "onsite_conversion.total_messaging_connection");
+      _wa.replied7d += _maxAct(c.actions, "onsite_conversion.messaging_conversation_replied_7d");
     } else if (parseFloat(c.leads || 0) > 0) {
       _formSpend += parseFloat(c.spend || 0);
     }
@@ -746,30 +759,109 @@ function renderSummaryBlock(summary, profile, eco, extras) {
   var _formLeads = parseFloat(g.leads || 0);
   // Octet triggers only when the client actually has WhatsApp
   // QualifiedLeads recorded in customOutcomes for the report period.
-  // Previously any campaign with _wapp_ in its name lit up the octet,
-  // which fired for clients that run WhatsApp campaigns but do not use
-  // the two-path (Form + CAPI QualifiedLeads) model. Combined with the
-  // dashboard's now-fixed learnalot fallback, that shipped Learnalot's
-  // 633 WhatsApp leads to MTN MoMo's email.
   var _showTwoPath = _waLeadTotal > 0;
+  var _learnalotExtrasRow = "";
   if (_showTwoPath) {
     var _formCpl = _formLeads > 0 && _formSpend > 0 ? (_formSpend / _formLeads) : 0;
     var _waCpl = _waLeadTotal > 0 && _wa.spend > 0 ? (_wa.spend / _waLeadTotal) : 0;
     var _totalLeads = _formLeads + _waLeadTotal;
     var _totalSpend = _formSpend + _wa.spend;
     var _blendedCpl = _totalLeads > 0 ? (_totalSpend / _totalLeads) : 0;
-    var _convToLead = _wa.conversations > 0 && _waLeadTotal > 0 ? (_waLeadTotal / _wa.conversations * 100) : 0;
     var _eng3Rate = _wa.conversations > 0 ? (_wa.engaged3 / _wa.conversations * 100) : 0;
+    var _costPerConv = _wa.conversations > 0 && _wa.spend > 0 ? (_wa.spend / _wa.conversations) : 0;
+    var _costPerEng = _wa.engaged3 > 0 && _wa.spend > 0 ? (_wa.spend / _wa.engaged3) : 0;
+    // ── Row 1: 4-tile blended summary (replaces old 8-tile octet)
     outcomes = [
-      { label: "PSI Form Leads", value: _formLeads, display: fmtNum(_formLeads), cost: "Meta lead-form captures", accent: "#F43F5E" },
-      { label: "CPL Form Leads", value: _formCpl, display: _formCpl > 0 ? fmtR(_formCpl) : "—", cost: "form-campaign spend / leads", accent: "#F43F5E" },
-      { label: "WhatsApp PSI Leads", value: _waLeadTotal, display: fmtNum(_waLeadTotal), cost: "CAPI QualifiedLead events", accent: "#A855F7" },
-      { label: "CPL WhatsApp Leads", value: _waCpl, display: _waCpl > 0 ? fmtR(_waCpl) : "—", cost: "WhatsApp spend / leads", accent: "#A855F7" },
-      { label: "Total Leads (blended)", value: _totalLeads, display: fmtNum(_totalLeads), cost: fmtNum(_formLeads) + " form + " + fmtNum(_waLeadTotal) + " WhatsApp" + (_blendedCpl > 0 ? " · " + fmtR(_blendedCpl) + " blended CPL" : ""), accent: "#FFAA00" },
-      { label: "WhatsApp Conversations", value: _wa.conversations, display: fmtNum(_wa.conversations), cost: "conversations opened (7d)", accent: "#34D399" },
-      { label: "Engaged 3+ Messages", value: _wa.engaged3, display: fmtNum(_wa.engaged3), cost: _wa.conversations > 0 ? _eng3Rate.toFixed(2) + "% of conversations" : "3+ message exchanges", accent: "#34D399" },
-      { label: "Conversion Ratio", value: _convToLead, display: _convToLead > 0 ? _convToLead.toFixed(2) + "%" : "—", cost: _waLeadTotal > 0 && _wa.conversations > 0 ? fmtNum(_waLeadTotal) + " of " + fmtNum(_wa.conversations) + " converted" : "conversations → leads", accent: "#0891B2" }
+      { label: "Total Leads (Blended)", value: _totalLeads, display: fmtNum(_totalLeads), cost: fmtNum(_formLeads) + " form + " + fmtNum(_waLeadTotal) + " WhatsApp", accent: "#FFAA00" },
+      { label: "Blended CPL", value: _blendedCpl, display: _blendedCpl > 0 ? fmtR(_blendedCpl) : "—", cost: "combined spend / total leads", accent: "#FFAA00" },
+      { label: "PSI Form Leads", value: _formLeads, display: fmtNum(_formLeads), cost: _formCpl > 0 ? fmtR(_formCpl) + " per form lead" : "Meta lead-form captures", accent: "#F43F5E" },
+      { label: "WhatsApp Leads", value: _waLeadTotal, display: fmtNum(_waLeadTotal), cost: (_waUniqueUsers > 0 ? fmtNum(_waUniqueUsers) + " unique users" : "CAPI QualifiedLead events") + (_waCpl > 0 ? " · " + fmtR(_waCpl) + " per lead" : ""), accent: "#A855F7" }
     ];
+    // ── Row 2: WhatsApp Message Funnel (staged bars, table-based)
+    var _funnelStages = [];
+    if (_wa.reach > 0) _funnelStages.push({ label: "Reach", val: _wa.reach, sub: "unique people who saw the ad" });
+    _funnelStages.push({ label: "Conversations Opened", val: _wa.conversations, sub: "tapped WhatsApp to start a chat" });
+    if (_wa.firstReplies > 0) _funnelStages.push({ label: "First Reply Sent", val: _wa.firstReplies, sub: "got past the initial greeting" });
+    _funnelStages.push({ label: "Engaged 3+ Messages", val: _wa.engaged3, sub: "three or more messages exchanged" });
+    var _funnelTop = _funnelStages.length ? _funnelStages[0].val : 0;
+    var _funnelRowsHtml = _funnelStages.map(function(st, i) {
+      var pctOfTop = _funnelTop > 0 ? (st.val / _funnelTop * 100) : 0;
+      var prevVal = i > 0 ? _funnelStages[i - 1].val : 0;
+      var pctOfPrev = prevVal > 0 ? (st.val / prevVal * 100) : null;
+      var prevColor = pctOfPrev === null ? "#34D399" : (pctOfPrev >= 50 ? "#34D399" : (pctOfPrev >= 25 ? "#FBBF24" : "#F43F5E"));
+      var prevLabel = pctOfPrev === null ? "starting point" : (pctOfPrev.toFixed(2) + "% of previous");
+      var barWidth = Math.max(pctOfTop, 1).toFixed(1);
+      return '<tr>' +
+        '<td style="padding:6px 10px;font-size:11px;color:#FFFBF8;font-weight:700;font-family:Helvetica,Arial,sans-serif;width:160px;">' + escapeHtml(st.label) + '</td>' +
+        '<td style="padding:6px 10px;font-size:14px;color:#34D399;font-weight:900;font-family:Helvetica,Arial,sans-serif;text-align:right;width:80px;">' + fmtNum(st.val) + '</td>' +
+        '<td style="padding:6px 10px;width:40%;">' +
+          '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.05);border-radius:3px;">' +
+            '<tr><td style="height:8px;background:linear-gradient(90deg,#34D399,#34D39970);width:' + barWidth + '%;border-radius:3px;font-size:1px;line-height:1px;">&nbsp;</td></tr>' +
+          '</table>' +
+        '</td>' +
+        '<td style="padding:6px 10px;font-size:10px;font-family:Helvetica,Arial,sans-serif;text-align:right;line-height:1.4;">' +
+          '<div style="color:' + prevColor + ';font-weight:800;font-size:11px;">' + prevLabel + '</div>' +
+          '<div style="color:#8B7FA3;margin-top:2px;">' + escapeHtml(st.sub) + '</div>' +
+        '</td>' +
+      '</tr>';
+    }).join("");
+    var _funnelHtml = '<div style="background:rgba(0,0,0,0.22);border-radius:10px;border:1px solid rgba(255,255,255,0.06);border-left:3px solid #34D399;padding:14px 16px;margin-top:12px;">' +
+      '<div style="font-size:10px;font-weight:800;color:#34D399;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;font-family:Helvetica,Arial,sans-serif;">WhatsApp Message Funnel</div>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + _funnelRowsHtml + '</table>' +
+    '</div>';
+    // ── Row 3: Efficiency tiles (3, table-based) ────────────
+    var _effTile = function(label, value, sub, accent) {
+      return '<td valign="top" width="33%" style="padding:6px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(0,0,0,0.22);border:1px solid ' + accent + '25;border-left:3px solid ' + accent + ';border-radius:10px;">' +
+        '<tr><td style="padding:12px 14px;">' +
+        '<div style="font-size:9px;font-weight:800;color:' + accent + ';letter-spacing:1.5px;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;margin-bottom:6px;">' + label + '</div>' +
+        '<div style="font-size:20px;font-weight:900;color:' + accent + ';font-family:Helvetica,Arial,sans-serif;line-height:1;margin-bottom:4px;">' + value + '</div>' +
+        '<div style="font-size:10px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;">' + sub + '</div>' +
+        '</td></tr></table>' +
+      '</td>';
+    };
+    var _efficiencyHtml = (_wa.conversations > 0 || _wa.engaged3 > 0) ?
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;margin-left:-6px;margin-right:-6px;"><tr>' +
+        _effTile("Cost per Conversation", _costPerConv > 0 ? fmtR(_costPerConv) : "—", "WhatsApp spend / conversations opened", "#34D399") +
+        _effTile("Cost per Engaged 3+", _costPerEng > 0 ? fmtR(_costPerEng) : "—", "spend / conversations reaching 3+ messages", "#34D399") +
+        _effTile("Engagement Rate", _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "—", fmtNum(_wa.engaged3) + " of " + fmtNum(_wa.conversations) + " reached 3+ messages", "#0891B2") +
+      '</tr></table>' : "";
+    // ── Row 4: Meta Messaging Raw Counters (transparency table)
+    var _rawRows = [
+      { l: "Total Messaging Connections", v: _wa.connections, n: "New user-business connections, no window cap" },
+      { l: "Conversations Started (7d)", v: _wa.conversations, n: "Attributed within 7 days of ad click" },
+      { l: "First Reply Sent", v: _wa.firstReplies, n: "User sent first response to the bot" },
+      { l: "2+ Messages Exchanged", v: _wa.engaged2, n: "Users who reached the 2-message depth threshold" },
+      { l: "3+ Messages Exchanged", v: _wa.engaged3, n: "Users who reached the 3-message depth threshold" },
+      { l: "5+ Message Thresholds Hit", v: _wa.depth5, n: "Counts each 5-message threshold cross, NOT unique users" }
+    ];
+    var _hasAnyRaw = _rawRows.some(function(r) { return r.v > 0; });
+    var _rawHtml = _hasAnyRaw ?
+      '<div style="background:rgba(0,0,0,0.22);border-radius:10px;border:1px solid rgba(255,255,255,0.06);border-left:3px solid #0891B2;padding:14px 16px;margin-top:12px;">' +
+        '<div style="font-size:10px;font-weight:800;color:#0891B2;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;font-family:Helvetica,Arial,sans-serif;">Meta Messaging Raw Counters</div>' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' +
+          '<tr>' +
+            '<th align="left" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#8B7FA3;font-weight:900;padding:0 6px 6px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Helvetica,Arial,sans-serif;">Metric</th>' +
+            '<th align="right" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#8B7FA3;font-weight:900;padding:0 6px 6px 6px;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Helvetica,Arial,sans-serif;">Value</th>' +
+            '<th align="left" style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#8B7FA3;font-weight:900;padding:0 0 6px 6px;border-bottom:1px solid rgba(255,255,255,0.08);font-family:Helvetica,Arial,sans-serif;">Note</th>' +
+          '</tr>' +
+          _rawRows.map(function(r, i) {
+            var last = i === _rawRows.length - 1;
+            var bb = last ? "none" : "1px dotted rgba(255,255,255,0.06)";
+            return '<tr>' +
+              '<td style="padding:7px 6px 7px 0;font-size:11px;color:#FFFBF8;font-weight:700;font-family:Helvetica,Arial,sans-serif;border-bottom:' + bb + ';">' + escapeHtml(r.l) + '</td>' +
+              '<td align="right" style="padding:7px 6px;font-size:12px;color:' + (r.v > 0 ? "#FFFBF8" : "#8B7FA3") + ';font-weight:900;font-family:Helvetica,Arial,sans-serif;border-bottom:' + bb + ';">' + fmtNum(r.v) + '</td>' +
+              '<td style="padding:7px 0 7px 6px;font-size:10px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;line-height:1.4;border-bottom:' + bb + ';">' + escapeHtml(r.n) + '</td>' +
+            '</tr>';
+          }).join("") +
+        '</table>' +
+        '<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:10px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;line-height:1.5;">' +
+          '<strong style="color:#FFFBF8;font-weight:800;">Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users. CAPI Qualified Leads above are captured independently by the bot and reconcile against the "Unique Users" column in Meta Events Manager, not against these depth counters.' +
+        '</div>' +
+      '</div>' : "";
+    // Full extras row: funnel + efficiency + raw counters, injected
+    // after the outcomes tile row in the main return HTML below.
+    _learnalotExtrasRow = '<tr><td style="padding:14px 40px 0;">' + _funnelHtml + _efficiencyHtml + _rawHtml + '</td></tr>';
   }
   var OUTCOME_TILE_HEIGHT = 110;
   var outcomeRows = "";
@@ -811,6 +903,7 @@ function renderSummaryBlock(summary, profile, eco, extras) {
         outcomeRows +
       '</table>' +
     '</td></tr>' : '') +
+    _learnalotExtrasRow +
     (summary.platforms.length > 1 ? '<tr><td style="padding:22px 40px 0;">' +
       '<div style="font-size:11px;color:#F96203;letter-spacing:3px;font-weight:800;text-transform:uppercase;margin-bottom:14px;font-family:Helvetica,Arial,sans-serif;">Platform Breakdown</div>' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(168,85,247,0.16);border-radius:12px;">' +

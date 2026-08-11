@@ -7989,8 +7989,7 @@ export default function MediaOnGas(){
                     {label:"First Reply Sent",           val:waFirstReplies,  note:"User sent first response to the bot"},
                     {label:"2+ Messages Exchanged",      val:waEngaged2,      note:"Users who reached the 2-message depth threshold"},
                     {label:"3+ Messages Exchanged",      val:waEngaged3,      note:"Users who reached the 3-message depth threshold"},
-                    {label:"5+ Message Thresholds Hit",  val:waDepth5,        note:"Counts each 5-message threshold cross, NOT unique users"},
-                    {label:"Conversation Replied (7d)",  val:waReplied7d,     note:"Meta counter that rarely fires reliably"}
+                    {label:"5+ Message Thresholds Hit",  val:waDepth5,        note:"Counts each 5-message threshold cross, NOT unique users"}
                   ];
                   var hasAnyRawCounter=rawCounters.some(function(r){return r.val>0;});
                   var rawCountersBlock=hasAnyRawCounter?<div style={{background:"rgba(0,0,0,0.22)",borderRadius:14,padding:"18px 20px 18px",border:"1px solid "+P.rule,borderLeft:"3px solid "+P.cyan,marginTop:14}}>
