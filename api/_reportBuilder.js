@@ -796,6 +796,24 @@ function renderBofuSection(opts) {
   } catch (_) { /* logging is best-effort */ }
 
   if (showLearnalotOctet) {
+    // ── DIAGNOSTIC BANNER ────────────────────────────────────────
+    // If the octet is rendering (Learnalot slug detected) but
+    // waLeadTotal is 0, show a visible warning at the top of the
+    // section so the operator immediately sees WHY WhatsApp Leads
+    // reads 0 and blended CPL is inflated. Common causes: custom
+    // outcomes not entered for the report month, entry label doesn't
+    // match the WhatsApp regex, or customOutcomes body was empty on
+    // the request. The banner is invisible when everything is fine.
+    var _diagBanner = "";
+    if (_isLearnalot && waLeadTotal === 0) {
+      var _reason;
+      if (coList.length === 0) _reason = "No custom outcomes reached the report generator. The dashboard may not have loaded the outcomes state before Download PDF was clicked, or the client slug lookup fell through.";
+      else if (activeCo.length === 0) _reason = "Custom outcomes exist (" + coList.length + " total) but none match the report window months. Add or update the outcome for the correct month in Settings, Custom Outcomes.";
+      else _reason = "Custom outcomes match the window (" + activeCo.length + " active) but none carry a WhatsApp label. The label must contain \"whatsapp\", \"wapp\", or \" wa \" for the aggregator to pick it up.";
+      _diagBanner = '<div style="background:rgba(244,63,94,0.08);border:1px solid #F43F5E55;border-left:3px solid #F43F5E;border-radius:2mm;padding:3mm 4mm;margin-bottom:4mm;font-size:8.5pt;color:var(--rp-fg);line-height:1.5;">' +
+        '<strong style="color:#F43F5E;letter-spacing:1px;">Data mismatch:</strong> WhatsApp Leads reads 0 for this report. ' + escapeHtmlLocal(_reason) +
+      '</div>';
+    }
     // ── OCTET (2×4 tiles) ──────────────────────────────────────────
     var _formCpl = formLeadsCount > 0 ? (formLeadsSpend / formLeadsCount) : 0;
     var _waSpend = wa ? (wa.spend || 0) : 0;
@@ -834,7 +852,7 @@ function renderBofuSection(opts) {
     var _waCostPerEng = _waEng3 > 0 && _waSpend > 0 ? (_waSpend / _waEng3) : 0;
 
     // ── Row 1: Blended leads summary (4 tiles) ──────────────────
-    var _octet = '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);">'
+    var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);">'
       + _tile("Total Leads (Blended)",fmtNum(_totalLeads),                  fmtNum(formLeadsCount) + " form + " + fmtNum(waLeadTotal) + " WhatsApp", COL.solar)
       + _tile("Blended CPL",          _blendedCpl > 0 ? fmtR(_blendedCpl) : "&mdash;", "combined spend / total leads",          COL.solar)
       + _tile("PSI Form Leads",       fmtNum(formLeadsCount),               _formCpl > 0 ? fmtR(_formCpl) + " per form lead" : "Meta lead-form captures", COL.rose)

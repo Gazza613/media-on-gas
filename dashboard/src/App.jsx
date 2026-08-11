@@ -2064,6 +2064,28 @@ function ShareModal(props){
   // the browser print dialog so the operator can save as PDF.
   var downloadPdf=function(){
     if(!validateForm(false))return;
+    // Learnalot-specific safety check: if the report is being generated
+    // for Learnalot but the customOutcomes state hasn't loaded (or the
+    // slug lookup fell through to empty), the PDF's WhatsApp Leads tile
+    // will render as 0 and blended CPL will be wildly overstated. Bail
+    // out with a clear message rather than shipping a misleading PDF.
+    var _slugLowerCheck=String(slug[0]||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+    if(_slugLowerCheck==="learnalot"){
+      var _coCheck=props.customOutcomes&&Array.isArray(props.customOutcomes.learnalot)?props.customOutcomes.learnalot:[];
+      if(_coCheck.length===0){
+        err[1]("Learnalot custom outcomes have not loaded yet. Wait a few seconds for the WhatsApp Leads data to arrive, then retry — otherwise the PDF will render 0 WhatsApp Leads and an inflated blended CPL.");
+        return;
+      }
+      // Also warn if outcomes exist but none match the report window
+      // months. Better to abort than ship a zero.
+      var _fromM=String(props.dateFrom||"").slice(0,7);
+      var _toM=String(props.dateTo||"").slice(0,7);
+      var _hasMatch=_coCheck.some(function(o){var m=String(o.month||"");return m>=_fromM&&m<=_toM;});
+      if(!_hasMatch){
+        err[1]("No Learnalot WhatsApp outcomes recorded for the selected report period ("+props.dateFrom+" to "+props.dateTo+"). Go to Settings, Custom Outcomes, add the July entry (or the relevant month), then retry.");
+        return;
+      }
+    }
     err[1]("");pdfBusy[1](true);
     // Open the target window SYNCHRONOUSLY as part of the click
     // gesture. Chrome/Safari popup blockers reject window.open() that
@@ -2138,6 +2160,13 @@ function ShareModal(props){
             try{ w.focus(); w.print(); }catch(_){/* popup closed */}
           },900);
         }
+        // Auto-close the share modal once the PDF popup has the report
+        // HTML written to it. Previously the modal stayed open behind
+        // the popup with pdfBusy state cleared, which read as "the
+        // share box hangs and gets stuck once the PDF is in preview
+        // mode" to the operator. Short delay lets the popup focus the
+        // print dialog first so the close doesn't yank focus away.
+        setTimeout(function(){ try{ props.onClose && props.onClose(); }catch(_) {} }, 600);
       }catch(e){
         err[1]("Could not write report into new window: "+(e&&e.message||"unknown"));
       }
