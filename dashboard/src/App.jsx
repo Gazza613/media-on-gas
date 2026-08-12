@@ -6113,11 +6113,20 @@ export default function MediaOnGas(){
             // The mismatch produced a spurious 45-54 spike on the
             // aggregate chart for financial-services accounts because
             // Google's age-range inference concentrates in 45-54 while
-            // Meta / TikTok distribute more naturally. Falls back to the
-            // full three-platform list if the per-region path is empty
-            // (e.g. Meta returned no 3-dim rows for the window).
-            var scopedAgRows=!selectedProvince?(agByRegRows.length>0?agByRegRows:agRows):(realScopedAg.length>0?realScopedAg:synthByProv(agRows,selectedProvince));
-            var scopedDevRows=!selectedProvince?(devByRegRows.length>0?devByRegRows:devRows):(realScopedDev.length>0?realScopedDev:synthByProv(devRows,selectedProvince));
+            // Meta / TikTok distribute more naturally.
+            //
+            // Fallback path: when agByRegRows is empty (Meta returned no
+            // 3-dim rows for the window, common on short date ranges) we
+            // used to fall back to the blended agRows — which re-admits
+            // Google and re-introduces the 45-54 spike. Instead, filter
+            // agRows to Meta + TikTok only for the fallback path so the
+            // aggregate chart is always Google-free even without the
+            // per-region rows. Same treatment for the device chart.
+            var isGooglePlat=function(r){return String(r.platform||"").toLowerCase().indexOf("google")>=0;};
+            var agRowsNoGoogle=agRows.filter(function(r){return !isGooglePlat(r);});
+            var devRowsNoGoogle=devRows.filter(function(r){return !isGooglePlat(r);});
+            var scopedAgRows=!selectedProvince?(agByRegRows.length>0?agByRegRows:agRowsNoGoogle):(realScopedAg.length>0?realScopedAg:synthByProv(agRowsNoGoogle,selectedProvince));
+            var scopedDevRows=!selectedProvince?(devByRegRows.length>0?devByRegRows:devRowsNoGoogle):(realScopedDev.length>0?realScopedDev:synthByProv(devRowsNoGoogle,selectedProvince));
             // Flag whether we're showing real or synthesised data so
             // the WHO + HOW header can carry the right label.
             var scopedIsEstimated=!!(selectedProvince&&realScopedAg.length===0&&realScopedDev.length===0);
