@@ -1712,48 +1712,74 @@ export default async function handler(req, res) {
           });
           var assetUrlByRef = {};
           var assetYoutubeIdByRef = {};
-          googleAssetDebug = { totalRefs: directAssetRefs.length, chunks: 0, resolved: 0, failedChunks: 0, sampleErrors: [] };
-          // Chunk the direct asset IN clause. Previously joined every ref
-          // into one query; on accounts with many RDAs each carrying
-          // 10+ marketing_images, the IN clause exceeded Google Ads GAQL
-          // query length limits and returned no rows for the tail refs,
-          // which showed up as black card thumbnails for ads whose refs
-          // fell past the truncation point. 50 refs per chunk keeps every
-          // query under 4KB.
-          var CHUNK = 50;
-          for (var rc = 0; rc < directAssetRefs.length; rc += CHUNK) {
-            var chunk = directAssetRefs.slice(rc, rc + CHUNK);
-            googleAssetDebug.chunks += 1;
-            try {
-              var refList = chunk.map(function(rn) { return "'" + rn + "'"; }).join(",");
-              var directQ = "SELECT asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name IN (" + refList + ")";
-              var dRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
-                method: "POST",
-                headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
-                body: JSON.stringify({ query: directQ })
-              });
-              if (dRes.status === 200) {
-                var dData = await dRes.json();
-                (dData.results || []).forEach(function(ar) {
-                  if (ar.asset && ar.asset.resourceName) {
-                    if (ar.asset.imageAsset && ar.asset.imageAsset.fullSize && ar.asset.imageAsset.fullSize.url) {
-                      assetUrlByRef[ar.asset.resourceName] = ar.asset.imageAsset.fullSize.url;
-                      googleAssetDebug.resolved += 1;
-                    }
-                    if (ar.asset.youtubeVideoAsset && ar.asset.youtubeVideoAsset.youtubeVideoId) {
-                      assetYoutubeIdByRef[ar.asset.resourceName] = ar.asset.youtubeVideoAsset.youtubeVideoId;
-                    }
-                  }
+          googleAssetDebug = { totalRefs: directAssetRefs.length, chunks: 0, resolved: 0, failedChunks: 0, sampleErrors: [], perCustomerCounts: {}, perCustomerResolved: {} };
+          // Group refs by the customer_id encoded in the resource name.
+          // Google Ads asset refs look like `customers/{ID}/assets/{ID}`.
+          // When an RDA is served from a linked-account asset library, the
+          // ref's customer_id differs from the operating account's ID and
+          // the direct `asset` GAQL lookup against gCustomerId silently
+          // returns zero rows for those refs (the target account cannot
+          // see other accounts' assets even under an MCC login). Grouping
+          // per source-customer and issuing each group's query against
+          // its own customer_id in the URL path lifts this restriction so
+          // linked-account assets resolve to URLs instead of leaving the
+          // ad thumbnail blank.
+          var refsBySourceCustomer = {};
+          directAssetRefs.forEach(function(rn) {
+            var m = /^customers\/(\d+)\/assets\//.exec(String(rn));
+            var cid = m ? m[1] : gCustomerId;
+            if (!refsBySourceCustomer[cid]) refsBySourceCustomer[cid] = [];
+            refsBySourceCustomer[cid].push(rn);
+            googleAssetDebug.perCustomerCounts[cid] = (googleAssetDebug.perCustomerCounts[cid] || 0) + 1;
+          });
+          // Chunk the direct asset IN clause. On accounts with many RDAs
+          // each carrying 10+ marketing_images, the IN clause exceeded
+          // Google Ads GAQL query length limits and returned no rows for
+          // the tail refs, which showed up as black card thumbnails for
+          // ads whose refs fell past the truncation point. 25 refs per
+          // chunk keeps every query well under 4KB even with the longest
+          // resource names.
+          var CHUNK = 25;
+          var customerIds = Object.keys(refsBySourceCustomer);
+          for (var ci = 0; ci < customerIds.length; ci++) {
+            var sourceCid = customerIds[ci];
+            var sourceRefs = refsBySourceCustomer[sourceCid];
+            googleAssetDebug.perCustomerResolved[sourceCid] = 0;
+            for (var rc = 0; rc < sourceRefs.length; rc += CHUNK) {
+              var chunk = sourceRefs.slice(rc, rc + CHUNK);
+              googleAssetDebug.chunks += 1;
+              try {
+                var refList = chunk.map(function(rn) { return "'" + rn + "'"; }).join(",");
+                var directQ = "SELECT asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name IN (" + refList + ")";
+                var dRes = await fetch("https://googleads.googleapis.com/v21/customers/" + sourceCid + "/googleAds:search", {
+                  method: "POST",
+                  headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
+                  body: JSON.stringify({ query: directQ })
                 });
-              } else {
-                googleAssetDebug.failedChunks += 1;
-                if (googleAssetDebug.sampleErrors.length < 2) {
-                  try { googleAssetDebug.sampleErrors.push((await dRes.text()).substring(0, 300)); } catch (_) {}
+                if (dRes.status === 200) {
+                  var dData = await dRes.json();
+                  (dData.results || []).forEach(function(ar) {
+                    if (ar.asset && ar.asset.resourceName) {
+                      if (ar.asset.imageAsset && ar.asset.imageAsset.fullSize && ar.asset.imageAsset.fullSize.url) {
+                        assetUrlByRef[ar.asset.resourceName] = ar.asset.imageAsset.fullSize.url;
+                        googleAssetDebug.resolved += 1;
+                        googleAssetDebug.perCustomerResolved[sourceCid] += 1;
+                      }
+                      if (ar.asset.youtubeVideoAsset && ar.asset.youtubeVideoAsset.youtubeVideoId) {
+                        assetYoutubeIdByRef[ar.asset.resourceName] = ar.asset.youtubeVideoAsset.youtubeVideoId;
+                      }
+                    }
+                  });
+                } else {
+                  googleAssetDebug.failedChunks += 1;
+                  if (googleAssetDebug.sampleErrors.length < 2) {
+                    try { googleAssetDebug.sampleErrors.push((await dRes.text()).substring(0, 300)); } catch (_) {}
+                  }
                 }
+              } catch (dErr) {
+                googleAssetDebug.failedChunks += 1;
+                console.error("Google direct asset lookup chunk error", dErr);
               }
-            } catch (dErr) {
-              googleAssetDebug.failedChunks += 1;
-              console.error("Google direct asset lookup chunk error", dErr);
             }
           }
           try { console.log("[ads] Google asset resolution", googleAssetDebug); } catch (_) {}
@@ -1880,11 +1906,17 @@ export default async function handler(req, res) {
             // account / query truncation), (C) it's a video-only VRA
             // that we don't handle, or (D) something else.
             var _gDbg = null;
-            if (debugFollows) {
+            // Always attach _debugGoogle when a Google ad ended up with an
+            // empty thumbnail so the client-facing response carries enough
+            // context to explain a blank card without needing ?debug=1.
+            // For ads that resolved a thumbnail we still gate on debugFollows
+            // to keep the payload lean.
+            if (debugFollows || !thumb) {
               var _rdaDbg = ad.responsiveDisplayAd || {};
               var _appDbg = ad.appAd || {};
               var _vraDbg = ad.videoResponsiveAd || {};
               var _countResolved = function(arr) { var t = 0, r2 = 0; (arr || []).forEach(function(m) { if (m && m.asset) { t += 1; if (assetUrlByRef[m.asset]) r2 += 1; } }); return t + "/" + r2; };
+              var _firstFewRefs = function(arr) { return (arr || []).slice(0, 2).map(function(m){ return m && m.asset || ""; }).filter(Boolean); };
               _gDbg = {
                 adType: adType,
                 thumbEmpty: !thumb,
@@ -1898,7 +1930,13 @@ export default async function handler(req, res) {
                 appAdImages: _countResolved(_appDbg.images),
                 appAdYoutube: (_appDbg.youtubeVideos || []).length,
                 vraVideos: (_vraDbg.videos || []).length,
-                imageAdUrl: !!(ad.imageAd && ad.imageAd.imageUrl)
+                imageAdUrl: !!(ad.imageAd && ad.imageAd.imageUrl),
+                // Sample refs (up to 2 per slot) so we can inspect the
+                // customer_id prefix and confirm whether the assets live
+                // in this account or a linked one. Attached only when
+                // thumb is empty, so bloat is bounded to the failing ads.
+                sampleMarketingRefs: !thumb ? _firstFewRefs(_rdaDbg.marketingImages) : undefined,
+                sampleLogoRefs: !thumb ? _firstFewRefs(_rdaDbg.logoImages) : undefined
               };
             }
             allAds.push({
@@ -1977,10 +2015,22 @@ export default async function handler(req, res) {
   } catch (ovErr) { console.error("[ads] thumb override merge error", ovErr); }
 
   var response = { ads: allAds, total: allAds.length, noImpressionAds: noImpressionAds };
-  // Expose Google debug bundles in the response when ?debug=1 so we can
-  // diagnose why RDA thumbnails end up empty without needing Vercel log
-  // access. Not cached, only returned on debug fetches so production
-  // responses stay lean.
+  // Always expose the Google asset-resolution summary in the response
+  // so a blank Display thumbnail is one Network-tab click away from a
+  // per-source-customer resolved/unresolved count instead of a Vercel
+  // logs dig. Full googleDebug (payload sample + first ad object) stays
+  // gated on ?debug=1 to keep production responses lean.
+  if (typeof googleAssetDebug !== "undefined") {
+    response.googleAssetSummary = {
+      totalRefs: googleAssetDebug.totalRefs,
+      resolved: googleAssetDebug.resolved,
+      unresolved: googleAssetDebug.totalRefs - googleAssetDebug.resolved,
+      perCustomerCounts: googleAssetDebug.perCustomerCounts,
+      perCustomerResolved: googleAssetDebug.perCustomerResolved,
+      chunks: googleAssetDebug.chunks,
+      failedChunks: googleAssetDebug.failedChunks
+    };
+  }
   if (debugFollows) {
     response.googleDebug = googleDebug;
     if (typeof googleAssetDebug !== "undefined") response.googleAssetDebug = googleAssetDebug;
