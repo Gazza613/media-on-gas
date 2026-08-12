@@ -459,13 +459,29 @@ async function fetchTimeseriesTotals(req, from, to) {
     // carry spend themselves.
     var series = d.series || [];
     var totals = { spend: 0, impressions: 0, clicks: 0 };
+    // Per-platform sums so the reconcile diff can identify WHICH
+    // platform is over-reporting when the aggregate delta is high.
+    // Series items carry `platform` = "Facebook" / "Instagram" /
+    // "TikTok" / "Google" — collapse Meta's per-publisher rows into
+    // one Meta bucket so the truth side (which has no publisher
+    // breakdown) is comparable.
+    var perPlatform = { Meta: { spend: 0, impressions: 0, clicks: 0 }, TikTok: { spend: 0, impressions: 0, clicks: 0 }, Google: { spend: 0, impressions: 0, clicks: 0 } };
     series.forEach(function(s) {
+      var plat = String(s.platform || "");
+      var bucket = plat === "TikTok" ? "TikTok" : (plat === "Google" ? "Google" : "Meta");
       (s.points || []).forEach(function(pt) {
-        totals.spend += parseFloat(pt.spend || 0);
-        totals.impressions += parseFloat(pt.impressions || 0);
-        totals.clicks += parseFloat(pt.clicks || 0);
+        var sp = parseFloat(pt.spend || 0);
+        var im = parseFloat(pt.impressions || 0);
+        var cl = parseFloat(pt.clicks || 0);
+        totals.spend += sp;
+        totals.impressions += im;
+        totals.clicks += cl;
+        perPlatform[bucket].spend += sp;
+        perPlatform[bucket].impressions += im;
+        perPlatform[bucket].clicks += cl;
       });
     });
+    totals.perPlatform = perPlatform;
     return totals;
   } catch (_) { return null; }
 }
@@ -706,6 +722,36 @@ export default async function handler(req, res) {
     tsPush("daily spend sum", totalTruth.spend, tsTotals.spend);
     tsPush("daily impressions sum", totalTruth.impressions, tsTotals.impressions);
     tsPush("daily clicks sum", totalTruth.clicks, tsTotals.clicks);
+    // Per-platform delta breakdown so 'timeseries dashboard higher
+    // than source' can be attributed to a specific platform in one
+    // glance. Meta / TikTok / Google truth sums come from sourceRows'
+    // platform field; timeseries per-platform sums come from tsTotals
+    // .perPlatform (populated by fetchTimeseriesTotals below). Fires
+    // only when the aggregate delta is >5% on any metric.
+    var worstAggDelta = Math.max(Math.abs(pct(totalTruth.spend, tsTotals.spend)), Math.abs(pct(totalTruth.impressions, tsTotals.impressions)), Math.abs(pct(totalTruth.clicks, tsTotals.clicks)));
+    if (worstAggDelta > 5 && tsTotals.perPlatform) {
+      var truthByPlat = { Meta: { spend: 0, impressions: 0, clicks: 0 }, TikTok: { spend: 0, impressions: 0, clicks: 0 }, Google: { spend: 0, impressions: 0, clicks: 0 } };
+      sourceRows.forEach(function(s) {
+        var p = String(s.platform || "");
+        var b = p.indexOf("TikTok") >= 0 ? "TikTok" : (p.indexOf("Google") >= 0 ? "Google" : "Meta");
+        truthByPlat[b].spend += parseFloat(s.spend || 0);
+        truthByPlat[b].impressions += parseFloat(s.impressions || 0);
+        truthByPlat[b].clicks += parseFloat(s.clicks || 0);
+      });
+      ["Meta", "TikTok", "Google"].forEach(function(plat) {
+        var t = truthByPlat[plat];
+        var d = tsTotals.perPlatform[plat] || { spend: 0, impressions: 0, clicks: 0 };
+        // Only surface metrics where the delta is meaningful on this
+        // platform. Skips the ~0% rows so the flagged list stays
+        // legible.
+        var sD = pct(t.spend, d.spend);
+        var iD = pct(t.impressions, d.impressions);
+        var cD = pct(t.clicks, d.clicks);
+        if (Math.abs(sD) > 3) tsPush(plat + " spend (per-platform delta)", t.spend, d.spend);
+        if (Math.abs(iD) > 3) tsPush(plat + " impressions (per-platform delta)", t.impressions, d.impressions);
+        if (Math.abs(cD) > 3) tsPush(plat + " clicks (per-platform delta)", t.clicks, d.clicks);
+      });
+    }
     var sevTs = { red: 0, yellow: 1, green: 2 };
     tsMetrics.sort(function(a, b) { return sevTs[a.status] - sevTs[b.status]; });
     var worstTs = "green";
