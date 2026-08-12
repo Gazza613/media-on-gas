@@ -420,7 +420,7 @@ export default async function handler(req, res) {
       var tokenData = await tokenRes.json();
       if (tokenData.access_token) {
         var query = "SELECT campaign.id, campaign.advertising_channel_type, metrics.cost_micros, metrics.impressions, metrics.clicks FROM campaign WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
-        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+        var gRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
             "Authorization": "Bearer " + tokenData.access_token,

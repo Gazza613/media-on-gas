@@ -1635,7 +1635,7 @@ export default async function handler(req, res) {
         // Creative spend on long-running campaigns whose ads had been deleted
         // since the period (Ground Truth Audit caught a -6.3% drift).
         var gQuery = "SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.ad.type, ad_group_ad.ad.image_ad.image_url, ad_group_ad.ad.image_ad.name, ad_group_ad.ad.responsive_display_ad.marketing_images, ad_group_ad.ad.responsive_display_ad.square_marketing_images, ad_group_ad.ad.responsive_display_ad.logo_images, ad_group_ad.ad.responsive_display_ad.square_logo_images, ad_group_ad.ad.responsive_display_ad.youtube_videos, ad_group_ad.ad.responsive_display_ad.long_headline, ad_group_ad.ad.responsive_display_ad.headlines, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.app_ad.images, ad_group_ad.ad.app_ad.youtube_videos, ad_group_ad.ad.app_ad.headlines, ad_group_ad.ad.video_responsive_ad.videos, ad_group_ad.ad.video_responsive_ad.headlines, campaign.id, campaign.name, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, ad_group.id, ad_group.name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group_ad WHERE segments.date BETWEEN '" + from + "' AND '" + to + "'";
-        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+        var gRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
             "Authorization": "Bearer " + gTokenData.access_token,
@@ -1674,7 +1674,7 @@ export default async function handler(req, res) {
           googleDebug.firstAdResource = (gData.results && gData.results[0] && gData.results[0].adGroupAd) ? gData.results[0].adGroupAd.resourceName : null;
           try {
             var assetQuery = "SELECT ad_group_ad_asset_view.ad_group_ad, ad_group_ad_asset_view.field_type, asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM ad_group_ad_asset_view WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND asset.type IN ('IMAGE','YOUTUBE_VIDEO')";
-            var aRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+            var aRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
               method: "POST",
               headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
               body: JSON.stringify({ query: assetQuery })
@@ -1765,7 +1765,7 @@ export default async function handler(req, res) {
               try {
                 var refList = chunk.map(function(rn) { return "'" + rn + "'"; }).join(",");
                 var directQ = "SELECT asset.resource_name, asset.type, asset.image_asset.full_size.url, asset.youtube_video_asset.youtube_video_id FROM asset WHERE asset.resource_name IN (" + refList + ")";
-                var dRes = await fetch("https://googleads.googleapis.com/v21/customers/" + sourceCid + "/googleAds:search", {
+                var dRes = await fetch("https://googleads.googleapis.com/v22/customers/" + sourceCid + "/googleAds:search", {
                   method: "POST",
                   headers: { "Authorization": "Bearer " + gTokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
                   body: JSON.stringify({ query: directQ })

@@ -297,7 +297,7 @@ export default async function handler(req, res) {
       var gTokenData = await gTokenRes.json();
       if (gTokenData.access_token) {
         var gQuery = "SELECT campaign.name, campaign.id, ad_group.name, ad_group.id, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.ctr, metrics.conversions FROM ad_group WHERE segments.date BETWEEN '" + from + "' AND '" + to + "' AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' ORDER BY metrics.cost_micros DESC";
-        var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+        var gRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
             "Authorization": "Bearer " + gTokenData.access_token,

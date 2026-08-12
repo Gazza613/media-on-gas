@@ -140,7 +140,7 @@ export default async function handler(req, res) {
 
     var runQuery = async function(query) {
       try {
-        var r = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+        var r = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
             "Authorization": authHeader,

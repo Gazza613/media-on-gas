@@ -1974,7 +1974,7 @@ export default async function handler(req, res) {
         if (gCached && Array.isArray(gCached.results)) {
           gResults = gCached.results;
         } else {
-          var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+          var gRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
             method: "POST",
             headers: {
               "Authorization": "Bearer " + gTokenData.access_token,

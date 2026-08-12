@@ -494,7 +494,7 @@ export default async function handler(req, res) {
         do {
           gGuard++;
           var gBody = gPageToken ? { query: q, pageToken: gPageToken } : { query: q };
-          var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+          var gRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
             method: "POST",
             headers: { "Authorization": "Bearer " + tokenData.access_token, "developer-token": gDevToken, "login-customer-id": gManagerId, "Content-Type": "application/json" },
             body: JSON.stringify(gBody)

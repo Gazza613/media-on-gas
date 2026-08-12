@@ -867,7 +867,7 @@ async function fetchGoogleDemo(from, to) {
 
     var googleSearch = async function(query) {
       try {
-        var r = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+        var r = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
           method: "POST",
           headers: {
             "Authorization": authHeader,

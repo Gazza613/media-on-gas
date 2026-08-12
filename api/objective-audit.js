@@ -229,7 +229,7 @@ async function fetchGoogle(activeFrom, activeTo) {
     // We ask for status + impressions over the period, then filter client-side for
     // ENABLED or impressions > 0.
     var query = "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.advertising_channel_sub_type, metrics.impressions FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '" + activeFrom + "' AND '" + activeTo + "'";
-    var gRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+    var gRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
       method: "POST",
       headers: {
         "Authorization": "Bearer " + tokenData.access_token,
@@ -254,7 +254,7 @@ async function fetchGoogle(activeFrom, activeTo) {
     // Some currently-enabled campaigns may have no impressions in the window but
     // still deserve to appear. Fetch those separately to union in.
     var enabledQuery = "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign.advertising_channel_sub_type FROM campaign WHERE campaign.status = 'ENABLED'";
-    var enRes = await fetch("https://googleads.googleapis.com/v21/customers/" + gCustomerId + "/googleAds:search", {
+    var enRes = await fetch("https://googleads.googleapis.com/v22/customers/" + gCustomerId + "/googleAds:search", {
       method: "POST",
       headers: {
         "Authorization": "Bearer " + tokenData.access_token,

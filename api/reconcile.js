@@ -338,7 +338,7 @@ async function fetchGoogleTruth(from, to, warnings, overridesMap) {
     do {
       gGuard++;
       var body = pageToken ? { query: q, pageToken: pageToken } : { query: q };
-      var r = await fetchWithTimeout("https://googleads.googleapis.com/v21/customers/" + customer + "/googleAds:search", {
+      var r = await fetchWithTimeout("https://googleads.googleapis.com/v22/customers/" + customer + "/googleAds:search", {
         method: "POST",
         headers: { "Authorization": "Bearer " + tokD.access_token, "developer-token": dt, "login-customer-id": mg, "Content-Type": "application/json" },
         body: JSON.stringify(body)
