@@ -841,16 +841,17 @@ function SH(props){
   </div><div><h2 style={{margin:0,fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,letterSpacing:3,lineHeight:1,textTransform:"uppercase"}}>{props.title}</h2>{props.sub&&<p style={{margin:"6px 0 0",fontSize:11,color:P.label,fontFamily:fm,letterSpacing:2}}>{props.sub}</p>}</div></div><div style={{height:1,marginTop:16,background:"linear-gradient(90deg,"+a+"50,"+a+"15,transparent 80%)"}}/></div>);
 }
 function Pill(props){return(<span style={{display:"inline-flex",alignItems:"center",gap:5,background:props.color+"12",border:"1px solid "+props.color+"30",borderRadius:20,padding:"3px 10px",fontSize:9,fontWeight:700,color:props.color,fontFamily:fm,textTransform:"uppercase"}}><span style={{width:6,height:6,borderRadius:"50%",background:props.color}}/>{props.name}</span>);}
-// Targeting persona card for the Targeting tab. Impression-weighted per-
-// platform audience profile (the card describes who your ads reached at
-// scale, not who clicked hardest post-impression). Shows the dominant age
-// bracket as the visual anchor and layers gender / mobile / regions /
-// hottest segment / CTR-vs-blended as supporting data strips. Platform-
-// coloured header and accent throughout so the three cards read at a
-// glance as "Facebook vs Instagram vs TikTok" even before the numbers
-// register. shareOfClicks stays a click-based number because it is
-// answering a genuine engagement-volume question, not an audience-
-// composition question.
+// Targeting persona card for the Targeting tab. Click-weighted per-
+// platform engagement persona — describes who actively engaged with
+// the creative (opted in, showed intent), which is the standard
+// media-agency definition of a persona. Impressions describe who the
+// algorithm served, which is upstream of persona and can be biased by
+// platform delivery choices; clicks describe who chose to interact.
+// Shows the dominant age bracket as the visual anchor and layers
+// gender / mobile / regions / hottest segment / CTR-vs-blended as
+// supporting data strips. Platform-coloured header and accent
+// throughout so the three cards read at a glance as "Facebook vs
+// Instagram vs TikTok" even before the numbers register.
 function TargetingPersonaCard(props){
   var p=props.persona;var c=p.color;
   var genderLead=p.genderSplit.female>p.genderSplit.male?"Female":(p.genderSplit.male>0?"Male":"");
@@ -877,15 +878,15 @@ function TargetingPersonaCard(props){
       <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-      <div title="Overall gender share by impressions (paid reach), summed across all age brackets. Can differ from the top Best Personas entry below if one gender is concentrated in a single age bracket while the other is spread across many." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+      <div title="Overall click share by gender, summed across all age brackets. Can differ from the top Best Personas entry below if one gender is concentrated in a single age bracket while the other is spread across many." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
         <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Gender Lead</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{genderLead||"—"}</div>
         <div style={{fontSize:10,color:c,fontFamily:fm,fontWeight:700,marginTop:1}}>{genderLead?genderShare.toFixed(2)+"%":""}</div>
       </div>
-      <div title="Share of device-tagged impressions that were served on a mobile device, with desktop and tablet making up the rest. Measures the audience's device mix, not their click behaviour." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
+      <div title="Share of device-tagged clicks that came from a mobile device, with desktop and tablet making up the rest." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
         <div style={{fontSize:8,color:P.label,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>On Mobile</div>
         <div style={{fontSize:14,color:"#fff",fontFamily:fm,fontWeight:800}}>{p.mobileShare>0?p.mobileShare.toFixed(2)+"%":"—"}</div>
-        <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:1}}>of device-tagged impressions</div>
+        <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:1}}>of device-tagged clicks</div>
       </div>
     </div>
     {p.topProvinces.length>0&&<div style={{marginBottom:14}}>
@@ -898,7 +899,7 @@ function TargetingPersonaCard(props){
         <span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{pr.share.toFixed(2)+"%"}</span>
       </div>;})}
     </div>}
-    {topSegments.length>0&&<div title="Top three age + gender segments by impression share (paid reach). Each row is a single age × gender cell, ranked. The cells can rank differently from the overall Gender Lead above because the Lead sums across all ages while these are individual cells, the largest single cell is sometimes a male age band even when females are more numerous in total." style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
+    {topSegments.length>0&&<div title="Top three age + gender segments by click share. Each row is a single age × gender cell, ranked. The cells can rank differently from the overall Gender Lead above because the Lead sums across all ages while these are individual cells, the largest single cell is sometimes a male age band even when females are more numerous in total." style={{marginTop:"auto",padding:"10px 12px",background:c+"10",border:"1px dashed "+c+"45",borderRadius:10}}>
       <div style={{fontSize:8,color:c,fontFamily:fm,letterSpacing:1.8,textTransform:"uppercase",marginBottom:6,fontWeight:800}}>Best Personas</div>
       {topSegments.map(function(s,i){return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<topSegments.length-1?"1px dashed "+c+"20":"none",fontSize:12,fontFamily:fm}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -7051,84 +7052,71 @@ export default function MediaOnGas(){
               authObj:authObj
             };
 
-            // Build per-platform targeting personas (impression-weighted).
-            // One card per platform on the Targeting tab's AUDIENCE PERSONAS
-            // section. Uses the awareness stage so the signal is about who
-            // the ad was SERVED to (audience composition at scale), not who
-            // clicked hardest per impression — that click-weighting caused
-            // MTN MoMo TikTok to show 45-54 dominant even though 18-24 was
-            // the reach leader. shareOfClicks (below) stays click-based
-            // because it answers a real engagement-volume question.
-            // Platforms with zero click volume are dropped so an unused
-            // account doesn't leave an empty card.
+            // Build per-platform targeting personas (click-weighted). One
+            // card per platform on the Targeting tab's AUDIENCE PERSONAS
+            // section. Uses the engagement stage so the signal is about
+            // who ENGAGED with the ad, not who was passively served it —
+            // the standard media-agency definition of a persona. Platforms
+            // with zero click volume are dropped so an unused account
+            // doesn't leave an empty card.
             var buildPersona=function(matchKey,displayName,color,iconFn){
               var pKeyLow=matchKey.toLowerCase();
               var matches=function(r){return String(r.platform||"").toLowerCase().indexOf(pKeyLow)>=0;};
               var agP=agRows.filter(matches);
               var devP=devRows.filter(matches);
               var regP=regRows.filter(matches);
-              // Persona "Dominant Age" and all audience-composition
-              // signals (gender lead, top regions, best-persona segments)
-              // now weight on IMPRESSIONS, not clicks. Diagnostic on the
-              // MTN MoMo TikTok data (2026-08) proved why: 45-54 TikTok
-              // users clicked ~5x more per impression than 18-24, so the
-              // click-weighted persona headlined 45-54 (37.7% of clicks)
-              // even though 18-24 was the reach leader (30.7% of impres-
-              // sions) and under-35s made up 59% of the audience. The
-              // card describes WHO YOUR AUDIENCE IS — that's a reach
-              // question (who your ads reached), not an engagement
-              // question (who clicked hardest). Every platform now uses
-              // the same methodology, so cross-platform comparisons stay
-              // honest.
+              // Persona weights on CLICKS (stageDef.engagement). Owner
+              // methodology: demographics should reflect who ACTUALLY
+              // ENGAGED with the ad, not who was passively served it.
+              // Click-weighting shows the true engagement demographic —
+              // TikTok's algorithm serves widely at low CPM, so impres-
+              // sion counts overstate who's actually reachable; click
+              // counts capture who opted in. This matches the earlier
+              // methodology and the Demographics tab's engagement stage.
               //
-              // Engagement intensity by age still lives on the Deep Dive
-              // / Demographics tab click-rate views; it's a real signal,
-              // just not what "Dominant Age" is asking.
-              var stage=stageDef.awareness; // impressions
-              var totalImps=0;agP.forEach(function(r){totalImps+=stage.field(r);});
-              // shareOfClicks stays a click-based number because it
-              // answers "how much of engagement came from this platform"
-              // which is a genuine click question.
-              var clickTotal=0;agP.forEach(function(r){clickTotal+=(parseFloat(r.clicks||0)||0);});
+              // A brief detour to impression-weighting (commits a4b28ca
+              // → dd85f50) was reverted per owner: for MoMo TikTok this
+              // meant the 45-54 dominance IS real engagement truth, not
+              // a bug — that age band clicks 5x more per impression and
+              // their engagement should drive the persona.
+              var stage=stageDef.engagement; // clicks
+              var totalClicks=0;agP.forEach(function(r){totalClicks+=stage.field(r);});
               var blendedClk=authClicks||0;
-              var shareOfClicks=blendedClk>0?(clickTotal/blendedClk*100):0;
-              // Dominant age (impression-weighted)
+              var shareOfClicks=blendedClk>0?(totalClicks/blendedClk*100):0;
+              // Dominant age (click-weighted engagement demographic)
               var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+stage.field(r);});
-              // Diagnostic: dump both impression-weighted and click-
-              // weighted breakdowns so we can spot high-asymmetry cases
-              // (like TikTok 45-54 clicking 5x its reach share) without
-              // touching the endpoint. Fires once per persona build.
+              // Diagnostic: dump both click-weighted and impression-
+              // weighted breakdowns so future asymmetry questions can be
+              // answered from one console line — the reach view is
+              // preserved for context even though the persona uses the
+              // click view.
               try {
-                var clkSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;clkSums[a]=(clkSums[a]||0)+(parseFloat(r.clicks||0)||0);});
-                console.log("[persona-diag]",displayName,{rowCount:agP.length,weighting:"impressions",ageSumsByImpressions:ageSums,ageSumsByClicks:clkSums,totalImpressions:totalImps,totalClicks:clickTotal});
+                var impSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;impSums[a]=(impSums[a]||0)+(parseFloat(r.impressions||0)||0);});
+                console.log("[persona-diag]",displayName,{rowCount:agP.length,weighting:"clicks",ageSumsByClicks:ageSums,ageSumsByImpressions:impSums,totalClicks:totalClicks});
               } catch(_) {}
               var topAge="";var topAgeVal=0;Object.keys(ageSums).forEach(function(a){if(ageSums[a]>topAgeVal){topAgeVal=ageSums[a];topAge=a;}});
               var ageDenom=Object.keys(ageSums).reduce(function(s,k){return s+ageSums[k];},0);
               var topAgeShare=ageDenom>0?(topAgeVal/ageDenom*100):0;
-              // Gender split (impression-weighted)
+              // Gender split (click-weighted engagement demographic)
               var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=stage.field(r);});
               var gSum=gs.female+gs.male;
               var genderSplit={female:gSum>0?(gs.female/gSum*100):0,male:gSum>0?(gs.male/gSum*100):0};
-              // Top provinces (up to 3, impression-weighted)
+              // Top provinces (up to 3, click-weighted engagement view)
               var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+stage.field(r);});
               var pOrder=Object.keys(provSums).sort(function(a,b){return provSums[b]-provSums[a];});
               var pDenom=Object.keys(provSums).reduce(function(s,k){return s+provSums[k];},0);
               var topProvinces=pOrder.slice(0,3).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
-              // Mobile share of device-tagged impressions (Mobile + Desktop + Tablet denominator)
+              // Mobile share of device-tagged clicks (Mobile + Desktop + Tablet denominator, matches Device Mix chart)
               var devB={mobile:0,desktop:0,tablet:0};
               devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=stage.field(r);});
               var devDenom=devB.mobile+devB.desktop+devB.tablet;
               var mobileShare=devDenom>0?(devB.mobile/devDenom*100):0;
-              // Top 3 age+gender segments (impression-weighted). Reach-
-              // based so "Best Personas" describes who your audience
-              // actually is at scale, not just who clicked the hardest.
+              // Top 3 age+gender segments (click-weighted engagement).
+              // "Best Personas" ranks by who's engaging most, giving the
+              // sharpest signal for creative-audience targeting decisions.
               var segMap={};
               agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var k=a+"|"+g;var v=stage.field(r);segMap[k]=(segMap[k]||0)+v;});
-              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalImps>0?(segMap[k]/totalImps*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
-              // Preserve totalClicks in the return payload for any
-              // downstream card slot that reads it (e.g. Google intent
-              // card's parallel field). Keeps the shape compatible.
-              var totalClicks=clickTotal;
+              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalClicks>0?(segMap[k]/totalClicks*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
               // CTR vs blended, kept in the payload even though the card
               // footer no longer prints it, the Targeting Insights narrative
               // below the grid still references ctrRatio.
@@ -11160,7 +11148,7 @@ export default function MediaOnGas(){
               var byShare=targetingPersonas.slice().sort(function(a,b){return b.shareOfClicks-a.shareOfClicks;});
               var lead=byShare[0];
               var leadSeg=(lead.topSegments&&lead.topSegments[0])||null;
-              lines.push(lead.platform+" carries the heaviest click volume at "+lead.shareOfClicks.toFixed(2)+"% of selected-campaign clicks, with the biggest audience slice being "+(lead.topAge||"a mixed-age")+(leadSeg&&leadSeg.gen?" "+(leadSeg.gen==="female"?"female":"male"):"")+" viewers, served "+(lead.mobileShare>0?"mostly on mobile at "+lead.mobileShare.toFixed(2)+"%":"across devices")+".");
+              lines.push(lead.platform+" carries the heaviest click volume at "+lead.shareOfClicks.toFixed(2)+"% of selected-campaign clicks, with the largest single converting cell being "+(lead.topAge||"a mixed-age")+(leadSeg&&leadSeg.gen?" "+(leadSeg.gen==="female"?"female":"male"):"")+" segment, clicking "+(lead.mobileShare>0?"mostly on mobile at "+lead.mobileShare.toFixed(2)+"%":"across devices")+".");
               if(targetingPersonas.length>1){
                 var byCtr=targetingPersonas.slice().filter(function(p){return p.ctrRatio>0;}).sort(function(a,b){return b.ctrRatio-a.ctrRatio;});
                 if(byCtr.length>0){
@@ -11174,7 +11162,7 @@ export default function MediaOnGas(){
               var strongGeo=targetingPersonas.map(function(p){return {plat:p.platform,prov:(p.topProvinces[0]&&p.topProvinces[0].name)||"",share:(p.topProvinces[0]&&p.topProvinces[0].share)||0};}).filter(function(x){return x.prov;});
               if(strongGeo.length>0){
                 var geo=strongGeo.sort(function(a,b){return b.share-a.share;})[0];
-                lines.push(geo.plat+" is especially concentrated in "+geo.prov+" at "+geo.share.toFixed(2)+"% of its impressions, the sharpest geographic signal across the personas.");
+                lines.push(geo.plat+" is especially concentrated in "+geo.prov+" at "+geo.share.toFixed(2)+"% of its clicks, the sharpest geographic signal across the personas.");
               }
               lines.push("Recommendation, keep the current platform mix broadly intact to preserve reach diversity, then weight a larger share of budget to "+lead.platform+" creative variants that speak directly to the "+(lead.topAge||"primary")+(leadSeg&&leadSeg.gen?" "+(leadSeg.gen==="female"?"female":"male"):"")+" segment it is over-indexing on. This is a weighting shift, not an exclusion.");
               return <Insight title="Targeting Insights" accent={P.solar} icon={Ic.radar(P.solar,16)}>{lines.join(" ")}</Insight>;
