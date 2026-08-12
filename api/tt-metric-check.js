@@ -85,10 +85,13 @@ export default async function handler(req, res) {
   if (!advId || !token) return res.status(500).json({ error: "TikTok creds missing" });
 
   // AUDIENCE report at AUCTION_CAMPAIGN with age dimension — same
-  // shape the persona reads. Every meaningful click definition
-  // requested so we can see side-by-side which one Ads Manager
-  // agrees with.
-  var metrics = ["spend", "impressions", "clicks", "link_click_count", "reach"];
+  // shape the persona reads. Metric list confirmed accepted by
+  // TikTok at this data_level (verified 2026-08-12: link_click_count
+  // returns error 40002 'Invalid metric fields' at AUDIENCE +
+  // AUCTION_CAMPAIGN, so the earlier cross-platform-parity attempt
+  // was fundamentally rejected by the API and we're stuck with
+  // broad `clicks` at this endpoint).
+  var metrics = ["spend", "impressions", "clicks", "reach"];
   var params =
     "advertiser_id=" + advId +
     "&report_type=AUDIENCE" +
@@ -114,7 +117,6 @@ export default async function handler(req, res) {
   var perAge = {
     impressions: {},
     clicks: {},
-    linkClicks: {},
     reach: {}
   };
   (resp.list || []).forEach(function(row) {
@@ -123,7 +125,6 @@ export default async function handler(req, res) {
     var age = normaliseAge(dim.age);
     perAge.impressions[age] = (perAge.impressions[age] || 0) + (parseInt(met.impressions, 10) || 0);
     perAge.clicks[age] = (perAge.clicks[age] || 0) + (parseInt(met.clicks, 10) || 0);
-    perAge.linkClicks[age] = (perAge.linkClicks[age] || 0) + (parseInt(met.link_click_count, 10) || 0);
     perAge.reach[age] = (perAge.reach[age] || 0) + (parseInt(met.reach, 10) || 0);
   });
 
