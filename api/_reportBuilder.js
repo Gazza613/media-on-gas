@@ -1212,24 +1212,20 @@ function objectiveWeight(row, campaignObjType) {
 // stage block. Age tally seeds ONLY with ALLOWED_AGES so the dominant
 // age can never be "unknown" (Google GAQL returns UNKNOWN for
 // privacy-blocked users). Gender tally seeds with only female/male.
-// Aggregates THREE views in a single pass: click-weighted, impression-
-// weighted, and objective-weighted. Persona cards (mirror dashboard
-// TargetingPersonaCard which now uses stageDef.awareness = impressions)
-// read from ageImpressionsPersona / genderImpressions / segMapImpressions.
-// Age & Region bar charts (mirror the dashboard Demographics OBJECTIVE
-// stage) read from ageObj / genderObj / segMapObj / byRegionObj.
-// ageClicks / genderClicks / segMapClicks are kept for any legacy
-// consumer that hasn't migrated. The persona-weighting switch fixes
-// the MTN MoMo TikTok mis-headline (45-54 dominant on clicks even
-// though 18-24 was reach leader by impressions).
+// Aggregates two views in a single pass: click-weighted and
+// objective-weighted. Persona cards (mirror dashboard
+// TargetingPersonaCard which uses stageDef.engagement = clicks per
+// owner methodology) read from ageClicksPersona / genderClicks /
+// segMapClicks. Age & Region bar charts (mirror the dashboard
+// Demographics OBJECTIVE stage) read from ageObj / genderObj /
+// segMapObj / byRegionObj.
 function aggregateAgeGender(rows, campaignObjType) {
   var byPlat = {};
-  var ageClicksAll = {}, ageObjAll = {}, ageImpressionsAll = {};
+  var ageClicksAll = {}, ageObjAll = {};
   var genderClicksAll = { male: 0, female: 0 };
   var genderObjAll = { male: 0, female: 0 };
-  var genderImpressionsAll = { male: 0, female: 0 };
   var initAllowedMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
-  ALLOWED_AGES.forEach(function(a) { ageClicksAll[a] = 0; ageObjAll[a] = 0; ageImpressionsAll[a] = 0; });
+  ALLOWED_AGES.forEach(function(a) { ageClicksAll[a] = 0; ageObjAll[a] = 0; });
   (rows || []).forEach(function(r) {
     var age = String(r.age || "");
     if (EXCLUDED_AGES[age]) return; // 13-17 hard-drop, owner rule
@@ -1239,13 +1235,13 @@ function aggregateAgeGender(rows, campaignObjType) {
       // ("unknown", "13-17"-excluded, everything else) so dominant age
       // matches dashboard buildPersona (App.jsx ~7059) exactly. Empty
       // maps not seeded here; keys added on first hit.
-      ageClicksPersona: {}, ageObjPersona: {}, ageImpressionsPersona: {},
+      ageClicksPersona: {}, ageObjPersona: {},
       // Age-breakdown-scope tallies — CLASSIFIED bands only. Matches
       // dashboard's Demographics OBJECTIVE stage which iterates
       // ageOrder only (App.jsx ~5831 topAgeFor).
-      ageClicks: initAllowedMap(), ageObj: initAllowedMap(), ageImpressions: initAllowedMap(),
-      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 }, genderImpressions: { male: 0, female: 0 },
-      segMapClicks: {}, segMapObj: {}, segMapImpressions: {},
+      ageClicks: initAllowedMap(), ageObj: initAllowedMap(),
+      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 },
+      segMapClicks: {}, segMapObj: {},
       impressions: 0, clicks: 0, spend: 0, weight: 0
     };
     var bp = byPlat[p];
@@ -1260,24 +1256,19 @@ function aggregateAgeGender(rows, campaignObjType) {
     if (age) {
       bp.ageClicksPersona[age] = (bp.ageClicksPersona[age] || 0) + clicks;
       bp.ageObjPersona[age] = (bp.ageObjPersona[age] || 0) + w;
-      bp.ageImpressionsPersona[age] = (bp.ageImpressionsPersona[age] || 0) + imps;
     }
     // Breakdown tally — classified bands only.
     if (ALLOWED_AGES.indexOf(age) >= 0) {
       ageClicksAll[age] += clicks;
       ageObjAll[age] += w;
-      ageImpressionsAll[age] += imps;
       bp.ageClicks[age] += clicks;
       bp.ageObj[age] += w;
-      bp.ageImpressions[age] += imps;
     }
     if (g === "male" || g === "female") {
       genderClicksAll[g] += clicks;
       genderObjAll[g] += w;
-      genderImpressionsAll[g] += imps;
       bp.genderClicks[g] += clicks;
       bp.genderObj[g] += w;
-      bp.genderImpressions[g] += imps;
     }
     bp.impressions += imps;
     bp.clicks += clicks;
@@ -1287,23 +1278,22 @@ function aggregateAgeGender(rows, campaignObjType) {
       var k = age + "|" + g;
       bp.segMapClicks[k] = (bp.segMapClicks[k] || 0) + clicks;
       bp.segMapObj[k] = (bp.segMapObj[k] || 0) + w;
-      bp.segMapImpressions[k] = (bp.segMapImpressions[k] || 0) + imps;
     }
   });
   return {
     byPlatform: byPlat,
-    ageClicksAll: ageClicksAll, ageObjAll: ageObjAll, ageImpressionsAll: ageImpressionsAll,
-    genderClicksAll: genderClicksAll, genderObjAll: genderObjAll, genderImpressionsAll: genderImpressionsAll
+    ageClicksAll: ageClicksAll, ageObjAll: ageObjAll,
+    genderClicksAll: genderClicksAll, genderObjAll: genderObjAll
   };
 }
 
-// Click-weighted, impression-weighted (persona/targeting) and objective-
-// weighted (Demographics OBJECTIVE) region rollups in one pass. Persona
-// cards now read byPlatformRegionImpressions to answer the audience-
-// composition question honestly (who was reached in each region).
+// Click-weighted (persona/targeting) and objective-weighted (Demographics
+// OBJECTIVE stage) region rollups in one pass. Persona cards read
+// byPlatformRegionClicks per owner methodology (engagement view, not
+// reach view).
 function aggregateRegion(rows, campaignObjType) {
   var byRegion = {};
-  var byPlatformRegionClicks = {}, byPlatformRegionObj = {}, byPlatformRegionImpressions = {};
+  var byPlatformRegionClicks = {}, byPlatformRegionObj = {};
   (rows || []).forEach(function(r) {
     var reg = String(r.region || "").trim();
     if (!reg || reg.toLowerCase() === "unknown") return;
@@ -1318,16 +1308,13 @@ function aggregateRegion(rows, campaignObjType) {
     byRegion[reg].weight += w;
     if (!byPlatformRegionClicks[p]) byPlatformRegionClicks[p] = {};
     if (!byPlatformRegionObj[p]) byPlatformRegionObj[p] = {};
-    if (!byPlatformRegionImpressions[p]) byPlatformRegionImpressions[p] = {};
     byPlatformRegionClicks[p][reg] = (byPlatformRegionClicks[p][reg] || 0) + clicks;
     byPlatformRegionObj[p][reg] = (byPlatformRegionObj[p][reg] || 0) + w;
-    byPlatformRegionImpressions[p][reg] = (byPlatformRegionImpressions[p][reg] || 0) + imps;
   });
   return {
     byRegion: byRegion,
     byPlatformRegionClicks: byPlatformRegionClicks,
-    byPlatformRegionObj: byPlatformRegionObj,
-    byPlatformRegionImpressions: byPlatformRegionImpressions
+    byPlatformRegionObj: byPlatformRegionObj
   };
 }
 
