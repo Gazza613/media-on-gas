@@ -21,7 +21,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v19-tt-activity-guard-imps-too";
+var DEMO_CACHE_VERSION = "v20-tt-revert-to-broad-clicks";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -462,101 +462,52 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
   try {
     // report_type=AUDIENCE with data_level=AUCTION_CAMPAIGN is documented
     // but returns empty lists in practice on many advertiser accounts.
-    // BASIC report type supports the same demographic dimensions at the
-    // campaign level and is consistently populated.
+    // If it errors, retry at AUCTION_AD level — some advertisers only
+    // populate AUDIENCE reports at ad level, not campaign level.
     //
-    // Metric strategy — two-pass with graceful degradation. Preferred
-    // metric set includes `link_click_count` (destination-URL clicks,
-    // apples-to-apples with Meta's `clicks` field). If TikTok rejects
-    // link_click_count as invalid for the AUDIENCE/AUCTION_CAMPAIGN
-    // combo (documented at other data_levels but not always here), the
-    // second pass retries with just the broad metric set so the persona
-    // and demographic charts degrade to broad-clicks instead of going
-    // completely blank. The initial 2026-08-12 fix that switched to
-    // link_click_count wiped the TikTok persona on advertiser accounts
-    // where the metric wasn't supported at this data_level.
+    // Metric list: broad `clicks` only. Personas and demographic charts
+    // are ENGAGEMENT constructs (owner methodology, media-agency
+    // standard), so what TikTok reports as `clicks` — its broad tap
+    // count including video-area taps, CTA taps, profile taps, "See
+    // more" taps — IS the engagement signal we want. An earlier
+    // 2026-08-12 attempt to switch to link_click_count for cross-
+    // platform apples-to-apples caused TikTok's AUDIENCE endpoint to
+    // return rows with clicks='0' and link_click_count='0' for
+    // MoMo (link-click-count not a supported metric at this data-
+    // level on the account), which blanked the persona entirely.
+    // Reverted to the simple broad-clicks fetch that has served
+    // TikTok data reliably for months.
     var dims = encodeURIComponent(JSON.stringify(dimensions));
-    var metricsPreferred = ["spend", "impressions", "clicks", "link_click_count"];
-    var metricsFallback = ["spend", "impressions", "clicks"];
-    var mkUrl = function(dataLevel, metricsList) {
-      return "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/" +
-        "?advertiser_id=" + advId +
-        "&report_type=AUDIENCE" +
-        "&data_level=" + dataLevel +
-        "&dimensions=" + dims +
-        "&metrics=" + encodeURIComponent(JSON.stringify(metricsList)) +
-        "&start_date=" + from + "&end_date=" + to +
-        "&page_size=1000";
-    };
-    var tryFetch = async function(dataLevel, metricsList, label) {
-      try {
-        var rr = await fetch(mkUrl(dataLevel, metricsList), { headers: { "Access-Token": token } });
-        if (!rr.ok) {
-          console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " " + label + " non-ok", rr.status);
-          return { ok: false, list: null };
-        }
-        var dd = await rr.json();
-        if (dd.code && dd.code !== 0) {
-          console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " " + label + " api error", dd.code, dd.message);
-          return { ok: false, list: null, apiError: true };
-        }
-        var list = (dd.data && dd.data.list) || [];
-        return { ok: true, list: list };
-      } catch (err) {
-        console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " " + label + " threw", String(err && err.message || err));
-        return { ok: false, list: null };
-      }
-    };
-    // Attempt order: preferred-metrics @ CAMPAIGN, preferred @ AD,
-    // fallback @ CAMPAIGN, fallback @ AD. First useful response wins.
-    // "Useful" = non-empty list AND non-zero total activity (impressions
-    // OR clicks OR link_click_count) — TikTok's AUDIENCE report at
-    // AUCTION_CAMPAIGN sometimes returns rows with clicks='0' AND
-    // link_click_count='0' across the board on link_click_count fetches
-    // when the account runs no link-click TikTok campaigns. Without a
-    // fallthrough guard the link_click_count attempt 'succeeds' with
-    // all-zero rows and the persona stays blank.
-    //
-    // The activity check MUST include impressions, not just clicks —
-    // device breakdown rows (dimensions=['campaign_id','platform'])
-    // often carry non-zero impressions with zero clicks (users saw the
-    // ad on that device but did not tap). A click-only guard rejected
-    // those valid device rows and blanked the On-Mobile tile too.
-    var attempts = [
-      { dataLevel: "AUCTION_CAMPAIGN", metrics: metricsPreferred, label: "CAMPAIGN+link_click_count" },
-      { dataLevel: "AUCTION_AD", metrics: metricsPreferred, label: "AD+link_click_count" },
-      { dataLevel: "AUCTION_CAMPAIGN", metrics: metricsFallback, label: "CAMPAIGN+broadOnly" },
-      { dataLevel: "AUCTION_AD", metrics: metricsFallback, label: "AD+broadOnly" }
-    ];
-    var sumActivity = function(list) {
-      var imps = 0, clicks = 0, linkClicks = 0;
-      (list || []).forEach(function(row) {
-        var m = row.metrics || {};
-        imps += parseInt(m.impressions, 10) || 0;
-        clicks += parseInt(m.clicks, 10) || 0;
-        linkClicks += parseInt(m.link_click_count, 10) || 0;
-      });
-      return { imps: imps, clicks: clicks, linkClicks: linkClicks, total: imps + clicks + linkClicks };
-    };
-    for (var i = 0; i < attempts.length; i++) {
-      var a = attempts[i];
-      var res = await tryFetch(a.dataLevel, a.metrics, a.label);
-      if (res.ok) {
-        if (res.list.length === 0) {
-          console.log("[demo] TikTok " + JSON.stringify(dimensions) + " " + a.label + " returned 0 rows");
-          continue;
-        }
-        var act = sumActivity(res.list);
-        if (act.total === 0) {
-          console.log("[demo] TikTok " + JSON.stringify(dimensions) + " " + a.label + " returned " + res.list.length + " rows but 0 impressions / clicks — falling through");
-          continue;
-        }
-        console.log("[demo] TikTok " + JSON.stringify(dimensions) + " served by " + a.label + " (" + res.list.length + " rows, " + act.imps + " imps, " + act.clicks + " broad clicks, " + act.linkClicks + " link clicks)");
-        return res.list;
-      }
+    var metrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks"]));
+    var url = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/" +
+      "?advertiser_id=" + advId +
+      "&report_type=AUDIENCE" +
+      "&data_level=AUCTION_CAMPAIGN" +
+      "&dimensions=" + dims +
+      "&metrics=" + metrics +
+      "&start_date=" + from + "&end_date=" + to +
+      "&page_size=1000";
+    var r = await fetch(url, { headers: { "Access-Token": token } });
+    if (!r.ok) {
+      console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " non-ok", r.status);
+      return [];
     }
-    console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " all 4 attempts failed or empty, returning []");
-    return [];
+    var d = await r.json();
+    if (d.code && d.code !== 0) {
+      console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " api error", d.code, d.message);
+      var urlAd = url.replace("AUCTION_CAMPAIGN", "AUCTION_AD");
+      var r2 = await fetch(urlAd, { headers: { "Access-Token": token } });
+      if (r2.ok) {
+        var d2 = await r2.json();
+        if (d2.data && d2.data.list) return d2.data.list;
+      }
+      return [];
+    }
+    if (!d.data || !d.data.list) return [];
+    if (d.data.list.length === 0) {
+      console.log("[demo] TikTok " + JSON.stringify(dimensions) + " returned 0 rows");
+    }
+    return d.data.list;
   } catch (e) {
     console.error("TikTok demo fetch error", dimensions, e && e.message);
     return [];
@@ -634,21 +585,7 @@ async function fetchTikTokDemo(token, advId, from, to) {
       age: normaliseTikTokAge(dim.age),
       gender: normaliseTikTokGender(dim.gender),
       impressions: parseInt(met.impressions || 0, 10),
-      // Prefer link_click_count (destination-URL clicks, matches Meta's
-      // "clicks" definition) so cross-platform aggregate demographics
-      // charts blend apples-to-apples. Fall back to broad `clicks` if
-      // link_click_count is missing or zero on this row (older campaigns,
-      // or ad-set-level rows where TikTok doesn't expose link clicks).
-      // Broad clicks preserved as broadClicks for any consumer that
-      // wants the wider engagement view (video taps + all interactions).
-      //
-      // TikTok returns metrics as strings ("0", "322"). A naive
-      // `met.link_click_count || met.clicks` chain treats the string
-      // "0" as truthy and never falls through — wiping every row's
-      // clicks to 0 and blanking the TikTok persona. Parse first, then
-      // rely on the numeric-zero short-circuit for the fallback.
-      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
-      broadClicks: parseInt(met.clicks || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -666,21 +603,7 @@ async function fetchTikTokDemo(token, advId, from, to) {
       campaignName: "",
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      // Prefer link_click_count (destination-URL clicks, matches Meta's
-      // "clicks" definition) so cross-platform aggregate demographics
-      // charts blend apples-to-apples. Fall back to broad `clicks` if
-      // link_click_count is missing or zero on this row (older campaigns,
-      // or ad-set-level rows where TikTok doesn't expose link clicks).
-      // Broad clicks preserved as broadClicks for any consumer that
-      // wants the wider engagement view (video taps + all interactions).
-      //
-      // TikTok returns metrics as strings ("0", "322"). A naive
-      // `met.link_click_count || met.clicks` chain treats the string
-      // "0" as truthy and never falls through — wiping every row's
-      // clicks to 0 and blanking the TikTok persona. Parse first, then
-      // rely on the numeric-zero short-circuit for the fallback.
-      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
-      broadClicks: parseInt(met.clicks || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -696,21 +619,7 @@ async function fetchTikTokDemo(token, advId, from, to) {
       campaignName: "",
       device: String(dim.platform || "unknown").toLowerCase(),
       impressions: parseInt(met.impressions || 0, 10),
-      // Prefer link_click_count (destination-URL clicks, matches Meta's
-      // "clicks" definition) so cross-platform aggregate demographics
-      // charts blend apples-to-apples. Fall back to broad `clicks` if
-      // link_click_count is missing or zero on this row (older campaigns,
-      // or ad-set-level rows where TikTok doesn't expose link clicks).
-      // Broad clicks preserved as broadClicks for any consumer that
-      // wants the wider engagement view (video taps + all interactions).
-      //
-      // TikTok returns metrics as strings ("0", "322"). A naive
-      // `met.link_click_count || met.clicks` chain treats the string
-      // "0" as truthy and never falls through — wiping every row's
-      // clicks to 0 and blanking the TikTok persona. Parse first, then
-      // rely on the numeric-zero short-circuit for the fallback.
-      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
-      broadClicks: parseInt(met.clicks || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -731,21 +640,7 @@ async function fetchTikTokDemo(token, advId, from, to) {
       gender: "unknown",
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      // Prefer link_click_count (destination-URL clicks, matches Meta's
-      // "clicks" definition) so cross-platform aggregate demographics
-      // charts blend apples-to-apples. Fall back to broad `clicks` if
-      // link_click_count is missing or zero on this row (older campaigns,
-      // or ad-set-level rows where TikTok doesn't expose link clicks).
-      // Broad clicks preserved as broadClicks for any consumer that
-      // wants the wider engagement view (video taps + all interactions).
-      //
-      // TikTok returns metrics as strings ("0", "322"). A naive
-      // `met.link_click_count || met.clicks` chain treats the string
-      // "0" as truthy and never falls through — wiping every row's
-      // clicks to 0 and blanking the TikTok persona. Parse first, then
-      // rely on the numeric-zero short-circuit for the fallback.
-      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
-      broadClicks: parseInt(met.clicks || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -765,21 +660,7 @@ async function fetchTikTokDemo(token, advId, from, to) {
       gender: normaliseTikTokGender(dim.gender),
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      // Prefer link_click_count (destination-URL clicks, matches Meta's
-      // "clicks" definition) so cross-platform aggregate demographics
-      // charts blend apples-to-apples. Fall back to broad `clicks` if
-      // link_click_count is missing or zero on this row (older campaigns,
-      // or ad-set-level rows where TikTok doesn't expose link clicks).
-      // Broad clicks preserved as broadClicks for any consumer that
-      // wants the wider engagement view (video taps + all interactions).
-      //
-      // TikTok returns metrics as strings ("0", "322"). A naive
-      // `met.link_click_count || met.clicks` chain treats the string
-      // "0" as truthy and never falls through — wiping every row's
-      // clicks to 0 and blanking the TikTok persona. Parse first, then
-      // rely on the numeric-zero short-circuit for the fallback.
-      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
-      broadClicks: parseInt(met.clicks || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -798,21 +679,7 @@ async function fetchTikTokDemo(token, advId, from, to) {
       device: String(dim.platform || "unknown").toLowerCase(),
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      // Prefer link_click_count (destination-URL clicks, matches Meta's
-      // "clicks" definition) so cross-platform aggregate demographics
-      // charts blend apples-to-apples. Fall back to broad `clicks` if
-      // link_click_count is missing or zero on this row (older campaigns,
-      // or ad-set-level rows where TikTok doesn't expose link clicks).
-      // Broad clicks preserved as broadClicks for any consumer that
-      // wants the wider engagement view (video taps + all interactions).
-      //
-      // TikTok returns metrics as strings ("0", "322"). A naive
-      // `met.link_click_count || met.clicks` chain treats the string
-      // "0" as truthy and never falls through — wiping every row's
-      // clicks to 0 and blanking the TikTok persona. Parse first, then
-      // rely on the numeric-zero short-circuit for the fallback.
-      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
-      broadClicks: parseInt(met.clicks || 0, 10),
+      clicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -1277,10 +1144,9 @@ export default async function handler(req, res) {
           if (!b) return;
           perPlatRowCount[b] += 1;
           var a = String(r.age || "unknown");
-          if (!perPlatAge[b][a]) perPlatAge[b][a] = { impressions: 0, clicks: 0, broadClicks: 0, rows: 0 };
+          if (!perPlatAge[b][a]) perPlatAge[b][a] = { impressions: 0, clicks: 0, rows: 0 };
           perPlatAge[b][a].impressions += parseFloat(r.impressions || 0) || 0;
           perPlatAge[b][a].clicks += parseFloat(r.clicks || 0) || 0;
-          perPlatAge[b][a].broadClicks += parseFloat(r.broadClicks || r.clicks || 0) || 0;
           perPlatAge[b][a].rows += 1;
         });
         // Round for legibility in the DevTools payload.
