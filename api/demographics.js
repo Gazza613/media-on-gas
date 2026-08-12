@@ -21,7 +21,7 @@ var META_ACCOUNTS = [
 
 var demoCache = {};
 var DEMO_CACHE_TTL_MS = 5 * 60 * 1000;
-var DEMO_CACHE_VERSION = "v18-tt-fallthrough-on-zero";
+var DEMO_CACHE_VERSION = "v19-tt-activity-guard-imps-too";
 
 // Google demographics caching strategy: see fetchGoogleDemo() below.
 // Short version: Redis-first read, fresh fetch only if stale or empty,
@@ -509,27 +509,34 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
     };
     // Attempt order: preferred-metrics @ CAMPAIGN, preferred @ AD,
     // fallback @ CAMPAIGN, fallback @ AD. First useful response wins.
-    // "Useful" = non-empty list AND non-zero total clicks + broadClicks —
-    // TikTok's AUDIENCE report sometimes returns rows with clicks='0'
-    // AND link_click_count='0' across the board when the requested
-    // metric list includes link_click_count and the account runs no
-    // link-click campaigns on TikTok. Without the click-sum check the
-    // link_click_count attempt "succeeds" with all-zero rows and the
-    // persona/aggregate stays blank instead of falling through to the
-    // broad-clicks attempt which has real engagement data.
+    // "Useful" = non-empty list AND non-zero total activity (impressions
+    // OR clicks OR link_click_count) — TikTok's AUDIENCE report at
+    // AUCTION_CAMPAIGN sometimes returns rows with clicks='0' AND
+    // link_click_count='0' across the board on link_click_count fetches
+    // when the account runs no link-click TikTok campaigns. Without a
+    // fallthrough guard the link_click_count attempt 'succeeds' with
+    // all-zero rows and the persona stays blank.
+    //
+    // The activity check MUST include impressions, not just clicks —
+    // device breakdown rows (dimensions=['campaign_id','platform'])
+    // often carry non-zero impressions with zero clicks (users saw the
+    // ad on that device but did not tap). A click-only guard rejected
+    // those valid device rows and blanked the On-Mobile tile too.
     var attempts = [
       { dataLevel: "AUCTION_CAMPAIGN", metrics: metricsPreferred, label: "CAMPAIGN+link_click_count" },
       { dataLevel: "AUCTION_AD", metrics: metricsPreferred, label: "AD+link_click_count" },
       { dataLevel: "AUCTION_CAMPAIGN", metrics: metricsFallback, label: "CAMPAIGN+broadOnly" },
       { dataLevel: "AUCTION_AD", metrics: metricsFallback, label: "AD+broadOnly" }
     ];
-    var sumClicks = function(list) {
-      var total = 0;
+    var sumActivity = function(list) {
+      var imps = 0, clicks = 0, linkClicks = 0;
       (list || []).forEach(function(row) {
         var m = row.metrics || {};
-        total += (parseInt(m.clicks, 10) || 0) + (parseInt(m.link_click_count, 10) || 0);
+        imps += parseInt(m.impressions, 10) || 0;
+        clicks += parseInt(m.clicks, 10) || 0;
+        linkClicks += parseInt(m.link_click_count, 10) || 0;
       });
-      return total;
+      return { imps: imps, clicks: clicks, linkClicks: linkClicks, total: imps + clicks + linkClicks };
     };
     for (var i = 0; i < attempts.length; i++) {
       var a = attempts[i];
@@ -537,14 +544,14 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
       if (res.ok) {
         if (res.list.length === 0) {
           console.log("[demo] TikTok " + JSON.stringify(dimensions) + " " + a.label + " returned 0 rows");
-          continue; // try next attempt in case this data_level+metrics is empty
-        }
-        var clickTotal = sumClicks(res.list);
-        if (clickTotal === 0) {
-          console.log("[demo] TikTok " + JSON.stringify(dimensions) + " " + a.label + " returned " + res.list.length + " rows but 0 aggregate clicks — falling through to next attempt");
           continue;
         }
-        console.log("[demo] TikTok " + JSON.stringify(dimensions) + " served by " + a.label + " (" + res.list.length + " rows, " + clickTotal + " total clicks)");
+        var act = sumActivity(res.list);
+        if (act.total === 0) {
+          console.log("[demo] TikTok " + JSON.stringify(dimensions) + " " + a.label + " returned " + res.list.length + " rows but 0 impressions / clicks — falling through");
+          continue;
+        }
+        console.log("[demo] TikTok " + JSON.stringify(dimensions) + " served by " + a.label + " (" + res.list.length + " rows, " + act.imps + " imps, " + act.clicks + " broad clicks, " + act.linkClicks + " link clicks)");
         return res.list;
       }
     }
