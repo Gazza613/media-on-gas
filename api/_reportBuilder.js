@@ -1212,22 +1212,24 @@ function objectiveWeight(row, campaignObjType) {
 // stage block. Age tally seeds ONLY with ALLOWED_AGES so the dominant
 // age can never be "unknown" (Google GAQL returns UNKNOWN for
 // privacy-blocked users). Gender tally seeds with only female/male.
-// Aggregates BOTH click-weighted and objective-weighted views in a
-// single pass. Persona cards (mirror dashboard TargetingPersonaCard
-// which uses stageDef.engagement = clicks) read from ageClicks /
-// genderClicks / segMapClicks. Age & Region bar charts (mirror the
-// dashboard Demographics OBJECTIVE stage) read from ageObj /
-// genderObj / segMapObj / byRegionObj. This split fixes the
-// "Facebook dominant age 65+" persona mis-match where every reader
-// was using objective-weight and elders were overweighted because
-// Community Reach objective heavily indexes on the 65+ band.
+// Aggregates THREE views in a single pass: click-weighted, impression-
+// weighted, and objective-weighted. Persona cards (mirror dashboard
+// TargetingPersonaCard which now uses stageDef.awareness = impressions)
+// read from ageImpressionsPersona / genderImpressions / segMapImpressions.
+// Age & Region bar charts (mirror the dashboard Demographics OBJECTIVE
+// stage) read from ageObj / genderObj / segMapObj / byRegionObj.
+// ageClicks / genderClicks / segMapClicks are kept for any legacy
+// consumer that hasn't migrated. The persona-weighting switch fixes
+// the MTN MoMo TikTok mis-headline (45-54 dominant on clicks even
+// though 18-24 was reach leader by impressions).
 function aggregateAgeGender(rows, campaignObjType) {
   var byPlat = {};
-  var ageClicksAll = {}, ageObjAll = {};
+  var ageClicksAll = {}, ageObjAll = {}, ageImpressionsAll = {};
   var genderClicksAll = { male: 0, female: 0 };
   var genderObjAll = { male: 0, female: 0 };
+  var genderImpressionsAll = { male: 0, female: 0 };
   var initAllowedMap = function() { var m = {}; ALLOWED_AGES.forEach(function(a) { m[a] = 0; }); return m; };
-  ALLOWED_AGES.forEach(function(a) { ageClicksAll[a] = 0; ageObjAll[a] = 0; });
+  ALLOWED_AGES.forEach(function(a) { ageClicksAll[a] = 0; ageObjAll[a] = 0; ageImpressionsAll[a] = 0; });
   (rows || []).forEach(function(r) {
     var age = String(r.age || "");
     if (EXCLUDED_AGES[age]) return; // 13-17 hard-drop, owner rule
@@ -1235,15 +1237,15 @@ function aggregateAgeGender(rows, campaignObjType) {
     if (!byPlat[p]) byPlat[p] = {
       // Persona-scope age tallies — INCLUDE any non-13-17 age string
       // ("unknown", "13-17"-excluded, everything else) so dominant age
-      // matches dashboard buildPersona (App.jsx ~6306) exactly. Empty
+      // matches dashboard buildPersona (App.jsx ~7059) exactly. Empty
       // maps not seeded here; keys added on first hit.
-      ageClicksPersona: {}, ageObjPersona: {},
+      ageClicksPersona: {}, ageObjPersona: {}, ageImpressionsPersona: {},
       // Age-breakdown-scope tallies — CLASSIFIED bands only. Matches
       // dashboard's Demographics OBJECTIVE stage which iterates
       // ageOrder only (App.jsx ~5831 topAgeFor).
-      ageClicks: initAllowedMap(), ageObj: initAllowedMap(),
-      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 },
-      segMapClicks: {}, segMapObj: {},
+      ageClicks: initAllowedMap(), ageObj: initAllowedMap(), ageImpressions: initAllowedMap(),
+      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 }, genderImpressions: { male: 0, female: 0 },
+      segMapClicks: {}, segMapObj: {}, segMapImpressions: {},
       impressions: 0, clicks: 0, spend: 0, weight: 0
     };
     var bp = byPlat[p];
@@ -1258,19 +1260,24 @@ function aggregateAgeGender(rows, campaignObjType) {
     if (age) {
       bp.ageClicksPersona[age] = (bp.ageClicksPersona[age] || 0) + clicks;
       bp.ageObjPersona[age] = (bp.ageObjPersona[age] || 0) + w;
+      bp.ageImpressionsPersona[age] = (bp.ageImpressionsPersona[age] || 0) + imps;
     }
     // Breakdown tally — classified bands only.
     if (ALLOWED_AGES.indexOf(age) >= 0) {
       ageClicksAll[age] += clicks;
       ageObjAll[age] += w;
+      ageImpressionsAll[age] += imps;
       bp.ageClicks[age] += clicks;
       bp.ageObj[age] += w;
+      bp.ageImpressions[age] += imps;
     }
     if (g === "male" || g === "female") {
       genderClicksAll[g] += clicks;
       genderObjAll[g] += w;
+      genderImpressionsAll[g] += imps;
       bp.genderClicks[g] += clicks;
       bp.genderObj[g] += w;
+      bp.genderImpressions[g] += imps;
     }
     bp.impressions += imps;
     bp.clicks += clicks;
@@ -1280,20 +1287,23 @@ function aggregateAgeGender(rows, campaignObjType) {
       var k = age + "|" + g;
       bp.segMapClicks[k] = (bp.segMapClicks[k] || 0) + clicks;
       bp.segMapObj[k] = (bp.segMapObj[k] || 0) + w;
+      bp.segMapImpressions[k] = (bp.segMapImpressions[k] || 0) + imps;
     }
   });
   return {
     byPlatform: byPlat,
-    ageClicksAll: ageClicksAll, ageObjAll: ageObjAll,
-    genderClicksAll: genderClicksAll, genderObjAll: genderObjAll
+    ageClicksAll: ageClicksAll, ageObjAll: ageObjAll, ageImpressionsAll: ageImpressionsAll,
+    genderClicksAll: genderClicksAll, genderObjAll: genderObjAll, genderImpressionsAll: genderImpressionsAll
   };
 }
 
-// Both click-weighted (persona/targeting) and objective-weighted
-// (Demographics OBJECTIVE) region rollups in one pass.
+// Click-weighted, impression-weighted (persona/targeting) and objective-
+// weighted (Demographics OBJECTIVE) region rollups in one pass. Persona
+// cards now read byPlatformRegionImpressions to answer the audience-
+// composition question honestly (who was reached in each region).
 function aggregateRegion(rows, campaignObjType) {
   var byRegion = {};
-  var byPlatformRegionClicks = {}, byPlatformRegionObj = {};
+  var byPlatformRegionClicks = {}, byPlatformRegionObj = {}, byPlatformRegionImpressions = {};
   (rows || []).forEach(function(r) {
     var reg = String(r.region || "").trim();
     if (!reg || reg.toLowerCase() === "unknown") return;
@@ -1308,20 +1318,26 @@ function aggregateRegion(rows, campaignObjType) {
     byRegion[reg].weight += w;
     if (!byPlatformRegionClicks[p]) byPlatformRegionClicks[p] = {};
     if (!byPlatformRegionObj[p]) byPlatformRegionObj[p] = {};
+    if (!byPlatformRegionImpressions[p]) byPlatformRegionImpressions[p] = {};
     byPlatformRegionClicks[p][reg] = (byPlatformRegionClicks[p][reg] || 0) + clicks;
     byPlatformRegionObj[p][reg] = (byPlatformRegionObj[p][reg] || 0) + w;
+    byPlatformRegionImpressions[p][reg] = (byPlatformRegionImpressions[p][reg] || 0) + imps;
   });
   return {
     byRegion: byRegion,
     byPlatformRegionClicks: byPlatformRegionClicks,
-    byPlatformRegionObj: byPlatformRegionObj
+    byPlatformRegionObj: byPlatformRegionObj,
+    byPlatformRegionImpressions: byPlatformRegionImpressions
   };
 }
 
 // Render the audience/demographics section. Persona cards mirror the
-// dashboard's TargetingPersonaCard (App.jsx ~723): click-weighted
-// dominant age + share, gender lead + share, top regions, top 3 age
-// x gender segments. Every calculation excludes 13-17 (owner rule).
+// dashboard's TargetingPersonaCard (App.jsx ~850): impression-weighted
+// dominant age + share, gender lead + share, top regions, top 3 age x
+// gender segments — because the section describes WHO WAS REACHED, not
+// who clicked hardest per impression. Every calculation excludes 13-17
+// (owner rule). Total Clicks tile stays a legitimate click read
+// (that's an engagement-volume question, not audience composition).
 function renderAudienceSection(opts) {
   var demo = opts.demographics;
   if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
@@ -1367,10 +1383,12 @@ function renderAudienceSection(opts) {
     var pb = agAgg.byPlatform[p];
     var accent = platformAccent(p);
     // Persona dominant age reads the PERSONA-SCOPE tally which
-    // matches dashboard buildPersona (App.jsx ~6306): every non-13-17
-    // age string contributes to the click sum, including "unknown".
-    // Denominator includes those too so the % is honest.
-    var personaMap = pb.ageClicksPersona || {};
+    // matches dashboard buildPersona (App.jsx ~7059): every non-13-17
+    // age string contributes to the impression sum, including "unknown".
+    // Denominator includes those too so the % is honest. Impression-
+    // weighted since the card asks "who is this platform's audience",
+    // a reach question (not a click question, which was the old bug).
+    var personaMap = pb.ageImpressionsPersona || {};
     var topAgeKey = "", topAgeVal = 0;
     Object.keys(personaMap).forEach(function(k) { if (personaMap[k] > topAgeVal) { topAgeVal = personaMap[k]; topAgeKey = k; } });
     var ageDenom = Object.keys(personaMap).reduce(function(s, k) { return s + personaMap[k]; }, 0);
@@ -1385,25 +1403,25 @@ function renderAudienceSection(opts) {
       ALLOWED_AGES.forEach(function(k) { if ((personaMap[k] || 0) > altVal) { altVal = personaMap[k]; altKey = k; } });
       if (altKey) { topAgeKey = altKey; topAgeVal = altVal; topAgeShare = ageDenom > 0 ? (altVal / ageDenom * 100) : 0; }
     }
-    var gSum = pb.genderClicks.male + pb.genderClicks.female;
-    var femaleShare = gSum > 0 ? (pb.genderClicks.female / gSum * 100) : 0;
-    var maleShare = gSum > 0 ? (pb.genderClicks.male / gSum * 100) : 0;
+    var gSum = pb.genderImpressions.male + pb.genderImpressions.female;
+    var femaleShare = gSum > 0 ? (pb.genderImpressions.female / gSum * 100) : 0;
+    var maleShare = gSum > 0 ? (pb.genderImpressions.male / gSum * 100) : 0;
     var genderLead = femaleShare > maleShare ? "Female" : (maleShare > 0 ? "Male" : "");
     var genderShare = Math.max(femaleShare, maleShare);
-    // Region rollup for this platform, click-weighted to match
-    // TargetingPersonaCard.
-    var pRegs = (regAgg.byPlatformRegionClicks && regAgg.byPlatformRegionClicks[p]) || {};
+    // Region rollup for this platform, impression-weighted to match
+    // TargetingPersonaCard's audience-composition framing.
+    var pRegs = (regAgg.byPlatformRegionImpressions && regAgg.byPlatformRegionImpressions[p]) || {};
     var pRegKeys = Object.keys(pRegs).sort(function(a, b) { return pRegs[b] - pRegs[a]; }).slice(0, 3);
     var pRegDenom = Object.keys(pRegs).reduce(function(s, k) { return s + pRegs[k]; }, 0);
     var regionRows = pRegKeys.map(function(rk) {
       var share = pRegDenom > 0 ? (pRegs[rk] / pRegDenom * 100) : 0;
       return `<div class="rp-persona-region"><span class="rp-persona-region-name">${escapeHtmlLocal(rk)}</span><span class="rp-persona-region-share">${share.toFixed(2)}%</span></div>`;
     }).join("");
-    // Best Personas — top 3 age × gender segments, click-weighted.
-    var segTotal = Object.keys(pb.segMapClicks).reduce(function(s, k) { return s + pb.segMapClicks[k]; }, 0);
-    var segments = Object.keys(pb.segMapClicks).map(function(k) {
+    // Best Personas — top 3 age × gender segments, impression-weighted.
+    var segTotal = Object.keys(pb.segMapImpressions).reduce(function(s, k) { return s + pb.segMapImpressions[k]; }, 0);
+    var segments = Object.keys(pb.segMapImpressions).map(function(k) {
       var parts = k.split("|");
-      return { age: parts[0], gen: parts[1], val: pb.segMapClicks[k], share: segTotal > 0 ? (pb.segMapClicks[k] / segTotal * 100) : 0 };
+      return { age: parts[0], gen: parts[1], val: pb.segMapImpressions[k], share: segTotal > 0 ? (pb.segMapImpressions[k] / segTotal * 100) : 0 };
     }).sort(function(a, b) { return b.val - a.val; }).slice(0, 3);
     var segRows = segments.map(function(s, i) {
       var label = s.age + " " + (s.gen === "female" ? "Female" : "Male");
@@ -1424,7 +1442,7 @@ function renderAudienceSection(opts) {
         <div class="rp-persona-strip-tile">
           <div class="rp-persona-strip-label">Total Clicks</div>
           <div class="rp-persona-strip-value">${fmtNum(pb.clicks)}</div>
-          <div class="rp-persona-strip-sub">click-weighted</div>
+          <div class="rp-persona-strip-sub">engagement volume</div>
         </div>
       </div>
       ${regionRows ? `<div class="rp-persona-block-title">Top Regions</div><div class="rp-persona-regions">${regionRows}</div>` : ""}
