@@ -2020,7 +2020,12 @@ export default async function handler(req, res) {
   // per-source-customer resolved/unresolved count instead of a Vercel
   // logs dig. Full googleDebug (payload sample + first ad object) stays
   // gated on ?debug=1 to keep production responses lean.
-  if (typeof googleAssetDebug !== "undefined") {
+  // googleAssetDebug is declared as `null` at fetch entry so `typeof` is
+  // "object" whether or not the fetch actually populated it — guard on
+  // truthiness instead. Previously typeof-only check triggered a 500
+  // (Cannot read properties of null) when the Google fetch errored
+  // before the resolver ran, e.g. missing credentials in preview envs.
+  if (googleAssetDebug) {
     response.googleAssetSummary = {
       totalRefs: googleAssetDebug.totalRefs,
       resolved: googleAssetDebug.resolved,
@@ -2033,7 +2038,7 @@ export default async function handler(req, res) {
   }
   if (debugFollows) {
     response.googleDebug = googleDebug;
-    if (typeof googleAssetDebug !== "undefined") response.googleAssetDebug = googleAssetDebug;
+    if (googleAssetDebug) response.googleAssetDebug = googleAssetDebug;
   }
   // ?googleOnly=1 slices the response to Google-platform ads plus the
   // debug bundles, so the diagnostic payload fits inside a browser tab
@@ -2044,7 +2049,7 @@ export default async function handler(req, res) {
       return p.indexOf("google") >= 0 || p.indexOf("youtube") >= 0 || p.indexOf("pmax") >= 0 || p.indexOf("demand") >= 0;
     });
     var slim = { ads: googleAds, total: googleAds.length, googleDebug: googleDebug };
-    if (typeof googleAssetDebug !== "undefined") slim.googleAssetDebug = googleAssetDebug;
+    if (googleAssetDebug) slim.googleAssetDebug = googleAssetDebug;
     res.status(200).json(slim);
     return;
   }
