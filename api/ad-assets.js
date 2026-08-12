@@ -133,16 +133,29 @@ export async function computeAssetBreakdown(adId, from, to) {
   // winner is the creative that delivered the most impressions (Meta's
   // asset breakdown does not expose reach per creative, only at the
   // ad/campaign level, so impressions is the correct per-asset proxy).
+  //
+  // Also pull the creative's object_story_spec so we can detect carousel
+  // ads (child_attachments) and return every card as an asset. Meta does
+  // not expose per-card metrics on the standard asset breakdown for
+  // carousels, so those cards render without their own numbers (the
+  // whole-ad totals apply) — but the reader gets to see every card in
+  // the preview modal, which is the primary ask.
   var accountId = "";
   var awareness = false;
+  var carouselCards = [];
   try {
-    var ar = await fetch(GRAPH + "/" + encodeURIComponent(adId) + "?fields=account_id,campaign{name,objective}&access_token=" + encodeURIComponent(token));
+    var ar = await fetch(GRAPH + "/" + encodeURIComponent(adId) + "?fields=account_id,campaign{name,objective},creative{object_story_spec,effective_object_story_id}&access_token=" + encodeURIComponent(token));
     var ad = await ar.json();
     if (ar.ok && ad.account_id) accountId = "act_" + ad.account_id;
     var campObj = String((ad.campaign && ad.campaign.objective) || "");
     var campName = String((ad.campaign && ad.campaign.name) || "");
     awareness = /AWARENESS|REACH|BRAND/i.test(campObj) ||
       /(^|[_\s|-])(awr|awareness|reach|brand)([_\s|-]|$)/i.test(campName);
+    // Carousel detection: object_story_spec.link_data.child_attachments
+    // is the canonical shape for Meta carousels (2-10 cards per ad).
+    var oss = (ad.creative && ad.creative.object_story_spec) || {};
+    var childs = (oss.link_data && Array.isArray(oss.link_data.child_attachments)) ? oss.link_data.child_attachments : [];
+    if (childs.length > 1) carouselCards = childs;
   } catch (_) {}
 
   // Pull both visual breakdowns in parallel. A mixed ad usually leads
@@ -201,6 +214,37 @@ export async function computeAssetBreakdown(adId, from, to) {
     });
   });
 
+  // Carousel cards fold in as their own "assets" so the preview modal's
+  // existing per-creative picker renders every card. Meta does not
+  // expose per-card metrics on the asset breakdown, so per-card
+  // impressions / clicks / spend are left at 0 — the reader gets to
+  // see each card image + headline + description, which is what the
+  // Ads Manager preview shows and what the client asked for. If Meta
+  // later exposes per-card metrics via a `card_id` breakdown, this
+  // block can hook them in without changing the response shape.
+  if (carouselCards.length > 0) {
+    carouselCards.forEach(function(ch, idx) {
+      var childHash = ch.image_hash || "";
+      var childImgUrl = ch.image_url || ch.picture || "";
+      var childName = ch.name || ch.headline || ("Carousel card " + (idx + 1));
+      var childDesc = ch.description || ch.call_to_action_type || "";
+      assets.push({
+        kind: "Carousel card",
+        assetId: "carousel_" + idx,
+        hash: childHash,
+        videoId: ch.video_id || "",
+        name: childName,
+        url: childImgUrl,
+        description: childDesc,
+        link: ch.link || "",
+        impressions: 0, clicks: 0, spend: 0,
+        ctr: 0, cpc: 0,
+        leads: 0, installs: 0, follows: 0, linkClicks: 0,
+        _carouselIndex: idx
+      });
+    });
+  }
+
   if (assets.length === 0) {
     var emptyPayload = {
       ok: true, supported: true, adId: adId, from: from, to: to,
@@ -245,6 +289,14 @@ export async function computeAssetBreakdown(adId, from, to) {
   // Resolve thumbnails (cap parallelism, isolate failures).
   await Promise.all(assets.slice(0, 20).map(async function(a) {
     if (a.kind === "Image") a.thumbnail = (await resolveImageThumb(accountId, a.hash, token)) || a.url || "";
+    else if (a.kind === "Carousel card") {
+      // Carousel cards ship a direct image_url in child_attachments,
+      // use that first. Fall back to image_hash resolution or the
+      // card's video_id thumbnail when the direct URL isn't present.
+      a.thumbnail = a.url ||
+        (a.hash ? (await resolveImageThumb(accountId, a.hash, token)) : "") ||
+        (a.videoId ? (await resolveVideoThumb(a.videoId, token)) : "") || "";
+    }
     else a.thumbnail = a.preThumb || (await resolveVideoThumb(a.videoId, token)) || a.url || "";
   }));
 
@@ -266,7 +318,12 @@ export async function computeAssetBreakdown(adId, from, to) {
         ctr: a.ctr,
         cpc: a.cpc,
         results: a.results,
-        costPerResult: a.costPerResult
+        costPerResult: a.costPerResult,
+        // Carousel-only extras (undefined for image/video assets, safe
+        // to render conditionally on the client).
+        description: a.description,
+        link: a.link,
+        _carouselIndex: a._carouselIndex
       };
     }),
     note: awareness

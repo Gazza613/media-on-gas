@@ -1228,7 +1228,14 @@ function AdPreviewModal(props){
   // the winner thumbnail + per-creative breakdown applies to every
   // client (MTN MoMo etc), past and future, without touching the
   // displayed format label.
-  var mixedCapable=(isMixed||!!(ad&&ad.multiCreative));
+  // Carousel ads carry >1 child_attachments in object_story_spec —
+  // ad-assets.js expands those into per-card asset rows so the picker
+  // can show every card in the carousel, not just the hero image (which
+  // is what "clicking the thumbnail" would otherwise reveal). Without
+  // this gate the fetch never fires and the picker collapses to the
+  // single-thumbnail preview even though the Ads Manager itself lists
+  // every card in the carousel.
+  var mixedCapable=(isMixed||!!(ad&&ad.multiCreative)||String((ad&&ad.format)||"").toUpperCase()==="CAROUSEL");
   // Awareness ad? (Psycho Bunny awareness today.) Used to surface the
   // true ad-level Reach in the preview. Per-creative reach is not
   // possible (Meta does not split reach per asset in a Dynamic
@@ -7027,6 +7034,17 @@ export default function MediaOnGas(){
               var shareOfClicks=blendedClk>0?(totalClicks/blendedClk*100):0;
               // Dominant age
               var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+stage.field(r);});
+              // Diagnostic: dump the age breakdown that drives this
+              // persona's Dominant Age so we can validate suspicious
+              // dominance calls (e.g. TikTok reading 45-54 for a mobile-
+              // first client). Also carry raw impressions per bracket so
+              // we can compare click-weighted vs impression-weighted
+              // views. Fires once per persona build (per demo data
+              // change), not on every render.
+              try {
+                var impSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;impSums[a]=(impSums[a]||0)+(parseFloat(r.impressions||0)||0);});
+                console.log("[persona-diag]",displayName,{rowCount:agP.length,ageSumsByClicks:ageSums,ageSumsByImpressions:impSums,totalClicks:totalClicks});
+              } catch(_) {}
               var topAge="";var topAgeVal=0;Object.keys(ageSums).forEach(function(a){if(ageSums[a]>topAgeVal){topAgeVal=ageSums[a];topAge=a;}});
               var ageDenom=Object.keys(ageSums).reduce(function(s,k){return s+ageSums[k];},0);
               var topAgeShare=ageDenom>0?(topAgeVal/ageDenom*100):0;
@@ -9884,22 +9902,61 @@ export default function MediaOnGas(){
               if(!byObj[o])byObj[o]=[];
               byObj[o].push(a);
             });
+            // Aggregate same-creative duplicates. When a creative is
+            // reused across multiple ad-sets, Meta assigns each instance
+            // its own ad_id, which used to surface as 3 near-identical
+            // cards with fractured metrics (e.g. MTN MoMo's
+            // "EverydayAppDeals-Marketing_Aug2026" showing 794 / 230 /
+            // 112 follows on three cards for what the user perceives as
+            // one ad). Collapse by (platform, adName) inside each
+            // objective bucket, sum the additive metrics, recompute the
+            // rate metrics from the sums, and keep the highest-
+            // impressions instance as the display representative so
+            // thumbnail / adId / campaignName resolve to the ad-set that
+            // carried the creative hardest. The `_adSetCount` field
+            // powers a small "xN AD-SETS" chip on the card so users know
+            // the numbers are cumulative across placements.
+            var aggregateSameName=function(arr){
+              var groups={};
+              arr.forEach(function(a){
+                var nm=String(a.adName||"").trim()||String(a.adId||"");
+                var k=(a.platform||"")+""+nm;
+                if(!groups[k])groups[k]=[];
+                groups[k].push(a);
+              });
+              return Object.keys(groups).map(function(k){
+                var list=groups[k];
+                if(list.length===1)return list[0];
+                var primary=list.slice().sort(function(x,y){
+                  return (parseFloat(y.impressions||0))-(parseFloat(x.impressions||0));
+                })[0];
+                var out=Object.assign({},primary);
+                var sumKeys=["spend","impressions","clicks","reach","results","leads","follows","followsTrue","followsRaw","linkClicks","inlineLinkClicks","installs","conversions"];
+                sumKeys.forEach(function(kk){out[kk]=0;});
+                list.forEach(function(a){
+                  sumKeys.forEach(function(kk){out[kk]+=parseFloat(a[kk]||0);});
+                });
+                out.ctr=out.impressions>0?(out.clicks/out.impressions*100):0;
+                out.cpc=out.clicks>0?(out.spend/out.clicks):0;
+                out.cpm=out.impressions>0?(out.spend/out.impressions*1000):0;
+                out._adSetCount=list.length;
+                return out;
+              });
+            };
+            Object.keys(byObj).forEach(function(o){
+              byObj[o]=aggregateSameName(byObj[o]);
+            });
             // Followers bucket: per-platform result metric honest to what
             // the ad actually drives. FB + TikTok have in-ad follow CTAs
             // with clean per-ad attribution. IG's follow happens on the
             // profile after a click, so we report Profile Visits (clicks)
             // instead of inventing a follow attribution model. Net IG
             // follower growth appears on Community Growth from Page
-            // Insights as the honest rollup.
+            // Insights as the honest rollup. Ad-set-level dedup is
+            // already handled upstream by aggregateSameName — this block
+            // only remaps the result metric per platform.
             if (byObj.followers && byObj.followers.length > 0) {
-              var fdedup={};
-              byObj.followers.forEach(function(a){
-                var k=a.adId||a.adName;
-                if(!k)return;
-                if(!fdedup[k]||parseFloat(a.impressions||0)>parseFloat(fdedup[k].impressions||0))fdedup[k]=a;
-              });
-              byObj.followers=Object.keys(fdedup).map(function(k){
-                var a=fdedup[k];
+              byObj.followers=byObj.followers.map(function(a){
                 var pk=platformGroup(a.platform);
                 if(pk==="Instagram"){
                   var ck=parseFloat(a.clicks||0);

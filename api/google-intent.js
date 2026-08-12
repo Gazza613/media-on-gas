@@ -282,7 +282,32 @@ export default async function handler(req, res) {
       gender: genderSplit,
       matchType: matchTypeMix,
       whenLabel: whenLabel,
-      observationDemographicsAvailable: ageTotal > 0 || genSum > 0
+      observationDemographicsAvailable: ageTotal > 0 || genSum > 0,
+      // Client-visible diagnostic: intentThemes empty is a legit outcome
+      // (no Search campaigns in the current selection window), and last
+      // week's persona-scoping commit made the endpoint honour campaign
+      // selection instead of aggregating the whole account. When themes
+      // vanish for a client that had them, the DevTools Network payload
+      // now spells out WHY without a redeploy — was the search-terms
+      // query empty, was the campaign filter too tight, did none of the
+      // selected Google campaigns run Search this window.
+      _debug: {
+        googleIdsUsed: googleIds,
+        campaignFilterApplied: campaignFilter,
+        searchTermRows: stRows.length,
+        ageRows: ageRows.length,
+        genderRows: genRows.length,
+        matchTypeRows: mtRows.length,
+        hourRows: hrRows.length,
+        intentThemesReturned: intentThemes.length,
+        reason: intentThemes.length === 0
+          ? (googleIds.length === 0
+              ? "no Google campaigns selected (account-wide aggregate used)"
+              : (stRows.length === 0
+                  ? "search_term_view returned 0 rows for selected campaigns in window"
+                  : "search terms present but none classified into intent buckets"))
+          : "intent themes present"
+      }
     };
 
     // Diagnostic, tell us in the Vercel logs exactly what each Google Ads
