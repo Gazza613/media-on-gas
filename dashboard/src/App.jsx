@@ -4643,7 +4643,21 @@ export default function MediaOnGas(){
     var h=authHeaders();
     fetch(API+"/api/demographics?from="+df+"&to="+dt+(province?"&region="+encodeURIComponent(province):""),{headers:h})
       .then(function(r){return r.ok?r.json():{error:"HTTP "+r.status};})
-      .then(function(d){setDemoLoading(false);if(d&&d.error){setDemoErr(d.error);}else{setDemoData(d);}})
+      .then(function(d){
+        setDemoLoading(false);
+        if(d&&d.error){setDemoErr(d.error);}
+        else{
+          setDemoData(d);
+          // Surface the server-side _diag block on the console so the
+          // per-platform per-age impressions + clicks breakdown is a
+          // one-glance read, no Network tab dig needed. Answers the
+          // "is TikTok legitimately 45-54 heavy or is our code bucketing
+          // wrong" question directly at the payload level.
+          try {
+            if (d && d._diag) console.log("[demo-diag] server _diag", d._diag);
+          } catch(_) {}
+        }
+      })
       .catch(function(err){setDemoLoading(false);setDemoErr("Connection error");console.error("Demo API error",err);});
   },[tab,df,dt,session,viewToken,demoData,demoLoading,province]);
   useEffect(function(){

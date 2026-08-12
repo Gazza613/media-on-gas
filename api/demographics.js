@@ -1112,13 +1112,49 @@ export default async function handler(req, res) {
       // Surface row counts in the payload so we (and admins viewing
       // dev tools) can verify the per-province cuts are actually
       // returning rows without having to dig through Vercel logs.
-      _diag: {
-        metaAgeGenderByRegion: (meta.ageGenderByRegion || []).length,
-        ttAgeGenderByRegion: (tt.ageGenderByRegion || []).length,
-        metaDeviceByRegion: (meta.deviceByRegion || []).length,
-        ttDeviceByRegion: (tt.deviceByRegion || []).length,
-        regionRows: ([].concat(meta.region, tt.region, google.region || [])).length
-      }
+      _diag: (function(){
+        // Per-platform per-age impressions + clicks breakdown. Answers
+        // "is TikTok legitimately 45-54 heavy or are we mis-bucketing"
+        // in one glance without spinning up a diagnostic endpoint or
+        // repro'ing locally. The persona card weights on clicks; the
+        // aggregate chart weights on impressions; showing both here
+        // lets us tell which weighting is driving the anomaly.
+        var perPlatAge = { Meta: {}, TikTok: {}, Google: {} };
+        var perPlatRowCount = { Meta: 0, TikTok: 0, Google: 0 };
+        var bucketFor = function(p){
+          var s = String(p || "").toLowerCase();
+          if (s.indexOf("facebook") >= 0 || s.indexOf("instagram") >= 0 || s.indexOf("meta") >= 0) return "Meta";
+          if (s.indexOf("tiktok") >= 0) return "TikTok";
+          if (s.indexOf("google") >= 0) return "Google";
+          return null;
+        };
+        [].concat(meta.ageGender, tt.ageGender, google.ageGender).forEach(function(r){
+          var b = bucketFor(r.platform);
+          if (!b) return;
+          perPlatRowCount[b] += 1;
+          var a = String(r.age || "unknown");
+          if (!perPlatAge[b][a]) perPlatAge[b][a] = { impressions: 0, clicks: 0, rows: 0 };
+          perPlatAge[b][a].impressions += parseFloat(r.impressions || 0) || 0;
+          perPlatAge[b][a].clicks += parseFloat(r.clicks || 0) || 0;
+          perPlatAge[b][a].rows += 1;
+        });
+        // Round for legibility in the DevTools payload.
+        Object.keys(perPlatAge).forEach(function(p){
+          Object.keys(perPlatAge[p]).forEach(function(a){
+            perPlatAge[p][a].impressions = Math.round(perPlatAge[p][a].impressions);
+            perPlatAge[p][a].clicks = Math.round(perPlatAge[p][a].clicks);
+          });
+        });
+        return {
+          metaAgeGenderByRegion: (meta.ageGenderByRegion || []).length,
+          ttAgeGenderByRegion: (tt.ageGenderByRegion || []).length,
+          metaDeviceByRegion: (meta.deviceByRegion || []).length,
+          ttDeviceByRegion: (tt.deviceByRegion || []).length,
+          regionRows: ([].concat(meta.region, tt.region, google.region || [])).length,
+          perPlatformRowCount: perPlatRowCount,
+          perPlatformAgeBreakdown: perPlatAge
+        };
+      })()
     };
     demoCache[cacheKey] = { data: response, ts: Date.now() };
     res.status(200).json(response);
