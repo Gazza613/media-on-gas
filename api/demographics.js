@@ -465,7 +465,20 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
     // BASIC report type supports the same demographic dimensions at the
     // campaign level and is consistently populated.
     var dims = encodeURIComponent(JSON.stringify(dimensions));
-    var metrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks"]));
+    // Include BOTH the broad `clicks` metric (TikTok's "any tap" count —
+    // includes video-area taps, CTA taps, profile taps, "See more" taps,
+    // sound taps, everything) AND the narrow `link_click_count` metric
+    // (destination-URL clicks only, apples-to-apples with Meta's "clicks"
+    // field). The 2026-08-12 diagnostic on MTN MoMo showed TikTok's
+    // broad-click count producing a 27% blended CTR and a 54.7% CTR in
+    // the 45-54 bracket — impossible for real link clicks and the sole
+    // reason the aggregate Objective demographics chart was flipping
+    // 45-54 dominant on a MoMo age slice that Meta reads as 25-34.
+    // Downstream parsing prefers link_click_count so the click-weighted
+    // persona and aggregate charts use the same click definition as
+    // Meta. Broad clicks are preserved as `broadClicks` on the row for
+    // any future consumer that wants the wider engagement view.
+    var metrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks", "link_click_count"]));
     var url = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/" +
       "?advertiser_id=" + advId +
       "&report_type=AUDIENCE" +
@@ -574,7 +587,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
       age: normaliseTikTokAge(dim.age),
       gender: normaliseTikTokGender(dim.gender),
       impressions: parseInt(met.impressions || 0, 10),
-      clicks: parseInt(met.clicks || 0, 10),
+      // Prefer link_click_count (destination-URL clicks, matches Meta's
+      // "clicks" definition) so cross-platform aggregate demographics
+      // charts blend apples-to-apples. Fall back to broad `clicks` if
+      // link_click_count is missing or zero on this row (older campaigns,
+      // or ad-set-level rows where TikTok doesn't expose link clicks).
+      // Broad clicks preserved as broadClicks for any consumer that
+      // wants the wider engagement view (video taps + all interactions).
+      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -592,7 +613,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
       campaignName: "",
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      clicks: parseInt(met.clicks || 0, 10),
+      // Prefer link_click_count (destination-URL clicks, matches Meta's
+      // "clicks" definition) so cross-platform aggregate demographics
+      // charts blend apples-to-apples. Fall back to broad `clicks` if
+      // link_click_count is missing or zero on this row (older campaigns,
+      // or ad-set-level rows where TikTok doesn't expose link clicks).
+      // Broad clicks preserved as broadClicks for any consumer that
+      // wants the wider engagement view (video taps + all interactions).
+      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -608,7 +637,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
       campaignName: "",
       device: String(dim.platform || "unknown").toLowerCase(),
       impressions: parseInt(met.impressions || 0, 10),
-      clicks: parseInt(met.clicks || 0, 10),
+      // Prefer link_click_count (destination-URL clicks, matches Meta's
+      // "clicks" definition) so cross-platform aggregate demographics
+      // charts blend apples-to-apples. Fall back to broad `clicks` if
+      // link_click_count is missing or zero on this row (older campaigns,
+      // or ad-set-level rows where TikTok doesn't expose link clicks).
+      // Broad clicks preserved as broadClicks for any consumer that
+      // wants the wider engagement view (video taps + all interactions).
+      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -629,7 +666,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
       gender: "unknown",
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      clicks: parseInt(met.clicks || 0, 10),
+      // Prefer link_click_count (destination-URL clicks, matches Meta's
+      // "clicks" definition) so cross-platform aggregate demographics
+      // charts blend apples-to-apples. Fall back to broad `clicks` if
+      // link_click_count is missing or zero on this row (older campaigns,
+      // or ad-set-level rows where TikTok doesn't expose link clicks).
+      // Broad clicks preserved as broadClicks for any consumer that
+      // wants the wider engagement view (video taps + all interactions).
+      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -649,7 +694,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
       gender: normaliseTikTokGender(dim.gender),
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      clicks: parseInt(met.clicks || 0, 10),
+      // Prefer link_click_count (destination-URL clicks, matches Meta's
+      // "clicks" definition) so cross-platform aggregate demographics
+      // charts blend apples-to-apples. Fall back to broad `clicks` if
+      // link_click_count is missing or zero on this row (older campaigns,
+      // or ad-set-level rows where TikTok doesn't expose link clicks).
+      // Broad clicks preserved as broadClicks for any consumer that
+      // wants the wider engagement view (video taps + all interactions).
+      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -668,7 +721,15 @@ async function fetchTikTokDemo(token, advId, from, to) {
       device: String(dim.platform || "unknown").toLowerCase(),
       region: pn,
       impressions: parseInt(met.impressions || 0, 10),
-      clicks: parseInt(met.clicks || 0, 10),
+      // Prefer link_click_count (destination-URL clicks, matches Meta's
+      // "clicks" definition) so cross-platform aggregate demographics
+      // charts blend apples-to-apples. Fall back to broad `clicks` if
+      // link_click_count is missing or zero on this row (older campaigns,
+      // or ad-set-level rows where TikTok doesn't expose link clicks).
+      // Broad clicks preserved as broadClicks for any consumer that
+      // wants the wider engagement view (video taps + all interactions).
+      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
     });
@@ -1133,9 +1194,10 @@ export default async function handler(req, res) {
           if (!b) return;
           perPlatRowCount[b] += 1;
           var a = String(r.age || "unknown");
-          if (!perPlatAge[b][a]) perPlatAge[b][a] = { impressions: 0, clicks: 0, rows: 0 };
+          if (!perPlatAge[b][a]) perPlatAge[b][a] = { impressions: 0, clicks: 0, broadClicks: 0, rows: 0 };
           perPlatAge[b][a].impressions += parseFloat(r.impressions || 0) || 0;
           perPlatAge[b][a].clicks += parseFloat(r.clicks || 0) || 0;
+          perPlatAge[b][a].broadClicks += parseFloat(r.broadClicks || r.clicks || 0) || 0;
           perPlatAge[b][a].rows += 1;
         });
         // Round for legibility in the DevTools payload.
