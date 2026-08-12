@@ -613,7 +613,13 @@ async function fetchTikTokDemo(token, advId, from, to) {
       // or ad-set-level rows where TikTok doesn't expose link clicks).
       // Broad clicks preserved as broadClicks for any consumer that
       // wants the wider engagement view (video taps + all interactions).
-      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      //
+      // TikTok returns metrics as strings ("0", "322"). A naive
+      // `met.link_click_count || met.clicks` chain treats the string
+      // "0" as truthy and never falls through — wiping every row's
+      // clicks to 0 and blanking the TikTok persona. Parse first, then
+      // rely on the numeric-zero short-circuit for the fallback.
+      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
       broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
@@ -639,7 +645,13 @@ async function fetchTikTokDemo(token, advId, from, to) {
       // or ad-set-level rows where TikTok doesn't expose link clicks).
       // Broad clicks preserved as broadClicks for any consumer that
       // wants the wider engagement view (video taps + all interactions).
-      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      //
+      // TikTok returns metrics as strings ("0", "322"). A naive
+      // `met.link_click_count || met.clicks` chain treats the string
+      // "0" as truthy and never falls through — wiping every row's
+      // clicks to 0 and blanking the TikTok persona. Parse first, then
+      // rely on the numeric-zero short-circuit for the fallback.
+      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
       broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
@@ -663,7 +675,13 @@ async function fetchTikTokDemo(token, advId, from, to) {
       // or ad-set-level rows where TikTok doesn't expose link clicks).
       // Broad clicks preserved as broadClicks for any consumer that
       // wants the wider engagement view (video taps + all interactions).
-      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      //
+      // TikTok returns metrics as strings ("0", "322"). A naive
+      // `met.link_click_count || met.clicks` chain treats the string
+      // "0" as truthy and never falls through — wiping every row's
+      // clicks to 0 and blanking the TikTok persona. Parse first, then
+      // rely on the numeric-zero short-circuit for the fallback.
+      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
       broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
@@ -692,7 +710,13 @@ async function fetchTikTokDemo(token, advId, from, to) {
       // or ad-set-level rows where TikTok doesn't expose link clicks).
       // Broad clicks preserved as broadClicks for any consumer that
       // wants the wider engagement view (video taps + all interactions).
-      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      //
+      // TikTok returns metrics as strings ("0", "322"). A naive
+      // `met.link_click_count || met.clicks` chain treats the string
+      // "0" as truthy and never falls through — wiping every row's
+      // clicks to 0 and blanking the TikTok persona. Parse first, then
+      // rely on the numeric-zero short-circuit for the fallback.
+      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
       broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
@@ -720,7 +744,13 @@ async function fetchTikTokDemo(token, advId, from, to) {
       // or ad-set-level rows where TikTok doesn't expose link clicks).
       // Broad clicks preserved as broadClicks for any consumer that
       // wants the wider engagement view (video taps + all interactions).
-      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      //
+      // TikTok returns metrics as strings ("0", "322"). A naive
+      // `met.link_click_count || met.clicks` chain treats the string
+      // "0" as truthy and never falls through — wiping every row's
+      // clicks to 0 and blanking the TikTok persona. Parse first, then
+      // rely on the numeric-zero short-circuit for the fallback.
+      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
       broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
@@ -747,7 +777,13 @@ async function fetchTikTokDemo(token, advId, from, to) {
       // or ad-set-level rows where TikTok doesn't expose link clicks).
       // Broad clicks preserved as broadClicks for any consumer that
       // wants the wider engagement view (video taps + all interactions).
-      clicks: parseInt(met.link_click_count || met.clicks || 0, 10),
+      //
+      // TikTok returns metrics as strings ("0", "322"). A naive
+      // `met.link_click_count || met.clicks` chain treats the string
+      // "0" as truthy and never falls through — wiping every row's
+      // clicks to 0 and blanking the TikTok persona. Parse first, then
+      // rely on the numeric-zero short-circuit for the fallback.
+      clicks: parseInt(met.link_click_count, 10) || parseInt(met.clicks || 0, 10),
       broadClicks: parseInt(met.clicks || 0, 10),
       spend: parseFloat(met.spend || 0),
       results: { follows: parseInt(met.follows || 0, 10), leads: 0, appInstalls: 0, pageLikes: 0, postReactions: parseInt(met.likes || 0, 10), landingPageViews: 0 }
