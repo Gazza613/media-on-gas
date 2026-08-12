@@ -6083,8 +6083,20 @@ export default function MediaOnGas(){
             // long as the campaign delivered to the selected province).
             var realScopedAg=selectedProvince?agByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):[];
             var realScopedDev=selectedProvince?devByRegRows.filter(function(r){return String(r.region||"")===selectedProvince;}):[];
-            var scopedAgRows=!selectedProvince?agRows:(realScopedAg.length>0?realScopedAg:synthByProv(agRows,selectedProvince));
-            var scopedDevRows=!selectedProvince?devRows:(realScopedDev.length>0?realScopedDev:synthByProv(devRows,selectedProvince));
+            // Aggregate view (no province clicked): read from the
+            // per-region rows too when they exist, so the aggregate is
+            // exactly the sum of every per-province view. Previously
+            // read demoData.ageGender / device which contains Meta +
+            // TikTok + Google, while agByRegRows is Meta + TikTok only
+            // (Google has no per-region age breakdown from age_range_view).
+            // The mismatch produced a spurious 45-54 spike on the
+            // aggregate chart for financial-services accounts because
+            // Google's age-range inference concentrates in 45-54 while
+            // Meta / TikTok distribute more naturally. Falls back to the
+            // full three-platform list if the per-region path is empty
+            // (e.g. Meta returned no 3-dim rows for the window).
+            var scopedAgRows=!selectedProvince?(agByRegRows.length>0?agByRegRows:agRows):(realScopedAg.length>0?realScopedAg:synthByProv(agRows,selectedProvince));
+            var scopedDevRows=!selectedProvince?(devByRegRows.length>0?devByRegRows:devRows):(realScopedDev.length>0?realScopedDev:synthByProv(devRows,selectedProvince));
             // Flag whether we're showing real or synthesised data so
             // the WHO + HOW header can carry the right label.
             var scopedIsEstimated=!!(selectedProvince&&realScopedAg.length===0&&realScopedDev.length===0);
