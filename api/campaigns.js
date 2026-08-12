@@ -1992,10 +1992,30 @@ export default async function handler(req, res) {
             var gErrTxt = "";
             try { gErrTxt = await gRes.text(); } catch (_) {}
             var gErrMsg = "HTTP " + gRes.status;
+            var gErrDetail = "";
             try {
               var gParsed = JSON.parse(gErrTxt || "{}");
               if (gParsed && gParsed.error && gParsed.error.message) gErrMsg = gParsed.error.message + " (HTTP " + gRes.status + ")";
+              // Google Ads wraps the SPECIFIC field-level error inside
+              // details[0].errors[0].message. Without this the operator
+              // sees the generic 'Request contains an invalid argument'
+              // wrapper with no clue which field / enum value Google is
+              // rejecting. Surface the concrete detail so a 400 can be
+              // triaged without a Vercel-logs dig.
+              var det = gParsed && gParsed.error && Array.isArray(gParsed.error.details) ? gParsed.error.details : [];
+              for (var di = 0; di < det.length; di++) {
+                var d = det[di];
+                if (d && Array.isArray(d.errors) && d.errors.length > 0) {
+                  var firstErr = d.errors[0];
+                  if (firstErr && firstErr.message) { gErrDetail = firstErr.message; break; }
+                }
+              }
+              if (gErrDetail) gErrMsg = gErrMsg + " — " + gErrDetail;
             } catch (_) {}
+            // Always log full body to Vercel logs so we can post-mortem
+            // even if the parsed detail extraction misses a novel error
+            // envelope shape.
+            try { console.error("[campaigns] Google Ads 400 body:", gErrTxt.substring(0, 1500)); } catch(_) {}
             warnings.push({ platform: "Google", stage: "ads", message: gErrMsg });
           } else {
             var gData = await gRes.json();

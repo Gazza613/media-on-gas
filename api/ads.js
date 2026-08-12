@@ -1650,6 +1650,20 @@ export default async function handler(req, res) {
           var gErrText = "";
           try { gErrText = await gRes.text(); } catch (e) { gErrText = "could not read body"; }
           googleDebug.errorBody = gErrText.substring(0, 800);
+          // Extract Google's specific field-level error from the details
+          // array so 'Request contains an invalid argument' expands into
+          // the concrete field / enum problem for triage.
+          try {
+            var gParsedAds = JSON.parse(gErrText || "{}");
+            var detAds = gParsedAds && gParsedAds.error && Array.isArray(gParsedAds.error.details) ? gParsedAds.error.details : [];
+            for (var dai = 0; dai < detAds.length; dai++) {
+              var da = detAds[dai];
+              if (da && Array.isArray(da.errors) && da.errors.length > 0 && da.errors[0].message) {
+                googleDebug.errorDetail = da.errors[0].message;
+                break;
+              }
+            }
+          } catch(_) {}
           console.error("Google Ads API error", gRes.status, gErrText.substring(0, 500));
         } else {
           var gData = await gRes.json();
