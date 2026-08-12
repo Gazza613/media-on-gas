@@ -10129,7 +10129,13 @@ export default function MediaOnGas(){
               var adPlatC=platCol5[ad.platform]||P.ember;
               var adPlatShort=platShort2[ad.platform]||ad.platform;
               var isTop=rank===1;
-              return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
+              // height:"100%" + alignSelf:"stretch" so every card in the
+              // 5-column row grows to the tallest card's height even when
+              // conditional blocks (AVG WATCH, top-performer chip, video
+              // metrics) render differently per card. Without this the
+              // row could look uneven when only some cards have the
+              // watch-time sub-line populated.
+              return <div key={ad.adId+"_"+sec.key+"_"+rank} style={{background:isTop?"linear-gradient(135deg,rgba(52,211,153,0.10),rgba(0,0,0,0.4))":"rgba(0,0,0,0.35)",borderRadius:14,border:"1px solid "+(isTop?P.mint+"55":P.rule),overflow:"hidden",display:"flex",flexDirection:"column",height:"100%",alignSelf:"stretch",boxShadow:isTop?"0 8px 32px rgba(52,211,153,0.18)":"none",transition:"all 0.2s"}}>
                 <div style={{position:"relative",width:"100%",paddingTop:"100%",background:"#1a0f2a",overflow:"hidden"}}>
                   {renderFallback(ad,sec)}
                   {hasThumb(ad)&&<div onClick={function(){setPreviewAd(ad);}} style={{position:"absolute",inset:0,display:"block",zIndex:1,cursor:"pointer"}}><img src={thumbFor(ad)} alt={ad.adName||"Ad"} loading="lazy" decoding="async" referrerPolicy="no-referrer" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={function(e){e.target.style.display="none";}}/></div>}
