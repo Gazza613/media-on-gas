@@ -464,52 +464,71 @@ async function fetchTikTokDemoDim(token, advId, from, to, dimensions) {
     // but returns empty lists in practice on many advertiser accounts.
     // BASIC report type supports the same demographic dimensions at the
     // campaign level and is consistently populated.
+    //
+    // Metric strategy — two-pass with graceful degradation. Preferred
+    // metric set includes `link_click_count` (destination-URL clicks,
+    // apples-to-apples with Meta's `clicks` field). If TikTok rejects
+    // link_click_count as invalid for the AUDIENCE/AUCTION_CAMPAIGN
+    // combo (documented at other data_levels but not always here), the
+    // second pass retries with just the broad metric set so the persona
+    // and demographic charts degrade to broad-clicks instead of going
+    // completely blank. The initial 2026-08-12 fix that switched to
+    // link_click_count wiped the TikTok persona on advertiser accounts
+    // where the metric wasn't supported at this data_level.
     var dims = encodeURIComponent(JSON.stringify(dimensions));
-    // Include BOTH the broad `clicks` metric (TikTok's "any tap" count —
-    // includes video-area taps, CTA taps, profile taps, "See more" taps,
-    // sound taps, everything) AND the narrow `link_click_count` metric
-    // (destination-URL clicks only, apples-to-apples with Meta's "clicks"
-    // field). The 2026-08-12 diagnostic on MTN MoMo showed TikTok's
-    // broad-click count producing a 27% blended CTR and a 54.7% CTR in
-    // the 45-54 bracket — impossible for real link clicks and the sole
-    // reason the aggregate Objective demographics chart was flipping
-    // 45-54 dominant on a MoMo age slice that Meta reads as 25-34.
-    // Downstream parsing prefers link_click_count so the click-weighted
-    // persona and aggregate charts use the same click definition as
-    // Meta. Broad clicks are preserved as `broadClicks` on the row for
-    // any future consumer that wants the wider engagement view.
-    var metrics = encodeURIComponent(JSON.stringify(["spend", "impressions", "clicks", "link_click_count"]));
-    var url = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/" +
-      "?advertiser_id=" + advId +
-      "&report_type=AUDIENCE" +
-      "&data_level=AUCTION_CAMPAIGN" +
-      "&dimensions=" + dims +
-      "&metrics=" + metrics +
-      "&start_date=" + from + "&end_date=" + to +
-      "&page_size=1000";
-    var r = await fetch(url, { headers: { "Access-Token": token } });
-    if (!r.ok) {
-      console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " non-ok", r.status);
-      return [];
-    }
-    var d = await r.json();
-    if (d.code && d.code !== 0) {
-      console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " api error", d.code, d.message);
-      // Retry at AUCTION_AD level — some advertiser accounts only populate
-      // AUDIENCE reports at ad level, not campaign level.
-      var urlAd = url.replace("AUCTION_CAMPAIGN", "AUCTION_AD");
-      var r2 = await fetch(urlAd, { headers: { "Access-Token": token } });
-      if (r2.ok) {
-        var d2 = await r2.json();
-        if (d2.data && d2.data.list) return d2.data.list;
+    var metricsPreferred = ["spend", "impressions", "clicks", "link_click_count"];
+    var metricsFallback = ["spend", "impressions", "clicks"];
+    var mkUrl = function(dataLevel, metricsList) {
+      return "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/" +
+        "?advertiser_id=" + advId +
+        "&report_type=AUDIENCE" +
+        "&data_level=" + dataLevel +
+        "&dimensions=" + dims +
+        "&metrics=" + encodeURIComponent(JSON.stringify(metricsList)) +
+        "&start_date=" + from + "&end_date=" + to +
+        "&page_size=1000";
+    };
+    var tryFetch = async function(dataLevel, metricsList, label) {
+      try {
+        var rr = await fetch(mkUrl(dataLevel, metricsList), { headers: { "Access-Token": token } });
+        if (!rr.ok) {
+          console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " " + label + " non-ok", rr.status);
+          return { ok: false, list: null };
+        }
+        var dd = await rr.json();
+        if (dd.code && dd.code !== 0) {
+          console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " " + label + " api error", dd.code, dd.message);
+          return { ok: false, list: null, apiError: true };
+        }
+        var list = (dd.data && dd.data.list) || [];
+        return { ok: true, list: list };
+      } catch (err) {
+        console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " " + label + " threw", String(err && err.message || err));
+        return { ok: false, list: null };
       }
-      return [];
+    };
+    // Attempt order: preferred-metrics @ CAMPAIGN, preferred @ AD,
+    // fallback @ CAMPAIGN, fallback @ AD. First OK response wins.
+    var attempts = [
+      { dataLevel: "AUCTION_CAMPAIGN", metrics: metricsPreferred, label: "CAMPAIGN+link_click_count" },
+      { dataLevel: "AUCTION_AD", metrics: metricsPreferred, label: "AD+link_click_count" },
+      { dataLevel: "AUCTION_CAMPAIGN", metrics: metricsFallback, label: "CAMPAIGN+broadOnly" },
+      { dataLevel: "AUCTION_AD", metrics: metricsFallback, label: "AD+broadOnly" }
+    ];
+    for (var i = 0; i < attempts.length; i++) {
+      var a = attempts[i];
+      var res = await tryFetch(a.dataLevel, a.metrics, a.label);
+      if (res.ok) {
+        if (res.list.length === 0) {
+          console.log("[demo] TikTok " + JSON.stringify(dimensions) + " " + a.label + " returned 0 rows");
+          continue; // try next attempt in case this data_level+metrics is empty
+        }
+        console.log("[demo] TikTok " + JSON.stringify(dimensions) + " served by " + a.label + " (" + res.list.length + " rows)");
+        return res.list;
+      }
     }
-    if (!d.data || !d.data.list) return [];
-    if (d.data.list.length === 0) {
-      console.log("[demo] TikTok " + JSON.stringify(dimensions) + " returned 0 rows");
-    }
-    return d.data.list;
+    console.warn("[demo] TikTok " + JSON.stringify(dimensions) + " all 4 attempts failed, returning []");
+    return [];
   } catch (e) {
     console.error("TikTok demo fetch error", dimensions, e && e.message);
     return [];

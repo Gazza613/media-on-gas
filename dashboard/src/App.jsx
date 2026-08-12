@@ -1025,7 +1025,25 @@ function GoogleIntentCard(props){
         {line.share&&<span style={{color:c,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{line.share}</span>}
       </div>;})}
     </div>:<div style={{marginTop:"auto",padding:"12px 12px",background:"rgba(0,0,0,0.22)",border:"1px dashed "+c+"35",borderRadius:10,fontSize:11,color:"rgba(255,251,248,0.78)",fontFamily:fm,lineHeight:1.55,textAlign:"center"}}>
-      Google signals will populate here once the selected campaigns accumulate click activity across age, gender, or search-term dimensions.
+      {(function(){
+        // Prefer the server-provided _debug.reason when present so the
+        // empty state tells the user exactly why the card is blank —
+        // "search_term_view returned 0 rows" (Display/YouTube-only
+        // selection) reads very differently from "no Google campaigns
+        // selected" (nothing Google selected at all). Falls back to
+        // generic copy when the endpoint didn't ship a reason.
+        var reason = g && g._debug && g._debug.reason;
+        if (reason === "no Google campaigns selected (account-wide aggregate used)") {
+          return "No Google campaigns in the current selection. Add a Google campaign to the selection to see intent themes or observation demographics here.";
+        }
+        if (reason === "search_term_view returned 0 rows for selected campaigns in window") {
+          return "The selected Google campaigns had no Search-channel activity in this window — Display, YouTube and PMax campaigns don't populate search terms. Select a Search campaign or widen the date range to see intent themes.";
+        }
+        if (reason === "search terms present but none classified into intent buckets") {
+          return "Search terms present but none matched an intent theme yet. Signals will populate as the query pool broadens.";
+        }
+        return "Google signals will populate here once the selected campaigns accumulate click activity across age, gender, or search-term dimensions.";
+      })()}
     </div>}
     </div>
   </div>;
