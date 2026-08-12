@@ -7051,47 +7051,68 @@ export default function MediaOnGas(){
               var agP=agRows.filter(matches);
               var devP=devRows.filter(matches);
               var regP=regRows.filter(matches);
-              var stage=stageDef.engagement;
-              var totalClicks=0;agP.forEach(function(r){totalClicks+=stage.field(r);});
+              // Persona "Dominant Age" and all audience-composition
+              // signals (gender lead, top regions, best-persona segments)
+              // now weight on IMPRESSIONS, not clicks. Diagnostic on the
+              // MTN MoMo TikTok data (2026-08) proved why: 45-54 TikTok
+              // users clicked ~5x more per impression than 18-24, so the
+              // click-weighted persona headlined 45-54 (37.7% of clicks)
+              // even though 18-24 was the reach leader (30.7% of impres-
+              // sions) and under-35s made up 59% of the audience. The
+              // card describes WHO YOUR AUDIENCE IS — that's a reach
+              // question (who your ads reached), not an engagement
+              // question (who clicked hardest). Every platform now uses
+              // the same methodology, so cross-platform comparisons stay
+              // honest.
+              //
+              // Engagement intensity by age still lives on the Deep Dive
+              // / Demographics tab click-rate views; it's a real signal,
+              // just not what "Dominant Age" is asking.
+              var stage=stageDef.awareness; // impressions
+              var totalImps=0;agP.forEach(function(r){totalImps+=stage.field(r);});
+              // shareOfClicks stays a click-based number because it
+              // answers "how much of engagement came from this platform"
+              // which is a genuine click question.
+              var clickTotal=0;agP.forEach(function(r){clickTotal+=(parseFloat(r.clicks||0)||0);});
               var blendedClk=authClicks||0;
-              var shareOfClicks=blendedClk>0?(totalClicks/blendedClk*100):0;
-              // Dominant age
+              var shareOfClicks=blendedClk>0?(clickTotal/blendedClk*100):0;
+              // Dominant age (impression-weighted)
               var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+stage.field(r);});
-              // Diagnostic: dump the age breakdown that drives this
-              // persona's Dominant Age so we can validate suspicious
-              // dominance calls (e.g. TikTok reading 45-54 for a mobile-
-              // first client). Also carry raw impressions per bracket so
-              // we can compare click-weighted vs impression-weighted
-              // views. Fires once per persona build (per demo data
-              // change), not on every render.
+              // Diagnostic: dump both impression-weighted and click-
+              // weighted breakdowns so we can spot high-asymmetry cases
+              // (like TikTok 45-54 clicking 5x its reach share) without
+              // touching the endpoint. Fires once per persona build.
               try {
-                var impSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;impSums[a]=(impSums[a]||0)+(parseFloat(r.impressions||0)||0);});
-                console.log("[persona-diag]",displayName,{rowCount:agP.length,ageSumsByClicks:ageSums,ageSumsByImpressions:impSums,totalClicks:totalClicks});
+                var clkSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;clkSums[a]=(clkSums[a]||0)+(parseFloat(r.clicks||0)||0);});
+                console.log("[persona-diag]",displayName,{rowCount:agP.length,weighting:"impressions",ageSumsByImpressions:ageSums,ageSumsByClicks:clkSums,totalImpressions:totalImps,totalClicks:clickTotal});
               } catch(_) {}
               var topAge="";var topAgeVal=0;Object.keys(ageSums).forEach(function(a){if(ageSums[a]>topAgeVal){topAgeVal=ageSums[a];topAge=a;}});
               var ageDenom=Object.keys(ageSums).reduce(function(s,k){return s+ageSums[k];},0);
               var topAgeShare=ageDenom>0?(topAgeVal/ageDenom*100):0;
-              // Gender split
+              // Gender split (impression-weighted)
               var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=stage.field(r);});
               var gSum=gs.female+gs.male;
               var genderSplit={female:gSum>0?(gs.female/gSum*100):0,male:gSum>0?(gs.male/gSum*100):0};
-              // Top provinces (up to 3)
+              // Top provinces (up to 3, impression-weighted)
               var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+stage.field(r);});
               var pOrder=Object.keys(provSums).sort(function(a,b){return provSums[b]-provSums[a];});
               var pDenom=Object.keys(provSums).reduce(function(s,k){return s+provSums[k];},0);
               var topProvinces=pOrder.slice(0,3).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
-              // Mobile share of device-tagged clicks (Mobile + Desktop + Tablet denominator, matches the Device Mix chart)
+              // Mobile share of device-tagged impressions (Mobile + Desktop + Tablet denominator)
               var devB={mobile:0,desktop:0,tablet:0};
               devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=stage.field(r);});
               var devDenom=devB.mobile+devB.desktop+devB.tablet;
               var mobileShare=devDenom>0?(devB.mobile/devDenom*100):0;
-              // Top 3 age+gender segments, descending. Previously we only
-              // surfaced the single hottest segment, client wanted a top-3
-              // list so multiple converting segments can be weighted in
-              // budget decisions rather than one winner.
+              // Top 3 age+gender segments (impression-weighted). Reach-
+              // based so "Best Personas" describes who your audience
+              // actually is at scale, not just who clicked the hardest.
               var segMap={};
               agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var k=a+"|"+g;var v=stage.field(r);segMap[k]=(segMap[k]||0)+v;});
-              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalClicks>0?(segMap[k]/totalClicks*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
+              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalImps>0?(segMap[k]/totalImps*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
+              // Preserve totalClicks in the return payload for any
+              // downstream card slot that reads it (e.g. Google intent
+              // card's parallel field). Keeps the shape compatible.
+              var totalClicks=clickTotal;
               // CTR vs blended, kept in the payload even though the card
               // footer no longer prints it, the Targeting Insights narrative
               // below the grid still references ctrRatio.
