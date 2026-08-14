@@ -84,6 +84,15 @@ export default async function handler(req, res) {
   var token = process.env.TIKTOK_ACCESS_TOKEN;
   if (!advId || !token) return res.status(500).json({ error: "TikTok creds missing" });
 
+  // Wrap the rest in try/catch so any exception surfaces as a
+  // structured JSON error rather than Vercel's default HTML 'A server
+  // error occurred' page, which was breaking the client-side
+  // r.json() parse and hiding the real cause. Last regression: I
+  // deleted perAge.linkClicks from the map but left three references
+  // dangling, pickDominant(undefined) threw, endpoint returned raw
+  // HTML 500 and the operator saw 'Unexpected token A'.
+  try {
+
   // AUDIENCE report at AUCTION_CAMPAIGN with age dimension — same
   // shape the persona reads. Metric list confirmed accepted by
   // TikTok at this data_level (verified 2026-08-12: link_click_count
@@ -130,7 +139,6 @@ export default async function handler(req, res) {
 
   var domImps = pickDominant(perAge.impressions);
   var domClicks = pickDominant(perAge.clicks);
-  var domLinkClicks = pickDominant(perAge.linkClicks);
   var domReach = pickDominant(perAge.reach);
 
   // Verdict block in plain English so the operator gets the answer
@@ -144,12 +152,7 @@ export default async function handler(req, res) {
   verdictLines.push("By CLICKS (broad taps — TikTok's default 'clicks' metric, includes video-area / CTA / profile taps):");
   verdictLines.push("  " + domClicks.age + " dominant with " + domClicks.share.toFixed(2) + "% (" + Math.round(domClicks.value).toLocaleString() + " of " + Math.round(domClicks.denom).toLocaleString() + ")");
   verdictLines.push("");
-  verdictLines.push("By LINK CLICKS (link_click_count — destination-URL clicks only, apples-to-apples with Meta 'clicks'):");
-  if (domLinkClicks.denom === 0) {
-    verdictLines.push("  NOT POPULATED — link_click_count returned zero across every age band. Either this account has no link-click campaigns on TikTok, or the metric is not exposed at AUCTION_CAMPAIGN + AUDIENCE.");
-  } else {
-    verdictLines.push("  " + domLinkClicks.age + " dominant with " + domLinkClicks.share.toFixed(2) + "% (" + Math.round(domLinkClicks.value).toLocaleString() + " of " + Math.round(domLinkClicks.denom).toLocaleString() + ")");
-  }
+  verdictLines.push("By LINK CLICKS: NOT AVAILABLE at this data_level. TikTok's AUDIENCE report at AUCTION_CAMPAIGN rejects `link_click_count` (verified error 40002 'Invalid metric fields' on 2026-08-12). Cannot get link-click parity with Meta from TikTok demographics.");
   verdictLines.push("");
   verdictLines.push("By REACH (unique users):");
   if (domReach.denom === 0) {
@@ -165,9 +168,6 @@ export default async function handler(req, res) {
   } else {
     verdictLines.push("  Impressions and Clicks both point to " + domClicks.age + " dominant. This is TikTok's straightforward answer for MoMo — the algorithm both serves and gets clicks concentrated in that band.");
   }
-  if (domLinkClicks.denom > 0 && domLinkClicks.age !== domClicks.age) {
-    verdictLines.push("  Link Clicks disagrees with Broad Clicks (" + domLinkClicks.age + " vs " + domClicks.age + "). Meta's 'clicks' definition is link-click-equivalent, so cross-platform aggregate charts using TikTok's broad clicks are apples-to-oranges.");
-  }
 
   // Per-age table for eyeballing edge cases and CTR asymmetry.
   var ageOrder = ["13-17","18-24","25-34","35-44","45-54","55-64","55+","65+","unknown"];
@@ -179,16 +179,13 @@ export default async function handler(req, res) {
   var perAgeTable = displayAges.map(function(a) {
     var imps = perAge.impressions[a] || 0;
     var clk = perAge.clicks[a] || 0;
-    var lclk = perAge.linkClicks[a] || 0;
     var rch = perAge.reach[a] || 0;
     return {
       age: a,
       impressions: imps,
       broadClicks: clk,
-      linkClicks: lclk,
       reach: rch,
-      broadCtr: imps > 0 ? +(clk / imps * 100).toFixed(2) : 0,
-      linkCtr: imps > 0 ? +(lclk / imps * 100).toFixed(2) : 0
+      broadCtr: imps > 0 ? +(clk / imps * 100).toFixed(2) : 0
     };
   });
 
@@ -197,7 +194,6 @@ export default async function handler(req, res) {
     dominantBy: {
       impressions: { age: domImps.age, share: +domImps.share.toFixed(2), value: domImps.value },
       broadClicks: { age: domClicks.age, share: +domClicks.share.toFixed(2), value: domClicks.value },
-      linkClicks: { age: domLinkClicks.age, share: +domLinkClicks.share.toFixed(2), value: domLinkClicks.value },
       reach: { age: domReach.age, share: +domReach.share.toFixed(2), value: domReach.value }
     },
     perAge: perAgeTable,
@@ -212,4 +208,12 @@ export default async function handler(req, res) {
       metricsRequested: metrics
     }
   });
+  } catch (err) {
+    console.error("[tt-metric-check] handler crash:", err && err.stack || err);
+    res.status(200).json({
+      verdict: "tt-metric-check crashed before it could produce a verdict",
+      handlerError: String(err && err.message || err),
+      stack: (err && err.stack || "").split("\n").slice(0, 5).join(" | ")
+    });
+  }
 }
