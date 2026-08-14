@@ -6138,25 +6138,40 @@ export default function MediaOnGas(){
             // per-region rows too when they exist, so the aggregate is
             // exactly the sum of every per-province view. Previously
             // read demoData.ageGender / device which contains Meta +
-            // TikTok + Google, while agByRegRows is Meta + TikTok only
-            // (Google has no per-region age breakdown from age_range_view).
-            // The mismatch produced a spurious 45-54 spike on the
-            // aggregate chart for financial-services accounts because
-            // Google's age-range inference concentrates in 45-54 while
-            // Meta / TikTok distribute more naturally.
+            // TikTok + Google, but two platforms report demographics
+            // in ways that are NOT apples-to-apples with Meta and
+            // must be excluded from any blended aggregate:
             //
-            // Fallback path: when agByRegRows is empty (Meta returned no
-            // 3-dim rows for the window, common on short date ranges) we
-            // used to fall back to the blended agRows — which re-admits
-            // Google and re-introduces the 45-54 spike. Instead, filter
-            // agRows to Meta + TikTok only for the fallback path so the
-            // aggregate chart is always Google-free even without the
-            // per-region rows. Same treatment for the device chart.
+            //   Google — age_range_view uses inferred age (financial
+            //   services accounts concentrate in 45-54 as a Google
+            //   algorithmic bias) rather than declared age, and Google
+            //   has no per-region age breakdown from age_range_view.
+            //
+            //   TikTok — the AUDIENCE report's `clicks` metric is broad
+            //   taps (video-area, CTA, profile taps, "See more" taps,
+            //   everything) NOT link clicks. Meta's `clicks` is link
+            //   clicks. Blending TikTok's ~30% broad-tap 'CTR' with
+            //   Meta's ~1.7% link-click CTR in one weighted chart
+            //   inflates whichever age band TikTok's broad-tap volume
+            //   concentrates in (45-54 on MoMo). TikTok's own
+            //   engagement demographic still shows honestly in its own
+            //   persona card in the AUDIENCE PERSONAS row — this only
+            //   removes it from the CROSS-PLATFORM aggregate charts
+            //   where the metric asymmetry makes the blend misleading.
+            //
+            // Fallback path (agByRegRows empty): filter agRows to
+            // Meta-only for both the aggregate and the province-scoped
+            // synthByProv path so the chart is always TikTok-and-
+            // Google-free at the aggregate level.
             var isGooglePlat=function(r){return String(r.platform||"").toLowerCase().indexOf("google")>=0;};
-            var agRowsNoGoogle=agRows.filter(function(r){return !isGooglePlat(r);});
-            var devRowsNoGoogle=devRows.filter(function(r){return !isGooglePlat(r);});
-            var scopedAgRows=!selectedProvince?(agByRegRows.length>0?agByRegRows:agRowsNoGoogle):(realScopedAg.length>0?realScopedAg:synthByProv(agRowsNoGoogle,selectedProvince));
-            var scopedDevRows=!selectedProvince?(devByRegRows.length>0?devByRegRows:devRowsNoGoogle):(realScopedDev.length>0?realScopedDev:synthByProv(devRowsNoGoogle,selectedProvince));
+            var isTikTokPlat=function(r){return String(r.platform||"").toLowerCase().indexOf("tiktok")>=0;};
+            var isMetaOnly=function(r){return !isGooglePlat(r)&&!isTikTokPlat(r);};
+            var agRowsMetaOnly=agRows.filter(isMetaOnly);
+            var devRowsMetaOnly=devRows.filter(isMetaOnly);
+            var agByRegRowsMetaOnly=agByRegRows.filter(isMetaOnly);
+            var devByRegRowsMetaOnly=devByRegRows.filter(isMetaOnly);
+            var scopedAgRows=!selectedProvince?(agByRegRowsMetaOnly.length>0?agByRegRowsMetaOnly:agRowsMetaOnly):(realScopedAg.length>0?realScopedAg.filter(isMetaOnly):synthByProv(agRowsMetaOnly,selectedProvince));
+            var scopedDevRows=!selectedProvince?(devByRegRowsMetaOnly.length>0?devByRegRowsMetaOnly:devRowsMetaOnly):(realScopedDev.length>0?realScopedDev.filter(isMetaOnly):synthByProv(devRowsMetaOnly,selectedProvince));
             // Flag whether we're showing real or synthesised data so
             // the WHO + HOW header can carry the right label.
             var scopedIsEstimated=!!(selectedProvince&&realScopedAg.length===0&&realScopedDev.length===0);
