@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog } from "./_audit.js";
-import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain, canonicalClientSlug } from "./_clientIdentity.js";
+import { registeredDomain, clientIdentity, displayNameFromIdentity, isFreeMailDomain, canonicalClientSlug, knownBrandForSlug } from "./_clientIdentity.js";
 import { listUsers, normalizeEmail, isSuperadminEmail } from "./_users.js";
 import { getSession } from "./auth.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
@@ -22,6 +22,29 @@ var TEAM_DOMAIN = "gasmarketing.co.za";
 var SLA_DAYS = 7;
 var BUFFER_HOURS = 2; // hit right after SLA, not in the middle of day 7
 var ORIGIN = "https://media.gasmarketing.co.za";
+
+// Clients explicitly opted out of SLA nudge reminders per owner
+// direction. Matches the same PREFIX approach api/weekly-summary.js
+// uses (WEEKLY_SUMMARY_EXCLUDED_PREFIXES) so the two SLA surfaces
+// stay in lockstep. Match by canonical slug PREFIX so every name
+// variant resolves to the same skip ("Simpson Properties", "Simpson
+// Properties - Arnie Berman", "Simpson Properties June 2026" all
+// canonicalise to a slug starting with "simpsonproperties" and drop
+// out of the overdue queue).
+var NUDGE_EXCLUDED_PREFIXES = ["simpsonproperties"];
+function isNudgeExcluded(identity, lastSlug) {
+  // Resolve to a canonical slug from either the stored slug hint or
+  // the display name derived from the identity. Mirrors the same slug
+  // resolution the queue-building logic uses at line ~609 so the
+  // exclusion catches every recorded variant.
+  var displayName = displayNameFromIdentity(identity, lastSlug);
+  var slug = canonicalClientSlug(lastSlug || "") || canonicalClientSlug(displayName || "");
+  if (!slug) return false;
+  for (var i = 0; i < NUDGE_EXCLUDED_PREFIXES.length; i++) {
+    if (slug.indexOf(NUDGE_EXCLUDED_PREFIXES[i]) === 0) return true;
+  }
+  return false;
+}
 
 // Fixed leadership distribution. Every overdue-client nudge ships to this
 // list as TO recipients so all five leaders see every SLA breach. The list
@@ -336,7 +359,21 @@ function isInternalTestSend(entry, teamEmailSet) {
 // "mtn-momo", "MTN MOMO", "MTN MOMO APRIL 2026", "Willowbrook Cycle2"
 // all collapse to one canonical client. Delegates to the shared
 // canonicalClientSlug so every SLA path agrees.
+//
+// Additionally, when the raw slug is a full campaign-name variant
+// like "GAS_Learnalot_META_Leads_WApp_PSI_July/Aug_2026" the plain
+// canonical form collapses to "gaslearnalotmetaleadswapppsi" —
+// which does NOT match the earlier "learnalot" canonical form the
+// previous send may have used, and the slug-merge second pass then
+// keeps two separate identities and the older one stays overdue
+// forever. Route through knownBrandForSlug FIRST: it resolves any
+// GAS_<Client>_<Objective>... variant back to the client's known
+// brand key ("Learnalot" -> "learnalot"), so every campaign-name
+// variant collapses to the SAME merge key. Falls back to the raw
+// canonical when the input has no recognised brand.
 function normalizeSlug(s) {
+  var brand = knownBrandForSlug(s);
+  if (brand) return canonicalClientSlug(brand);
   return canonicalClientSlug(s);
 }
 
@@ -577,7 +614,11 @@ export default async function handler(req, res) {
   }).sort(function(a, b) { return b.daysSince - a.daysSince; });
 
   var overdue = identities.map(function(id) { return byClient[id]; })
-    .filter(function(c) { return (now - c.lastSentTs) > slaMs; });
+    .filter(function(c) { return (now - c.lastSentTs) > slaMs; })
+    // Drop opted-out clients (Simpson Properties etc) BEFORE the
+    // queue is built so they never generate a nudge, a final-cycle
+    // reminder, OR a diagnostic 'sla_overdue' row in the response.
+    .filter(function(c) { return !isNudgeExcluded(c.identity, c.lastSlug); });
 
   // Campaign lifecycle gate:
   //   1) Live campaigns use normal SLA nudges.
