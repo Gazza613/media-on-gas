@@ -1332,16 +1332,13 @@ function aggregateRegion(rows, campaignObjType) {
 }
 
 // Render the audience/demographics section. Persona cards mirror the
-// dashboard's TargetingPersonaCard (App.jsx ~850): Meta / Instagram
-// personas are click-weighted (their `clicks` metric IS link clicks,
-// a real engagement-intent signal). TikTok persona is impression-
-// weighted (TikTok's `clicks` metric from AUDIENCE reports is broad
-// taps not link clicks — verified 27% blended CTR on MoMo via /api/
-// tt-metric-check, impossible for real link clicks, and link_click_
-// count is rejected at AUCTION_CAMPAIGN + AUDIENCE with error 40002).
-// Impressions is the honest audience view for TikTok. Small caption
-// on the TikTok card explains the weighting. Every calculation
-// excludes 13-17 (owner rule).
+// dashboard's TargetingPersonaCard (App.jsx ~850): all four platforms
+// (Facebook / Instagram / TikTok / Google Ads) are click-weighted per
+// team standard. Team reverted a brief per-platform impression-
+// weighting attempt for TikTok on 2026-08-14 (was 3ed265f / e96abb5)
+// — they prefer TikTok's honest broad-tap engagement demographic on
+// the card even acknowledging its metric-definition asymmetry with
+// Meta's link clicks. Every calculation excludes 13-17 (owner rule).
 function renderAudienceSection(opts) {
   var demo = opts.demographics;
   if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
@@ -1386,12 +1383,9 @@ function renderAudienceSection(opts) {
   }).map(function(p) {
     var pb = agAgg.byPlatform[p];
     var accent = platformAccent(p);
-    // Per-platform weighting: TikTok reads impression-scope tallies
-    // (broad-tap `clicks` metric not comparable to Meta link clicks —
-    // impressions is the honest audience view for TikTok). Every
-    // other platform reads click-scope tallies.
-    var isTikTok = p === "TikTok";
-    var personaMap = isTikTok ? (pb.ageImpressionsPersona || {}) : (pb.ageClicksPersona || {});
+    // Click-weighted for every platform (Meta / Instagram / TikTok /
+    // Google Ads) — team standard, matches dashboard buildPersona.
+    var personaMap = pb.ageClicksPersona || {};
     var topAgeKey = "", topAgeVal = 0;
     Object.keys(personaMap).forEach(function(k) { if (personaMap[k] > topAgeVal) { topAgeVal = personaMap[k]; topAgeKey = k; } });
     var ageDenom = Object.keys(personaMap).reduce(function(s, k) { return s + personaMap[k]; }, 0);
@@ -1406,48 +1400,34 @@ function renderAudienceSection(opts) {
       ALLOWED_AGES.forEach(function(k) { if ((personaMap[k] || 0) > altVal) { altVal = personaMap[k]; altKey = k; } });
       if (altKey) { topAgeKey = altKey; topAgeVal = altVal; topAgeShare = ageDenom > 0 ? (altVal / ageDenom * 100) : 0; }
     }
-    var genderSrc = isTikTok ? pb.genderImpressions : pb.genderClicks;
-    var gSum = genderSrc.male + genderSrc.female;
-    var femaleShare = gSum > 0 ? (genderSrc.female / gSum * 100) : 0;
-    var maleShare = gSum > 0 ? (genderSrc.male / gSum * 100) : 0;
+    var gSum = pb.genderClicks.male + pb.genderClicks.female;
+    var femaleShare = gSum > 0 ? (pb.genderClicks.female / gSum * 100) : 0;
+    var maleShare = gSum > 0 ? (pb.genderClicks.male / gSum * 100) : 0;
     var genderLead = femaleShare > maleShare ? "Female" : (maleShare > 0 ? "Male" : "");
     var genderShare = Math.max(femaleShare, maleShare);
-    // Region rollup for this platform. TikTok reads impression-per-
-    // region; everyone else reads click-per-region — same weighting
-    // choice as the age/gender tallies for internal consistency.
-    var pRegs = isTikTok
-      ? ((regAgg.byPlatformRegionImpressions && regAgg.byPlatformRegionImpressions[p]) || {})
-      : ((regAgg.byPlatformRegionClicks && regAgg.byPlatformRegionClicks[p]) || {});
+    // Region rollup for this platform, click-weighted.
+    var pRegs = (regAgg.byPlatformRegionClicks && regAgg.byPlatformRegionClicks[p]) || {};
     var pRegKeys = Object.keys(pRegs).sort(function(a, b) { return pRegs[b] - pRegs[a]; }).slice(0, 3);
     var pRegDenom = Object.keys(pRegs).reduce(function(s, k) { return s + pRegs[k]; }, 0);
     var regionRows = pRegKeys.map(function(rk) {
       var share = pRegDenom > 0 ? (pRegs[rk] / pRegDenom * 100) : 0;
       return `<div class="rp-persona-region"><span class="rp-persona-region-name">${escapeHtmlLocal(rk)}</span><span class="rp-persona-region-share">${share.toFixed(2)}%</span></div>`;
     }).join("");
-    // Best Personas — top 3 age × gender segments, weighted per
-    // platform (TikTok impressions, others clicks).
-    var segMap = isTikTok ? pb.segMapImpressions : pb.segMapClicks;
-    var segTotal = Object.keys(segMap).reduce(function(s, k) { return s + segMap[k]; }, 0);
-    var segments = Object.keys(segMap).map(function(k) {
+    // Best Personas — top 3 age × gender segments, click-weighted.
+    var segTotal = Object.keys(pb.segMapClicks).reduce(function(s, k) { return s + pb.segMapClicks[k]; }, 0);
+    var segments = Object.keys(pb.segMapClicks).map(function(k) {
       var parts = k.split("|");
-      return { age: parts[0], gen: parts[1], val: segMap[k], share: segTotal > 0 ? (segMap[k] / segTotal * 100) : 0 };
+      return { age: parts[0], gen: parts[1], val: pb.segMapClicks[k], share: segTotal > 0 ? (pb.segMapClicks[k] / segTotal * 100) : 0 };
     }).sort(function(a, b) { return b.val - a.val; }).slice(0, 3);
     var segRows = segments.map(function(s, i) {
       var label = s.age + " " + (s.gen === "female" ? "Female" : "Male");
       return `<div class="rp-persona-seg"><span class="rp-persona-seg-rank">${i + 1}</span><span class="rp-persona-seg-label">${escapeHtmlLocal(label)}</span><span class="rp-persona-seg-share">${s.share.toFixed(2)}%</span></div>`;
     }).join("");
-    // Caption under the Dominant Age for the TikTok card ONLY, so
-    // the reader understands why its weighting differs. Mirrors the
-    // dashboard TargetingPersonaCard caption (App.jsx ~882).
-    var weightingCaption = isTikTok
-      ? `<div class="rp-persona-hero-note">reach-weighted (TikTok's click metric is broad taps, not link clicks)</div>`
-      : "";
     return `<div class="rp-persona" style="border-color:${accent}55;">
       <div class="rp-persona-plat" style="background:${accent};">${escapeHtmlLocal(p)}</div>
       <div class="rp-persona-hero">
         <div class="rp-persona-hero-age" style="color:${accent};">${escapeHtmlLocal(topAgeKey || "-")}</div>
         <div class="rp-persona-hero-caption">Dominant Age${topAgeKey ? " &middot; " + topAgeShare.toFixed(2) + "%" : ""}</div>
-        ${weightingCaption}
       </div>
       <div class="rp-persona-strip">
         <div class="rp-persona-strip-tile">
@@ -1458,7 +1438,7 @@ function renderAudienceSection(opts) {
         <div class="rp-persona-strip-tile">
           <div class="rp-persona-strip-label">Total Clicks</div>
           <div class="rp-persona-strip-value">${fmtNum(pb.clicks)}</div>
-          <div class="rp-persona-strip-sub">${isTikTok ? "engagement volume" : "click-weighted"}</div>
+          <div class="rp-persona-strip-sub">click-weighted</div>
         </div>
       </div>
       ${regionRows ? `<div class="rp-persona-block-title">Top Regions</div><div class="rp-persona-regions">${regionRows}</div>` : ""}

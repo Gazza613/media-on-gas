@@ -876,7 +876,6 @@ function TargetingPersonaCard(props){
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
       <div style={{fontSize:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-1,lineHeight:1,textShadow:"0 0 24px "+c+"60"}}>{p.topAge||"—"}</div>
       <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
-      {p.weighting==="impressions"&&<div title="TikTok's `clicks` metric via the AUDIENCE report is broad taps (video-area, CTA, profile, 'See more' — everything pooled), not link clicks like Meta. TikTok's link_click_count is not exposed at demographic granularity (rejected by the API at AUCTION_CAMPAIGN + AUDIENCE), so this persona reads paid reach (impressions) instead of engagement — the honest audience view for TikTok on this account." style={{fontSize:8,color:P.caption,fontFamily:fm,marginTop:6,fontStyle:"italic",lineHeight:1.4,maxWidth:200,marginLeft:"auto",marginRight:"auto"}}>reach-weighted (TikTok's click metric is broad taps, not link clicks)</div>}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div title="Overall click share by gender, summed across all age brackets. Can differ from the top Best Personas entry below if one gender is concentrated in a single age bracket while the other is spread across many." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
@@ -7086,90 +7085,65 @@ export default function MediaOnGas(){
               authObj:authObj
             };
 
-            // Build per-platform targeting personas. Meta / Instagram
-            // weight on CLICKS (stageDef.engagement) because Meta's
-            // `clicks` metric IS link clicks — a real engagement-intent
-            // signal. TikTok weights on IMPRESSIONS (stageDef.awareness)
-            // because TikTok's `clicks` metric returned by AUDIENCE
-            // reports is BROAD TAPS (video-area, CTA, profile taps,
-            // 'See more', everything pooled) — verified 2026-08-12
-            // via /api/tt-metric-check which measured a 27% blended
-            // CTR (988K clicks / 3.7M impressions) on MoMo TikTok,
-            // impossible for real link clicks (normal TikTok link-CTR
-            // is 1-3%). TikTok's link_click_count metric is rejected
-            // at AUCTION_CAMPAIGN + AUDIENCE (error 40002), so link-
-            // click parity with Meta is not achievable at demographic
-            // granularity. Impression-weighting is the honest reach
-            // view for TikTok on this diagnostic and matches the
-            // media-agency understanding that TikTok is a young reach
-            // platform. This is a PER-PLATFORM data-quality decision,
-            // not a wholesale methodology reversal — Meta/IG remain
-            // click-weighted.
+            // Build per-platform targeting personas (click-weighted).
+            // Every platform's persona reads stageDef.engagement (clicks)
+            // per team standard — the media-agency definition of a
+            // persona is who ACTIVELY engaged with the ad, and clicks
+            // (broad or link, depending on platform) are the honest
+            // engagement signal for a persona card.
+            //
+            // History note: an earlier commit 3ed265f split TikTok to
+            // impression-weighted because TikTok's `clicks` metric is
+            // broad taps (video-area, CTA, profile taps, 'See more',
+            // everything pooled), not link clicks like Meta. Team
+            // reverted 2026-08-14 — they prefer TikTok's honest broad-
+            // tap engagement demographic on the persona card over the
+            // impression-based reach view, even acknowledging the
+            // metric-definition asymmetry with Meta.
             //
             // Platforms with zero click volume are dropped so an
-            // unused account doesn't leave an empty card. shareOfClicks
-            // stays a click-based number regardless of the persona-
-            // weighting stage since it answers 'how much engagement
-            // came from this platform' which IS a click question.
+            // unused account doesn't leave an empty card.
             var buildPersona=function(matchKey,displayName,color,iconFn){
               var pKeyLow=matchKey.toLowerCase();
               var matches=function(r){return String(r.platform||"").toLowerCase().indexOf(pKeyLow)>=0;};
               var agP=agRows.filter(matches);
               var devP=devRows.filter(matches);
               var regP=regRows.filter(matches);
-              // Per-platform stage choice. TikTok uses awareness
-              // (impressions) because its clicks metric is broad taps
-              // not link clicks; every other platform uses engagement
-              // (clicks) because their clicks ARE link clicks.
-              var isTikTok=pKeyLow==="tiktok";
-              var stage=isTikTok?stageDef.awareness:stageDef.engagement;
-              var weightingLabel=isTikTok?"impressions":"clicks";
-              var totalWeight=0;agP.forEach(function(r){totalWeight+=stage.field(r);});
-              // shareOfClicks is always click-based (real engagement-volume answer)
-              var totalClicksForShare=0;agP.forEach(function(r){totalClicksForShare+=(parseFloat(r.clicks||0)||0);});
+              var stage=stageDef.engagement; // clicks, all platforms
+              var totalClicks=0;agP.forEach(function(r){totalClicks+=stage.field(r);});
               var blendedClk=authClicks||0;
-              var shareOfClicks=blendedClk>0?(totalClicksForShare/blendedClk*100):0;
-              // Dominant age (weighted per the stage chosen above)
+              var shareOfClicks=blendedClk>0?(totalClicks/blendedClk*100):0;
+              // Dominant age (click-weighted engagement demographic)
               var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+stage.field(r);});
               // Diagnostic: dump both click-weighted and impression-
-              // weighted breakdowns so future asymmetry questions can
-              // be answered from one console line — regardless of
-              // which the persona is using.
+              // weighted breakdowns so any future asymmetry question
+              // can be answered from one console line.
               try {
-                var clkSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;clkSums[a]=(clkSums[a]||0)+(parseFloat(r.clicks||0)||0);});
                 var impSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;impSums[a]=(impSums[a]||0)+(parseFloat(r.impressions||0)||0);});
-                console.log("[persona-diag]",displayName,{rowCount:agP.length,weighting:weightingLabel,ageSumsByClicks:clkSums,ageSumsByImpressions:impSums,totalClicks:totalClicksForShare,totalImpressions:Object.keys(impSums).reduce(function(s,k){return s+impSums[k];},0)});
+                console.log("[persona-diag]",displayName,{rowCount:agP.length,weighting:"clicks",ageSumsByClicks:ageSums,ageSumsByImpressions:impSums,totalClicks:totalClicks});
               } catch(_) {}
               var topAge="";var topAgeVal=0;Object.keys(ageSums).forEach(function(a){if(ageSums[a]>topAgeVal){topAgeVal=ageSums[a];topAge=a;}});
               var ageDenom=Object.keys(ageSums).reduce(function(s,k){return s+ageSums[k];},0);
               var topAgeShare=ageDenom>0?(topAgeVal/ageDenom*100):0;
-              // Gender split (matches the persona's weighting stage)
+              // Gender split (click-weighted)
               var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=stage.field(r);});
               var gSum=gs.female+gs.male;
               var genderSplit={female:gSum>0?(gs.female/gSum*100):0,male:gSum>0?(gs.male/gSum*100):0};
-              // Top provinces (up to 3, matches persona's weighting stage)
+              // Top provinces (up to 3, click-weighted)
               var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+stage.field(r);});
               var pOrder=Object.keys(provSums).sort(function(a,b){return provSums[b]-provSums[a];});
               var pDenom=Object.keys(provSums).reduce(function(s,k){return s+provSums[k];},0);
               var topProvinces=pOrder.slice(0,3).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
-              // Mobile share of device-tagged rows, weighted the same
-              // as the rest of the card so the reader sees ONE consistent
-              // methodology per card (TikTok all impressions, others
-              // all clicks).
+              // Mobile share of device-tagged clicks
               var devB={mobile:0,desktop:0,tablet:0};
               devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=stage.field(r);});
               var devDenom=devB.mobile+devB.desktop+devB.tablet;
               var mobileShare=devDenom>0?(devB.mobile/devDenom*100):0;
-              // Top 3 age+gender segments (weighted per the persona's
-              // stage) — "Best Personas" ranks by who dominates the
-              // audience under the platform's honest metric.
+              // Top 3 age+gender segments (click-weighted). "Best
+              // Personas" ranks by who's engaging most.
               var segMap={};
               agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var k=a+"|"+g;var v=stage.field(r);segMap[k]=(segMap[k]||0)+v;});
-              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalWeight>0?(segMap[k]/totalWeight*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
-              // totalClicks kept for the downstream empty-persona
-              // filter — real click volume is the right liveness check
-              // regardless of which stage the persona headlines.
-              var totalClicks=totalClicksForShare;
+              var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalClicks>0?(segMap[k]/totalClicks*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
               // CTR vs blended, kept in the payload even though the card
               // footer no longer prints it, the Targeting Insights narrative
               // below the grid still references ctrRatio.
@@ -7188,7 +7162,7 @@ export default function MediaOnGas(){
               // as dashes, instead of swapping the whole card for an
               // empty placeholder.
               var hasPlatformClicks=platClk>0;
-              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,hasPlatformClicks:hasPlatformClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio,weighting:weightingLabel};
+              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,hasPlatformClicks:hasPlatformClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio};
             };
             targetingPersonas=[
               buildPersona("facebook","Facebook",P.fb,Ic.eye),
