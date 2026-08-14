@@ -1233,15 +1233,21 @@ function aggregateAgeGender(rows, campaignObjType) {
     if (!byPlat[p]) byPlat[p] = {
       // Persona-scope age tallies — INCLUDE any non-13-17 age string
       // ("unknown", "13-17"-excluded, everything else) so dominant age
-      // matches dashboard buildPersona (App.jsx ~7059) exactly. Empty
-      // maps not seeded here; keys added on first hit.
-      ageClicksPersona: {}, ageObjPersona: {},
+      // matches dashboard buildPersona (App.jsx ~7095) exactly. Empty
+      // maps not seeded here; keys added on first hit. Impression
+      // tally kept alongside clicks because TikTok's persona reads
+      // ageImpressionsPersona (per-platform data-quality decision
+      // taken 2026-08-13, commit 3ed265f — TikTok's `clicks` metric
+      // from AUDIENCE reports is broad taps not link clicks, so
+      // impressions is the honest reach view for that platform).
+      // Every other platform's persona still reads ageClicksPersona.
+      ageClicksPersona: {}, ageObjPersona: {}, ageImpressionsPersona: {},
       // Age-breakdown-scope tallies — CLASSIFIED bands only. Matches
       // dashboard's Demographics OBJECTIVE stage which iterates
       // ageOrder only (App.jsx ~5831 topAgeFor).
       ageClicks: initAllowedMap(), ageObj: initAllowedMap(),
-      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 },
-      segMapClicks: {}, segMapObj: {},
+      genderClicks: { male: 0, female: 0 }, genderObj: { male: 0, female: 0 }, genderImpressions: { male: 0, female: 0 },
+      segMapClicks: {}, segMapObj: {}, segMapImpressions: {},
       impressions: 0, clicks: 0, spend: 0, weight: 0
     };
     var bp = byPlat[p];
@@ -1256,6 +1262,7 @@ function aggregateAgeGender(rows, campaignObjType) {
     if (age) {
       bp.ageClicksPersona[age] = (bp.ageClicksPersona[age] || 0) + clicks;
       bp.ageObjPersona[age] = (bp.ageObjPersona[age] || 0) + w;
+      bp.ageImpressionsPersona[age] = (bp.ageImpressionsPersona[age] || 0) + imps;
     }
     // Breakdown tally — classified bands only.
     if (ALLOWED_AGES.indexOf(age) >= 0) {
@@ -1269,6 +1276,7 @@ function aggregateAgeGender(rows, campaignObjType) {
       genderObjAll[g] += w;
       bp.genderClicks[g] += clicks;
       bp.genderObj[g] += w;
+      bp.genderImpressions[g] += imps;
     }
     bp.impressions += imps;
     bp.clicks += clicks;
@@ -1278,6 +1286,7 @@ function aggregateAgeGender(rows, campaignObjType) {
       var k = age + "|" + g;
       bp.segMapClicks[k] = (bp.segMapClicks[k] || 0) + clicks;
       bp.segMapObj[k] = (bp.segMapObj[k] || 0) + w;
+      bp.segMapImpressions[k] = (bp.segMapImpressions[k] || 0) + imps;
     }
   });
   return {
@@ -1288,12 +1297,13 @@ function aggregateAgeGender(rows, campaignObjType) {
 }
 
 // Click-weighted (persona/targeting) and objective-weighted (Demographics
-// OBJECTIVE stage) region rollups in one pass. Persona cards read
-// byPlatformRegionClicks per owner methodology (engagement view, not
-// reach view).
+// OBJECTIVE stage) region rollups in one pass. Meta/IG persona cards
+// read byPlatformRegionClicks; TikTok persona reads
+// byPlatformRegionImpressions per the per-platform data-quality
+// decision (see aggregateAgeGender docblock above).
 function aggregateRegion(rows, campaignObjType) {
   var byRegion = {};
-  var byPlatformRegionClicks = {}, byPlatformRegionObj = {};
+  var byPlatformRegionClicks = {}, byPlatformRegionObj = {}, byPlatformRegionImpressions = {};
   (rows || []).forEach(function(r) {
     var reg = String(r.region || "").trim();
     if (!reg || reg.toLowerCase() === "unknown") return;
@@ -1308,22 +1318,30 @@ function aggregateRegion(rows, campaignObjType) {
     byRegion[reg].weight += w;
     if (!byPlatformRegionClicks[p]) byPlatformRegionClicks[p] = {};
     if (!byPlatformRegionObj[p]) byPlatformRegionObj[p] = {};
+    if (!byPlatformRegionImpressions[p]) byPlatformRegionImpressions[p] = {};
     byPlatformRegionClicks[p][reg] = (byPlatformRegionClicks[p][reg] || 0) + clicks;
     byPlatformRegionObj[p][reg] = (byPlatformRegionObj[p][reg] || 0) + w;
+    byPlatformRegionImpressions[p][reg] = (byPlatformRegionImpressions[p][reg] || 0) + imps;
   });
   return {
     byRegion: byRegion,
     byPlatformRegionClicks: byPlatformRegionClicks,
-    byPlatformRegionObj: byPlatformRegionObj
+    byPlatformRegionObj: byPlatformRegionObj,
+    byPlatformRegionImpressions: byPlatformRegionImpressions
   };
 }
 
 // Render the audience/demographics section. Persona cards mirror the
-// dashboard's TargetingPersonaCard (App.jsx ~850): click-weighted
-// dominant age + share, gender lead + share, top regions, top 3 age
-// x gender segments — a persona describes who actively engaged (the
-// media-agency definition), not who the algorithm chose to serve.
-// Every calculation excludes 13-17 (owner rule).
+// dashboard's TargetingPersonaCard (App.jsx ~850): Meta / Instagram
+// personas are click-weighted (their `clicks` metric IS link clicks,
+// a real engagement-intent signal). TikTok persona is impression-
+// weighted (TikTok's `clicks` metric from AUDIENCE reports is broad
+// taps not link clicks — verified 27% blended CTR on MoMo via /api/
+// tt-metric-check, impossible for real link clicks, and link_click_
+// count is rejected at AUCTION_CAMPAIGN + AUDIENCE with error 40002).
+// Impressions is the honest audience view for TikTok. Small caption
+// on the TikTok card explains the weighting. Every calculation
+// excludes 13-17 (owner rule).
 function renderAudienceSection(opts) {
   var demo = opts.demographics;
   if (!demo || (!Array.isArray(demo.ageGender) && !Array.isArray(demo.region))) return "";
@@ -1368,13 +1386,12 @@ function renderAudienceSection(opts) {
   }).map(function(p) {
     var pb = agAgg.byPlatform[p];
     var accent = platformAccent(p);
-    // Persona dominant age reads the PERSONA-SCOPE tally which
-    // matches dashboard buildPersona (App.jsx ~7059): every non-13-17
-    // age string contributes to the click sum, including "unknown".
-    // Denominator includes those too so the % is honest. Click-weighted
-    // because a persona is an engagement construct (who opted in), not
-    // a reach construct (who was served).
-    var personaMap = pb.ageClicksPersona || {};
+    // Per-platform weighting: TikTok reads impression-scope tallies
+    // (broad-tap `clicks` metric not comparable to Meta link clicks —
+    // impressions is the honest audience view for TikTok). Every
+    // other platform reads click-scope tallies.
+    var isTikTok = p === "TikTok";
+    var personaMap = isTikTok ? (pb.ageImpressionsPersona || {}) : (pb.ageClicksPersona || {});
     var topAgeKey = "", topAgeVal = 0;
     Object.keys(personaMap).forEach(function(k) { if (personaMap[k] > topAgeVal) { topAgeVal = personaMap[k]; topAgeKey = k; } });
     var ageDenom = Object.keys(personaMap).reduce(function(s, k) { return s + personaMap[k]; }, 0);
@@ -1389,35 +1406,48 @@ function renderAudienceSection(opts) {
       ALLOWED_AGES.forEach(function(k) { if ((personaMap[k] || 0) > altVal) { altVal = personaMap[k]; altKey = k; } });
       if (altKey) { topAgeKey = altKey; topAgeVal = altVal; topAgeShare = ageDenom > 0 ? (altVal / ageDenom * 100) : 0; }
     }
-    var gSum = pb.genderClicks.male + pb.genderClicks.female;
-    var femaleShare = gSum > 0 ? (pb.genderClicks.female / gSum * 100) : 0;
-    var maleShare = gSum > 0 ? (pb.genderClicks.male / gSum * 100) : 0;
+    var genderSrc = isTikTok ? pb.genderImpressions : pb.genderClicks;
+    var gSum = genderSrc.male + genderSrc.female;
+    var femaleShare = gSum > 0 ? (genderSrc.female / gSum * 100) : 0;
+    var maleShare = gSum > 0 ? (genderSrc.male / gSum * 100) : 0;
     var genderLead = femaleShare > maleShare ? "Female" : (maleShare > 0 ? "Male" : "");
     var genderShare = Math.max(femaleShare, maleShare);
-    // Region rollup for this platform, click-weighted to match the
-    // TargetingPersonaCard's engagement-persona framing.
-    var pRegs = (regAgg.byPlatformRegionClicks && regAgg.byPlatformRegionClicks[p]) || {};
+    // Region rollup for this platform. TikTok reads impression-per-
+    // region; everyone else reads click-per-region — same weighting
+    // choice as the age/gender tallies for internal consistency.
+    var pRegs = isTikTok
+      ? ((regAgg.byPlatformRegionImpressions && regAgg.byPlatformRegionImpressions[p]) || {})
+      : ((regAgg.byPlatformRegionClicks && regAgg.byPlatformRegionClicks[p]) || {});
     var pRegKeys = Object.keys(pRegs).sort(function(a, b) { return pRegs[b] - pRegs[a]; }).slice(0, 3);
     var pRegDenom = Object.keys(pRegs).reduce(function(s, k) { return s + pRegs[k]; }, 0);
     var regionRows = pRegKeys.map(function(rk) {
       var share = pRegDenom > 0 ? (pRegs[rk] / pRegDenom * 100) : 0;
       return `<div class="rp-persona-region"><span class="rp-persona-region-name">${escapeHtmlLocal(rk)}</span><span class="rp-persona-region-share">${share.toFixed(2)}%</span></div>`;
     }).join("");
-    // Best Personas — top 3 age × gender segments, click-weighted.
-    var segTotal = Object.keys(pb.segMapClicks).reduce(function(s, k) { return s + pb.segMapClicks[k]; }, 0);
-    var segments = Object.keys(pb.segMapClicks).map(function(k) {
+    // Best Personas — top 3 age × gender segments, weighted per
+    // platform (TikTok impressions, others clicks).
+    var segMap = isTikTok ? pb.segMapImpressions : pb.segMapClicks;
+    var segTotal = Object.keys(segMap).reduce(function(s, k) { return s + segMap[k]; }, 0);
+    var segments = Object.keys(segMap).map(function(k) {
       var parts = k.split("|");
-      return { age: parts[0], gen: parts[1], val: pb.segMapClicks[k], share: segTotal > 0 ? (pb.segMapClicks[k] / segTotal * 100) : 0 };
+      return { age: parts[0], gen: parts[1], val: segMap[k], share: segTotal > 0 ? (segMap[k] / segTotal * 100) : 0 };
     }).sort(function(a, b) { return b.val - a.val; }).slice(0, 3);
     var segRows = segments.map(function(s, i) {
       var label = s.age + " " + (s.gen === "female" ? "Female" : "Male");
       return `<div class="rp-persona-seg"><span class="rp-persona-seg-rank">${i + 1}</span><span class="rp-persona-seg-label">${escapeHtmlLocal(label)}</span><span class="rp-persona-seg-share">${s.share.toFixed(2)}%</span></div>`;
     }).join("");
+    // Caption under the Dominant Age for the TikTok card ONLY, so
+    // the reader understands why its weighting differs. Mirrors the
+    // dashboard TargetingPersonaCard caption (App.jsx ~882).
+    var weightingCaption = isTikTok
+      ? `<div class="rp-persona-hero-note">reach-weighted (TikTok's click metric is broad taps, not link clicks)</div>`
+      : "";
     return `<div class="rp-persona" style="border-color:${accent}55;">
       <div class="rp-persona-plat" style="background:${accent};">${escapeHtmlLocal(p)}</div>
       <div class="rp-persona-hero">
         <div class="rp-persona-hero-age" style="color:${accent};">${escapeHtmlLocal(topAgeKey || "-")}</div>
         <div class="rp-persona-hero-caption">Dominant Age${topAgeKey ? " &middot; " + topAgeShare.toFixed(2) + "%" : ""}</div>
+        ${weightingCaption}
       </div>
       <div class="rp-persona-strip">
         <div class="rp-persona-strip-tile">
@@ -1428,7 +1458,7 @@ function renderAudienceSection(opts) {
         <div class="rp-persona-strip-tile">
           <div class="rp-persona-strip-label">Total Clicks</div>
           <div class="rp-persona-strip-value">${fmtNum(pb.clicks)}</div>
-          <div class="rp-persona-strip-sub">click-weighted</div>
+          <div class="rp-persona-strip-sub">${isTikTok ? "engagement volume" : "click-weighted"}</div>
         </div>
       </div>
       ${regionRows ? `<div class="rp-persona-block-title">Top Regions</div><div class="rp-persona-regions">${regionRows}</div>` : ""}
@@ -2374,6 +2404,7 @@ img { max-width: 100%; display: block; }
 .rp-persona-hero { padding: 4mm 4mm 3mm; text-align: center; border-bottom: 1px solid var(--rp-line); }
 .rp-persona-hero-age { font-size: 30pt; font-weight: 900; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
 .rp-persona-hero-caption { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; color: var(--rp-fg-mute); font-weight: 800; margin-top: 3mm; }
+.rp-persona-hero-note { font-size: 6pt; font-style: italic; color: var(--rp-fg-mute); opacity: 0.75; margin-top: 2mm; line-height: 1.3; max-width: 46mm; margin-left: auto; margin-right: auto; }
 /* ─────────────── SECTION 05: TOP ADS BY OBJECTIVE (new layout) ───────────────
    All-platforms-per-subsection layout (2026-08 team spec). Each KPI
    gets ONE page with every active platform stacked vertically as a
