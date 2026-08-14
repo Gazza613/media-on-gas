@@ -323,6 +323,14 @@ async function fetchGoogleTruth(from, to, warnings, overridesMap) {
       warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "config", error: "GOOGLE_ADS_* env vars not set" });
       return [];
     }
+    // OAuth refresh gets the default 8s timeout — usually resolves in
+    // ~200ms so no bump needed. Google Ads GAQL search on the other
+    // hand can take 5-15s for a month of data with per-day segments,
+    // and the default 8s was killing the reconcile Google truth fetch
+    // silently before any rows landed (returned via AbortError -> catch
+    // block -> [] with a fetch-truth warning that the operator wasn't
+    // seeing on the ground-truth display). Bump those calls to 60s
+    // matching the Vercel function ceiling headroom.
     var tok = await fetchWithTimeout("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "client_id=" + cid + "&client_secret=" + cs + "&refresh_token=" + rt + "&grant_type=refresh_token" });
     var tokD = await tok.json();
     if (!tokD.access_token) {
@@ -342,7 +350,7 @@ async function fetchGoogleTruth(from, to, warnings, overridesMap) {
         method: "POST",
         headers: { "Authorization": "Bearer " + tokD.access_token, "developer-token": dt, "login-customer-id": mg, "Content-Type": "application/json" },
         body: JSON.stringify(body)
-      });
+      }, 60000);
       if (!r.ok) {
         warnings.push({ source: "Google", account: "MTN MoMo Google", stage: "search", error: "http-" + r.status, atPage: gGuard });
         gStoppedShort = true;
