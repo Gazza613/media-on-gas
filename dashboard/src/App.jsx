@@ -9207,7 +9207,7 @@ export default function MediaOnGas(){
                           // own label, even at zero. The IG-fallback to
                           // REACH only applies when the row has no
                           // objective metric at all.
-                          var objType=rt==="leads"||rt==="installs"||rt==="follows"||rt==="profile_visits"||rt==="store_clicks"||rt==="lp_clicks"||rt==="clicks"||rt==="conversions"||rt==="tt_views";
+                          var objType=rt==="leads"||rt==="installs"||rt==="follows"||rt==="profile_visits"||rt==="store_clicks"||rt==="lp_clicks"||rt==="clicks"||rt==="conversions"||rt==="conversations"||rt==="tt_views";
                           if(rt==="reach"){ lbl="REACH"; val=fmt(parseFloat(ad.results||0)||rch); }
                           else if(rt==="impressions"){ lbl="IMPRESSIONS"; val=fmt(parseFloat(ad.impressions||0)||parseFloat(ad.results||0)); }
                           else if(objType){ lbl=resultLabelS(rt); val=fmt(parseFloat(ad.results||0)); }
@@ -10098,8 +10098,8 @@ export default function MediaOnGas(){
             filteredAds.forEach(function(a){totalSpend+=a.spend;totalImps+=a.impressions;totalClicks+=a.clicks;});
             var blendedCtr=totalImps>0?(totalClicks/totalImps*100):0;
 
-            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="tt_views"?"VIDEO VIEWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
-            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="tt_views"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
+            var resultLabel=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="tt_views"?"VIDEO VIEWS":rt==="conversions"?"CONVERSIONS":rt==="conversations"?"WA CONVOS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
+            var costPerLabel=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="tt_views"?"CPV":rt==="conversions"?"CPA":rt==="conversations"?"COST PER CONVO":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
             // Format badge color + label
             var fmtMeta=function(f){
               var ff=(f||"STATIC").toUpperCase();
@@ -10164,7 +10164,7 @@ export default function MediaOnGas(){
                       // The IMPRESSIONS fallback only applies when the row has
                       // no objective metric at all (rt is reach / impressions
                       // / empty).
-                      var objType=rt==="leads"||rt==="installs"||rt==="follows"||rt==="profile_visits"||rt==="store_clicks"||rt==="lp_clicks"||rt==="clicks"||rt==="conversions"||rt==="tt_views";
+                      var objType=rt==="leads"||rt==="installs"||rt==="follows"||rt==="profile_visits"||rt==="store_clicks"||rt==="lp_clicks"||rt==="clicks"||rt==="conversions"||rt==="conversations"||rt==="tt_views";
                       var hasRes=ad.results>0;
                       var lbl=hasRes||objType?resultLabel(rt):"IMPRESSIONS";
                       var val=hasRes?fmt(ad.results):(objType?"0":fmt(ad.impressions));
@@ -10305,14 +10305,42 @@ export default function MediaOnGas(){
                 </div>
               </div>
 
-              {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:objSections.map(function(sec){
+              {filteredAds.length===0?<div style={{padding:40,textAlign:"center",color:P.caption,fontFamily:fm,fontSize:12}}>No ads match the current filters.</div>:(function(){
+                // Learnalot-only override: rank Summary ad-preview cards
+                // by WhatsApp conversations started per ad, and rewrite
+                // the card's headline metric + cost-per to reflect that.
+                // Strict "every selected campaign is Learnalot" check so
+                // a mixed admin selection doesn't accidentally apply the
+                // WA-conversation ranking to non-Learnalot ads (which
+                // would rank them all at zero and produce a nonsense
+                // display). Matches the same detection pattern the
+                // Learnalot BOFU + WhatsApp Audience sections use.
+                var _selAllLearnalot=(computed.allSelected||[]).length>0&&(computed.allSelected||[]).every(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
+                });
+                return objSections.map(function(sec){
                 var arr=byObj[sec.key]||[];
                 if(arr.length===0)return null;
+                // Learnalot mode: rewrite each ad's results / resultType
+                // to the WA-conversation count (0 for ads with no WA
+                // CTA) so both the sort AND the card render use the
+                // new metric with no per-card branching downstream.
+                // Non-Learnalot: arr is untouched.
+                if(_selAllLearnalot){
+                  arr=arr.map(function(a){
+                    var wa=parseInt(a.messagingConversations7d||0,10);
+                    return Object.assign({},a,{results:wa,resultType:"conversations"});
+                  });
+                }
                 // Tier-based sort: (1) ads with results rank by results DESC then CPR ASC,
                 // (2) ads with impressions >= 5k but no results yet rank by impressions DESC
                 // (algorithm is delivering, just hasn't scored), (3) low-delivery ads last.
                 // Landing Page skips the impression floor so the highest-click ad always wins,
-                // even if its impressions are under 5k.
+                // even if its impressions are under 5k. Under Learnalot mode 'results' IS
+                // now WA-conversation count so the same tier logic ranks by conversations
+                // without a separate code path.
                 var IMP_FLOOR=sec.key==="landingpage"?0:5000;
                 var tierOf=function(ad){if(ad.results>0)return 1;if(ad.impressions>=IMP_FLOOR)return 2;return 3;};
                 var sorted=arr.slice().sort(function(a,b){
@@ -10442,7 +10470,8 @@ export default function MediaOnGas(){
                     return lines.join(" ");
                   })()}</Insight>
                 </div>;
-              })}
+              });
+              })()}
 
               {(function(){
                 // Show ads that didn't match any objective bucket (rare)

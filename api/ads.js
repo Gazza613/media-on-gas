@@ -1159,6 +1159,15 @@ export default async function handler(req, res) {
         else if (objective === "community_reach") { resCount = parseInt(ins.reach || 0); resType = "reach"; }
         // Landing Page: clicks to landing page
         else { resCount = ins.clicks; resType = "lp_clicks"; }
+        // WhatsApp / Messenger conversations started per ad. Exposed
+        // on every Meta ad row (zero for ads with no WhatsApp CTA)
+        // so the Learnalot-specific Summary override (App.jsx ~10318)
+        // can rank ads by conversation volume without a second fetch.
+        // Reads the SAME action_type upstream flows use — see
+        // _pulseShared.extractMessagingConversations at line ~133.
+        // Non-Learnalot clients ignore this field and the payload
+        // cost is trivial (one integer per ad row).
+        var messagingConversations7d = parseInt((ins.actionsAgg || {})["onsite_conversion.messaging_conversation_started_7d"] || 0, 10);
         allAds.push({
           platform: platform,
           accountName: account.name,
@@ -1169,6 +1178,7 @@ export default async function handler(req, res) {
           adName: ins.ad_name,
           thumbnail: thumb,
           previewUrl: preview,
+          messagingConversations7d: messagingConversations7d,
           format: (function(){
             // Ad-name tag wins. The team's naming convention puts the
             // format directly in the name ("Static", "MP4 Video", "GIF",
