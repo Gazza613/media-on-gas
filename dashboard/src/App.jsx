@@ -6252,6 +6252,27 @@ export default function MediaOnGas(){
               engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.mint,accentDeep:"#059669",deep:"#065f46",cool:"#059669",warm:"#10b981",hot:"#34d399",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel - who responded",field:function(r){return r.clicks||0;}},
               objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel - who actually converted",field:function(r){var type=rowObjectiveType(r);var rs=r.results||{};if(type==="Leads")return rs.leads||0;if(type==="Followers")return (rs.follows||0)+(rs.pageLikes||0);return r.clicks||0;}}
             };
+            // Learnalot override: the client's dashboard is conversation-
+            // first, not lead-first. Every downstream reader of
+            // stageDef.objective (Objective Highlights BY AGE GROUP chart,
+            // stageDef.objective narrative helpers, WHO & HOW blocks that
+            // read the objective field) uses WhatsApp conversations
+            // started as the objective weight instead of leads/follows/
+            // clicks. Detection mirrors the pattern used by the BOFU
+            // learnalotInSel gate (line ~8057). demoData rows carry
+            // results.messagingConversations from the demographics
+            // endpoint (extractResults in api/demographics.js:60).
+            var _selAllLearnalotStage=sel.length>0&&sel.every(function(c){
+              var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+              var cn=String(c.campaignName||"").toLowerCase();
+              return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
+            });
+            if(_selAllLearnalotStage){
+              stageDef.objective.field=function(r){var rs=r.results||{};return rs.messagingConversations||0;};
+              stageDef.objective.label="Conversations Started";
+              stageDef.objective.costLabel="Cost Per Conversation";
+              stageDef.objective.subtitle="Bottom of funnel - who started a WhatsApp conversation";
+            }
 
             // AUTHORITATIVE TOTALS — computed from the same selected-campaign
             // objects Summary uses, so the headline numbers on this tab match
@@ -8368,30 +8389,26 @@ export default function MediaOnGas(){
                   return <div style={{height:300}}><div style={{fontSize:10,fontWeight:800,color:P.label,fontFamily:fm,letterSpacing:2,marginBottom:10,textAlign:"center"}}>{chartTitle}</div><ChartReveal><ResponsiveContainer width="100%" height="90%"><BarChart data={objData} barSize={48} margin={{top:24,right:12,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={P.rule}/><XAxis dataKey="name" tick={{fontSize:10,fill:P.label,fontFamily:fm}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:10,fill:P.caption,fontFamily:fm}} axisLine={false} tickLine={false} tickFormatter={function(v){return "R"+Number(v).toFixed(2);}}/><Tooltip content={<Tip/>} wrapperStyle={{outline:"none"}} cursor={{fill:"rgba(255,255,255,0.05)"}}/><Legend verticalAlign="bottom" iconType="circle" wrapperStyle={legStyle}/><Bar dataKey="costPer" name={showLearnalotOctet?"Cost Per Lead":"Cost Per Result"} radius={[6,6,0,0]} fill="rgba(255,255,255,0.55)">{objData.map(function(e,i){return <Cell key={i} fill={e.color}/>;})}<LabelList dataKey="costPer" position="top" formatter={function(v){return "R"+Number(v).toFixed(2);}} style={lblStyle}/></Bar></BarChart></ResponsiveContainer></ChartReveal></div>;
                 })()}
                 {(function(){
-                  // Learnalot: the standRow frame is LEADS-first, not the
-                  // generic multi-objective mix. The client's two lead
-                  // paths (PSI Form leads via Meta Marketing API + manual
-                  // WhatsApp qualified leads via Custom Outcomes) are
-                  // compared head-to-head on volume, on CPL, and rolled
-                  // into a blended total. Non-Learnalot clients keep the
-                  // original multi-objective standRow.
+                  // Learnalot: conversation-first octet per owner
+                  // directive (2026-08-14) — Learnalot's Objective
+                  // Highlights BOFU is measured in WhatsApp
+                  // conversations, not leads. No lead volume or CPL
+                  // surfaces on this section. The WhatsApp Message
+                  // Funnel + efficiency tiles below carry the detailed
+                  // conversation quality story; this top row shows the
+                  // four headline conversation KPIs:
+                  //   1. Total Conversations Started (7-day attribution)
+                  //   2. Cost per Conversation (WA spend / conversations)
+                  //   3. Engaged 3+ Messages (quality threshold)
+                  //   4. Engagement Rate (engaged / conversations)
                   if(showLearnalotOctet){
-                    var _formVol=formLeadsCount,_waVol=waLeadsCount;
-                    var _formCpl=formLeadsCount>0?(formLeadsSpend/formLeadsCount):0;
-                    var _waCpl=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
-                    var _blendedCpl=totalLeadsCount>0?(totalLeadsSpend/totalLeadsCount):0;
-                    var _topVolCard=(_formVol>=_waVol&&_formVol>0)
-                      ?stand("HIGHEST VOLUME","PSI Form Leads, "+fmt(_formVol),P.rose)
-                      :(_waVol>0?stand("HIGHEST VOLUME","WhatsApp PSI Leads, "+fmt(_waVol),P.orchid):null);
-                    var _bestEffPool=[];
-                    if(_formCpl>0)_bestEffPool.push({k:"PSI Form Leads",cpl:_formCpl,col:P.rose});
-                    if(_waCpl>0)_bestEffPool.push({k:"WhatsApp PSI Leads",cpl:_waCpl,col:P.orchid});
-                    _bestEffPool.sort(function(a,b){return a.cpl-b.cpl;});
-                    var _bestEff=_bestEffPool[0]||null;
-                    var _bestEffCard=_bestEff?stand("BEST EFFICIENCY",_bestEff.k+", "+fR(_bestEff.cpl)+"/lead",_bestEff.col):null;
-                    var _blendedCard=_blendedCpl>0?stand("BLENDED CPL",fR(_blendedCpl),P.solar):null;
-                    var _totalCard=stand("TOTAL LEADS",fmt(totalLeadsCount),P.ember);
-                    return standRow([_topVolCard,_bestEffCard,_blendedCard,_totalCard]);
+                    var _waCostPerConv=waConversations>0&&waSpend>0?(waSpend/waConversations):0;
+                    var _waEngagementRate=waConversations>0?(waEngaged3/waConversations*100):0;
+                    var _convCard=stand("CONVERSATIONS STARTED",fmt(waConversations),P.mint);
+                    var _cpcCard=_waCostPerConv>0?stand("COST PER CONVERSATION",fR(_waCostPerConv),P.orchid):null;
+                    var _engCard=stand("ENGAGED 3+ MESSAGES",fmt(waEngaged3),P.solar);
+                    var _rateCard=_waEngagementRate>0?stand("ENGAGEMENT RATE",_waEngagementRate.toFixed(2)+"%",P.cyan):null;
+                    return standRow([_convCard,_cpcCard,_engCard,_rateCard]);
                   }
                   var cpFor=function(k,od){return od.results>0?(k==="Community Reach"?(od.spend/od.results*1000):(od.spend/od.results)):0;};
                   var active=objKeys.filter(function(k){return objectives4[k]&&objectives4[k].results>0;});if(active.length===0)return null;

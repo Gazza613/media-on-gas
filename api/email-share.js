@@ -757,9 +757,13 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     }
   });
   var _formLeads = parseFloat(g.leads || 0);
-  // Octet triggers only when the client actually has WhatsApp
-  // QualifiedLeads recorded in customOutcomes for the report period.
-  var _showTwoPath = _waLeadTotal > 0;
+  // Conversation-first section triggers when the report has EITHER
+  // WhatsApp CAPI QualifiedLeads OR any WhatsApp conversation
+  // activity (owner directive 2026-08-14 — Learnalot is measured
+  // in conversations, not just qualified leads, so a report window
+  // with conversations but no qualified leads still gets the full
+  // BOFU treatment).
+  var _showTwoPath = _waLeadTotal > 0 || (_wa && (_wa.conversations || 0) > 0);
   var _learnalotExtrasRow = "";
   if (_showTwoPath) {
     var _formCpl = _formLeads > 0 && _formSpend > 0 ? (_formSpend / _formLeads) : 0;
@@ -770,12 +774,23 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     var _eng3Rate = _wa.conversations > 0 ? (_wa.engaged3 / _wa.conversations * 100) : 0;
     var _costPerConv = _wa.conversations > 0 && _wa.spend > 0 ? (_wa.spend / _wa.conversations) : 0;
     var _costPerEng = _wa.engaged3 > 0 && _wa.spend > 0 ? (_wa.spend / _wa.engaged3) : 0;
-    // ── Row 1: 4-tile blended summary (replaces old 8-tile octet)
+    // ── Row 1: Conversation-first summary (4 tiles) ──────────────
+    // Owner directive 2026-08-14: Learnalot email report is
+    // conversation-first, not lead-first. No lead volume or CPL
+    // surfaces in this section. Four headline conversation KPIs:
+    //   1. Conversations Started (7-day attribution)
+    //   2. Cost per Conversation (WA spend / conversations)
+    //   3. Engaged 3+ Messages (quality threshold)
+    //   4. Engagement Rate (engaged / conversations)
+    // Mirrors dashboard octet (App.jsx ~8378) and PDF octet
+    // (_reportBuilder.js ~867). WhatsApp Message Funnel below still
+    // renders Conversations Opened / First Reply Sent / Engaged 3+
+    // with drop-off percentages so the full detail story stays.
     outcomes = [
-      { label: "Total Leads (Blended)", value: _totalLeads, display: fmtNum(_totalLeads), cost: fmtNum(_formLeads) + " form + " + fmtNum(_waLeadTotal) + " WhatsApp", accent: "#FFAA00" },
-      { label: "Blended CPL", value: _blendedCpl, display: _blendedCpl > 0 ? fmtR(_blendedCpl) : "—", cost: "combined spend / total leads", accent: "#FFAA00" },
-      { label: "PSI Form Leads", value: _formLeads, display: fmtNum(_formLeads), cost: _formCpl > 0 ? fmtR(_formCpl) + " per form lead" : "Meta lead-form captures", accent: "#F43F5E" },
-      { label: "WhatsApp Leads", value: _waLeadTotal, display: fmtNum(_waLeadTotal), cost: (_waUniqueUsers > 0 ? fmtNum(_waUniqueUsers) + " unique users" : "CAPI QualifiedLead events") + (_waCpl > 0 ? " · " + fmtR(_waCpl) + " per lead" : ""), accent: "#A855F7" }
+      { label: "Conversations Started", value: _wa.conversations, display: fmtNum(_wa.conversations), cost: "tapped WhatsApp to start a chat", accent: "#34D399" },
+      { label: "Cost per Conversation", value: _costPerConv, display: _costPerConv > 0 ? fmtR(_costPerConv) : "—", cost: "WhatsApp spend / conversations", accent: "#A855F7" },
+      { label: "Engaged 3+ Messages", value: _wa.engaged3, display: fmtNum(_wa.engaged3), cost: "three or more messages exchanged", accent: "#FFAA00" },
+      { label: "Engagement Rate", value: _eng3Rate, display: _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "—", cost: fmtNum(_wa.engaged3) + " of " + fmtNum(_wa.conversations) + " reached 3+ messages", accent: "#0891B2" }
     ];
     // ── Row 2: WhatsApp Message Funnel (staged bars, table-based)
     var _funnelStages = [];

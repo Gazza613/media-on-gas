@@ -864,12 +864,22 @@ function renderBofuSection(opts) {
     var _waCostPerConv = _waConv > 0 && _waSpend > 0 ? (_waSpend / _waConv) : 0;
     var _waCostPerEng = _waEng3 > 0 && _waSpend > 0 ? (_waSpend / _waEng3) : 0;
 
-    // ── Row 1: Blended leads summary (4 tiles) ──────────────────
+    // ── Row 1: Conversation-first summary (4 tiles) ─────────────
+    // Owner directive 2026-08-14: Learnalot is measured in
+    // WhatsApp conversations, not leads. No lead volume or CPL
+    // surfaces on this report section. Four headline conversation
+    // KPIs replace the earlier leads-focused octet:
+    //   1. Conversations Started (7-day attribution)
+    //   2. Cost per Conversation (WA spend / conversations)
+    //   3. Engaged 3+ Messages (quality threshold)
+    //   4. Engagement Rate (engaged / conversations)
+    // Mirrors the dashboard Summary octet at App.jsx line ~8378.
+    var _rateEng = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
     var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);">'
-      + _tile("Total Leads (Blended)",fmtNum(_totalLeads),                  fmtNum(formLeadsCount) + " form + " + fmtNum(waLeadTotal) + " WhatsApp", COL.solar)
-      + _tile("Blended CPL",          _blendedCpl > 0 ? fmtR(_blendedCpl) : "&mdash;", "combined spend / total leads",          COL.solar)
-      + _tile("PSI Form Leads",       fmtNum(formLeadsCount),               _formCpl > 0 ? fmtR(_formCpl) + " per form lead" : "Meta lead-form captures", COL.rose)
-      + _tile("WhatsApp Leads",       fmtNum(waLeadTotal),                  (waUniqueUsers > 0 ? fmtNum(waUniqueUsers) + " unique users" : "CAPI QualifiedLead events") + (_waCpl > 0 ? " &middot; " + fmtR(_waCpl) + " per lead" : ""), COL.orchid)
+      + _tile("Conversations Started",fmtNum(_waConv),                  "tapped WhatsApp to start a chat", COL.mint)
+      + _tile("Cost per Conversation",_waCostPerConv > 0 ? fmtR(_waCostPerConv) : "&mdash;", "WhatsApp spend / conversations", COL.orchid)
+      + _tile("Engaged 3+ Messages",  fmtNum(_waEng3),                  "three or more messages exchanged", COL.solar)
+      + _tile("Engagement Rate",      _rateEng > 0 ? _rateEng.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan)
       + '</div>';
 
     // ── Row 2: WhatsApp Message Funnel (staged bars) ────────────
