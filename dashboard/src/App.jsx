@@ -8966,8 +8966,8 @@ export default function MediaOnGas(){
                   if(ff2==="TEXT")return{label:"TEXT",color:P.caption};
                   return{label:"STATIC",color:P.cyan};
                 };
-                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="tt_views"?"VIDEO VIEWS":rt==="conversions"?"CONVERSIONS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
-                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="tt_views"?"CPV":rt==="conversions"?"CPA":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
+                var resultLabelS=function(rt){return rt==="leads"?"LEADS":rt==="installs"?"INSTALLS":rt==="follows"?"FOLLOWS":rt==="profile_visits"?"PROFILE VISITS":rt==="tt_views"?"VIDEO VIEWS":rt==="conversions"?"CONVERSIONS":rt==="conversations"?"WA CONVOS":rt==="store_clicks"?"STORE CLICKS":rt==="lp_clicks"?"LP CLICKS":rt==="reach"?"REACH":rt==="impressions"?"IMPRESSIONS":rt==="clicks"?"CLICKS":"RESULTS";};
+                var costPerLabelS=function(rt){return rt==="leads"?"CPL":rt==="installs"?"CPI":rt==="follows"?"CPF":rt==="profile_visits"?"CPV":rt==="tt_views"?"CPV":rt==="conversions"?"CPA":rt==="conversations"?"COST PER CONVO":rt==="store_clicks"?"CPC":rt==="lp_clicks"?"CPC":rt==="reach"||rt==="impressions"?"CPM":rt==="clicks"?"CPC":"CPR";};
                 // Awareness/reach campaigns must NOT be judged on landing-page
                 // clicks (Phase 1 rule). Same detection the backend
                 // isAwarenessObjective uses: objective field or a name token.
@@ -8986,11 +8986,25 @@ export default function MediaOnGas(){
                   {key:"TikTok",label:"TIKTOK",accent:P.tt,short:"TT"},
                   {key:"Google Display",label:"GOOGLE DISPLAY",accent:P.gd,short:"GD"}
                 ];
+                // Learnalot-only override: every ad in the per-platform
+                // sub-groups below gets its results / resultType rewritten
+                // to WhatsApp conversations started (per commit 42ea1eb —
+                // Learnalot's Summary top-ads sections rank by WA
+                // conversations regardless of the ad's objective bucket).
+                // Strict "every selected campaign is Learnalot" check so
+                // a mixed admin selection doesn't rank other clients'
+                // ads at zero. Uses the same detection pattern the
+                // Learnalot BOFU section already uses (line ~8057).
+                var _selAllLearnalotTA=(computed.allSelected||[]).length>0&&(computed.allSelected||[]).every(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
+                });
                 var objGroups=[
-                  {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:"by leads & cost per lead"},
+                  {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:_selAllLearnalotTA?"by WhatsApp conversations & cost per conversation":"by leads & cost per lead"},
                   {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
                   {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
-                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:"by clicks to landing page"},
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:_selAllLearnalotTA?"by WhatsApp conversations & cost per conversation":"by clicks to landing page"},
                   {key:"community_reach",label:"COMMUNITY REACH",accent:P.momoYellow,criterion:"by reach & CPM"}
                 ];
 
@@ -9038,7 +9052,24 @@ export default function MediaOnGas(){
                     var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
                     if(platAds.length===0)return;
                     var objAds;
-                    if(og.key==="followers"){
+                    if(_selAllLearnalotTA){
+                      // Learnalot override, applies to every objective
+                      // section: rewrite each ad's `results` to WA
+                      // conversations count and `resultType` to
+                      // "conversations". The card renderer downstream
+                      // already handles resultType="conversations" via
+                      // resultLabel/costPerLabel (WA CONVOS / COST PER
+                      // CONVO — added in commit 42ea1eb). Filter by the
+                      // objective bucket the section owns so ads still
+                      // land in their natural section (LEAD GENERATION /
+                      // LANDING PAGE etc) — only the RANKING metric and
+                      // card headline change, not which section shows
+                      // which ad.
+                      objAds=platAds.filter(function(a){return (a.objective||"landingpage")===og.key;}).map(function(a){
+                        var wa=parseInt(a.messagingConversations7d||0,10);
+                        return Object.assign({},a,{results:wa,resultType:"conversations"});
+                      });
+                    } else if(og.key==="followers"){
                       // Per-platform result metric, honest to what the ad
                       // surface actually drives:
                       //   FB : page_like action (clean in-ad CTA, one-click
@@ -9138,7 +9169,12 @@ export default function MediaOnGas(){
                     }
                     if(objAds.length===0)return;
                     var sorter;
-                    if(og.key==="leads"||og.key==="followers")sorter=leadSort;
+                    // Learnalot override always ranks by results DESC
+                    // then cost-per ASC (leadSort) — since results is
+                    // now WA conversations count, that's exactly the
+                    // ranking the owner requested.
+                    if(_selAllLearnalotTA)sorter=leadSort;
+                    else if(og.key==="leads"||og.key==="followers")sorter=leadSort;
                     else if(og.key==="landingpage") sorter=landingPageSort;
                     else if(og.key==="community_reach") sorter=communityReachSort;
                     else sorter=engagementSort;
