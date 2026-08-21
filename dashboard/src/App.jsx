@@ -6268,7 +6268,70 @@ export default function MediaOnGas(){
               return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
             });
             if(_selAllLearnalotStage){
-              stageDef.objective.field=function(r){var rs=r.results||{};return rs.messagingConversations||0;};
+              // Meta returns messaging_conversation_started_7d at the
+              // campaign level but does NOT reliably split it per
+              // region/age/gender breakdown (many messaging events
+              // land as unattributed at breakdown granularity). If we
+              // read r.results.messagingConversations directly, every
+              // breakdown row shows 0 and the demographic chart is
+              // empty. Compute per-campaign scale factors from the
+              // messaging_conversation_started_7d TOTAL on each
+              // campaign's actions array (which IS populated), then
+              // proportionally distribute that campaign total across
+              // its breakdown rows using the row's impression share
+              // of the campaign's total impressions in the row set.
+              // Same technique regRows/agRows use elsewhere for
+              // proportional attribution.
+              var _campConvByCid={};
+              sel.forEach(function(c){
+                var acts=Array.isArray(c.actions)?c.actions:[];
+                var best=0;
+                for(var _i=0;_i<acts.length;_i++){
+                  if(String(acts[_i].action_type||"").toLowerCase()==="onsite_conversion.messaging_conversation_started_7d"){
+                    var v=parseFloat(acts[_i].value||0);
+                    if(v>best)best=v;
+                  }
+                }
+                if(best>0){
+                  var _cid=String(c.campaignId||"");
+                  var _raw=c.rawCampaignId||_cid.replace(/_facebook$/,"").replace(/_instagram$/,"");
+                  _campConvByCid[_cid]=best;
+                  if(_raw&&!_campConvByCid[_raw])_campConvByCid[_raw]=best;
+                }
+              });
+              // For each row-set we care about (agRows, regRows), pre-
+              // compute per-campaign impression totals so the scale
+              // factor is row's_impressions / campaign_total_impressions
+              // for that row-set.
+              var _impsByRowSet=function(rows){
+                var m={};
+                rows.forEach(function(r){
+                  var cid=String(r.campaignId||"");
+                  m[cid]=(m[cid]||0)+(parseFloat(r.impressions||0)||0);
+                });
+                return m;
+              };
+              var _agImpsByCid=_impsByRowSet(agRows);
+              var _regImpsByCid=_impsByRowSet(regRows);
+              stageDef.objective.field=function(r){
+                var rs=r.results||{};
+                // If the row already has a real messagingConversations
+                // number (rare for region/age breakdowns but happens),
+                // use it. Otherwise proportionally distribute the
+                // campaign total.
+                var raw=parseFloat(rs.messagingConversations||0)||0;
+                if(raw>0)return raw;
+                var cid=String(r.campaignId||"");
+                var campTotal=_campConvByCid[cid]||0;
+                if(campTotal<=0)return 0;
+                // Decide which row-set this row belongs to by presence
+                // of `region` or `age` — matches how the row was
+                // built upstream in demographics.js.
+                var setTotal=r.region!==undefined?(_regImpsByCid[cid]||0):(_agImpsByCid[cid]||0);
+                if(setTotal<=0)return 0;
+                var rowImps=parseFloat(r.impressions||0)||0;
+                return (rowImps/setTotal)*campTotal;
+              };
               stageDef.objective.label="Conversations Started";
               stageDef.objective.costLabel="Cost Per Conversation";
               stageDef.objective.subtitle="Bottom of funnel - who started a WhatsApp conversation";
@@ -8169,12 +8232,21 @@ export default function MediaOnGas(){
                       <div style={{fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.4}}>{caption}</div>
                     </div>;
                   };
-                  // ── Row 1: Blended leads summary ────────────────────
+                  // ── Row 1: Conversation-first summary (2026-08-14) ──
+                  // Owner directive: Learnalot BOFU is measured in
+                  // WhatsApp conversations, not leads. No lead volume
+                  // or CPL surfaces on this section. Four headline
+                  // conversation KPIs replace the earlier leads-first
+                  // tile set. The WhatsApp Message Funnel + efficiency
+                  // tiles below still carry the drop-off detail;
+                  // this row is the at-a-glance summary.
+                  var _waCostPerConvTile=waConversations>0&&waSpend>0?(waSpend/waConversations):0;
+                  var _waEngRateTile=waConversations>0?(waEngaged3/waConversations*100):0;
                   var summaryTiles=[
-                    mkTile("total-leads",  "Total Leads (Blended)",fmt(totalLeadsCount),           P.solar,  fmt(formLeadsCount)+" form + "+fmt(waLeadsCount)+" WhatsApp"),
-                    mkTile("blended-cpl",  "Blended CPL",          blendedCpl>0?fR(blendedCpl):"—",P.solar,  "combined spend / total leads"),
-                    mkTile("psi-form",     "PSI Form Leads",       fmt(formLeadsCount),            P.rose,   formCpl>0?fR(formCpl)+" per form lead":"Meta lead-form captures"),
-                    mkTile("wa-leads",     "WhatsApp Leads",       fmt(waLeadsCount),              P.orchid, (waUniqueUsers>0?fmt(waUniqueUsers)+" unique users":"CAPI QualifiedLead events")+(waCpl>0?" · "+fR(waCpl)+" per lead":""))
+                    mkTile("wa-conv",      "Conversations Started",fmt(waConversations),                                    P.mint,   "tapped WhatsApp to start a chat"),
+                    mkTile("wa-cpc",       "Cost per Conversation",_waCostPerConvTile>0?fR(_waCostPerConvTile):"—",         P.orchid, "WhatsApp spend / conversations"),
+                    mkTile("wa-engaged",   "Engaged 3+ Messages",  fmt(waEngaged3),                                         P.solar,  "three or more messages exchanged"),
+                    mkTile("wa-rate",      "Engagement Rate",      _waEngRateTile>0?_waEngRateTile.toFixed(2)+"%":"—",      P.cyan,   fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages")
                   ];
                   // ── Row 2: WhatsApp message funnel ──────────────────
                   // Reach → Conversations → First Reply → Engaged 3+.
@@ -8457,59 +8529,47 @@ export default function MediaOnGas(){
                   var bestEffCost=bestEff?_cpFor(bestEff,objectives4[bestEff]):0;
                   var bestEffUnit=bestEff==="Community Reach"?" CPM":" per result";
                   var lines=[];
-                  // Learnalot lead-first narrative. The client's goal is
-                  // lead capture across two paths (PSI Form Leads via
-                  // Meta Marketing API + WhatsApp qualified leads via
-                  // manually recorded Custom Outcomes). WhatsApp
-                  // Conversations are the mid-funnel signal that led to
-                  // the WhatsApp lead conversions, so they get a
-                  // contextual mention but do NOT lead the narrative or
-                  // count into TOTAL OBJECTIVE RESULTS. Non-Learnalot
-                  // clients continue with the generic multi-objective
-                  // read below.
+                  // Learnalot conversation-first narrative (2026-08-14
+                  // owner directive). The client's goal is measured in
+                  // WhatsApp conversations, NOT leads. No lead volume,
+                  // CPL or lead-path split surfaces in this narrative.
+                  // The full story is: how many conversations opened,
+                  // at what cost, how many got past the first reply,
+                  // and how many reached 3+ message engagement depth.
+                  // Non-Learnalot clients continue with the generic
+                  // multi-objective read below.
                   if(showLearnalotOctet){
-                    var _fCpl=formLeadsCount>0?(formLeadsSpend/formLeadsCount):0;
-                    var _wCpl=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
-                    var _blendedCpl=totalLeadsCount>0?(totalLeadsSpend/totalLeadsCount):0;
-                    lines.push(fmt(totalLeadsCount)+" qualified leads were captured across the two paths from "+fR(totalLeadsSpend)+" invested"+(_blendedCpl>0?" at a blended "+fR(_blendedCpl)+" cost per lead":"")+", "+fmt(formLeadsCount)+" through PSI lead forms and "+fmt(waLeadsCount)+" as WhatsApp qualified leads.");
-                    if(formLeadsCount>0&&waLeadsCount>0){
-                      var _pathVol=formLeadsCount>=waLeadsCount?"PSI Form Leads":"WhatsApp PSI Leads";
-                      var _pathEff=_fCpl>0&&_wCpl>0?(_fCpl<=_wCpl?"PSI Form Leads":"WhatsApp PSI Leads"):(_fCpl>0?"PSI Form Leads":"WhatsApp PSI Leads");
-                      lines.push(_pathVol+" led on volume"+(_pathEff===_pathVol?" and on efficiency, the stronger path on both dimensions":"; "+_pathEff+" led on efficiency at "+fR(_pathEff==="PSI Form Leads"?_fCpl:_wCpl)+" per lead vs "+fR(_pathVol==="PSI Form Leads"?_fCpl:_wCpl)+" on "+_pathVol)+".");
+                    var _cpc=waConversations>0&&waSpend>0?(waSpend/waConversations):0;
+                    var _wr=objectives4["WhatsApp Conversations"];
+                    var _firstReplies=(_wr&&_wr.wa&&_wr.wa.firstReplies)||0;
+                    var _eng3=(_wr&&_wr.wa&&_wr.wa.engaged3)||0;
+                    var _cpEng3=_eng3>0&&waSpend>0?(waSpend/_eng3):0;
+                    var _engRate=waConversations>0?(_eng3/waConversations*100):0;
+                    var _firstReplyRate=waConversations>0?(_firstReplies/waConversations*100):0;
+                    // Lead 1: headline conversations + cost per conversation.
+                    lines.push(fmt(waConversations)+" WhatsApp conversations were opened from "+fR(waSpend)+" invested"+(_cpc>0?" at "+fR(_cpc)+" per conversation":"")+", the primary demand-generation metric for the period.");
+                    // Lead 2: first-reply depth — did people get past the greeting.
+                    if(_firstReplies>0){
+                      lines.push(fmt(_firstReplies)+" conversations progressed past the initial reply ("+_firstReplyRate.toFixed(2)+"% of opened chats), the first quality checkpoint on the way to a meaningful exchange.");
                     }
-                    // Form-lead platform split ONLY (the WhatsApp path
-                    // reads on the conversation funnel below, not on a
-                    // per-platform split since it's a single campaign).
-                    var _leadsRec=objectives4["Leads"];
-                    if(_leadsRec){
-                      var _leadPlats=Object.keys(_leadsRec.byPlatform||{}).filter(function(pl){return _leadsRec.byPlatform[pl].results>0;});
-                      if(_leadPlats.length>=2){
-                        var _leadCostLabel=(objCL4["Leads"]||"cost per lead").toLowerCase();
-                        var _leadParts=_leadPlats.sort(function(a,b){return _leadsRec.byPlatform[b].results-_leadsRec.byPlatform[a].results;}).map(function(pl){
-                          var pb=_leadsRec.byPlatform[pl];
+                    // Lead 3: engaged 3+ threshold — the qualified-conversation proxy.
+                    if(_eng3>0){
+                      lines.push(fmt(_eng3)+" conversations reached the engaged 3+ message threshold ("+_engRate.toFixed(2)+"% of opened chats)"+(_cpEng3>0?" at "+fR(_cpEng3)+" per engaged conversation":"")+", the strongest indicator of prospect intent inside the funnel.");
+                    }
+                    // Optional: per-platform conversation split when data allows.
+                    if(_wr){
+                      var _convPlats=Object.keys(_wr.byPlatform||{}).filter(function(pl){return _wr.byPlatform[pl].results>0;});
+                      if(_convPlats.length>=2){
+                        var _convParts=_convPlats.sort(function(a,b){return _wr.byPlatform[b].results-_wr.byPlatform[a].results;}).map(function(pl){
+                          var pb=_wr.byPlatform[pl];
                           var cp=pb.results>0?pb.spend/pb.results:0;
-                          var shareR=_leadsRec.results>0?(pb.results/_leadsRec.results*100).toFixed(2):"0.00";
-                          return pl+" delivered "+fmt(pb.results)+" "+(pb.results===1?"lead":"leads")+" ("+shareR+"%) at "+fR(cp)+" "+_leadCostLabel;
+                          var shareR=_wr.results>0?(pb.results/_wr.results*100).toFixed(2):"0.00";
+                          return pl+" opened "+fmt(pb.results)+" "+(pb.results===1?"conversation":"conversations")+" ("+shareR+"%) at "+fR(cp)+" per conversation";
                         });
-                        lines.push("PSI Form Leads split by platform, "+_leadParts.join(", ")+".");
+                        lines.push("Conversations by platform, "+_convParts.join(", ")+".");
                       }
                     }
-                    // Conversation funnel — supportive context, not the
-                    // headline. Shows what the WhatsApp lead volume came
-                    // out of and how efficiently conversations were
-                    // opened.
-                    if(waConversations>0){
-                      var _cpc=waConversations>0?(waSpend/waConversations):0;
-                      var _wr=objectives4["WhatsApp Conversations"];
-                      var _eng3=(_wr&&_wr.wa&&_wr.wa.engaged3)||0;
-                      var _convToLeadRate=(waLeadsCount>0&&waConversations>0)?(waLeadsCount/waConversations*100):0;
-                      var _funnelBits=[];
-                      _funnelBits.push(fmt(waConversations)+" paid conversations opened at "+fR(_cpc)+" per conversation");
-                      if(_eng3>0)_funnelBits.push(fmt(_eng3)+" engaged 3+ messages");
-                      if(_convToLeadRate>0)_funnelBits.push(_convToLeadRate.toFixed(2)+"% of conversations became a qualified lead");
-                      lines.push("WhatsApp mid-funnel context, "+_funnelBits.join(", ")+", the volume the WhatsApp lead conversions came out of.");
-                    }
-                    return <Insight title="Objective Insights" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
+                    return <Insight title="Conversation Insights" accent={P.rose} icon={Ic.target(P.rose,16)}>{lines.join(" ")}</Insight>;
                   }
                   lines.push(fmt(totalResults)+" objective results were delivered across "+active.length+" active objective"+(active.length>1?"s":"")+" from "+fR(totalSpend)+" invested.");
                   if(topVol)lines.push(topVol+" led volume with "+fmt(objectives4[topVol].results)+" results.");
