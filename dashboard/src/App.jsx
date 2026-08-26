@@ -9011,6 +9011,22 @@ export default function MediaOnGas(){
                   if(selCampNames[a.campaignName])return true;
                   return false;
                 });
+                // Diagnostic: log what got through the client / admin
+                // filter so the "Meta previews missing on client share
+                // link" case can be pinpointed. Owner spotted MTN MoMo
+                // client link missing Meta creative previews while
+                // admin view had them. Compare adsList vs filteredAds
+                // per-platform to see whether /api/ads dropped Meta
+                // ads (server-side filter) or whether the local
+                // selCampIds/Names match failed (client-side filter).
+                try{
+                  var _diag={mode:isClient?"CLIENT":"ADMIN",adsList:adsList.length,filtered:filteredAds.length,byPlatformIn:{},byPlatformOut:{},selCampsCount:selCamps.length,firstAdCampId:null,firstAdCampIdRaw:null,selCampIdSample:Object.keys(selCampIds).slice(0,3)};
+                  adsList.forEach(function(a){var p=String(a.platform||"?");_diag.byPlatformIn[p]=(_diag.byPlatformIn[p]||0)+1;});
+                  filteredAds.forEach(function(a){var p=String(a.platform||"?");_diag.byPlatformOut[p]=(_diag.byPlatformOut[p]||0)+1;});
+                  var _firstMeta=adsList.filter(function(a){return String(a.platform||"").indexOf("Facebook")===0||String(a.platform||"").indexOf("Instagram")===0;})[0];
+                  if(_firstMeta){_diag.firstAdCampId=_firstMeta.campaignId;_diag.firstAdCampIdRaw=String(_firstMeta.campaignId||"").replace(/_facebook$/,"").replace(/_instagram$/,"");}
+                  console.log("[top-ads-diag]",_diag);
+                }catch(_){}
                 // Ad-level data didn't match the selected campaigns for
                 // this date range. Could mean a fresh client with no
                 // delivery yet, OR an ads-endpoint hiccup, OR a campaign-id
