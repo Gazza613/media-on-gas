@@ -240,36 +240,75 @@ async function fetchTikTokTruth(token, advId, from, to, warnings) {
   warnings = warnings || [];
   try {
     var dims = encodeURIComponent(JSON.stringify(["campaign_id"]));
-    // profile_visits added so the truth side mirrors the dashboard's
+    // Metric list: two-pass with graceful degradation. Preferred set
+    // includes profile_visits so the truth side mirrors the dashboard's
     // engagement floor for TikTok follower campaigns: clicks =
-    // max(raw_clicks, profile_visits, follows). Without this, follower
-    // campaigns where TikTok's `clicks` metric returns 0 (no URL
-    // destination, the engagement is a tap on the profile avatar)
-    // showed up as a 100% red drift even though the dashboard and
-    // TikTok's own Ads Manager UI agreed on a non-zero engagement
-    // count.
-    var metrics = encodeURIComponent(JSON.stringify(["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes", "profile_visits"]));
-    var base = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + advId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + metrics + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
-    // Follow TikTok pagination via page_info.total_page.
-    var all = [];
-    var page = 1;
-    var stoppedShort = false;
-    while (page < 10) {
-      var r = await fetchWithTimeout(base + "&page=" + page, { headers: { "Access-Token": token } });
-      if (!r.ok) {
-        warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "report", error: "http-" + r.status, atPage: page });
-        stoppedShort = true;
-        break;
+    // max(raw_clicks, profile_visits, follows). If TikTok rejects
+    // profile_visits (or any other optional metric) as invalid at
+    // BASIC/AUCTION_CAMPAIGN the API returns HTTP 200 with code=40002
+    // and an empty list, which the earlier version silently returned
+    // as zero — producing the 100% TikTok delta ground-truth email
+    // owner flagged 2026-08. Second pass drops the optional metric so
+    // the fallback still delivers spend/impressions/clicks/reach and
+    // the truth side stays populated even if profile_visits is not
+    // exposed. Engagement-floor mirror below then max()es across
+    // whichever metrics WERE returned.
+    var preferredMetrics = ["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes", "profile_visits"];
+    var fallbackMetrics  = ["campaign_name", "spend", "impressions", "clicks", "reach", "follows", "likes"];
+    var runOnePass = async function(metricList, passLabel) {
+      var mParam = encodeURIComponent(JSON.stringify(metricList));
+      var base = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/?advertiser_id=" + advId + "&report_type=BASIC&data_level=AUCTION_CAMPAIGN&dimensions=" + dims + "&metrics=" + mParam + "&start_date=" + from + "&end_date=" + to + "&page_size=500";
+      var pagesOut = [];
+      var page = 1;
+      var apiError = null;
+      var hardStopped = false;
+      while (page < 10) {
+        var r = await fetchWithTimeout(base + "&page=" + page, { headers: { "Access-Token": token } });
+        if (!r.ok) {
+          warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "report/" + passLabel, error: "http-" + r.status, atPage: page });
+          hardStopped = true;
+          break;
+        }
+        var d = await r.json();
+        // TikTok often returns 200 with an error code in the body when
+        // a metric is invalid or an argument is malformed. Detect the
+        // non-zero code, surface it in warnings, and treat this pass
+        // as a failure so the caller falls back to the safer metric
+        // list. Silent-zero was the bug that produced the reported
+        // ground-truth delta.
+        if (d && d.code && d.code !== 0) {
+          apiError = { code: d.code, message: d.message || "" };
+          warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "report/" + passLabel, error: "code-" + d.code + ": " + (d.message || "unknown"), atPage: page });
+          break;
+        }
+        var list = (d.data || {}).list || [];
+        pagesOut = pagesOut.concat(list);
+        var totalPage = (d.data && d.data.page_info && d.data.page_info.total_page) || 1;
+        if (page >= totalPage) break;
+        page++;
       }
-      var d = await r.json();
-      var list = (d.data || {}).list || [];
-      all = all.concat(list);
-      var totalPage = (d.data && d.data.page_info && d.data.page_info.total_page) || 1;
-      if (page >= totalPage) break;
-      page++;
-    }
-    if (page >= 10 && !stoppedShort) {
-      warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "pagination-truncated", note: "more than 5,000 campaigns; raise the page guard" });
+      if (page >= 10 && !hardStopped && !apiError) {
+        warnings.push({ source: "TikTok", account: "MTN MoMo TikTok", stage: "pagination-truncated/" + passLabel, note: "more than 5,000 campaigns; raise the page guard" });
+      }
+      return { ok: !apiError && !hardStopped, list: pagesOut, apiError: apiError };
+    };
+    var all = [];
+    var passA = await runOnePass(preferredMetrics, "preferred");
+    if (passA.ok) {
+      all = passA.list;
+    } else {
+      // Preferred pass hit an API error — retry with the safe metric
+      // set. This drops profile_visits (the most common culprit for
+      // 40002 on legacy TikTok advertisers) so the rest of the truth
+      // payload still lands.
+      var passB = await runOnePass(fallbackMetrics, "fallback-no-profile-visits");
+      if (passB.ok) {
+        all = passB.list;
+      } else {
+        // Both passes failed — return empty. Warnings already pushed
+        // by runOnePass identify which metric / status code broke.
+        return [];
+      }
     }
     return all.map(function(row) {
       var m = row.metrics || {};
