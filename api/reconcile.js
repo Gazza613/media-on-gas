@@ -653,7 +653,14 @@ function buildReconciliation(sourceRows, dashRows, adSums, adsetSums) {
       campaignName: s.campaignName,
       dashboardMatched: entry.rows.length > 0,
       metrics: metrics,
-      overallStatus: worstStatus
+      overallStatus: worstStatus,
+      // Truth-side spend for this campaign — used by the email
+      // filter downstream to suppress alerts on immaterial low-
+      // spend campaigns (fresh launches, dormant residuals). Percent
+      // deltas on a R1 spend base are 100% noise; the alert threshold
+      // still fires on the row for the dashboard's own diff table,
+      // it just doesn't wake anyone up over rand-level differences.
+      truthSpend: parseFloat(s.spend || 0)
     });
   });
   return results;
@@ -827,7 +834,23 @@ export default async function handler(req, res) {
 
   var alertResult = null;
   if (wantAlert) {
-    var flagged = reconciled.filter(function(r) { return r.overallStatus !== "green"; });
+    // Two filters:
+    //   1. Only flag non-green rows (existing behaviour).
+    //   2. Skip rows with truth-side spend < R100 for the period —
+    //      percentage deltas on rand-level baselines are misleading
+    //      (a R1.27 spend delta on a R1.31 base flags as 96.95% and
+    //      swamps signal on real regressions). Fresh-launch TikTok
+    //      campaigns that just started delivering and dormant
+    //      Meta remnants both live below this floor. The timeseries-
+    //      aggregate row (id _timeseries_overall) is exempt so
+    //      cross-platform pacing drift still surfaces.
+    var SPEND_ALERT_FLOOR = 100;
+    var flagged = reconciled.filter(function(r) {
+      if (r.overallStatus === "green") return false;
+      if (r.campaignId === "_timeseries_overall") return true;
+      if (typeof r.truthSpend === "number" && r.truthSpend < SPEND_ALERT_FLOOR) return false;
+      return true;
+    });
     alertResult = await sendAlertEmail(flagged, from, to);
   }
 
