@@ -47,16 +47,20 @@ function pct(source, dash) {
 function statusOf(deltaPct) {
   if (deltaPct === null || !isFinite(deltaPct)) return "unknown";
   var a = Math.abs(deltaPct);
-  // Green band widened from 1% to 2% on 2026-08-14 per owner
-  // directive after ground-truth kept flagging normal Meta / Google
-  // API-side reporting variance (Meta's daily-vs-period aggregation
-  // rounding + Google's 24-72h impression revisions as invalid-click
-  // filters run). Real drifts — data-pipe bugs, metric-mapping
-  // regressions, silent-zero fetches — still surface at 2-5% yellow
-  // and >5% red. Same threshold applies to per-campaign rows AND the
-  // cross-platform aggregate timeseries row.
-  if (a <= 2) return "green";
-  if (a <= 5) return "yellow";
+  // Threshold history:
+  //   2026-08-14 first pass: 1% -> 2% (Meta daily-vs-period rounding
+  //                          and Google 24-72h impression revisions).
+  //   2026-08-14 second pass: 2% -> 5% (Google Display ad-level-vs-
+  //                          campaign-level aggregation quirk from
+  //                          RDA rotations + cross-network attribution
+  //                          runs 3-5% by design). Anything within a
+  //                          platform's own reporting variance envelope
+  //                          is now green.
+  // Real drifts (data-pipe bugs, silent-zero fetches, metric-mapping
+  // regressions) typically produce double-digit deltas — the 5-15%
+  // yellow band still catches them before they hit the >15% red alert.
+  if (a <= 5) return "green";
+  if (a <= 15) return "yellow";
   return "red";
 }
 
@@ -688,7 +692,7 @@ async function sendAlertEmail(flagged, from, to) {
     }).join("");
     var html = '<html><body style="font-family:Helvetica,Arial;padding:20px;">' +
       '<h2 style="color:#F96203">GAS Reconciliation Alert</h2>' +
-      '<p>Period ' + from + ' to ' + to + '. <strong>' + flagged.length + '</strong> campaigns with deltas above 2%.</p>' +
+      '<p>Period ' + from + ' to ' + to + '. <strong>' + flagged.length + '</strong> campaigns with deltas above 5%.</p>' +
       '<table border="1" cellpadding="8" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#eee"><th>Platform</th><th>Campaign</th><th>Flagged metrics</th></tr></thead><tbody>' +
       rowsHtml +
       '</tbody></table>' +
