@@ -1952,16 +1952,34 @@ function renderExecutiveSummary(opts) {
   ];
   var narrative = [];
   narrative.push("Across " + fmtNum(g.campaignCount) + " campaign" + (g.campaignCount === 1 ? "" : "s") + ", " + fmtR(g.spend) + " was invested during " + escapeHtmlLocal(opts.periodDisplay) + ", generating " + fmtNum(g.impressions) + " impressions and " + fmtNum(g.reach) + " unique users reached at a blended " + fmtR(cpmOf(g)) + " CPM.");
-  if (totalLeads > 0) {
-    if (isBlendedLeadsX) {
-      // Learnalot: name both paths in the narrative and use the
-      // blended CPL, so the sentence reconciles with the dashboard's
-      // Total Leads (blended) tile line-for-line.
-      narrative.push(fmtNum(totalLeads) + " qualified leads were captured (" + fmtNum(formLeadsCountX) + " PSI Form leads and " + fmtNum(waLeadTotalX) + " WhatsApp qualified leads) at a blended " + fmtR(blendedCplX) + " per lead.");
-    } else {
-      var _leadCpl = formLeadsSpendX > 0 && formLeadsCountX > 0 ? (formLeadsSpendX / formLeadsCountX) : (g.spend > 0 ? g.spend / totalLeads : 0);
-      narrative.push(fmtNum(totalLeads) + " qualified lead" + (totalLeads === 1 ? "" : "s") + " were captured at " + fmtR(_leadCpl) + " per lead.");
+  // Learnalot: conversation-first Executive Summary narrative (owner
+  // directive 2026-08-14). No lead volume, no CPL, no PSI vs
+  // WhatsApp split. Reads campaign-level messaging_conversation_
+  // started_7d + engaged3 depth counter. Every other client keeps
+  // the leads narrative.
+  if (_isLearnalotX) {
+    var _exWaConv = 0, _exWaEng3 = 0;
+    ((opts.summary && opts.summary.campaigns) || []).forEach(function(c) {
+      var cn = String(c.campaignName || "").toLowerCase();
+      var isWa = cn.indexOf("_wapp_") >= 0 || cn.indexOf("wapp_") >= 0 || cn.indexOf("_whatsapp_") >= 0 || cn.indexOf(" whatsapp ") >= 0 || cn.indexOf("_wa_") >= 0;
+      if (!isWa) return;
+      (c.actions || []).forEach(function(a) {
+        var t = String(a.action_type || "").toLowerCase();
+        var v = parseFloat(a.value || 0);
+        if (t === "onsite_conversion.messaging_conversation_started_7d" && v > _exWaConv) _exWaConv = v;
+        if (t === "onsite_conversion.messaging_user_depth_3_message_send" && v > _exWaEng3) _exWaEng3 = v;
+      });
+    });
+    if (_exWaConv > 0) {
+      var _exCpc = waSpendX > 0 ? (waSpendX / _exWaConv) : 0;
+      var _exEngRate = _exWaConv > 0 ? (_exWaEng3 / _exWaConv * 100) : 0;
+      var _exPhrase = fmtNum(_exWaConv) + " WhatsApp conversations were opened" + (_exCpc > 0 ? " at " + fmtR(_exCpc) + " per conversation" : "");
+      if (_exWaEng3 > 0) _exPhrase += ", " + fmtNum(_exWaEng3) + " reaching three or more message exchanges (" + _exEngRate.toFixed(2) + "% engagement rate)";
+      narrative.push(_exPhrase + ".");
     }
+  } else if (totalLeads > 0) {
+    var _leadCpl = formLeadsSpendX > 0 && formLeadsCountX > 0 ? (formLeadsSpendX / formLeadsCountX) : (g.spend > 0 ? g.spend / totalLeads : 0);
+    narrative.push(fmtNum(totalLeads) + " qualified lead" + (totalLeads === 1 ? "" : "s") + " were captured at " + fmtR(_leadCpl) + " per lead.");
   }
   if (totalFollows > 0) narrative.push("The community earned " + fmtNum(totalFollows) + " new follower" + (totalFollows === 1 ? "" : "s") + " and page like" + (totalFollows === 1 ? "" : "s") + ", each representing a permanent organic distribution channel that compounds beyond the paid window.");
   if (totalApp > 0) narrative.push(fmtNum(totalApp) + " users clicked through to their app store to download the app.");
@@ -1996,19 +2014,37 @@ function renderExecutiveSummary(opts) {
           var sApp = byObj["Clicks to App Store"] ? byObj["Clicks to App Store"].global.spend : 0;
           var sLp = byObj["Landing Page Clicks"] ? byObj["Landing Page Clicks"].global.spend : 0;
           var out = "";
-          if (totalLeads > 0) {
-            // Learnalot: swap the tile to "Total Leads (blended)" so
-            // it matches the dashboard octet + Total Leads card. The
-            // per-lead sub is the blended CPL (form + WhatsApp spend
-            // / combined lead count).
-            var _tileLabel = isBlendedLeadsX ? "Total Leads (blended)" : "Leads Captured";
-            var _tileSub = isBlendedLeadsX
-              ? (fmtNum(formLeadsCountX) + " form + " + fmtNum(waLeadTotalX) + " WhatsApp &middot; " + (blendedCplX > 0 ? fmtR(blendedCplX) + " blended CPL" : "n/a"))
-              : (fmtR(sLeads / totalLeads) + " per lead");
+          // Learnalot: conversation-first outcome tile (owner
+          // directive 2026-08-14). Replaces the leads tile entirely.
+          // Reads campaign-level messaging_conversation_started_7d
+          // and displays cost-per-conversation as the sub-line.
+          if (_isLearnalotX) {
+            var _tileConv = 0;
+            ((opts.summary && opts.summary.campaigns) || []).forEach(function(c) {
+              var cn = String(c.campaignName || "").toLowerCase();
+              var isWa = cn.indexOf("_wapp_") >= 0 || cn.indexOf("wapp_") >= 0 || cn.indexOf("_whatsapp_") >= 0 || cn.indexOf(" whatsapp ") >= 0 || cn.indexOf("_wa_") >= 0;
+              if (!isWa) return;
+              (c.actions || []).forEach(function(a) {
+                if (String(a.action_type || "").toLowerCase() === "onsite_conversion.messaging_conversation_started_7d") {
+                  var v = parseFloat(a.value || 0);
+                  if (v > _tileConv) _tileConv = v;
+                }
+              });
+            });
+            if (_tileConv > 0) {
+              var _tileCpc = waSpendX > 0 ? (waSpendX / _tileConv) : 0;
+              out += `<div class="rp-outcome-tile">
+                <div class="rp-outcome-label">WhatsApp Conversations</div>
+                <div class="rp-outcome-value" style="color:#34D399;">${fmtNum(_tileConv)}</div>
+                <div class="rp-outcome-sub">${_tileCpc > 0 ? fmtR(_tileCpc) + " per conversation" : "opened from ad clicks"}</div>
+              </div>`;
+            }
+          } else if (totalLeads > 0) {
+            var _leadCpl2 = sLeads > 0 && totalLeads > 0 ? (sLeads / totalLeads) : 0;
             out += `<div class="rp-outcome-tile">
-              <div class="rp-outcome-label">${_tileLabel}</div>
+              <div class="rp-outcome-label">Leads Captured</div>
               <div class="rp-outcome-value" style="color:#F43F5E;">${fmtNum(totalLeads)}</div>
-              <div class="rp-outcome-sub">${_tileSub}</div>
+              <div class="rp-outcome-sub">${_leadCpl2 > 0 ? fmtR(_leadCpl2) + " per lead" : ""}</div>
             </div>`;
           }
           if (totalFollows > 0) out += `<div class="rp-outcome-tile">
@@ -2104,8 +2140,24 @@ function renderClosingNote(opts) {
   }
   var _totalLeadsCN = _formLeadsCountCN + _waLeadTotalCN;
   var quickRecap = [];
-  if (_isLearnalotCN && _totalLeadsCN > 0) {
-    quickRecap.push(fmtNum(_totalLeadsCN) + " leads" + (_waLeadTotalCN > 0 && _formLeadsCountCN > 0 ? " (" + fmtNum(_formLeadsCountCN) + " form + " + fmtNum(_waLeadTotalCN) + " WhatsApp)" : ""));
+  // Learnalot: conversation-first recap (owner directive 2026-08-14).
+  // Reads WhatsApp conversations started from campaign-level actions
+  // — no leads, no CPL, no form/WhatsApp split. Every other client
+  // keeps the existing per-objective recap phrasing.
+  if (_isLearnalotCN) {
+    var _cnWaConv = 0;
+    ((opts.summary && opts.summary.campaigns) || []).forEach(function(c) {
+      var cn = String(c.campaignName || "").toLowerCase();
+      var isWa = cn.indexOf("_wapp_") >= 0 || cn.indexOf("wapp_") >= 0 || cn.indexOf("_whatsapp_") >= 0 || cn.indexOf(" whatsapp ") >= 0 || cn.indexOf("_wa_") >= 0;
+      if (!isWa) return;
+      (c.actions || []).forEach(function(a) {
+        if (String(a.action_type || "").toLowerCase() === "onsite_conversion.messaging_conversation_started_7d") {
+          var v = parseFloat(a.value || 0);
+          if (v > _cnWaConv) _cnWaConv = v;
+        }
+      });
+    });
+    if (_cnWaConv > 0) quickRecap.push(fmtNum(_cnWaConv) + " WhatsApp conversations");
   } else if (parseFloat(g.leads || 0) > 0) quickRecap.push(fmtNum(g.leads) + " leads");
   if (totalFollows > 0) quickRecap.push("+" + fmtNum(totalFollows) + " community");
   // Use raw clicks as the app-store metric to match Summary tApp.

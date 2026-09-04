@@ -1043,7 +1043,30 @@ function renderCommentaryBlock(summary, profile, extras) {
   // leads recorded in customOutcomes. Prevents non-two-path clients
   // from getting a "0 form + 0 WhatsApp = 0 blended" phrase.
   var _hasTwoPath2 = _waLeadTotal2 > 0;
-  if (_hasTwoPath2) {
+  // Learnalot detection: same account/campaign-name pattern used by
+  // the BOFU + top-ads Learnalot gates on the dashboard. When true,
+  // this client is conversation-first per owner directive
+  // (2026-08-14) — no lead volume, no CPL, no PSI/WhatsApp lead
+  // split language may appear in the narrative. Every other
+  // two-path client (none today) keeps the legacy blended-lead
+  // phrasing.
+  var _isLearnalotNarrative = (xopts.campaigns || summary.campaigns || []).length > 0 && (xopts.campaigns || summary.campaigns || []).every(function(c) {
+    var an = String(c.accountName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    var cn = String(c.campaignName || "").toLowerCase();
+    return an.indexOf("learnalot") >= 0 || cn.indexOf("learnalot") >= 0;
+  });
+  if (_isLearnalotNarrative && _wa2.conversations > 0) {
+    // Learnalot: conversation-only narrative. No blended leads,
+    // no CPL, no form vs WhatsApp split. Cost-per-conversation and
+    // engagement-rate carry the story.
+    var _cpc = _wa2.conversations > 0 && _wa2.spend > 0 ? (_wa2.spend / _wa2.conversations) : 0;
+    var _eng3RateL = _wa2.conversations > 0 ? (_wa2.engaged3 / _wa2.conversations * 100) : 0;
+    var _convPhrase = "<strong>" + fmtNum(_wa2.conversations) + " WhatsApp conversations</strong> opened" + (_cpc > 0 ? " at " + fmtR(_cpc) + " per conversation" : "");
+    if (_wa2.engaged3 > 0) {
+      _convPhrase += ", <strong>" + fmtNum(_wa2.engaged3) + " reaching three or more message exchanges</strong> (" + _eng3RateL.toFixed(2) + "% engagement rate)";
+    }
+    outcomeParts.push(_convPhrase);
+  } else if (_hasTwoPath2) {
     var _totalLeads2 = _formLeads2 + _waLeadTotal2;
     var _totalSpend2 = _formSpend2 + _wa2.spend;
     var _blendedCpl2 = _totalLeads2 > 0 ? (_totalSpend2 / _totalLeads2) : 0;
@@ -1728,7 +1751,35 @@ export default async function handler(req, res) {
       var txtFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
       var txtAppStore = parseFloat(g.appStoreClicks || 0);
       var txtLp = parseFloat(g.landingPageClicks || 0);
-      if (g.leads > 0) textLines.push("Leads: " + fmtNum(g.leads) + " at " + fmtR(g.costPerLead) + " per lead");
+      // Learnalot: conversation-first plain-text lines (no leads).
+      // Same detection pattern the HTML narrative uses at line ~1046.
+      var _txtIsLearnalot = (summary.campaigns || []).length > 0 && (summary.campaigns || []).every(function(c) {
+        var an = String(c.accountName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        var cn = String(c.campaignName || "").toLowerCase();
+        return an.indexOf("learnalot") >= 0 || cn.indexOf("learnalot") >= 0;
+      });
+      if (_txtIsLearnalot) {
+        var _txtWaConv = 0, _txtWaEng3 = 0, _txtWaSpend = 0;
+        (summary.campaigns || []).forEach(function(c) {
+          var cn = String(c.campaignName || "").toLowerCase();
+          var isWa = cn.indexOf("_wapp_") >= 0 || cn.indexOf("wapp_") >= 0 || cn.indexOf("_whatsapp_") >= 0 || cn.indexOf(" whatsapp ") >= 0 || cn.indexOf("_wa_") >= 0;
+          if (!isWa) return;
+          _txtWaSpend += parseFloat(c.spend || 0);
+          (c.actions || []).forEach(function(a) {
+            var t = String(a.action_type || "").toLowerCase();
+            var v = parseFloat(a.value || 0);
+            if (t === "onsite_conversion.messaging_conversation_started_7d" && v > _txtWaConv) _txtWaConv = v;
+            if (t === "onsite_conversion.messaging_user_depth_3_message_send" && v > _txtWaEng3) _txtWaEng3 = v;
+          });
+        });
+        if (_txtWaConv > 0) {
+          var _txtCpc = _txtWaSpend > 0 ? (_txtWaSpend / _txtWaConv) : 0;
+          textLines.push("WhatsApp conversations: " + fmtNum(_txtWaConv) + (_txtCpc > 0 ? " at " + fmtR(_txtCpc) + " per conversation" : ""));
+        }
+        if (_txtWaEng3 > 0) textLines.push("Engaged 3+ messages: " + fmtNum(_txtWaEng3));
+      } else {
+        if (g.leads > 0) textLines.push("Leads: " + fmtNum(g.leads) + " at " + fmtR(g.costPerLead) + " per lead");
+      }
       if (txtFollows > 0) textLines.push("New followers: " + fmtNum(txtFollows) + " at " + fmtR(g.costPerFollower) + " per follower");
       if (txtAppStore > 0) textLines.push("Clicks to App Store: " + fmtNum(txtAppStore) + " at " + fmtR(g.costPerAppStoreClick) + " per click");
       if (txtLp > 0) textLines.push("Clicks to Landing Page: " + fmtNum(txtLp) + " at " + fmtR(g.costPerLandingPageClick) + " per click");
