@@ -47,7 +47,15 @@ function pct(source, dash) {
 function statusOf(deltaPct) {
   if (deltaPct === null || !isFinite(deltaPct)) return "unknown";
   var a = Math.abs(deltaPct);
-  if (a <= 1) return "green";
+  // Green band widened from 1% to 2% on 2026-08-14 per owner
+  // directive after ground-truth kept flagging normal Meta / Google
+  // API-side reporting variance (Meta's daily-vs-period aggregation
+  // rounding + Google's 24-72h impression revisions as invalid-click
+  // filters run). Real drifts — data-pipe bugs, metric-mapping
+  // regressions, silent-zero fetches — still surface at 2-5% yellow
+  // and >5% red. Same threshold applies to per-campaign rows AND the
+  // cross-platform aggregate timeseries row.
+  if (a <= 2) return "green";
   if (a <= 5) return "yellow";
   return "red";
 }
@@ -680,7 +688,7 @@ async function sendAlertEmail(flagged, from, to) {
     }).join("");
     var html = '<html><body style="font-family:Helvetica,Arial;padding:20px;">' +
       '<h2 style="color:#F96203">GAS Reconciliation Alert</h2>' +
-      '<p>Period ' + from + ' to ' + to + '. <strong>' + flagged.length + '</strong> campaigns with deltas above 1%.</p>' +
+      '<p>Period ' + from + ' to ' + to + '. <strong>' + flagged.length + '</strong> campaigns with deltas above 2%.</p>' +
       '<table border="1" cellpadding="8" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#eee"><th>Platform</th><th>Campaign</th><th>Flagged metrics</th></tr></thead><tbody>' +
       rowsHtml +
       '</tbody></table>' +
