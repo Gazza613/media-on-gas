@@ -6426,6 +6426,20 @@ export default function MediaOnGas(){
             if(demoEarnedTotal>0&&authObjFollowersRaw>0){
               authObj=authObj-authObjFollowersRaw+demoEarnedTotal;
             }
+            // Learnalot re-override: the earlier assignment at line ~6298
+            // sets authObj=_learnalotAuthObj (campaign-level messaging
+            // conversation total, ~4K), but the accumulation loop at
+            // line ~6377 then declares `var authObj=0` and rebuilds it
+            // from objectiveValueFor(c) (leads/follows/clicks — the
+            // WhatsApp campaign returns ~170). Because both use `var`,
+            // they refer to the same function-scoped variable and the
+            // loop wipes the override. Re-apply it AFTER the loop AND
+            // AFTER the Followers override so nothing else can clobber
+            // it before stageTotal reads it. _learnalotAuthObj is var-
+            // hoisted from the earlier block so it's visible here.
+            if(_selAllLearnalotStage&&typeof _learnalotAuthObj==="number"&&_learnalotAuthObj>0){
+              authObj=_learnalotAuthObj;
+            }
             // stageTotal / stageSpend now return AUTHORITATIVE values, so every
             // section header and the KPI strip reconcile with Summary. Chart
             // cell values still come from breakdown sums (see agRows etc).
