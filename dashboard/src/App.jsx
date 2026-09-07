@@ -8262,19 +8262,24 @@ export default function MediaOnGas(){
                   };
                   // ── Row 1: Conversation-first summary (2026-08-14) ──
                   // Owner directive: Learnalot BOFU is measured in
-                  // WhatsApp conversations, not leads. No lead volume
-                  // or CPL surfaces on this section. Four headline
-                  // conversation KPIs replace the earlier leads-first
-                  // tile set. The WhatsApp Message Funnel + efficiency
-                  // tiles below still carry the drop-off detail;
-                  // this row is the at-a-glance summary.
+                  // WhatsApp conversations. Four conversation KPIs
+                  // headline the row + a fifth "Leads" tile that
+                  // surfaces the manually-entered custom-outcome
+                  // counts (2026-08-14b — owner added back as parallel
+                  // measurement since some CAPI qualified-lead events
+                  // are captured separately from Meta's 7-day
+                  // conversation counter). Narrative stays
+                  // conversation-first; this tile is quiet supplementary
+                  // reporting.
                   var _waCostPerConvTile=waConversations>0&&waSpend>0?(waSpend/waConversations):0;
                   var _waEngRateTile=waConversations>0?(waEngaged3/waConversations*100):0;
+                  var _waCplTile=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
                   var summaryTiles=[
                     mkTile("wa-conv",      "Conversations Started",fmt(waConversations),                                    P.mint,   "tapped WhatsApp to start a chat"),
                     mkTile("wa-cpc",       "Cost per Conversation",_waCostPerConvTile>0?fR(_waCostPerConvTile):"—",         P.orchid, "WhatsApp spend / conversations"),
                     mkTile("wa-engaged",   "Engaged 3+ Messages",  fmt(waEngaged3),                                         P.solar,  "three or more messages exchanged"),
-                    mkTile("wa-rate",      "Engagement Rate",      _waEngRateTile>0?_waEngRateTile.toFixed(2)+"%":"—",      P.cyan,   fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages")
+                    mkTile("wa-rate",      "Engagement Rate",      _waEngRateTile>0?_waEngRateTile.toFixed(2)+"%":"—",      P.cyan,   fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages"),
+                    mkTile("wa-leads",     "Leads",                fmt(waLeadsCount),                                       P.rose,   _waCplTile>0?fR(_waCplTile)+" per lead":"CAPI QualifiedLead events")
                   ];
                   // ── Row 2: WhatsApp message funnel ──────────────────
                   // Reach → Conversations → First Reply → Engaged 3+.
@@ -8363,7 +8368,7 @@ export default function MediaOnGas(){
                     </div>
                   </div>:null;
                   return <div style={{marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>{summaryTiles}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>{summaryTiles}</div>
                     {funnelBlock}
                     {efficiencyTiles.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginTop:14}}>{efficiencyTiles}</div>}
                     {rawCountersBlock}

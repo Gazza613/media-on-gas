@@ -786,11 +786,17 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     // (_reportBuilder.js ~867). WhatsApp Message Funnel below still
     // renders Conversations Opened / First Reply Sent / Engaged 3+
     // with drop-off percentages so the full detail story stays.
+    // 5-tile row (2026-08-14b) — added Leads tile back at owner
+    // request so the manually-entered CAPI QualifiedLead custom
+    // outcomes surface as parallel measurement alongside the
+    // conversation metrics. Narrative stays conversation-first.
+    var _leadsCplEmail = _waLeadTotal > 0 && _wa.spend > 0 ? (_wa.spend / _waLeadTotal) : 0;
     outcomes = [
       { label: "Conversations Started", value: _wa.conversations, display: fmtNum(_wa.conversations), cost: "tapped WhatsApp to start a chat", accent: "#34D399" },
       { label: "Cost per Conversation", value: _costPerConv, display: _costPerConv > 0 ? fmtR(_costPerConv) : "—", cost: "WhatsApp spend / conversations", accent: "#A855F7" },
       { label: "Engaged 3+ Messages", value: _wa.engaged3, display: fmtNum(_wa.engaged3), cost: "three or more messages exchanged", accent: "#FFAA00" },
-      { label: "Engagement Rate", value: _eng3Rate, display: _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "—", cost: fmtNum(_wa.engaged3) + " of " + fmtNum(_wa.conversations) + " reached 3+ messages", accent: "#0891B2" }
+      { label: "Engagement Rate", value: _eng3Rate, display: _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "—", cost: fmtNum(_wa.engaged3) + " of " + fmtNum(_wa.conversations) + " reached 3+ messages", accent: "#0891B2" },
+      { label: "Leads", value: _waLeadTotal, display: fmtNum(_waLeadTotal), cost: _leadsCplEmail > 0 ? fmtR(_leadsCplEmail) + " per lead" : "CAPI QualifiedLead events", accent: "#F43F5E" }
     ];
     // ── Row 2: WhatsApp Message Funnel (staged bars, table-based)
     var _funnelStages = [];

@@ -864,22 +864,21 @@ function renderBofuSection(opts) {
     var _waCostPerConv = _waConv > 0 && _waSpend > 0 ? (_waSpend / _waConv) : 0;
     var _waCostPerEng = _waEng3 > 0 && _waSpend > 0 ? (_waSpend / _waEng3) : 0;
 
-    // ── Row 1: Conversation-first summary (4 tiles) ─────────────
+    // ── Row 1: Conversation-first summary (5 tiles) ─────────────
     // Owner directive 2026-08-14: Learnalot is measured in
-    // WhatsApp conversations, not leads. No lead volume or CPL
-    // surfaces on this report section. Four headline conversation
-    // KPIs replace the earlier leads-focused octet:
-    //   1. Conversations Started (7-day attribution)
-    //   2. Cost per Conversation (WA spend / conversations)
-    //   3. Engaged 3+ Messages (quality threshold)
-    //   4. Engagement Rate (engaged / conversations)
-    // Mirrors the dashboard Summary octet at App.jsx line ~8378.
+    // WhatsApp conversations. Four conversation KPIs headline the
+    // row + a fifth "Leads" tile that surfaces the manually-entered
+    // CAPI QualifiedLead custom outcomes as a parallel measurement
+    // (2026-08-14b update). Narrative stays conversation-first;
+    // this tile is quiet supplementary reporting.
     var _rateEng = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
-    var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(4,1fr);">'
+    var _leadsCpl = waLeadTotal > 0 && _waSpend > 0 ? (_waSpend / waLeadTotal) : 0;
+    var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(5,1fr);">'
       + _tile("Conversations Started",fmtNum(_waConv),                  "tapped WhatsApp to start a chat", COL.mint)
       + _tile("Cost per Conversation",_waCostPerConv > 0 ? fmtR(_waCostPerConv) : "&mdash;", "WhatsApp spend / conversations", COL.orchid)
       + _tile("Engaged 3+ Messages",  fmtNum(_waEng3),                  "three or more messages exchanged", COL.solar)
       + _tile("Engagement Rate",      _rateEng > 0 ? _rateEng.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan)
+      + _tile("Leads",                fmtNum(waLeadTotal),              _leadsCpl > 0 ? fmtR(_leadsCpl) + " per lead" : "CAPI QualifiedLead events", COL.rose)
       + '</div>';
 
     // ── Row 2: WhatsApp Message Funnel (staged bars) ────────────
