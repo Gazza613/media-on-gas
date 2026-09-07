@@ -6268,6 +6268,34 @@ export default function MediaOnGas(){
               return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
             });
             if(_selAllLearnalotStage){
+              // Override authObj (the AUTHORITATIVE campaign-level
+              // objective total that feeds the Objective Demographics
+              // headline tile at line 6404 stageTotal) to sum WhatsApp
+              // conversations across the selected Learnalot campaigns.
+              // Without this the per-region breakdown percentages
+              // read correctly (via stage.field proportional
+              // distribution below) but the top-right "Conversations
+              // Started" tile read 0 because authObj was computed
+              // from objectiveValueFor which returns leads/follows/
+              // clicks, none of which map to WhatsApp conversations
+              // on a Learnalot messaging campaign. Reads campaign-
+              // level messaging_conversation_started_7d directly from
+              // each selected campaign's actions array — same source
+              // the BOFU octet uses, so tile + octet + funnel all
+              // reconcile.
+              var _learnalotAuthObj=0;
+              sel.forEach(function(c){
+                var acts=Array.isArray(c.actions)?c.actions:[];
+                var best=0;
+                for(var _i=0;_i<acts.length;_i++){
+                  if(String(acts[_i].action_type||"").toLowerCase()==="onsite_conversion.messaging_conversation_started_7d"){
+                    var v=parseFloat(acts[_i].value||0);
+                    if(v>best)best=v;
+                  }
+                }
+                _learnalotAuthObj+=best;
+              });
+              authObj=_learnalotAuthObj;
               // Meta returns messaging_conversation_started_7d at the
               // campaign level but does NOT reliably split it per
               // region/age/gender breakdown (many messaging events
