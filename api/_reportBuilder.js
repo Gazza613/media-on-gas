@@ -874,11 +874,14 @@ function renderBofuSection(opts) {
     var _rateEng = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
     var _leadsCpl = waLeadTotal > 0 && _waSpend > 0 ? (_waSpend / waLeadTotal) : 0;
     var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(5,1fr);">'
-      + _tile("Conversations Started",fmtNum(_waConv),                  "tapped WhatsApp to start a chat", COL.mint)
+      + _tile("Conversations Started",fmtNum(_waConv),                  "ad-attributed within 7 days of click", COL.mint)
       + _tile("Cost per Conversation",_waCostPerConv > 0 ? fmtR(_waCostPerConv) : "&mdash;", "WhatsApp spend / conversations", COL.orchid)
       + _tile("Engaged 3+ Messages",  fmtNum(_waEng3),                  "three or more messages exchanged", COL.solar)
       + _tile("Engagement Rate",      _rateEng > 0 ? _rateEng.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan)
       + _tile("Leads",                fmtNum(waLeadTotal),              _leadsCpl > 0 ? fmtR(_leadsCpl) + " per lead" : "CAPI QualifiedLead events", COL.rose)
+      + '</div>'
+      + '<div style="margin-top:3mm;padding:3mm 4mm;border-radius:2mm;background:rgba(255,255,255,0.03);border:1px solid var(--rp-rule);font-size:7.5pt;color:var(--rp-fg-dim);line-height:1.5;page-break-inside:avoid;">'
+      + '<strong style="color:var(--rp-fg);font-weight:800;">Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter but ARE captured in the Leads database.'
       + '</div>';
 
     // ── Row 2: WhatsApp Message Funnel (staged bars) ────────────
@@ -888,7 +891,7 @@ function renderBofuSection(opts) {
     // attribution so the % cascade never exceeds 100.
     var _funnelStages = [];
     if (_waReach > 0) _funnelStages.push({ label: "Reach",                 val: _waReach,       sub: "unique people who saw the ad" });
-    _funnelStages.push({                     label: "Conversations Opened",val: _waConv,        sub: "tapped WhatsApp to start a chat" });
+    _funnelStages.push({                     label: "Conversations Opened",val: _waConv,        sub: "ad-attributed within 7 days of click" });
     if (_waFirstReplies > 0) _funnelStages.push({ label: "First Reply Sent",val: _waFirstReplies,sub: "got past the initial greeting" });
     _funnelStages.push({                     label: "Engaged 3+ Messages", val: _waEng3,        sub: "three or more messages exchanged" });
     var _fTop = _funnelStages.length ? _funnelStages[0].val : 0;

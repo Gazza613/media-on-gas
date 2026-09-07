@@ -792,7 +792,7 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     // conversation metrics. Narrative stays conversation-first.
     var _leadsCplEmail = _waLeadTotal > 0 && _wa.spend > 0 ? (_wa.spend / _waLeadTotal) : 0;
     outcomes = [
-      { label: "Conversations Started", value: _wa.conversations, display: fmtNum(_wa.conversations), cost: "tapped WhatsApp to start a chat", accent: "#34D399" },
+      { label: "Conversations Started", value: _wa.conversations, display: fmtNum(_wa.conversations), cost: "ad-attributed within 7 days of click", accent: "#34D399" },
       { label: "Cost per Conversation", value: _costPerConv, display: _costPerConv > 0 ? fmtR(_costPerConv) : "—", cost: "WhatsApp spend / conversations", accent: "#A855F7" },
       { label: "Engaged 3+ Messages", value: _wa.engaged3, display: fmtNum(_wa.engaged3), cost: "three or more messages exchanged", accent: "#FFAA00" },
       { label: "Engagement Rate", value: _eng3Rate, display: _eng3Rate > 0 ? _eng3Rate.toFixed(2) + "%" : "—", cost: fmtNum(_wa.engaged3) + " of " + fmtNum(_wa.conversations) + " reached 3+ messages", accent: "#0891B2" },
@@ -801,7 +801,7 @@ function renderSummaryBlock(summary, profile, eco, extras) {
     // ── Row 2: WhatsApp Message Funnel (staged bars, table-based)
     var _funnelStages = [];
     if (_wa.reach > 0) _funnelStages.push({ label: "Reach", val: _wa.reach, sub: "unique people who saw the ad" });
-    _funnelStages.push({ label: "Conversations Opened", val: _wa.conversations, sub: "tapped WhatsApp to start a chat" });
+    _funnelStages.push({ label: "Conversations Opened", val: _wa.conversations, sub: "ad-attributed within 7 days of click" });
     if (_wa.firstReplies > 0) _funnelStages.push({ label: "First Reply Sent", val: _wa.firstReplies, sub: "got past the initial greeting" });
     _funnelStages.push({ label: "Engaged 3+ Messages", val: _wa.engaged3, sub: "three or more messages exchanged" });
     var _funnelTop = _funnelStages.length ? _funnelStages[0].val : 0;
@@ -880,9 +880,15 @@ function renderSummaryBlock(summary, profile, eco, extras) {
           '<strong style="color:#FFFBF8;font-weight:800;">Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users. CAPI Qualified Leads above are captured independently by the bot and reconcile against the "Unique Users" column in Meta Events Manager, not against these depth counters.' +
         '</div>' +
       '</div>' : "";
-    // Full extras row: funnel + efficiency + raw counters, injected
+    // Attribution note: sits above the funnel so the reader understands
+    // WHY the Leads count (organic-inclusive PSI database) is not the
+    // same shape as Conversations Started (Meta 7d ad-attribution only).
+    var _attrNoteHtml = '<div style="background:rgba(0,0,0,0.22);border-radius:10px;border:1px solid rgba(255,255,255,0.06);padding:10px 14px;margin-top:12px;font-size:11px;color:#8B7FA3;font-family:Helvetica,Arial,sans-serif;line-height:1.5;">' +
+      '<strong style="color:#FFFBF8;font-weight:800;">Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter but ARE captured in the Leads database.' +
+      '</div>';
+    // Full extras row: attribution note + funnel + efficiency + raw counters, injected
     // after the outcomes tile row in the main return HTML below.
-    _learnalotExtrasRow = '<tr><td style="padding:14px 40px 0;">' + _funnelHtml + _efficiencyHtml + _rawHtml + '</td></tr>';
+    _learnalotExtrasRow = '<tr><td style="padding:14px 40px 0;">' + _attrNoteHtml + _funnelHtml + _efficiencyHtml + _rawHtml + '</td></tr>';
   }
   var OUTCOME_TILE_HEIGHT = 110;
   var outcomeRows = "";
@@ -1781,6 +1787,7 @@ export default async function handler(req, res) {
         if (_txtWaConv > 0) {
           var _txtCpc = _txtWaSpend > 0 ? (_txtWaSpend / _txtWaConv) : 0;
           textLines.push("WhatsApp conversations: " + fmtNum(_txtWaConv) + (_txtCpc > 0 ? " at " + fmtR(_txtCpc) + " per conversation" : ""));
+          textLines.push("  (Meta counts only ad-attributed conversations within 7 days of click; organic opens live in the Leads DB.)");
         }
         if (_txtWaEng3 > 0) textLines.push("Engaged 3+ messages: " + fmtNum(_txtWaEng3));
       } else {

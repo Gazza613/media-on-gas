@@ -8275,7 +8275,7 @@ export default function MediaOnGas(){
                   var _waEngRateTile=waConversations>0?(waEngaged3/waConversations*100):0;
                   var _waCplTile=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
                   var summaryTiles=[
-                    mkTile("wa-conv",      "Conversations Started",fmt(waConversations),                                    P.mint,   "tapped WhatsApp to start a chat"),
+                    mkTile("wa-conv",      "Conversations Started",fmt(waConversations),                                    P.mint,   "ad-attributed within 7 days of click"),
                     mkTile("wa-cpc",       "Cost per Conversation",_waCostPerConvTile>0?fR(_waCostPerConvTile):"—",         P.orchid, "WhatsApp spend / conversations"),
                     mkTile("wa-engaged",   "Engaged 3+ Messages",  fmt(waEngaged3),                                         P.solar,  "three or more messages exchanged"),
                     mkTile("wa-rate",      "Engagement Rate",      _waEngRateTile>0?_waEngRateTile.toFixed(2)+"%":"—",      P.cyan,   fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages"),
@@ -8290,7 +8290,7 @@ export default function MediaOnGas(){
                   var waFirstReplies=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.firstReplies||0):0;
                   var funnelStages=[];
                   if(waReach>0)funnelStages.push({key:"reach",label:"Reach",val:waReach,sub:"unique people who saw the ad"});
-                  funnelStages.push({key:"conv",label:"Conversations Opened",val:waConversations,sub:"tapped WhatsApp to start a chat"});
+                  funnelStages.push({key:"conv",label:"Conversations Opened",val:waConversations,sub:"ad-attributed within 7 days of click"});
                   if(waFirstReplies>0)funnelStages.push({key:"reply",label:"First Reply Sent",val:waFirstReplies,sub:"got past the initial greeting"});
                   funnelStages.push({key:"eng",label:"Engaged 3+ Messages",val:waEngaged3,sub:"three or more messages exchanged"});
                   var funnelTop=funnelStages.length?funnelStages[0].val:0;
@@ -8369,6 +8369,9 @@ export default function MediaOnGas(){
                   </div>:null;
                   return <div style={{marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>{summaryTiles}</div>
+                    <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,fontSize:11,color:P.caption,fontFamily:fm,lineHeight:1.5}}>
+                      <strong style={{color:P.txt,fontWeight:800}}>Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter but ARE captured in the Leads database.
+                    </div>
                     {funnelBlock}
                     {efficiencyTiles.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginTop:14}}>{efficiencyTiles}</div>}
                     {rawCountersBlock}
