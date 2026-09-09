@@ -77,16 +77,26 @@ export default function BriefBar(props) {
           return;
         }
         var d = x.data.draft;
+        // Forward every field the extended brief-parse schema now returns.
+        // Wizard-side mergeDraft is deep on `audience`, so the parser's
+        // resolved geographies + genders + targetingItems reach the loader
+        // without additional wiring. budgetMode honours what Sami parsed
+        // (daily vs lifetime) so a "R10K over 4 weeks" brief lands as
+        // lifetime R10000 not daily R200.
         var partial = {
           accountId: d.accountId || "",
           accountName: d.accountName || "",
+          pageId: d.pageId || "",
+          pageName: d.pageName || "",
           objective: d.objective,
           specialAdCategories: d.specialAdCategories || [],
           clientCode: d.clientCode || "",
           variant: d.variant || "A",
           audience: d.audience || {},
-          funding: d.funding, budgetMode: "daily",
+          funding: d.funding,
+          budgetMode: d.budgetMode || "daily",
           dailyBudgetRand: d.dailyBudgetRand,
+          lifetimeBudgetRand: d.lifetimeBudgetRand,
           startDate: d.startDate, endDate: d.endDate,
           creativeMode: "single",
           creatives: [seededCreative(d.creativeDefaults, d.adVariants)],
