@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 var _v="2.0";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Legend, LabelList } from "recharts";
-import CreateTab from "./CreateTab.jsx";
+import CreateHub from "./CreateHub.jsx"; // Loader wizard + Media AI chat, one PIN, two modes.
 import CommandCentre from "./CommandCentre.jsx";
 
 
@@ -12038,7 +12038,7 @@ export default function MediaOnGas(){
         </div>)}
 
         {tab==="command"&&!isClient&&(<CommandCentre apiBase={API} P={P} ff={ff} fm={fm} Ic={Ic} Glass={Glass} SH={SH} session={session} dateFrom={df} dateTo={dt} adsList={adsList}/>)}
-        {tab==="create"&&!isClient&&(<CreateTab apiBase={API} P={P} ff={ff} fm={fm} gFire={gFire} gEmber={gEmber} Ic={Ic} Glass={Glass} SH={SH}/>)}
+        {tab==="create"&&!isClient&&(<CreateHub apiBase={API} P={P} ff={ff} fm={fm} gFire={gFire} gEmber={gEmber} Ic={Ic} Glass={Glass} SH={SH}/>)}
         </>)}
       </div>
     </div>
