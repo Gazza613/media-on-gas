@@ -105,18 +105,44 @@ export default function CreateTab(props) {
   var Ic = props.Ic, Glass = props.Glass, SH = props.SH, gFire = props.gFire, gEmber = props.gEmber;
   var apiBase = props.apiBase || "";
 
-  var ts = useState(null);
+  // Lazy-init from sessionStorage: an unexpired token means the operator
+  // already unlocked in this session (or reloaded the page). BriefBar
+  // reads the same sessionStorage keys, so persisting here lets the
+  // Quick Brief above the wizard authorize its /api/create/brief-parse
+  // call after unlock. Legacy v1 draft keys are still cleared below.
+  var _initialToken = null, _initialExp = 0;
+  try {
+    var _rawTok = sessionStorage.getItem(TOKEN_KEY);
+    var _rawExp = parseInt(sessionStorage.getItem(TOKEN_EXP_KEY) || "0", 10);
+    if (_rawTok && _rawExp * 1000 > Date.now()) { _initialToken = _rawTok; _initialExp = _rawExp; }
+  } catch (_) {}
+  var ts = useState(_initialToken);
   var token = ts[0], setToken = ts[1];
-  var expS = useState(0);
+  var expS = useState(_initialExp);
   var exp = expS[0], setExp = expS[1];
 
-  // One-time cleanup of any leftover legacy create-tab tokens or v1 drafts.
+  // One-time cleanup of legacy v1 draft keys (safe to drop on every mount).
+  // Token keys are NOT cleared here — see lazy-init above.
   useEffect(function(){
     try {
-      sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_EXP_KEY);
       sessionStorage.removeItem("gas_create_draft"); sessionStorage.removeItem("gas_create_step");
     } catch (_) {}
   }, []);
+
+  // Persist token/exp to sessionStorage and notify the parent hub so it
+  // can show/hide surfaces (Quick Brief bar) that depend on auth state.
+  useEffect(function(){
+    try {
+      if (token && exp) {
+        sessionStorage.setItem(TOKEN_KEY, token);
+        sessionStorage.setItem(TOKEN_EXP_KEY, String(exp));
+      } else {
+        sessionStorage.removeItem(TOKEN_KEY);
+        sessionStorage.removeItem(TOKEN_EXP_KEY);
+      }
+    } catch (_) {}
+    if (typeof props.onAuthChange === "function") props.onAuthChange(!!token);
+  }, [token, exp]);
 
   useEffect(function(){
     if (!token || !exp) return;

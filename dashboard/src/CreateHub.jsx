@@ -18,6 +18,12 @@ export default function CreateHub(props) {
   // Bumped when Quick Brief writes a fresh draft, remounting the wizard so
   // it re-reads sessionStorage and shows every step pre-filled.
   var ks = useState(0), wizKey = ks[0], setWizKey = ks[1];
+  // Unlocked mirrors CreateTab's PIN-gate state via its onAuthChange
+  // callback. BriefBar is hidden until unlocked so the operator can't
+  // type into it before authenticating (which would fail with "Unlock
+  // with the PIN below first" because BriefBar's fetch needs the token
+  // that PIN unlock puts into sessionStorage).
+  var us = useState(false), unlocked = us[0], setUnlocked = us[1];
 
   function ModeButton(id, label) {
     var active = mode === id;
@@ -46,9 +52,9 @@ export default function CreateHub(props) {
       {ModeButton("ai", "Media AI")}
     </div>
     <div style={{ display: mode === "loader" ? "block" : "none" }}>
-      <BriefBar apiBase={props.apiBase} P={P} ff={props.ff} fm={fm}
-        onApplied={function () { setWizKey(wizKey + 1); }} />
-      <CreateTab key={wizKey} {...props} />
+      {unlocked && <BriefBar apiBase={props.apiBase} P={P} ff={props.ff} fm={fm}
+        onApplied={function () { setWizKey(wizKey + 1); }} />}
+      <CreateTab key={wizKey} {...props} onAuthChange={setUnlocked} />
     </div>
     <div style={{ display: mode === "ai" ? "block" : "none" }}>
       <NlpTab {...props} />
