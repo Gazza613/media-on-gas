@@ -105,7 +105,7 @@ export default async function handler(req, res) {
   try {
     var anthropic = new Anthropic({ apiKey: apiKey });
     var msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 1500,
       system: buildSystem(objKeys, accounts, today),
       messages: [{ role: "user", content: "Brief:\n" + brief + "\n\nReturn the JSON draft." }]

@@ -36,7 +36,7 @@ import { checkCreateAuth } from "../_createAuth.js";
 export const config = { maxDuration: 120 };
 
 var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-var MODEL = "claude-sonnet-4-6";
+var MODEL = "claude-sonnet-5";
 var MAX_OUTPUT_TOKENS = 2000;
 var MAX_HISTORY_MESSAGES = 16;
 var MAX_MESSAGE_CHARS = 4000;
