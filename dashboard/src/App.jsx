@@ -743,10 +743,13 @@ function LinkedInSection(props){
       <span style={{fontSize:14,color:accent,marginLeft:2,opacity:0.85,fontWeight:900,lineHeight:1}}>×</span>
     </div>;
   };
-  // Thumbnail block, 60x60. If thumbUrl is present render the image; else a
-  // brand-tinted gradient with the LinkedIn "in" glyph so the row still has
-  // a visual anchor. Mock rows always fall through to the gradient path.
-  var thumb=function(url,color,size){
+  // Thumbnail block. If thumbUrl is present render the actual CDN image;
+  // else a brand-tinted gradient card with the LinkedIn "in" glyph in the
+  // top-left and (when a thumbLabel is provided) a content-type label
+  // across the bottom, styled to read as a mini LinkedIn creative card
+  // rather than a blank placeholder. Mock rows always fall through to
+  // this rich placeholder path since their thumbUrl is empty.
+  var thumb=function(url,color,label,size){
     size=size||60;
     var c=color||accent;
     if(url){
@@ -754,8 +757,9 @@ function LinkedInSection(props){
         <img src={url} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
       </div>;
     }
-    return <div style={{width:size,height:size,borderRadius:8,background:"linear-gradient(135deg,"+c+"cc,"+c+"55)",border:"1px solid "+c+"44",display:"flex",alignItems:"center",justifyContent:"center",flex:"0 0 auto"}}>
-      {Ic.linkedin("#fff",Math.round(size*0.42))}
+    return <div style={{width:size,height:size,borderRadius:8,background:"linear-gradient(135deg,"+c+"ee 0%,"+c+"88 55%,"+c+"44 100%)",border:"1px solid "+c+"55",position:"relative",overflow:"hidden",flex:"0 0 auto",boxShadow:"inset 0 -12px 20px rgba(0,0,0,0.25)"}}>
+      <div style={{position:"absolute",top:5,left:5,opacity:0.85,filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.4))"}}>{Ic.linkedin("#fff",Math.round(size*0.28))}</div>
+      {label?<div style={{position:"absolute",bottom:5,left:5,right:5,fontSize:8,color:"#fff",fontWeight:900,letterSpacing:0.8,textAlign:"center",fontFamily:fm,textTransform:"uppercase",textShadow:"0 1px 2px rgba(0,0,0,0.5)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>:null}
     </div>;
   };
   // Simple horizontal bar row for demographic slices.
@@ -817,7 +821,7 @@ function LinkedInSection(props){
             var last=i===Math.min(pd.ads.length,5)-1;
             var isSel=selAdId===a.id;
             return <div key={a.id} onClick={function(){setSelAdId(isSel?"":a.id);}} style={{display:"grid",gridTemplateColumns:"60px 1fr 90px 80px 80px 90px",gap:12,padding:"12px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",alignItems:"center",cursor:"pointer",background:isSel?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease"}}>
-              {thumb(a.thumbUrl,a.thumbColor,60)}
+              {thumb(a.thumbUrl,a.thumbColor,a.thumbLabel,60)}
               <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.name}>{a.name}</div>
               <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.impressions)} imps</div>
               <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.clicks)} clicks</div>
@@ -863,7 +867,7 @@ function LinkedInSection(props){
             var last=i===od.topPosts.length-1;
             var isSel=selPostId===p.id;
             return <div key={p.id} onClick={function(){setSelPostId(isSel?"":p.id);}} style={{display:"grid",gridTemplateColumns:"60px 1fr",gap:14,padding:"14px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",cursor:"pointer",background:isSel?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease",alignItems:"flex-start"}}>
-              {thumb(p.thumbUrl,p.thumbColor,60)}
+              {thumb(p.thumbUrl,p.thumbColor,p.thumbLabel,60)}
               <div>
                 <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.55,marginBottom:8}}>{p.commentary||"(post has no text)"}</div>
                 <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>

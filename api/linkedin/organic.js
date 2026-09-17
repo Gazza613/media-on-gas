@@ -190,35 +190,39 @@ async function fetchLive(fromIso, toIso) {
 // ---- Mock payload --------------------------------------------------------
 
 function mockPayload(fromIso, toIso, reason) {
+  // Content-type labels vary per mock so the sample thumbnails read as
+  // representative creative cards (article / video / newsletter etc)
+  // rather than five identical brand-blue blocks. Real LinkedIn data
+  // will drop thumbUrl in (CDN image) and this label is ignored.
   var mockPosts = [
     { id: "urn:li:share:mock-1",
       publishedAt: Date.now() - 2 * 86400000,
       commentary: "The next chapter of mobile money in South Africa is not about a bigger app, it is about smaller friction. Three barriers we are removing this quarter, and the numbers behind why.",
-      thumbUrl: "", thumbColor: "#0A66C2",
+      thumbUrl: "", thumbColor: "#0A66C2", thumbLabel: "ARTICLE",
       impressions: 12400, clicks: 287, engagement: 682, engagementRate: 5.50,
       likes: 512, comments: 89, shares: 81 },
     { id: "urn:li:share:mock-2",
       publishedAt: Date.now() - 5 * 86400000,
       commentary: "Financial inclusion is not a mandate we tick, it is a scoreboard. Four indicators MoMo tracks internally that no bank reports on, and why they matter for real economic access.",
-      thumbUrl: "", thumbColor: "#FFCC00",
+      thumbUrl: "", thumbColor: "#FFCC00", thumbLabel: "CAROUSEL",
       impressions: 9800, clicks: 214, engagement: 512, engagementRate: 5.22,
       likes: 397, comments: 67, shares: 48 },
     { id: "urn:li:share:mock-3",
       publishedAt: Date.now() - 8 * 86400000,
       commentary: "Why the WhatsApp payments race in SA is being run on the wrong finish line. Our CEO on where the real product-market fit lives.",
-      thumbUrl: "", thumbColor: "#34D399",
+      thumbUrl: "", thumbColor: "#34D399", thumbLabel: "VIDEO",
       impressions: 7600, clicks: 189, engagement: 431, engagementRate: 5.67,
       likes: 342, comments: 51, shares: 38 },
     { id: "urn:li:share:mock-4",
       publishedAt: Date.now() - 12 * 86400000,
       commentary: "Kagiso Mothibi at Africa Fintech Summit: the three-part thesis on why the next unicorn will be a wallet, not a bank.",
-      thumbUrl: "", thumbColor: "#A855F7",
+      thumbUrl: "", thumbColor: "#A855F7", thumbLabel: "PHOTO",
       impressions: 6200, clicks: 152, engagement: 348, engagementRate: 5.61,
       likes: 271, comments: 43, shares: 34 },
     { id: "urn:li:share:mock-5",
       publishedAt: Date.now() - 18 * 86400000,
       commentary: "Introducing the MoMo Insider newsletter, monthly field notes from the front line of African fintech. Subscribe on the button above.",
-      thumbUrl: "", thumbColor: "#F43F5E",
+      thumbUrl: "", thumbColor: "#F43F5E", thumbLabel: "NEWSLETTER",
       impressions: 5900, clicks: 412, engagement: 519, engagementRate: 8.80,
       likes: 78, comments: 12, shares: 17 }
   ];

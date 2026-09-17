@@ -193,8 +193,11 @@ async function fetchLive(fromIso, toIso) {
     } catch (_) { /* leave empty */ }
   }));
 
-  // LinkedIn creative palette for placeholder blocks when thumbUrl is empty.
+  // LinkedIn creative palette + type labels for placeholder blocks when
+  // thumbUrl is empty. Real ad creatives ship an actual CDN thumbUrl,
+  // making both fields moot.
   var _palette = ["#0A66C2", "#FFCC00", "#34D399", "#A855F7", "#F43F5E", "#0891B2", "#F97316", "#22C55E"];
+  var _labels  = ["SPONSORED",  "VIDEO",   "CAROUSEL", "SINGLE IMAGE", "ARTICLE",  "PROMOTED", "TEXT AD",   "MESSAGE"];
   var ads = creativeElements.map(function (row, i) {
     var pivot = (row.pivotValues && row.pivotValues[0]) || "";
     var imps = row.impressions || 0;
@@ -208,6 +211,7 @@ async function fetchLive(fromIso, toIso) {
       previewUrl: "",
       thumbUrl: meta.thumbUrl || "",
       thumbColor: _palette[i % _palette.length],
+      thumbLabel: _labels[i % _labels.length],
       impressions: imps,
       clicks: clicks,
       ctr: imps > 0 ? (clicks / imps * 100) : 0,
@@ -256,18 +260,23 @@ function mockPayload(fromIso, toIso, reason) {
     ads: [
       { id: "mock-ad-1", name: "The 3-part fintech thesis for South Africa (single-image)",
         campaignId: "mock-camp-1", previewUrl: "", thumbUrl: "",
+        thumbColor: "#0A66C2", thumbLabel: "SINGLE IMAGE",
         impressions: 22800, clicks: 640, ctr: 2.81, spend: 5400, cpc: 8.44, conversions: 45 },
       { id: "mock-ad-2", name: "Why WhatsApp is winning the SA payments race (video)",
         campaignId: "mock-camp-1", previewUrl: "", thumbUrl: "",
+        thumbColor: "#F43F5E", thumbLabel: "VIDEO",
         impressions: 19300, clicks: 540, ctr: 2.80, spend: 4400, cpc: 8.15, conversions: 33 },
       { id: "mock-ad-3", name: "Subscribe to the MoMo Insider newsletter (article)",
         campaignId: "mock-camp-2", previewUrl: "", thumbUrl: "",
+        thumbColor: "#FFCC00", thumbLabel: "NEWSLETTER",
         impressions: 17200, clicks: 355, ctr: 2.06, spend: 3250, cpc: 9.15, conversions: 25 },
       { id: "mock-ad-4", name: "Kagiso Mothibi on rewiring African fintech (article)",
         campaignId: "mock-camp-2", previewUrl: "", thumbUrl: "",
+        thumbColor: "#A855F7", thumbLabel: "ARTICLE",
         impressions: 14000, clicks: 285, ctr: 2.04, spend: 2650, cpc: 9.30, conversions: 20 },
       { id: "mock-ad-5", name: "Financial inclusion field report (carousel)",
         campaignId: "mock-camp-3", previewUrl: "", thumbUrl: "",
+        thumbColor: "#34D399", thumbLabel: "CAROUSEL",
         impressions: 14120, clicks: 283, ctr: 2.00, spend: 2750, cpc: 9.72, conversions: 19 }
     ],
     demographics: {
