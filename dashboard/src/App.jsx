@@ -18,7 +18,7 @@ import CommandCentre from "./CommandCentre.jsx";
 //   void   #06020e  page bottom, matches header background exactly
 //   cosmos #0a0418  modal + card surface, one notch lifted
 //   nebula #0d061f  gradient mid, slightly more depth
-var P={void:"#06020e",cosmos:"#0a0418",nebula:"#0d061f",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",momoYellow:"#FFCC00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
+var P={void:"#06020e",cosmos:"#0a0418",nebula:"#0d061f",glass:"rgba(30,18,50,0.65)",ember:"#F96203",blaze:"#FF3D00",solar:"#FFAA00",momoYellow:"#FFCC00",lava:"#FF2222",orchid:"#A855F7",violet:"#7C3AED",fuchsia:"#D946EF",rose:"#F43F5E",cyan:"#0891B2",mint:"#34D399",fb:"#4599FF",ig:"#E1306C",tt:"#00F2EA",gd:"#34A853",yt:"#FF0000",li:"#0A66C2",txt:"#FFFBF8",sub:"#8B7FA3",dim:"#4A3D60",label:"rgba(255,251,248,0.7)",caption:"rgba(255,251,248,0.58)",rule:"rgba(168,85,247,0.12)",critical:"#ef4444",warning:"#fbbf24",info:"#60a5fa",positive:"#4ade80"};
 var gFire="linear-gradient(135deg,#E8231A,#FF6B00,#FFAA00)",gEmber="linear-gradient(135deg,#FF3D00,#FF6B00)";
 var ff="Poppins,Outfit,Segoe UI,sans-serif",fm="JetBrains Mono,Consolas,monospace";
 
@@ -628,7 +628,14 @@ cart:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" f
 // is offset-left to suggest a group) so Optimise (this person owns
 // the platform today) and Community (the audience / users in the
 // account) read as visually different concepts in the nav.
-person:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke={c} strokeWidth="1.5" fill={c+"15"}/><path d="M4 21v-1.5a8 8 0 0116 0V21" stroke={c} strokeWidth="1.5" strokeLinecap="round"/></svg>;}
+person:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke={c} strokeWidth="1.5" fill={c+"15"}/><path d="M4 21v-1.5a8 8 0 0116 0V21" stroke={c} strokeWidth="1.5" strokeLinecap="round"/></svg>;},
+// LinkedIn "in" glyph. Rounded-square badge with a lowercase "in" cut
+// out, matching LinkedIn's own brand mark closely enough that the
+// LinkedIn section reads at a glance without a text label. The badge
+// fills with the accent colour (LinkedIn brand blue by default, but
+// callers can pass any accent) and the "in" is punched out in the
+// background void so the mark remains legible on dark surfaces.
+linkedin:function(c,s){s=s||20;return<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="3" fill={c}/><rect x="5.5" y="9.5" width="2.7" height="8.5" fill="#0a0418"/><circle cx="6.85" cy="6.7" r="1.55" fill="#0a0418"/><path d="M10.6 9.5h2.55v1.2c.55-.9 1.55-1.4 2.7-1.4 2.4 0 3.15 1.55 3.15 3.6V18h-2.7v-4.35c0-1.05-.35-1.75-1.35-1.75-1.05 0-1.5.7-1.5 1.75V18h-2.85V9.5z" fill="#0a0418"/></svg>;}
 };
 
 // Scroll-perf fix: only attach mouse handlers + the 0.3s "all"
@@ -669,6 +676,162 @@ function FreshnessChip(props){
   </div>;
 }
 function Glass(props){var a=props.accent||P.ember,st=props.st||{},hv=!!props.hv;var hexA=function(hex,al){if(!hex||hex[0]!=="#"||hex.length!==7)return hex;var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return"rgba("+r+","+g+","+b+","+al+")";};var base={background:P.glass,border:"1px solid "+P.rule,borderRadius:16,position:"relative",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.25)"};if(hv){base["--glass-accent"]=a;base["--glass-accent-border"]=hexA(a,0.32);base["--glass-accent-shadow"]=hexA(a,0.085);}return(<div className={hv?"gas-hover-card":undefined} style={Object.assign(base,st)}><div className={hv?"gas-hover-card-line":undefined} style={{position:"absolute",top:0,left:"10%",right:"10%",height:1,background:"linear-gradient(90deg,transparent,"+a+"80,transparent)",opacity:0.4,transition:hv?"opacity 0.3s ease":"none"}}/>{props.children}</div>);}
+
+// LinkedIn performance section, MTN MoMo only. Renders under Objectives
+// by Ad on the Creative tab when a MoMo campaign is in the current
+// selection. Two data sources:
+//   - /api/linkedin/paid    (App 1, Advertising API)
+//   - /api/linkedin/organic (App 2, Community Management API)
+// Both endpoints return live data when env vars are wired, else a
+// signed mock payload with source:"mock" so this layout can be
+// iterated visually before LinkedIn approvals land. Detection of that
+// mock state drives the "SAMPLE DATA" pill on the header.
+function LinkedInSection(props){
+  var P=props.P,ff=props.ff,fm=props.fm,Ic=props.Ic,apiBase=props.apiBase||"",df=props.df||"",dt=props.dt||"",fmt=props.fmt,fR=props.fR,session=props.session||"";
+  var accent=P.li||"#0A66C2";
+  var pS=useState({loading:true,data:null,error:""}),paid=pS[0],setPaid=pS[1];
+  var oS=useState({loading:true,data:null,error:""}),organic=oS[0],setOrganic=oS[1];
+  useEffect(function(){
+    var q=(df&&dt)?("?from="+encodeURIComponent(df)+"&to="+encodeURIComponent(dt)):"";
+    // Prefer the session prop the parent passes through (same pattern
+    // ShareModal, ThumbOverrideModal, CampaignAuditModal etc. use).
+    // sessionStorage("gas_session") is a fallback for the rare case
+    // where the prop is empty (e.g. viewToken-only reads).
+    var st=session||((typeof sessionStorage!=="undefined")?(sessionStorage.getItem("gas_session")||""):"");
+    var hdr=st?{"x-session-token":st}:{};
+    var fetchOne=function(path,setter){
+      fetch(apiBase+path+q,{headers:hdr}).then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d};});}).then(function(x){
+        if(!x.ok){setter({loading:false,data:null,error:(x.data&&x.data.error)||"fetch_failed"});return;}
+        setter({loading:false,data:x.data,error:""});
+      }).catch(function(e){setter({loading:false,data:null,error:String(e&&e.message||e)});});
+    };
+    fetchOne("/api/linkedin/paid",setPaid);
+    fetchOne("/api/linkedin/organic",setOrganic);
+  },[df,dt,apiBase,session]);
+  var pd=paid.data,od=organic.data;
+  var isMock=(pd&&pd.source==="mock")||(od&&od.source==="mock");
+  var loading=paid.loading||organic.loading;
+  var errored=paid.error&&organic.error&&!pd&&!od;
+  var _fmt=fmt||function(n){return String(Math.round(n||0));};
+  var _fR=fR||function(n){return "R"+Math.round(n||0).toLocaleString();};
+  // KPI tile — compact, LinkedIn-accent variant.
+  var kpi=function(label,value,sub){
+    return <div style={{background:"rgba(10,102,194,0.06)",border:"1px solid rgba(10,102,194,0.28)",borderLeft:"4px solid "+accent,borderRadius:12,padding:"14px 16px"}}>
+      <div style={{fontSize:9,color:accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:6}}>{label}</div>
+      <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{value}</div>
+      {sub?<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:6}}>{sub}</div>:null}
+    </div>;
+  };
+  // Simple horizontal bar row for demographic slices.
+  var bar=function(name,val,pct,max){
+    var w=max>0?Math.max(2,val/max*100):0;
+    return <div key={name} style={{display:"grid",gridTemplateColumns:"140px 1fr 70px 60px",gap:10,alignItems:"center",padding:"6px 0"}}>
+      <div style={{fontSize:11,color:P.txt,fontFamily:fm,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
+      <div style={{height:8,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:"100%",width:w.toFixed(1)+"%",background:"linear-gradient(90deg,"+accent+","+accent+"80)",borderRadius:4}}/>
+      </div>
+      <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(val)}</div>
+      <div style={{fontSize:11,color:accent,fontFamily:fm,fontWeight:800,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{(pct||0).toFixed(2)+"%"}</div>
+    </div>;
+  };
+  var demoBlock=function(title,rows){
+    if(!rows||rows.length===0)return null;
+    var max=Math.max.apply(null,rows.map(function(r){return r.impressions||0;}).concat(1));
+    return <div style={{background:"linear-gradient(145deg,#0a1830,#04101f)",borderRadius:12,padding:"14px 16px",border:"1px solid rgba(10,102,194,0.18)"}}>
+      <div style={{fontSize:10,color:accent,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>{title}</div>
+      {rows.map(function(r){return bar(r.name,r.impressions||0,r.share||0,max);})}
+    </div>;
+  };
+  return <div style={{background:P.glass,border:"1px solid "+P.rule,borderRadius:18,padding:"22px 26px 26px",marginTop:22,marginBottom:22,borderLeft:"4px solid "+accent}}>
+    {/* Header — LinkedIn glyph + section title + optional SAMPLE DATA pill */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,marginBottom:18,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        {Ic.linkedin(accent,26)}
+        <div>
+          <div style={{fontSize:18,color:accent,fontFamily:fm,letterSpacing:3,fontWeight:900,textTransform:"uppercase",lineHeight:1}}>LinkedIn Performance</div>
+          <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginTop:5}}>Paid Sponsored Content + organic Company Page reach, {df} to {dt}</div>
+        </div>
+      </div>
+      {isMock?<div title="Live LinkedIn credentials not yet in Vercel env. Layout is populated with sample data until MARKIFACT_ADS_REFRESH_TOKEN and ORG_REFRESH_TOKEN are set." style={{fontSize:9,color:P.solar,fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",background:"rgba(255,170,0,0.08)",border:"1px solid rgba(255,170,0,0.35)",borderRadius:8,padding:"6px 10px"}}>Sample data</div>:null}
+    </div>
+
+    {loading?<div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:fm}}>Loading LinkedIn performance…</div>:null}
+    {errored?<div style={{padding:"20px 22px",borderRadius:10,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.3)",fontSize:12,color:P.txt,fontFamily:fm}}>LinkedIn data unavailable: {paid.error||organic.error}. Confirm the LinkedIn env vars in Vercel or re-run the OAuth callback.</div>:null}
+
+    {!loading&&pd?<div>
+      {/* Paid KPIs, 6-tile strip */}
+      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Paid Performance</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,marginBottom:20}}>
+        {kpi("Impressions",_fmt(pd.kpis.impressions),null)}
+        {kpi("Clicks",_fmt(pd.kpis.clicks),null)}
+        {kpi("CTR",(pd.kpis.ctr||0).toFixed(2)+"%",null)}
+        {kpi("Spend",_fR(pd.kpis.spend),null)}
+        {kpi("Cost per Click",pd.kpis.cpc>0?_fR(pd.kpis.cpc):"—",null)}
+        {kpi("Newsletter Sign-Ups",_fmt(pd.kpis.conversions),pd.kpis.costPerConversion>0?_fR(pd.kpis.costPerConversion)+" per sign-up":null)}
+      </div>
+
+      {/* Top ads list */}
+      {pd.ads&&pd.ads.length>0?<div style={{marginBottom:20}}>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Ads by Spend</div>
+        <div style={{background:"rgba(10,102,194,0.04)",borderRadius:12,border:"1px solid rgba(10,102,194,0.16)",overflow:"hidden"}}>
+          {pd.ads.slice(0,5).map(function(a,i){
+            var last=i===Math.min(pd.ads.length,5)-1;
+            return <div key={a.id} style={{display:"grid",gridTemplateColumns:"1fr 90px 80px 80px 90px",gap:12,padding:"12px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",alignItems:"center"}}>
+              <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.name}>{a.name}</div>
+              <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.impressions)} imps</div>
+              <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.clicks)} clicks</div>
+              <div style={{fontSize:11,color:(a.ctr||0)>2?P.mint:P.label,fontFamily:fm,fontWeight:700,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{(a.ctr||0).toFixed(2)+"%"}</div>
+              <div style={{fontSize:12,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fR(a.spend)}</div>
+            </div>;
+          })}
+        </div>
+      </div>:null}
+
+      {/* Demographic breakdown */}
+      {pd.demographics?<div style={{marginBottom:20}}>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Who's Being Reached</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          {demoBlock("By Seniority",pd.demographics.seniority)}
+          {demoBlock("By Industry",pd.demographics.industry)}
+          {demoBlock("By Job Function",pd.demographics.jobFunction)}
+          {demoBlock("By Geography",pd.demographics.geography)}
+        </div>
+      </div>:null}
+    </div>:null}
+
+    {/* Divider between paid + organic */}
+    {!loading&&pd&&od?<div style={{height:1,background:"linear-gradient(90deg,transparent,"+accent+"40,transparent)",margin:"18px 0"}}/>:null}
+
+    {!loading&&od?<div>
+      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Organic Company Page</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        {kpi("Followers",_fmt(od.kpis.followers),od.kpis.followerGrowth>0?"+"+_fmt(od.kpis.followerGrowth)+" this period":null)}
+        {kpi("Newsletter Subscribers",_fmt(od.kpis.subscribers||0),null)}
+        {kpi("Post Impressions",_fmt(od.kpis.postImpressions),(od.kpis.engagementRate||0).toFixed(2)+"% engagement rate")}
+        {kpi("Page Views",_fmt(od.kpis.pageViews),od.kpis.uniqueVisitors>0?_fmt(od.kpis.uniqueVisitors)+" unique":null)}
+      </div>
+
+      {od.topPosts&&od.topPosts.length>0?<div>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Organic Posts by Engagement Rate</div>
+        <div style={{background:"rgba(10,102,194,0.04)",borderRadius:12,border:"1px solid rgba(10,102,194,0.16)",overflow:"hidden"}}>
+          {od.topPosts.map(function(p,i){
+            var last=i===od.topPosts.length-1;
+            return <div key={p.id} style={{padding:"14px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)"}}>
+              <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.55,marginBottom:8}}>{p.commentary||"(post has no text)"}</div>
+              <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.impressions)} impressions</span>
+                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.likes)} likes</span>
+                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.comments)} comments</span>
+                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.shares)} shares</span>
+                <span style={{fontSize:10.5,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{(p.engagementRate||0).toFixed(2)+"% engagement rate"}</span>
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>:null}
+    </div>:null}
+  </div>;
+}
 // Reveal: scroll-triggered fade + slide-up wrapper. Children only mount the
 // first time the wrapper enters the viewport, so recharts plays its own
 // mount animation in sync with the fade-in. Reserves vertical space via
@@ -8765,6 +8928,20 @@ export default function MediaOnGas(){
                   card to match section styling. */}
               {demoBlocks&&demoBlocks.objectiveBlock&&<div style={{background:P.glass,borderRadius:18,padding:"22px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>{demoBlocks.objectiveBlock}</div>}
 
+              {/* LinkedIn Performance (MTN MoMo only). Rendered on Summary
+                  and on Creative tab both — same detection + component,
+                  so the client sees LinkedIn insights in the top-level
+                  performance overview and in the creative-review flow. */}
+              {(function(){
+                var linkedinInSel=(computed.allSelected||[]).some(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("mtnmomo")>=0||an.indexOf("momo")>=0||cn.indexOf("mtn momo")>=0||cn.indexOf("momo")>=0;
+                });
+                if(!linkedinInSel)return null;
+                return <LinkedInSection P={P} ff={ff} fm={fm} Ic={Ic} apiBase={API} df={df} dt={dt} fmt={fmt} fR={fR} session={session}/>;
+              })()}
+
               {/* Learnalot-only WhatsApp Audience panel. The 8 CAPI-fired
                   QualifiedLead events can't be broken down by demographic
                   (no Meta public-API path exposes per-event dataset data),
@@ -11696,6 +11873,20 @@ export default function MediaOnGas(){
                 })()}
               </div>
             </div>;
+          })()}
+
+          {/* LinkedIn Performance section (MTN MoMo only). Renders under
+              Objectives by Ad so paid + organic LinkedIn insights live
+              alongside the other-platform creative surfaces. Same
+              detection pattern as learnalotInSel at line ~8183. */}
+          {(function(){
+            var linkedinInSel=(computed.allSelected||[]).some(function(c){
+              var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+              var cn=String(c.campaignName||"").toLowerCase();
+              return an.indexOf("mtnmomo")>=0||an.indexOf("momo")>=0||cn.indexOf("mtn momo")>=0||cn.indexOf("momo")>=0;
+            });
+            if(!linkedinInSel)return null;
+            return <LinkedInSection P={P} ff={ff} fm={fm} Ic={Ic} apiBase={API} df={df} dt={dt} fmt={fmt} fR={fR} session={session}/>;
           })()}
         </div>)}
 
