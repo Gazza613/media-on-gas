@@ -8928,6 +8928,20 @@ export default function MediaOnGas(){
                   card to match section styling. */}
               {demoBlocks&&demoBlocks.objectiveBlock&&<div style={{background:P.glass,borderRadius:18,padding:"22px 28px 28px",marginBottom:28,border:"1px solid "+P.rule}}>{demoBlocks.objectiveBlock}</div>}
 
+              {/* LinkedIn Performance (MTN MoMo only). Rendered on Summary
+                  and on Creative tab both — same detection + component,
+                  so the client sees LinkedIn insights in the top-level
+                  performance overview and in the creative-review flow. */}
+              {(function(){
+                var linkedinInSel=(computed.allSelected||[]).some(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("mtnmomo")>=0||an.indexOf("momo")>=0||cn.indexOf("mtn momo")>=0||cn.indexOf("momo")>=0;
+                });
+                if(!linkedinInSel)return null;
+                return <LinkedInSection P={P} ff={ff} fm={fm} Ic={Ic} apiBase={API} df={df} dt={dt} fmt={fmt} fR={fR} session={session}/>;
+              })()}
+
               {/* Learnalot-only WhatsApp Audience panel. The 8 CAPI-fired
                   QualifiedLead events can't be broken down by demographic
                   (no Meta public-API path exposes per-event dataset data),
