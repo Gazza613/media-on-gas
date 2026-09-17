@@ -80,7 +80,11 @@ async function fetchLive(fromIso, toIso) {
     "/rest/posts?q=author&author=" + encodeURIComponent(orgUrn) + "&count=25&sortBy=LAST_MODIFIED");
   var postElements = (postsResp.data && postsResp.data.elements) || [];
 
-  // Per-post statistics.
+  // Per-post statistics + thumbnails. LinkedIn returns each post's media
+  // as an image/video URN. We resolve up to 25 in parallel via /rest/images
+  // and /rest/videos which return short-lived CDN downloadUrls that we
+  // pass through as thumbUrl. On any single resolution failure the post
+  // keeps thumbUrl empty and the frontend renders a color placeholder.
   var posts = [];
   if (postElements.length > 0) {
     var shareUrns = postElements.map(function (p) { return p.id; }).filter(Boolean).slice(0, 25);
@@ -106,14 +110,48 @@ async function fetchLive(fromIso, toIso) {
           engagement: (s.likeCount || 0) + (s.commentCount || 0) + (s.shareCount || 0) + (s.clickCount || 0)
         };
       });
+
+      // Resolve media URNs -> downloadUrl for thumbnails. Parallel + tolerant.
+      var mediaUrnByPost = {};
+      postElements.forEach(function (p) {
+        var m = (p.content && p.content.media && p.content.media.id)
+          || (p.content && p.content.article && p.content.article.thumbnail)
+          || "";
+        if (m) mediaUrnByPost[p.id] = m;
+      });
+      var urns = Object.values(mediaUrnByPost);
+      var thumbByUrn = {};
+      if (urns.length > 0) {
+        await Promise.all(urns.slice(0, 25).map(async function (urn) {
+          var isVideo = /^urn:li:video:/i.test(urn);
+          var restPath = "/rest/" + (isVideo ? "videos" : "images") + "/" + encodeURIComponent(urn);
+          try {
+            var r = await fetchLinkedInJson("organic", restPath);
+            if (r.ok && r.data) {
+              // Images: downloadUrl on the image object. Videos: transcripts array;
+              // use aspectRatioAwarePosterUrl or the smallest poster if available.
+              var dl = r.data.downloadUrl
+                || (r.data.aspectRatioAwarePosterUrl || "")
+                || (r.data.thumbnail && r.data.thumbnail.url)
+                || "";
+              if (dl) thumbByUrn[urn] = dl;
+            }
+          } catch (_) { /* keep empty */ }
+        }));
+      }
+
       posts = postElements.map(function (p) {
         var stats = statsByShare[p.id] || {};
         var imps = stats.impressions || 0;
         var eng = stats.engagement || 0;
+        var mediaUrn = mediaUrnByPost[p.id] || "";
+        var thumbUrl = mediaUrn ? (thumbByUrn[mediaUrn] || "") : "";
         return {
           id: p.id,
           publishedAt: p.publishedAt || p.createdAt || null,
           commentary: (p.commentary || "").slice(0, 240),
+          thumbUrl: thumbUrl,
+          thumbColor: "#0A66C2", // brand-blue fallback tint if the CDN URL is empty
           impressions: imps,
           clicks: stats.clicks || 0,
           engagement: eng,
@@ -156,26 +194,31 @@ function mockPayload(fromIso, toIso, reason) {
     { id: "urn:li:share:mock-1",
       publishedAt: Date.now() - 2 * 86400000,
       commentary: "The next chapter of mobile money in South Africa is not about a bigger app, it is about smaller friction. Three barriers we are removing this quarter, and the numbers behind why.",
+      thumbUrl: "", thumbColor: "#0A66C2",
       impressions: 12400, clicks: 287, engagement: 682, engagementRate: 5.50,
       likes: 512, comments: 89, shares: 81 },
     { id: "urn:li:share:mock-2",
       publishedAt: Date.now() - 5 * 86400000,
       commentary: "Financial inclusion is not a mandate we tick, it is a scoreboard. Four indicators MoMo tracks internally that no bank reports on, and why they matter for real economic access.",
+      thumbUrl: "", thumbColor: "#FFCC00",
       impressions: 9800, clicks: 214, engagement: 512, engagementRate: 5.22,
       likes: 397, comments: 67, shares: 48 },
     { id: "urn:li:share:mock-3",
       publishedAt: Date.now() - 8 * 86400000,
       commentary: "Why the WhatsApp payments race in SA is being run on the wrong finish line. Our CEO on where the real product-market fit lives.",
+      thumbUrl: "", thumbColor: "#34D399",
       impressions: 7600, clicks: 189, engagement: 431, engagementRate: 5.67,
       likes: 342, comments: 51, shares: 38 },
     { id: "urn:li:share:mock-4",
       publishedAt: Date.now() - 12 * 86400000,
       commentary: "Kagiso Mothibi at Africa Fintech Summit: the three-part thesis on why the next unicorn will be a wallet, not a bank.",
+      thumbUrl: "", thumbColor: "#A855F7",
       impressions: 6200, clicks: 152, engagement: 348, engagementRate: 5.61,
       likes: 271, comments: 43, shares: 34 },
     { id: "urn:li:share:mock-5",
       publishedAt: Date.now() - 18 * 86400000,
       commentary: "Introducing the MoMo Insider newsletter, monthly field notes from the front line of African fintech. Subscribe on the button above.",
+      thumbUrl: "", thumbColor: "#F43F5E",
       impressions: 5900, clicks: 412, engagement: 519, engagementRate: 8.80,
       likes: 78, comments: 12, shares: 17 }
   ];

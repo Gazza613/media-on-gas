@@ -691,12 +691,14 @@ function LinkedInSection(props){
   var accent=P.li||"#0A66C2";
   var pS=useState({loading:true,data:null,error:""}),paid=pS[0],setPaid=pS[1];
   var oS=useState({loading:true,data:null,error:""}),organic=oS[0],setOrganic=oS[1];
+  // Selection state — one per section, independent. Clicking a row toggles;
+  // clicking the same row again OR the × on the SHOWING chip clears back
+  // to the aggregate view. Paid and organic filter independently so a
+  // selected ad doesn't force a selected post and vice versa.
+  var sAd=useState(""),selAdId=sAd[0],setSelAdId=sAd[1];
+  var sPo=useState(""),selPostId=sPo[0],setSelPostId=sPo[1];
   useEffect(function(){
     var q=(df&&dt)?("?from="+encodeURIComponent(df)+"&to="+encodeURIComponent(dt)):"";
-    // Prefer the session prop the parent passes through (same pattern
-    // ShareModal, ThumbOverrideModal, CampaignAuditModal etc. use).
-    // sessionStorage("gas_session") is a fallback for the rare case
-    // where the prop is empty (e.g. viewToken-only reads).
     var st=session||((typeof sessionStorage!=="undefined")?(sessionStorage.getItem("gas_session")||""):"");
     var hdr=st?{"x-session-token":st}:{};
     var fetchOne=function(path,setter){
@@ -707,6 +709,10 @@ function LinkedInSection(props){
     };
     fetchOne("/api/linkedin/paid",setPaid);
     fetchOne("/api/linkedin/organic",setOrganic);
+    // Clear selections whenever the date range changes (their scoped KPIs
+    // could otherwise reference an item that no longer exists in the new
+    // period).
+    setSelAdId("");setSelPostId("");
   },[df,dt,apiBase,session]);
   var pd=paid.data,od=organic.data;
   var isMock=(pd&&pd.source==="mock")||(od&&od.source==="mock");
@@ -714,12 +720,42 @@ function LinkedInSection(props){
   var errored=paid.error&&organic.error&&!pd&&!od;
   var _fmt=fmt||function(n){return String(Math.round(n||0));};
   var _fR=fR||function(n){return "R"+Math.round(n||0).toLocaleString();};
+
+  // Resolve current selections to the underlying record so the scoped KPI
+  // strips can read from them directly. Falls back to aggregate when null.
+  var selAd=(selAdId&&pd&&pd.ads)?pd.ads.find(function(a){return a.id===selAdId;}):null;
+  var selPost=(selPostId&&od&&od.posts)?od.posts.find(function(p){return p.id===selPostId;}):null;
+
   // KPI tile — compact, LinkedIn-accent variant.
-  var kpi=function(label,value,sub){
-    return <div style={{background:"rgba(10,102,194,0.06)",border:"1px solid rgba(10,102,194,0.28)",borderLeft:"4px solid "+accent,borderRadius:12,padding:"14px 16px"}}>
+  var kpi=function(label,value,sub,scoped){
+    return <div style={{background:scoped?"rgba(10,102,194,0.14)":"rgba(10,102,194,0.06)",border:"1px solid "+(scoped?"rgba(10,102,194,0.55)":"rgba(10,102,194,0.28)"),borderLeft:"4px solid "+accent,borderRadius:12,padding:"14px 16px"}}>
       <div style={{fontSize:9,color:accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:6}}>{label}</div>
       <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{value}</div>
       {sub?<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:6}}>{sub}</div>:null}
+    </div>;
+  };
+  // "SHOWING: [name] ×" chip that appears above a KPI strip whenever a
+  // row is selected. Clicking anywhere on the chip clears the selection.
+  var showingChip=function(label,onClear){
+    return <div onClick={onClear} title="Click to clear the filter and return to the period aggregate" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8,background:accent+"22",border:"1px solid "+accent+"66",borderRadius:14,padding:"5px 11px",marginLeft:10,fontFamily:fm,verticalAlign:"middle"}}>
+      <span style={{fontSize:9,color:accent,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase"}}>Showing</span>
+      <span style={{fontSize:11,color:P.txt,fontWeight:700,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+      <span style={{fontSize:14,color:accent,marginLeft:2,opacity:0.85,fontWeight:900,lineHeight:1}}>×</span>
+    </div>;
+  };
+  // Thumbnail block, 60x60. If thumbUrl is present render the image; else a
+  // brand-tinted gradient with the LinkedIn "in" glyph so the row still has
+  // a visual anchor. Mock rows always fall through to the gradient path.
+  var thumb=function(url,color,size){
+    size=size||60;
+    var c=color||accent;
+    if(url){
+      return <div style={{width:size,height:size,borderRadius:8,overflow:"hidden",background:"#0a1830",border:"1px solid "+accent+"33",flex:"0 0 auto"}}>
+        <img src={url} alt="" loading="lazy" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+      </div>;
+    }
+    return <div style={{width:size,height:size,borderRadius:8,background:"linear-gradient(135deg,"+c+"cc,"+c+"55)",border:"1px solid "+c+"44",display:"flex",alignItems:"center",justifyContent:"center",flex:"0 0 auto"}}>
+      {Ic.linkedin("#fff",Math.round(size*0.42))}
     </div>;
   };
   // Simple horizontal bar row for demographic slices.
@@ -752,31 +788,36 @@ function LinkedInSection(props){
           <div style={{fontSize:11,color:P.caption,fontFamily:fm,marginTop:5}}>Paid Sponsored Content + organic Company Page reach, {df} to {dt}</div>
         </div>
       </div>
-      {isMock?<div title="Live LinkedIn credentials not yet in Vercel env. Layout is populated with sample data until MARKIFACT_ADS_REFRESH_TOKEN and ORG_REFRESH_TOKEN are set." style={{fontSize:9,color:P.solar,fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",background:"rgba(255,170,0,0.08)",border:"1px solid rgba(255,170,0,0.35)",borderRadius:8,padding:"6px 10px"}}>Sample data</div>:null}
+      {isMock?<div title="Live LinkedIn credentials not yet in Vercel env. Layout is populated with sample data until LINKEDIN_ADS_REFRESH_TOKEN and LINKEDIN_ORG_REFRESH_TOKEN are set." style={{fontSize:9,color:P.solar,fontFamily:fm,fontWeight:900,letterSpacing:2,textTransform:"uppercase",background:"rgba(255,170,0,0.08)",border:"1px solid rgba(255,170,0,0.35)",borderRadius:8,padding:"6px 10px"}}>Sample data</div>:null}
     </div>
 
     {loading?<div style={{padding:"40px 20px",textAlign:"center",color:P.caption,fontFamily:fm}}>Loading LinkedIn performance…</div>:null}
     {errored?<div style={{padding:"20px 22px",borderRadius:10,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.3)",fontSize:12,color:P.txt,fontFamily:fm}}>LinkedIn data unavailable: {paid.error||organic.error}. Confirm the LinkedIn env vars in Vercel or re-run the OAuth callback.</div>:null}
 
     {!loading&&pd?<div>
-      {/* Paid KPIs, 6-tile strip */}
-      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Paid Performance</div>
+      {/* Paid KPIs, 6-tile strip. When an ad is selected the strip scopes to just that ad's numbers. */}
+      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+        · Paid Performance
+        {selAd?showingChip(selAd.name,function(){setSelAdId("");}):null}
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,marginBottom:20}}>
-        {kpi("Impressions",_fmt(pd.kpis.impressions),null)}
-        {kpi("Clicks",_fmt(pd.kpis.clicks),null)}
-        {kpi("CTR",(pd.kpis.ctr||0).toFixed(2)+"%",null)}
-        {kpi("Spend",_fR(pd.kpis.spend),null)}
-        {kpi("Cost per Click",pd.kpis.cpc>0?_fR(pd.kpis.cpc):"—",null)}
-        {kpi("Newsletter Sign-Ups",_fmt(pd.kpis.conversions),pd.kpis.costPerConversion>0?_fR(pd.kpis.costPerConversion)+" per sign-up":null)}
+        {kpi("Impressions",_fmt(selAd?selAd.impressions:pd.kpis.impressions),null,!!selAd)}
+        {kpi("Clicks",_fmt(selAd?selAd.clicks:pd.kpis.clicks),null,!!selAd)}
+        {kpi("CTR",((selAd?selAd.ctr:pd.kpis.ctr)||0).toFixed(2)+"%",null,!!selAd)}
+        {kpi("Spend",_fR(selAd?selAd.spend:pd.kpis.spend),null,!!selAd)}
+        {kpi("Cost per Click",(selAd?selAd.cpc:pd.kpis.cpc)>0?_fR(selAd?selAd.cpc:pd.kpis.cpc):"—",null,!!selAd)}
+        {kpi("Newsletter Sign-Ups",_fmt(selAd?selAd.conversions:pd.kpis.conversions),(!selAd&&pd.kpis.costPerConversion>0)?_fR(pd.kpis.costPerConversion)+" per sign-up":null,!!selAd)}
       </div>
 
-      {/* Top ads list */}
+      {/* Top ads list — clickable rows with thumbnails */}
       {pd.ads&&pd.ads.length>0?<div style={{marginBottom:20}}>
-        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Ads by Spend</div>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Ads by Spend — click a row to scope the KPIs above</div>
         <div style={{background:"rgba(10,102,194,0.04)",borderRadius:12,border:"1px solid rgba(10,102,194,0.16)",overflow:"hidden"}}>
           {pd.ads.slice(0,5).map(function(a,i){
             var last=i===Math.min(pd.ads.length,5)-1;
-            return <div key={a.id} style={{display:"grid",gridTemplateColumns:"1fr 90px 80px 80px 90px",gap:12,padding:"12px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",alignItems:"center"}}>
+            var isSel=selAdId===a.id;
+            return <div key={a.id} onClick={function(){setSelAdId(isSel?"":a.id);}} style={{display:"grid",gridTemplateColumns:"60px 1fr 90px 80px 80px 90px",gap:12,padding:"12px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",alignItems:"center",cursor:"pointer",background:isSel?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease"}}>
+              {thumb(a.thumbUrl,a.thumbColor,60)}
               <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.name}>{a.name}</div>
               <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.impressions)} imps</div>
               <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.clicks)} clicks</div>
@@ -803,27 +844,35 @@ function LinkedInSection(props){
     {!loading&&pd&&od?<div style={{height:1,background:"linear-gradient(90deg,transparent,"+accent+"40,transparent)",margin:"18px 0"}}/>:null}
 
     {!loading&&od?<div>
-      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Organic Company Page</div>
+      {/* Organic KPIs — 4-tile strip. When a post is selected, the two per-post tiles (Post Impressions, Engagement) scope to it. Followers + Subscribers stay page-level even when a post is selected (those are Page-level metrics that don't split per-post). */}
+      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+        · Organic Company Page
+        {selPost?showingChip((selPost.commentary||"selected post").slice(0,60)+((selPost.commentary||"").length>60?"…":""),function(){setSelPostId("");}):null}
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-        {kpi("Followers",_fmt(od.kpis.followers),od.kpis.followerGrowth>0?"+"+_fmt(od.kpis.followerGrowth)+" this period":null)}
-        {kpi("Newsletter Subscribers",_fmt(od.kpis.subscribers||0),null)}
-        {kpi("Post Impressions",_fmt(od.kpis.postImpressions),(od.kpis.engagementRate||0).toFixed(2)+"% engagement rate")}
-        {kpi("Page Views",_fmt(od.kpis.pageViews),od.kpis.uniqueVisitors>0?_fmt(od.kpis.uniqueVisitors)+" unique":null)}
+        {kpi("Followers",_fmt(od.kpis.followers),od.kpis.followerGrowth>0?"+"+_fmt(od.kpis.followerGrowth)+" this period":null,false)}
+        {kpi("Newsletter Subscribers",_fmt(od.kpis.subscribers||0),null,false)}
+        {kpi("Post Impressions",_fmt(selPost?selPost.impressions:od.kpis.postImpressions),((selPost?selPost.engagementRate:od.kpis.engagementRate)||0).toFixed(2)+"% engagement rate",!!selPost)}
+        {kpi(selPost?"Post Engagements":"Page Views",_fmt(selPost?selPost.engagement:od.kpis.pageViews),selPost?(_fmt(selPost.likes)+" likes · "+_fmt(selPost.comments)+" comments · "+_fmt(selPost.shares)+" shares"):(od.kpis.uniqueVisitors>0?_fmt(od.kpis.uniqueVisitors)+" unique":null),!!selPost)}
       </div>
 
       {od.topPosts&&od.topPosts.length>0?<div>
-        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Organic Posts by Engagement Rate</div>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Organic Posts by Engagement Rate — click a row to scope the KPIs above</div>
         <div style={{background:"rgba(10,102,194,0.04)",borderRadius:12,border:"1px solid rgba(10,102,194,0.16)",overflow:"hidden"}}>
           {od.topPosts.map(function(p,i){
             var last=i===od.topPosts.length-1;
-            return <div key={p.id} style={{padding:"14px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)"}}>
-              <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.55,marginBottom:8}}>{p.commentary||"(post has no text)"}</div>
-              <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.impressions)} impressions</span>
-                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.likes)} likes</span>
-                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.comments)} comments</span>
-                <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.shares)} shares</span>
-                <span style={{fontSize:10.5,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{(p.engagementRate||0).toFixed(2)+"% engagement rate"}</span>
+            var isSel=selPostId===p.id;
+            return <div key={p.id} onClick={function(){setSelPostId(isSel?"":p.id);}} style={{display:"grid",gridTemplateColumns:"60px 1fr",gap:14,padding:"14px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",cursor:"pointer",background:isSel?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease",alignItems:"flex-start"}}>
+              {thumb(p.thumbUrl,p.thumbColor,60)}
+              <div>
+                <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.55,marginBottom:8}}>{p.commentary||"(post has no text)"}</div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.impressions)} impressions</span>
+                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.likes)} likes</span>
+                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.comments)} comments</span>
+                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.shares)} shares</span>
+                  <span style={{fontSize:10.5,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{(p.engagementRate||0).toFixed(2)+"% engagement rate"}</span>
+                </div>
               </div>
             </div>;
           })}

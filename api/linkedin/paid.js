@@ -158,17 +158,56 @@ async function fetchLive(fromIso, toIso) {
   var creativeResp = await fetchLinkedInJson("ads",
     "/rest/adAnalytics?" + creativeQ);
   var creativeElements = (creativeResp.data && creativeResp.data.elements) || [];
-  var ads = creativeElements.map(function (row) {
+
+  // Resolve creative thumbnails. Each creative URN points to a Content
+  // share whose media (image/video URN) has a CDN downloadUrl. Batch this
+  // in parallel with a per-creative failure-tolerance: any resolution miss
+  // leaves thumbUrl empty and the UI renders a color placeholder.
+  var creativeUrns = creativeElements.map(function (row) {
+    return (row.pivotValues && row.pivotValues[0]) || "";
+  }).filter(Boolean).slice(0, 25);
+  var creativeMediaByUrn = {}; // creative-urn -> { thumbUrl, name }
+  await Promise.all(creativeUrns.map(async function (creativeUrn) {
+    try {
+      var creativeId = creativeUrn.split(":").pop();
+      var cr = await fetchLinkedInJson("ads",
+        "/rest/adAccounts/" + encodeURIComponent(adAccountId) + "/creatives/" + encodeURIComponent(creativeId));
+      if (!cr.ok || !cr.data) return;
+      var name = (cr.data.name || cr.data.reference || "Creative " + creativeId.slice(-6));
+      // The image/video urn nests under content.reference or content.media
+      // depending on the creative type (image, video, single-image, carousel).
+      var mediaUrn = (cr.data.content && (cr.data.content.reference || (cr.data.content.media && cr.data.content.media.id))) || "";
+      var thumbUrl = "";
+      if (mediaUrn) {
+        var isVideo = /^urn:li:video:/i.test(mediaUrn);
+        var restPath = "/rest/" + (isVideo ? "videos" : "images") + "/" + encodeURIComponent(mediaUrn);
+        var img = await fetchLinkedInJson("ads", restPath);
+        if (img.ok && img.data) {
+          thumbUrl = img.data.downloadUrl
+            || img.data.aspectRatioAwarePosterUrl
+            || (img.data.thumbnail && img.data.thumbnail.url)
+            || "";
+        }
+      }
+      creativeMediaByUrn[creativeUrn] = { thumbUrl: thumbUrl, name: name };
+    } catch (_) { /* leave empty */ }
+  }));
+
+  // LinkedIn creative palette for placeholder blocks when thumbUrl is empty.
+  var _palette = ["#0A66C2", "#FFCC00", "#34D399", "#A855F7", "#F43F5E", "#0891B2", "#F97316", "#22C55E"];
+  var ads = creativeElements.map(function (row, i) {
     var pivot = (row.pivotValues && row.pivotValues[0]) || "";
     var imps = row.impressions || 0;
     var clicks = row.clicks || 0;
     var spend = parseFloat(row.costInLocalCurrency || 0) || 0;
+    var meta = creativeMediaByUrn[pivot] || {};
     return {
       id: pivot,
-      name: "Creative " + pivot.slice(-8),
+      name: meta.name || ("Creative " + pivot.slice(-8)),
       campaignId: "",
       previewUrl: "",
-      thumbUrl: "",
+      thumbUrl: meta.thumbUrl || "",
+      thumbColor: _palette[i % _palette.length],
       impressions: imps,
       clicks: clicks,
       ctr: imps > 0 ? (clicks / imps * 100) : 0,
