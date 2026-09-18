@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { rateLimit } from "./_rateLimit.js";
 import { readEmailLog, readUsageEvents } from "./_audit.js";
-import { registeredDomain, clientIdentity, displayNameFromIdentity, canonicalClientSlug } from "./_clientIdentity.js";
+import { registeredDomain, clientIdentity, displayNameFromIdentity, canonicalClientSlug, knownBrandForSlug, brandDisplayForSlug } from "./_clientIdentity.js";
 import { listUsers, normalizeEmail } from "./_users.js";
 import { timingSafeStrEqual } from "./_createAuth.js";
 
@@ -26,7 +26,11 @@ var ORIGIN = "https://media.gasmarketing.co.za";
 // "Simpson Properties - Arnie Berman", "Simpson Properties June
 // 2026" all canonicalise to a slug starting with "simpsonproperties"
 // and drop out of both reportRows and overdueRows below).
-var WEEKLY_SUMMARY_EXCLUDED_PREFIXES = ["simpsonproperties"];
+// Client opt-outs from the Weekly Activity Summary (Simpson Properties
+// added 2026-06 per owner. Psycho Bunny + Sea Weeds + Sea Storm added
+// 2026-09-18 per owner: internal-only reporting for these three, do not
+// surface in overdue or activity tables).
+var WEEKLY_SUMMARY_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm"];
 function isExcludedFromWeeklySummary(clientName) {
   var s = canonicalClientSlug(clientName);
   if (!s) return false;
@@ -548,18 +552,31 @@ export default async function handler(req, res) {
       };
     }
   });
-  // Merge by slug (same fix as nudge-cron)
+  // Merge by slug (same fix as nudge-cron). CRITICAL: route the slug
+  // through knownBrandForSlug FIRST so a full campaign-name variant like
+  // "GAS_Learnalot_META_Leads_WApp_PSI_July/Aug_2026" (which canonicalises
+  // to "gaslearnalotmetaleadswapppsijulyaug2026" — months/years don't
+  // strip because there are no word boundaries around them in the
+  // concatenated form) collapses to the SAME merge key as every other
+  // Learnalot campaign variant. Without this the summary shows three
+  // separate "Learnalot" rows in SLA overdue when they should be one.
+  // Mirrors nudge-cron.js's normalizeSlug helper (line ~358).
+  var mergeKey = function(raw) {
+    var brand = knownBrandForSlug(raw);
+    if (brand) return canonicalClientSlug(brand);
+    return canonicalClientSlug(raw);
+  };
   var bySlug = {};
   Object.keys(byIdentity).forEach(function(id) {
     var rec = byIdentity[id];
-    var ns = canonicalClientSlug(rec.lastSlug);
+    var ns = mergeKey(rec.lastSlug);
     if (!ns) return;
     var prev = bySlug[ns];
     if (!prev || rec.lastSentTs > prev.lastSentTs) bySlug[ns] = rec;
   });
   Object.keys(byIdentity).forEach(function(id) {
     var rec = byIdentity[id];
-    var ns = canonicalClientSlug(rec.lastSlug);
+    var ns = mergeKey(rec.lastSlug);
     if (ns && bySlug[ns] && bySlug[ns] !== rec) delete byIdentity[id];
   });
 
@@ -613,8 +630,13 @@ export default async function handler(req, res) {
       return !!(state.finalReminderYmd && state.finalReminderYmd === todaySast);
     })
     .map(function(c) {
+      // Prefer the known-brand display so "GASLearnalotMETALeadsWAppPSIJulyAug2026"
+      // reads as "Learnalot" in the overdue table. Falls back to the raw
+      // identity-derived name for slugs the brand table doesn't recognise,
+      // rather than a title-cased echo of the campaign blob.
+      var display = brandDisplayForSlug(c.lastSlug || "") || displayNameFromIdentity(c.identity, c.lastSlug);
       return {
-        clientName: displayNameFromIdentity(c.identity, c.lastSlug),
+        clientName: display,
         daysOverdue: Math.floor((now.getTime() - c.lastSentTs) / (24 * 60 * 60 * 1000)),
         lastSentDisplay: new Date(c.lastSentTs).toLocaleDateString("en-ZA", { month: "short", day: "numeric" })
       };

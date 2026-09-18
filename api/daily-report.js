@@ -61,7 +61,10 @@ function extractAgencyClient(campaignName) {
 // - Arnie Berman" → "simpsonpropertiesarnieberman", both excluded).
 // canonicalClientSlug also strips month + year tags so e.g. a "Simpson
 // Properties June 2026" client name still matches.
-var DAILY_PULSE_EXCLUDED_PREFIXES = ["simpsonproperties"];
+// Simpson Properties added 2026-06 per owner. Psycho Bunny + Sea Weeds
+// + Sea Storm added 2026-09-18 per owner: internal-only reporting for
+// these three, do not surface in daily pulse either.
+var DAILY_PULSE_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm"];
 function isExcludedFromDailyPulse(clientName) {
   var s = canonicalClientSlug(clientName);
   if (!s) return false;
