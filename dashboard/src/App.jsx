@@ -3411,11 +3411,43 @@ function CampaignAuditModal(props){
               var sorted=allWithDate.filter(afterBaseline);
               var hidden=allWithDate.length-sorted.length;
               var now=Date.now();var DAY=86400000;
+              // Merge different-slug sends to the same real client (fixes
+              // the "Learnalot appearing twice" bug — one row per raw
+              // campaign-name variant). Mirrors nudge-cron.js's
+              // normalizeSlug + weekly-summary.js's mergeKey: canonicalise
+              // the slug (strip separators/months/years), then try
+              // prefix-match against the known brand list so every
+              // GAS_<Client>_..._July_2026 variant collapses to the same
+              // brand key. Falls back to the raw canonical when no known
+              // brand matches (unmapped clients still group per-slug).
+              var KNOWN_BRAND_KEYS=["simpsonproperties","willowbrookvillage","concordcollege","edencollege","psychobunnyza","psychobunny","mtnmomopos","mtnmomo","mtnkhava","seaweeds","seastorm","learnalot","gasagency"];
+              var slaBrandKey=function(raw){
+                var s=String(raw||"").toLowerCase()
+                  .replace(/\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/g," ")
+                  .replace(/\b20\d{2}\b/g," ")
+                  .replace(/[^a-z0-9]+/g,"");
+                if(!s)return "";
+                var candidates=[s];
+                if(s.indexOf("gas")===0&&s.length>3)candidates.push(s.slice(3));
+                // Longest-first so 'mtnmomopos' beats 'mtnmomo' when both would match.
+                for(var c=0;c<candidates.length;c++){
+                  for(var k=0;k<KNOWN_BRAND_KEYS.length;k++){
+                    if(candidates[c].indexOf(KNOWN_BRAND_KEYS[k])===0&&KNOWN_BRAND_KEYS[k].length>=5)return KNOWN_BRAND_KEYS[k];
+                  }
+                }
+                return s;
+              };
+              // Best display name per group: prefer a known-brand pretty name
+              // ('Learnalot', 'MTN MoMo') over the raw slug blob so the table
+              // reads cleanly even when the audit log stored a long slug.
+              var BRAND_DISPLAY={simpsonproperties:"Simpson Properties",willowbrookvillage:"Willowbrook Village",concordcollege:"Concord College",edencollege:"Eden College",psychobunny:"Psycho Bunny",psychobunnyza:"Psycho Bunny",mtnmomo:"MTN MoMo",mtnmomopos:"MTN MoMo POS",mtnkhava:"MTN Khava",seaweeds:"Sea Weeds",seastorm:"Sea Storm",learnalot:"Learnalot",gasagency:"GAS Agency"};
               var groups={};
               sorted.forEach(function(e){
-                var key=String(e.clientSlug||e.clientName||"unknown").toLowerCase();
+                var raw=e.clientSlug||e.clientName||"unknown";
+                var key=slaBrandKey(raw)||String(raw).toLowerCase();
+                var display=BRAND_DISPLAY[key]||e.clientName||e.clientSlug||"Unknown";
                 var ts=new Date(e.sentAt).getTime();
-                if(!groups[key]||ts>groups[key].ts){groups[key]={ts:ts,name:e.clientName||e.clientSlug||"Unknown",sentAt:e.sentAt};}
+                if(!groups[key]||ts>groups[key].ts){groups[key]={ts:ts,name:display,sentAt:e.sentAt};}
               });
               var standing=Object.keys(groups).map(function(k){var g=groups[k];var days=Math.floor((now-g.ts)/DAY);return{name:g.name,sentAt:g.sentAt,days:days,overdue:days>7};}).sort(function(a,b){return (b.overdue-a.overdue)||(b.days-a.days);});
               var baselineLabel=baselineTs?new Date(baselineTs).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"2-digit"}):"";
