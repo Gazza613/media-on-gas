@@ -1085,13 +1085,22 @@ function TargetingPersonaCard(props){
     <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}}>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,paddingBottom:12,borderBottom:"1px solid "+c+"28"}}>
       <div style={{width:44,height:44,borderRadius:12,background:"linear-gradient(135deg,"+c+"55,"+c+"20)",border:"1px solid "+c+"70",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 22px "+c+"40"}}>{p.iconFn("#fff",20)}</div>
-      <div style={{flex:1,minWidth:0}}>
+      <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8}}>
         <div style={{fontSize:13,fontWeight:900,color:"#fff",fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>{p.platform}</div>
+        {/* INFERRED pill: shows only when the entire platform's rows for this
+            selection were derived from Facebook's distribution (Meta dropped
+            the per-Instagram breakdown for privacy). Tooltip explains why the
+            percentages mirror Facebook exactly. */}
+        {p.inferred?<span title={p.dataSourceNote||"Distribution inferred from Facebook."} style={{fontSize:8,fontWeight:900,color:P.solar,fontFamily:fm,letterSpacing:1.5,textTransform:"uppercase",background:"rgba(255,170,0,0.10)",border:"1px solid rgba(255,170,0,0.45)",borderRadius:6,padding:"3px 7px",cursor:"help"}}>Inferred</span>:null}
       </div>
     </div>
     <div style={{textAlign:"center",marginBottom:14,padding:"6px 0"}}>
       <div style={{fontSize:42,fontWeight:900,color:c,fontFamily:fm,letterSpacing:-1,lineHeight:1,textShadow:"0 0 24px "+c+"60"}}>{p.topAge||"—"}</div>
-      <div style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700}}>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</div>
+      <div title={p.dataSourceNote||"Weighted per-platform demographic breakdown."} style={{fontSize:9,color:P.label,fontFamily:fm,letterSpacing:2.5,marginTop:8,textTransform:"uppercase",fontWeight:700,cursor:p.dataSourceNote?"help":"default",display:"inline-flex",alignItems:"center",gap:6}}>
+        <span>Dominant Age{p.topAge?" · "+p.topAgeShare.toFixed(2)+"%":""}</span>
+        {p.dataSourceNote?<span style={{width:12,height:12,borderRadius:"50%",background:c+"25",border:"1px solid "+c+"55",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900,color:c,letterSpacing:0,textTransform:"none",lineHeight:1}}>i</span>:null}
+      </div>
+      {p.weighting?<div style={{fontSize:8,color:P.caption,fontFamily:fm,letterSpacing:1.5,marginTop:4,textTransform:"uppercase",fontStyle:"italic"}}>{p.weighting}-weighted</div>:null}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div title="Overall click share by gender, summed across all age brackets. Can differ from the top Best Personas entry below if one gender is concentrated in a single age bracket while the other is spread across many." style={{background:"rgba(0,0,0,0.28)",border:"1px solid "+c+"25",borderRadius:10,padding:"10px 12px"}}>
@@ -7483,40 +7492,70 @@ export default function MediaOnGas(){
               var agP=agRows.filter(matches);
               var devP=devRows.filter(matches);
               var regP=regRows.filter(matches);
-              var stage=stageDef.engagement; // clicks, all platforms
-              var totalClicks=0;agP.forEach(function(r){totalClicks+=stage.field(r);});
+              // Platform-aware weighting. TikTok's `clicks` field counts
+              // every broad tap (video-area, CTA, profile, "See more"),
+              // not just link clicks. Impression-weighting shows WHO
+              // actually saw the ads, comparable to Meta's link-click
+              // semantics. Meta + Google Ads keep click-weighting because
+              // those clicks are meaningful link taps. Reverses the
+              // click-weighted decision from commit 1a9c486 per owner
+              // review 2026-09-18 (see also project_tiktok_images).
+              var isTikTok=pKeyLow.indexOf("tiktok")>=0;
+              var weightingField=isTikTok
+                ? function(r){return parseFloat(r.impressions||0)||0;}
+                : stageDef.engagement.field;
+              var weightingLabel=isTikTok?"impressions":"clicks";
+              // Data-source classifier for the persona-card tooltip. If
+              // ALL age/gender rows for this platform carry inferred:true
+              // (backend flag from api/demographics.js:421), Meta dropped
+              // the per-Instagram breakdown for privacy and we
+              // extrapolated from Facebook's distribution — the IG card
+              // is then mathematically forced to mirror FB's shape, so
+              // it earns an INFERRED badge. Any single real (non-inferred)
+              // row is enough to consider the platform's data measured.
+              var inferredCount=0;
+              agP.forEach(function(r){if(r&&r.inferred)inferredCount++;});
+              var personaInferred=agP.length>0&&inferredCount===agP.length;
+              var dataSourceNote=(function(){
+                if(isTikTok)return "TikTok reports the age/gender breakdown per campaign. Weighted by impressions here (TikTok clicks count every broad tap, so impressions are the truer measure of who actually saw the ads).";
+                if(personaInferred)return "Meta dropped Instagram's per-age breakdown for this range (sample too small for its privacy threshold). Shape is inferred by scaling Facebook's distribution by Instagram's share of clicks, so the percentages mirror Facebook exactly. Actual per-IG numbers become available at larger sample sizes.";
+                if(displayName==="Facebook"||displayName==="Instagram")return "Meta's per-publisher_platform age/gender breakdown, weighted by clicks (link clicks).";
+                if(displayName==="Google Ads")return "Google Ads age_range_view + gender_view demographic reports, click-weighted. Google's age classifier is user-inferred but genuinely per-user.";
+                return "";
+              })();
+              var totalClicks=0;agP.forEach(function(r){totalClicks+=weightingField(r);});
               var blendedClk=authClicks||0;
               var shareOfClicks=blendedClk>0?(totalClicks/blendedClk*100):0;
-              // Dominant age (click-weighted engagement demographic)
-              var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+stage.field(r);});
+              // Dominant age (weighted by platform-appropriate field)
+              var ageSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;ageSums[a]=(ageSums[a]||0)+weightingField(r);});
               // Diagnostic: dump both click-weighted and impression-
               // weighted breakdowns so any future asymmetry question
               // can be answered from one console line.
               try {
-                var impSums={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;impSums[a]=(impSums[a]||0)+(parseFloat(r.impressions||0)||0);});
-                console.log("[persona-diag]",displayName,{rowCount:agP.length,weighting:"clicks",ageSumsByClicks:ageSums,ageSumsByImpressions:impSums,totalClicks:totalClicks});
+                var impSumsDiag={};agP.forEach(function(r){var a=String(r.age||"");if(!a)return;impSumsDiag[a]=(impSumsDiag[a]||0)+(parseFloat(r.impressions||0)||0);});
+                console.log("[persona-diag]",displayName,{rowCount:agP.length,inferredRowCount:inferredCount,weighting:weightingLabel,ageSumsChosen:ageSums,ageSumsByImpressions:impSumsDiag,totalWeighted:totalClicks});
               } catch(_) {}
               var topAge="";var topAgeVal=0;Object.keys(ageSums).forEach(function(a){if(ageSums[a]>topAgeVal){topAgeVal=ageSums[a];topAge=a;}});
               var ageDenom=Object.keys(ageSums).reduce(function(s,k){return s+ageSums[k];},0);
               var topAgeShare=ageDenom>0?(topAgeVal/ageDenom*100):0;
-              // Gender split (click-weighted)
-              var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=stage.field(r);});
+              // Gender split (weighted)
+              var gs={female:0,male:0};agP.forEach(function(r){var g=String(r.gender||"").toLowerCase();if(gs[g]!==undefined)gs[g]+=weightingField(r);});
               var gSum=gs.female+gs.male;
               var genderSplit={female:gSum>0?(gs.female/gSum*100):0,male:gSum>0?(gs.male/gSum*100):0};
-              // Top provinces (up to 3, click-weighted)
-              var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+stage.field(r);});
+              // Top provinces (up to 3, weighted)
+              var provSums={};regP.forEach(function(r){var p=String(r.region||"").trim();if(!p)return;provSums[p]=(provSums[p]||0)+weightingField(r);});
               var pOrder=Object.keys(provSums).sort(function(a,b){return provSums[b]-provSums[a];});
               var pDenom=Object.keys(provSums).reduce(function(s,k){return s+provSums[k];},0);
               var topProvinces=pOrder.slice(0,3).map(function(p){return {name:p,share:pDenom>0?(provSums[p]/pDenom*100):0};});
-              // Mobile share of device-tagged clicks
+              // Mobile share of device-tagged weighted-metric activity
               var devB={mobile:0,desktop:0,tablet:0};
-              devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=stage.field(r);});
+              devP.forEach(function(r){var d=String(r.device||"").toLowerCase();var k=d.indexOf("mobile")>=0||d.indexOf("android")>=0||d.indexOf("ios")>=0||d==="iphone"?"mobile":(d==="ipad"||d.indexOf("tablet")>=0?"tablet":(d.indexOf("desktop")>=0||d==="web"?"desktop":null));if(k)devB[k]+=weightingField(r);});
               var devDenom=devB.mobile+devB.desktop+devB.tablet;
               var mobileShare=devDenom>0?(devB.mobile/devDenom*100):0;
-              // Top 3 age+gender segments (click-weighted). "Best
+              // Top 3 age+gender segments (weighted). "Best
               // Personas" ranks by who's engaging most.
               var segMap={};
-              agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var k=a+"|"+g;var v=stage.field(r);segMap[k]=(segMap[k]||0)+v;});
+              agP.forEach(function(r){var a=String(r.age||"");var g=String(r.gender||"").toLowerCase();if(ageOrder.indexOf(a)<0||genderOrder.indexOf(g)<0)return;var k=a+"|"+g;var v=weightingField(r);segMap[k]=(segMap[k]||0)+v;});
               var topSegments=Object.keys(segMap).map(function(k){var parts=k.split("|");return {age:parts[0],gen:parts[1],val:segMap[k],share:totalClicks>0?(segMap[k]/totalClicks*100):0};}).sort(function(a,b){return b.val-a.val;}).slice(0,3);
               // CTR vs blended, kept in the payload even though the card
               // footer no longer prints it, the Targeting Insights narrative
@@ -7536,7 +7575,7 @@ export default function MediaOnGas(){
               // as dashes, instead of swapping the whole card for an
               // empty placeholder.
               var hasPlatformClicks=platClk>0;
-              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,hasPlatformClicks:hasPlatformClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio};
+              return {platform:displayName,color:color,iconFn:iconFn,totalClicks:totalClicks,hasPlatformClicks:hasPlatformClicks,shareOfClicks:shareOfClicks,topAge:topAge,topAgeShare:topAgeShare,genderSplit:genderSplit,topProvinces:topProvinces,mobileShare:mobileShare,topSegments:topSegments,ctr:ctr,ctrRatio:ctrRatio,inferred:personaInferred,weighting:weightingLabel,dataSourceNote:dataSourceNote};
             };
             targetingPersonas=[
               buildPersona("facebook","Facebook",P.fb,Ic.eye),
