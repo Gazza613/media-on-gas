@@ -269,6 +269,85 @@ function ConnectorsRail(props) {
   </div>;
 }
 
+// ---- Creative pair card (Phase 3) ---------------------------------------
+// Rendered when Sami emits a <CREATIVE_PAIR_CARD> block after walking a
+// Drive/Dropbox folder. Shows the paired concepts as a grid of 1:1 +
+// 9:16 thumbnails, plus small warning strips for square-only and
+// vertical-only files. The user clicks Pairs OK to confirm the grouping
+// (posts PAIRS_OK: <id> back to Sami) or types free-language corrections
+// (e.g. "pair Menu_03_v2 with Menu_03_9x16 instead") to reassign.
+
+function CreativePairCard(props) {
+  var card = props.card, P = props.P, ff = props.ff, fm = props.fm;
+  var status = props.status || "pending"; // pending | confirmed
+  var accent = P.li || "#0A66C2"; // Reuse LinkedIn brand accent for a distinct "assets" look
+
+  var pairs = Array.isArray(card.pairs) ? card.pairs : [];
+  var sqOnly = Array.isArray(card.squareOnly) ? card.squareOnly : [];
+  var vOnly = Array.isArray(card.verticalOnly) ? card.verticalOnly : [];
+
+  var thumb = function (file, aspect) {
+    if (!file) return <div style={{ background: "rgba(255,255,255,0.04)", border: "1px dashed " + P.rule, borderRadius: 6, aspectRatio: aspect === "9x16" ? "9/16" : "1/1", display: "flex", alignItems: "center", justifyContent: "center", color: P.caption || "#8B7FA3", fontSize: 9, fontFamily: fm }}>Missing</div>;
+    return <div style={{ background: "#0a1830", border: "1px solid " + accent + "33", borderRadius: 6, overflow: "hidden", aspectRatio: aspect === "9x16" ? "9/16" : "1/1", position: "relative" }}>
+      {file.url
+        ? <img src={file.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={function (e) { e.currentTarget.style.display = "none"; }} />
+        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: P.caption || "#8B7FA3", fontSize: 9, fontFamily: fm }}>No preview</div>
+      }
+      <div style={{ position: "absolute", bottom: 2, left: 2, right: 2, fontSize: 7.5, color: "#fff", fontFamily: fm, fontWeight: 800, letterSpacing: 0.5, textAlign: "center", textShadow: "0 1px 2px rgba(0,0,0,0.7)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{aspect}</div>
+    </div>;
+  };
+
+  return <div style={{
+    marginTop: 10, marginBottom: 4,
+    background: "rgba(255,255,255,0.02)",
+    border: "1px solid " + accent + "55",
+    borderLeft: "4px solid " + accent,
+    borderRadius: 12, padding: "14px 16px"
+  }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 9, fontWeight: 900, color: accent, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", background: accent + "18", border: "1px solid " + accent + "44", borderRadius: 6, padding: "3px 8px" }}>
+        CREATIVE · {pairs.length} PAIR{pairs.length === 1 ? "" : "S"}
+      </span>
+      {card.source && <span style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm }}>{card.source}</span>}
+      <span style={{ fontSize: 9, fontWeight: 800, color: status === "confirmed" ? (P.mint || "#34D399") : (P.solar || "#FFAA00"), fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginLeft: "auto" }}>
+        {status === "confirmed" ? "✓ Pairs confirmed" : "Confirm pairing"}
+      </span>
+    </div>
+    {card.title && <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: ff, marginBottom: 10, lineHeight: 1.45 }}>{card.title}</div>}
+
+    {pairs.length > 0 && <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+        {pairs.map(function (pr, i) {
+          return <div key={i} style={{ background: "rgba(0,0,0,0.20)", border: "1px solid " + P.rule, borderRadius: 8, padding: "8px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 0.6fr", gap: 6, marginBottom: 6 }}>
+              {thumb(pr.square, "1x1")}
+              {thumb(pr.vertical, "9x16")}
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: P.txt, fontFamily: fm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pr.concept}>{pr.concept || "Unnamed pair"}</div>
+          </div>;
+        })}
+      </div>
+    </div>}
+
+    {sqOnly.length > 0 && <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.35)", borderRadius: 6, fontSize: 10.5, color: P.txt, fontFamily: fm, lineHeight: 1.55 }}>
+      <strong style={{ color: P.solar || "#FFAA00" }}>{sqOnly.length} square-only</strong> — will run on Feed placements only: {sqOnly.map(function (f) { return f.name; }).slice(0, 5).join(", ")}{sqOnly.length > 5 ? ", …" : ""}
+    </div>}
+    {vOnly.length > 0 && <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.35)", borderRadius: 6, fontSize: 10.5, color: P.txt, fontFamily: fm, lineHeight: 1.55 }}>
+      <strong style={{ color: P.solar || "#FFAA00" }}>{vOnly.length} vertical-only</strong> — will run on Stories / Reels / WhatsApp Status only: {vOnly.map(function (f) { return f.name; }).slice(0, 5).join(", ")}{vOnly.length > 5 ? ", …" : ""}
+    </div>}
+
+    {status !== "confirmed" && <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+      <button onClick={function () { props.onConfirm(card); }}
+        style={{ background: "linear-gradient(135deg,#0A66C2,#4599FF)", border: "none", borderRadius: 8, padding: "9px 18px", color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>
+        ✓ Pairs look right, proceed
+      </button>
+      <span style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, alignSelf: "center", lineHeight: 1.5 }}>
+        or type below to reassign specific pairs (e.g. "swap Menu_03 vertical for the v2 version")
+      </span>
+    </div>}
+  </div>;
+}
+
 // ---- Recent Conversations sidebar ---------------------------------------
 // Renders the user's Redis-persisted thread list. Each row is
 // click-to-load; hover reveals rename + delete buttons. Highlights the
@@ -333,6 +412,8 @@ export default function CreateChatTab(props) {
   var ms = useState([]), messages = ms[0], setMessages = ms[1];
   // Approval-card statuses keyed by card id: 'pending' | 'approved' | 'rejected'
   var cts = useState({}), cardStatus = cts[0], setCardStatus = cts[1];
+  // Creative-pair-card statuses keyed by card id: 'pending' | 'confirmed'
+  var pcs = useState({}), pairStatus = pcs[0], setPairStatus = pcs[1];
   var is = useState(""), input = is[0], setInput = is[1];
   var bs = useState(false), busy = bs[0], setBusy = bs[1];
   var es = useState(""), err = es[0], setErr = es[1];
@@ -469,15 +550,24 @@ export default function CreateChatTab(props) {
           role: "assistant",
           content: x.data.reply || "",
           cards: Array.isArray(x.data.cards) ? x.data.cards : [],
+          pairCards: Array.isArray(x.data.pairCards) ? x.data.pairCards : [],
           live: Array.isArray(x.data.actions) && x.data.actions.length > 0
         };
         var withReply = next.concat([samiTurn]);
         setMessages(withReply);
-        // Seed each new card to pending status.
+        // Seed each new approval card to pending status.
         if (samiTurn.cards.length > 0) {
           setCardStatus(function (cur) {
             var nextStatuses = Object.assign({}, cur);
             samiTurn.cards.forEach(function (c) { if (!nextStatuses[c.id]) nextStatuses[c.id] = "pending"; });
+            return nextStatuses;
+          });
+        }
+        // Seed each new pair card to pending too.
+        if (samiTurn.pairCards.length > 0) {
+          setPairStatus(function (cur) {
+            var nextStatuses = Object.assign({}, cur);
+            samiTurn.pairCards.forEach(function (c) { if (!nextStatuses[c.id]) nextStatuses[c.id] = "pending"; });
             return nextStatuses;
           });
         }
@@ -497,6 +587,11 @@ export default function CreateChatTab(props) {
     if (busy) return;
     setCardStatus(function (cur) { var n = Object.assign({}, cur); n[card.id] = "rejected"; return n; });
     send("REJECTED: " + card.id);
+  };
+  var handleConfirmPair = function (card) {
+    if (busy) return;
+    setPairStatus(function (cur) { var n = Object.assign({}, cur); n[card.id] = "confirmed"; return n; });
+    send("PAIRS_OK: " + card.id);
   };
 
   var onKeyDown = function (e) {
@@ -581,16 +676,27 @@ export default function CreateChatTab(props) {
           if (m.role === "user") {
             var isAppr = /^APPROVED: /.test(m.content);
             var isRej = /^REJECTED: /.test(m.content);
+            var isPairOk = /^PAIRS_OK: /.test(m.content);
+            var bg, bd;
+            if (isAppr) { bg = "rgba(52,211,153,0.13)"; bd = "rgba(52,211,153,0.35)"; }
+            else if (isRej) { bg = "rgba(239,68,68,0.13)"; bd = "rgba(239,68,68,0.35)"; }
+            else if (isPairOk) { bg = "rgba(10,102,194,0.14)"; bd = "rgba(10,102,194,0.4)"; }
+            else { bg = "rgba(249,98,3,0.13)"; bd = "rgba(249,98,3,0.3)"; }
             return <div key={i} style={{ alignSelf: "flex-end", maxWidth: "82%" }}>
               <div style={{
-                background: isAppr ? "rgba(52,211,153,0.13)" : isRej ? "rgba(239,68,68,0.13)" : "rgba(249,98,3,0.13)",
-                border: "1px solid " + (isAppr ? "rgba(52,211,153,0.35)" : isRej ? "rgba(239,68,68,0.35)" : "rgba(249,98,3,0.3)"),
+                background: bg,
+                border: "1px solid " + bd,
                 borderRadius: "14px 14px 4px 14px", padding: "10px 14px", color: P.txt, fontSize: 13, fontFamily: ff, lineHeight: 1.6, whiteSpace: "pre-wrap"
               }}>{m.content}</div>
             </div>;
           }
           return <div key={i} style={{ alignSelf: "flex-start", maxWidth: "88%", width: "88%" }}>
             {m.content && <div style={{ background: "rgba(30,18,50,0.85)", border: "1px solid " + P.rule, borderRadius: "14px 14px 14px 4px", padding: "13px 16px", color: P.txt, fontSize: 13, fontFamily: ff, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{m.content}</div>}
+            {Array.isArray(m.pairCards) && m.pairCards.map(function (c) {
+              return <CreativePairCard key={c.id} card={c} P={P} ff={ff} fm={fm}
+                status={pairStatus[c.id] || "pending"}
+                onConfirm={handleConfirmPair} />;
+            })}
             {Array.isArray(m.cards) && m.cards.map(function (c) {
               return <ApprovalCard key={c.id} card={c} P={P} ff={ff} fm={fm}
                 status={cardStatus[c.id] || "pending"}

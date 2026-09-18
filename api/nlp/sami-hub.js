@@ -96,11 +96,33 @@ function buildSystemPrompt() {
     "- Ad budgets that exceed R50,000 lifetime require the user to type the exact spend number as part of the approval message (belt and braces).",
     "- If Meta or another platform rejects a write, explain the error in plain English, suggest the fix, and offer a retry approval card. Do NOT retry the same write automatically.",
     "",
-    "═══════ WORKING WITH CREATIVE ═══════",
-    "- When the user provides a Drive or Dropbox link, use the engine to list the folder contents.",
-    "- Auto-pair 1:1 assets (feeds) with matching 9:16 assets (Stories/Reels/WhatsApp Status). Present the pairing map before uploading.",
-    "- Flag any asset without a matching pair — offer to run vertical-only on Stories/Reels/Status or hold until the missing pair is supplied.",
-    "- Upload each paired creative to the target ad account as a separate approval card unless the user asks you to batch them.",
+    "═══════ WORKING WITH CREATIVE (DRIVE / DROPBOX) ═══════",
+    "When the user pastes a Drive or Dropbox folder link, or asks you to look up assets for a client, follow this sequence:",
+    "  1. Use the engine to list the folder contents (call the appropriate Drive/Dropbox list operation).",
+    "  2. Pair matching aspect ratios by filename similarity. Standard heuristic: strip common aspect-ratio suffixes (_1x1, _9x16, _feed, _story, _reel, _vertical, _square) and file extensions from each name; two files with the same base name form a pair. Feed asset = 1:1 (square). Story/Reel/WhatsApp Status asset = 9:16 (vertical).",
+    "  3. Group results into 'paired concepts', 'square-only' (feed-eligible but no vertical companion), and 'vertical-only' (Stories/Reels/Status-eligible but no square companion).",
+    "  4. Emit ONE CREATIVE_PAIR_CARD block summarising what you found (see format below). Stop. Wait for the user to confirm the pairing looks right (they will reply with 'PAIRS_OK: <id>' meaning proceed, or ask you to reassign specific pairs in plain English).",
+    "  5. Once the pairing is confirmed, emit standard APPROVAL_CARDs to upload each paired creative to the target Meta ad account (either one card per pair, or one batched card if the user asked you to batch — check the plan the user agreed to at brief stage).",
+    "",
+    "CREATIVE_PAIR_CARD emission format (use exactly, only once per folder walk):",
+    "<CREATIVE_PAIR_CARD>{",
+    '  "id": "pair-card-slug-eg-chilla-menu-pairs-1",',
+    '  "title": "Human-readable summary line, e.g. Chilla Menu creatives: 14 concepts paired · 0 unpaired",',
+    '  "source": "Dropbox folder name and path, e.g. Chilla / To the Menu",',
+    '  "pairs": [',
+    '    { "concept": "Menu_01", "square": {"name": "Chilla_Menu_1x1_01.jpg", "url": "https://..."}, "vertical": {"name": "Chilla_Menu_9x16_01.jpg", "url": "https://..."} },',
+    '    ...',
+    '  ],',
+    '  "squareOnly": [ {"name": "...", "url": "..."} ],',
+    '  "verticalOnly": [ {"name": "...", "url": "..."} ]',
+    "}</CREATIVE_PAIR_CARD>",
+    "",
+    "Pair card rules:",
+    "- Every pair must have a concept label (the shared base name), a square file, and a vertical file. Never fabricate URLs — leave the field an empty string if the engine did not return one.",
+    "- squareOnly and verticalOnly lists exist even if empty (as []). The UI renders them as small warning strips so the user knows what will run only on one placement family.",
+    "- If the engine returned zero paired concepts (all files are singletons), still emit the card with pairs:[] so the UI can show squareOnly / verticalOnly cleanly.",
+    "- The card is a READ operation, not a write. No approval needed on the card itself. But every subsequent Meta upload IS a write and MUST be an APPROVAL_CARD.",
+    "- When the user replies 'PAIRS_OK: <id>' (matching the card id), proceed to Meta-upload approval cards. When they reply with 'PAIRS_FIX: <id> — ...' or plain-language feedback about specific pairs, adjust and re-emit the card.",
     "",
     "═══════ WHAT TO DO WHEN A NEW SESSION OPENS ═══════",
     "If the user starts a session with an open-ended message like 'help me' or 'new campaign', greet briefly in one line and ask what client, what objective, and what budget/dates. Do not lecture."
@@ -159,27 +181,47 @@ async function callAnthropic(apiKey, payload, betaHeader) {
   return { status: resp.status, data: data, rawText: text };
 }
 
-// Extract APPROVAL_CARD blocks from Sami's reply and return them
-// separately so the UI can render them as interactive cards instead
-// of raw JSON text in the chat bubble.
-function extractApprovalCards(text) {
-  var out = [];
+// Extract APPROVAL_CARD and CREATIVE_PAIR_CARD blocks from Sami's reply
+// and return them separately so the UI can render them as interactive
+// cards instead of raw JSON in the chat bubble. Approval cards drive the
+// per-write Approve/Reject flow; pair cards drive the Drive/Dropbox
+// creative-pair confirmation flow (Phase 3).
+function extractStructuredCards(text) {
   var cleanText = String(text || "");
-  var re = /<APPROVAL_CARD>([\s\S]*?)<\/APPROVAL_CARD>/g;
+  var approvalRe = /<APPROVAL_CARD>([\s\S]*?)<\/APPROVAL_CARD>/g;
+  var pairRe = /<CREATIVE_PAIR_CARD>([\s\S]*?)<\/CREATIVE_PAIR_CARD>/g;
+
+  var approvals = [];
   var m;
-  while ((m = re.exec(cleanText)) !== null) {
-    var raw = m[1].trim();
+  while ((m = approvalRe.exec(cleanText)) !== null) {
     try {
-      var parsed = JSON.parse(raw);
-      if (parsed && parsed.id) out.push(parsed);
-    } catch (_) {
-      // Malformed card — leave it in the text so the user can see it
-    }
+      var parsedA = JSON.parse(m[1].trim());
+      if (parsedA && parsedA.id) approvals.push(parsedA);
+    } catch (_) { /* malformed — leave in text */ }
   }
-  // Strip the raw card blocks from the text so the chat bubble reads
-  // cleanly (the UI renders the parsed cards separately).
-  var stripped = cleanText.replace(re, "").replace(/\n{3,}/g, "\n\n").trim();
-  return { cards: out, text: stripped };
+
+  var pairCards = [];
+  var p;
+  while ((p = pairRe.exec(cleanText)) !== null) {
+    try {
+      var parsedP = JSON.parse(p[1].trim());
+      if (parsedP && parsedP.id) {
+        // Normalise shape so the frontend can rely on arrays existing.
+        parsedP.pairs = Array.isArray(parsedP.pairs) ? parsedP.pairs : [];
+        parsedP.squareOnly = Array.isArray(parsedP.squareOnly) ? parsedP.squareOnly : [];
+        parsedP.verticalOnly = Array.isArray(parsedP.verticalOnly) ? parsedP.verticalOnly : [];
+        pairCards.push(parsedP);
+      }
+    } catch (_) { /* malformed — leave in text */ }
+  }
+
+  var stripped = cleanText
+    .replace(approvalRe, "")
+    .replace(pairRe, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { cards: approvals, pairCards: pairCards, text: stripped };
 }
 
 export default async function handler(req, res) {
@@ -246,11 +288,12 @@ export default async function handler(req, res) {
     if (!replyRaw) replyRaw = "I ran the request but got nothing readable back. Rephrase it, or narrow the scope, and I will try again.";
 
     var scrubbed = scrub(replyRaw);
-    var extracted = extractApprovalCards(scrubbed);
+    var extracted = extractStructuredCards(scrubbed);
 
     res.status(200).json({
       reply: extracted.text,
       cards: extracted.cards,
+      pairCards: extracted.pairCards,
       actions: actions,
       stopReason: result.data.stop_reason || null
     });
