@@ -15,6 +15,44 @@ import { useState, useEffect, useRef } from "react";
 
 var TOKEN_KEY = "gas_create_token";
 var TOKEN_EXP_KEY = "gas_create_token_exp";
+// Per-user thread namespacing. The PIN JWT is team-shared so it can't tell
+// Gary from Sam. We persist the current user's identity in localStorage on
+// first visit (via NamePicker below) and pass it as ?user=<slug> to every
+// /api/nlp/sami-threads call. Allowlist mirrors nudge-cron NUDGE_RECIPIENTS.
+var USER_KEY = "gas_sami_user";
+var TEAM_USERS = [
+  { slug: "gary", name: "Gary Berman" },
+  { slug: "sam", name: "Sam" },
+  { slug: "busi", name: "Busi Mntungwa" },
+  { slug: "claire", name: "Claire Chrystal" },
+  { slug: "donovan", name: "Donovan" }
+];
+
+function readUser() {
+  try { var v = localStorage.getItem(USER_KEY); return v && TEAM_USERS.some(function (u) { return u.slug === v; }) ? v : ""; }
+  catch (_) { return ""; }
+}
+function writeUser(slug) {
+  try { localStorage.setItem(USER_KEY, slug); } catch (_) { /* non-fatal */ }
+}
+
+// Thread id generator: sortable + short + collision-safe enough for a
+// per-user pool capped at 50. Timestamp base36 + 8 chars of random.
+function newThreadId() {
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+}
+
+// Human-friendly relative timestamp for the Recent Conversations sidebar.
+function fmtWhen(ms) {
+  if (!ms) return "";
+  var d = Date.now() - ms;
+  if (d < 60000) return "just now";
+  if (d < 3600000) return Math.floor(d / 60000) + "m ago";
+  if (d < 86400000) return Math.floor(d / 3600000) + "h ago";
+  if (d < 7 * 86400000) return Math.floor(d / 86400000) + "d ago";
+  var dt = new Date(ms);
+  return dt.toLocaleDateString("en-ZA", { month: "short", day: "numeric" });
+}
 
 var STARTERS = [
   "New campaign for Chilla, R10k lifetime, B2B lead gen on Meta.",
@@ -100,6 +138,31 @@ function PinGate(props) {
           {loading ? "Checking..." : "Unlock"}
         </button>
       </form>
+    </div>
+  </div>;
+}
+
+// ---- Name picker ---------------------------------------------------------
+// One-time modal on first Sami Hub visit. Threads namespace by user so
+// each AM sees only their own Recent Conversations. Team-only allowlist.
+
+function NamePicker(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  return <div style={{ display: "flex", justifyContent: "center", padding: "60px 20px" }}>
+    <div style={{ maxWidth: 480, width: "100%", background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, padding: "30px 32px" }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: P.ember, letterSpacing: 3, fontFamily: fm, textTransform: "uppercase", marginBottom: 8 }}>Sami · Who's chatting?</div>
+      <div style={{ fontSize: 13, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 22 }}>
+        Pick your name so Sami saves your conversations to your own Recent list. This stays in your browser and you can change it later from the sidebar.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {TEAM_USERS.map(function (u) {
+          return <button key={u.slug} onClick={function () { props.onPick(u.slug); }}
+            style={{ background: "rgba(249,98,3,0.06)", border: "1px solid rgba(249,98,3,0.28)", borderRadius: 12, padding: "14px 16px", color: P.txt, fontSize: 13, fontWeight: 700, fontFamily: ff, cursor: "pointer", textAlign: "left" }}>
+            {u.name}
+            <div style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, marginTop: 3, letterSpacing: 1 }}>@{u.slug}</div>
+          </button>;
+        })}
+      </div>
     </div>
   </div>;
 }
@@ -206,12 +269,65 @@ function ConnectorsRail(props) {
   </div>;
 }
 
+// ---- Recent Conversations sidebar ---------------------------------------
+// Renders the user's Redis-persisted thread list. Each row is
+// click-to-load; hover reveals rename + delete buttons. Highlights the
+// currently-active thread so the AM always knows which conversation
+// they're in.
+
+function RecentSidebar(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var threads = Array.isArray(props.threads) ? props.threads : [];
+  var currentId = props.currentThreadId;
+  var onOpen = props.onOpen, onDelete = props.onDelete, onRename = props.onRename;
+  var hs = useState(null), hoverId = hs[0], setHoverId = hs[1];
+
+  var handleRename = function (t) {
+    var next = prompt("Rename this conversation:", t.title || "");
+    if (next && next.trim() && next.trim() !== t.title) onRename(t.id, next.trim());
+  };
+  var handleDelete = function (t) {
+    if (window.confirm("Delete '" + (t.title || "this conversation") + "'? This can't be undone.")) onDelete(t.id);
+  };
+
+  return <div style={{ padding: "6px 10px 12px" }}>
+    <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, opacity: 0.75, padding: "0 4px" }}>Recent</div>
+    {threads.length === 0 && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 6px", lineHeight: 1.55 }}>Conversations you have with Sami will appear here.</div>}
+    {threads.map(function (t) {
+      var active = t.id === currentId;
+      var hovering = t.id === hoverId;
+      return <div key={t.id} onMouseEnter={function () { setHoverId(t.id); }} onMouseLeave={function () { setHoverId(null); }}
+        style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "8px 8px", borderRadius: 8, marginBottom: 3,
+          background: active ? "rgba(249,98,3,0.14)" : (hovering ? "rgba(255,255,255,0.03)" : "transparent"),
+          border: active ? "1px solid rgba(249,98,3,0.35)" : "1px solid transparent",
+          cursor: "pointer", transition: "background 0.15s ease"
+        }}>
+        <div onClick={function () { onOpen(t.id); }} style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: active ? P.ember : P.txt, fontFamily: ff, fontWeight: active ? 800 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title || "Untitled"}</div>
+          <div style={{ fontSize: 9.5, color: P.caption || "#8B7FA3", fontFamily: fm, marginTop: 1 }}>
+            {fmtWhen(t.updatedAt)} · {t.msgCount || 0} msg
+          </div>
+        </div>
+        {hovering && <div style={{ display: "flex", gap: 2, flex: "0 0 auto" }}>
+          <button onClick={function (e) { e.stopPropagation(); handleRename(t); }} title="Rename"
+            style={{ background: "transparent", border: "1px solid " + (P.rule || "rgba(255,255,255,0.1)"), borderRadius: 5, padding: "3px 6px", color: P.sub, fontSize: 11, cursor: "pointer" }}>✎</button>
+          <button onClick={function (e) { e.stopPropagation(); handleDelete(t); }} title="Delete"
+            style={{ background: "transparent", border: "1px solid " + (P.rule || "rgba(255,255,255,0.1)"), borderRadius: 5, padding: "3px 6px", color: P.critical || "#ef4444", fontSize: 11, cursor: "pointer" }}>✕</button>
+        </div>}
+      </div>;
+    })}
+  </div>;
+}
+
 // ---- Main hub -------------------------------------------------------------
 
 export default function CreateChatTab(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, apiBase = props.apiBase || "";
   var stored = readStoredToken();
   var ts = useState(stored ? stored.token : null), token = ts[0], setToken = ts[1];
+  // User identity (per-user thread namespacing). Empty → NamePicker gate.
+  var us = useState(readUser()), user = us[0], setUser = us[1];
 
   // Chat state
   var ms = useState([]), messages = ms[0], setMessages = ms[1];
@@ -224,6 +340,10 @@ export default function CreateChatTab(props) {
   var scrollRef = useRef(null);
   var inputRef = useRef(null);
 
+  // Persistence state (Phase 2)
+  var tids = useState(""), threadId = tids[0], setThreadId = tids[1]; // Current thread being edited
+  var trs = useState([]), threads = trs[0], setThreads = trs[1];       // Sidebar list
+
   useEffect(function () {
     if (!busy) return;
     var id = setInterval(function () { setQuipIdx(function (i) { return (i + 1) % LOADERS.length; }); }, 2600);
@@ -234,13 +354,93 @@ export default function CreateChatTab(props) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, busy]);
 
+  // ---- Thread persistence (Phase 2) --------------------------------------
+  // Fetch the user's thread list on mount + whenever user changes. Kept
+  // simple: one POST { op: "list" } and set state.
+  var fetchThreads = function () {
+    if (!token || !user) return;
+    fetch(apiBase + "/api/nlp/sami-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "list", user: user })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.threads)) setThreads(d.threads); })
+      .catch(function () { /* non-fatal, sidebar just stays empty */ });
+  };
+  useEffect(function () { fetchThreads(); }, [token, user]);
+
+  // Save the current thread (upsert). Called after Sami's reply lands.
+  var saveThread = function (id, msgs) {
+    if (!token || !user || !id || !msgs || msgs.length === 0) return;
+    fetch(apiBase + "/api/nlp/sami-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.threads)) setThreads(d.threads); })
+      .catch(function () { /* non-fatal — session continues, next save retries */ });
+  };
+
+  // Load a saved thread by id — replaces the current chat state.
+  var openThread = function (id) {
+    if (!token || !user || !id) return;
+    fetch(apiBase + "/api/nlp/sami-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "get", user: user, threadId: id })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.thread) return;
+        setMessages(Array.isArray(d.thread.messages) ? d.thread.messages : []);
+        setThreadId(d.thread.id);
+        setCardStatus({}); // Reset approval states; historic cards read as pending unless we tracked them.
+        setErr("");
+      })
+      .catch(function () { setErr("Could not load that conversation."); });
+  };
+
+  var renameThread = function (id, title) {
+    if (!token || !user || !id) return;
+    fetch(apiBase + "/api/nlp/sami-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "rename", user: user, threadId: id, title: title })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.threads)) setThreads(d.threads); });
+  };
+
+  var deleteThread = function (id) {
+    if (!token || !user || !id) return;
+    fetch(apiBase + "/api/nlp/sami-threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "delete", user: user, threadId: id })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && Array.isArray(d.threads)) setThreads(d.threads);
+        // If the user deleted the thread they were sitting in, clear the pane
+        if (id === threadId) { setMessages([]); setCardStatus({}); setThreadId(""); setInput(""); setErr(""); }
+      });
+  };
+
   // Send a user message + fetch Sami's reply. Handles both a plain text
   // send (from the composer or a starter) and an approval-response send
-  // (from clicking Approve/Reject on a card).
+  // (from clicking Approve/Reject on a card). Auto-generates a threadId
+  // on the first send of a fresh session, and persists the thread after
+  // each Sami reply so Recent Conversations stays up to date.
   var send = function (text) {
     var content = String(text == null ? input : text).trim();
     if (!content || busy || !token) return;
     setErr("");
+    // Auto-generate a threadId on the first message of a fresh session so
+    // it can persist immediately without waiting for a Save button.
+    var activeThreadId = threadId || newThreadId();
+    if (!threadId) setThreadId(activeThreadId);
     var next = messages.concat([{ role: "user", content: content }]);
     setMessages(next);
     if (text == null) setInput("");
@@ -265,22 +465,25 @@ export default function CreateChatTab(props) {
           setErr((x.data && x.data.error) || "Sami hit a problem answering. Try again.");
           return;
         }
-        setMessages(function (cur) {
-          return cur.concat([{
-            role: "assistant",
-            content: x.data.reply || "",
-            cards: Array.isArray(x.data.cards) ? x.data.cards : [],
-            live: Array.isArray(x.data.actions) && x.data.actions.length > 0
-          }]);
-        });
+        var samiTurn = {
+          role: "assistant",
+          content: x.data.reply || "",
+          cards: Array.isArray(x.data.cards) ? x.data.cards : [],
+          live: Array.isArray(x.data.actions) && x.data.actions.length > 0
+        };
+        var withReply = next.concat([samiTurn]);
+        setMessages(withReply);
         // Seed each new card to pending status.
-        if (Array.isArray(x.data.cards) && x.data.cards.length > 0) {
+        if (samiTurn.cards.length > 0) {
           setCardStatus(function (cur) {
-            var next = Object.assign({}, cur);
-            x.data.cards.forEach(function (c) { if (!next[c.id]) next[c.id] = "pending"; });
-            return next;
+            var nextStatuses = Object.assign({}, cur);
+            samiTurn.cards.forEach(function (c) { if (!nextStatuses[c.id]) nextStatuses[c.id] = "pending"; });
+            return nextStatuses;
           });
         }
+        // Persist the thread after Sami's reply so the sidebar updates
+        // and a page refresh / cross-device resume finds this conversation.
+        saveThread(activeThreadId, withReply);
       })
       .catch(function () { setBusy(false); setErr("Network error. Check your connection and try again."); });
   };
@@ -300,11 +503,22 @@ export default function CreateChatTab(props) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  var newTask = function () { setMessages([]); setCardStatus({}); setErr(""); setInput(""); };
+  // New task clears everything AND generates a fresh threadId so the next
+  // send starts a new persisted thread instead of overwriting the last.
+  var newTask = function () {
+    setMessages([]); setCardStatus({}); setErr(""); setInput("");
+    setThreadId(""); // Empty forces send() to mint a new id on next message
+  };
 
   if (!token) {
     return <PinGate P={P} ff={ff} fm={fm} apiBase={apiBase}
       onAuthed={function (t, ttlSec) { storeToken(t, ttlSec); setToken(t); }} />;
+  }
+  // Second gate: pick your team-member identity so Sami threads namespace
+  // per user. Shows once, persisted in localStorage.
+  if (!user) {
+    return <NamePicker P={P} ff={ff} fm={fm}
+      onPick={function (slug) { writeUser(slug); setUser(slug); }} />;
   }
 
   var empty = messages.length === 0;
@@ -319,9 +533,23 @@ export default function CreateChatTab(props) {
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         <ConnectorsRail P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} />
+        {/* Phase 2 addition: Recent Conversations. User-scoped, click any
+            row to load its full history back into the main chat. */}
+        <div style={{ marginTop: 4, borderTop: "1px solid " + P.rule, paddingTop: 8 }}>
+          <RecentSidebar P={P} ff={ff} fm={fm}
+            threads={threads} currentThreadId={threadId}
+            onOpen={openThread} onDelete={deleteThread} onRename={renameThread} />
+        </div>
       </div>
-      <div style={{ padding: "12px 14px", borderTop: "1px solid " + P.rule, fontSize: 9, color: P.dim, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", lineHeight: 1.6 }}>
-        Phase 1 · Chat + Approvals<br />Threads, Memory, Skills coming
+      <div style={{ padding: "10px 14px", borderTop: "1px solid " + P.rule, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.35 }}>
+          <span style={{ fontSize: 10, color: P.txt, fontFamily: fm, fontWeight: 700 }}>{(TEAM_USERS.find(function (u) { return u.slug === user; }) || {}).name || user}</span>
+          <span style={{ fontSize: 8, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>@{user}</span>
+        </div>
+        <button onClick={function () { writeUser(""); setUser(""); }} title="Switch to a different team member"
+          style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 6, padding: "4px 8px", color: P.dim || P.sub, fontSize: 9, fontWeight: 700, fontFamily: fm, letterSpacing: 1, cursor: "pointer", textTransform: "uppercase" }}>
+          Switch
+        </button>
       </div>
     </aside>
 
