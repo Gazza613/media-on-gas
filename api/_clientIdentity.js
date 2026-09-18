@@ -170,12 +170,30 @@ export function knownBrandForSlug(raw) {
   return "";
 }
 
-// Best display name for a client: prefer whatever slug the team last typed
-// for this identity (from the audit log), fall back to a capitalised
-// version of the registered domain's first label.
+// Best display name for a client. Order:
+//   1. Try the slug hint against knownBrandForSlug so a full campaign-name
+//      variant like "GAS_Learnalot_META_Leads_WApp_PSI_July_2026" resolves
+//      to "Learnalot" (the previously-returned raw slug leaked long
+//      campaign-name blobs into the Weekly Summary SLA overdue table).
+//   2. If unresolved but the slug hint is a short human-readable label
+//      (< 40 chars, no all-caps campaign-blob feel), pass it through
+//      verbatim so historic short slugs like "MTN MoMo" still render.
+//   3. Fall back to a capitalised first label of the registered domain.
+// A "campaign blob" is defined as a slug hint with no whitespace/hyphen
+// separators AND length > 40 chars, i.e. the concatenated GAS_Client_...
+// format we now see in the audit log. That threshold keeps normal
+// "Sea Storm" / "MTN MoMo" / "Client Name Sept" labels untouched.
 export function displayNameFromIdentity(identity, slugHint) {
   var s = String(slugHint || "").trim();
-  if (s) return s;
+  if (s) {
+    var brand = knownBrandForSlug(s);
+    if (brand) return brand;
+    var isCampaignBlob = s.length > 40 && !/[\s\-_]/.test(s);
+    if (!isCampaignBlob) return s;
+    // Campaign blob with no brand match — fall through to the title-cased
+    // brand-display helper for a readable label.
+    return brandDisplayForSlug(s);
+  }
   var id = String(identity || "");
   // Strip any "slug@" prefix from free-mail identities.
   if (id.indexOf("@") >= 0) id = id.split("@")[1] || id;
