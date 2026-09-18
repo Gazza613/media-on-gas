@@ -33,8 +33,9 @@ var ORIGIN = "https://media.gasmarketing.co.za";
 // out of the overdue queue).
 // Simpson Properties added 2026-06 per owner. Psycho Bunny + Sea Weeds
 // + Sea Storm added 2026-09-18 per owner: internal-only reporting for
-// these three, do not fire SLA nudges.
-var NUDGE_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm"];
+// these three, do not fire SLA nudges. Willowbrook Village added
+// 2026-09-18: campaign has ended, no further reminders required.
+var NUDGE_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm", "willowbrookvillage"];
 function isNudgeExcluded(identity, lastSlug) {
   // Resolve to a canonical slug from either the stored slug hint or
   // the display name derived from the identity. Mirrors the same slug

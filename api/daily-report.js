@@ -63,8 +63,9 @@ function extractAgencyClient(campaignName) {
 // Properties June 2026" client name still matches.
 // Simpson Properties added 2026-06 per owner. Psycho Bunny + Sea Weeds
 // + Sea Storm added 2026-09-18 per owner: internal-only reporting for
-// these three, do not surface in daily pulse either.
-var DAILY_PULSE_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm"];
+// these three, do not surface in daily pulse either. Willowbrook
+// Village added 2026-09-18: campaign has ended, no further reminders.
+var DAILY_PULSE_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm", "willowbrookvillage"];
 function isExcludedFromDailyPulse(clientName) {
   var s = canonicalClientSlug(clientName);
   if (!s) return false;

@@ -29,8 +29,9 @@ var ORIGIN = "https://media.gasmarketing.co.za";
 // Client opt-outs from the Weekly Activity Summary (Simpson Properties
 // added 2026-06 per owner. Psycho Bunny + Sea Weeds + Sea Storm added
 // 2026-09-18 per owner: internal-only reporting for these three, do not
-// surface in overdue or activity tables).
-var WEEKLY_SUMMARY_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm"];
+// surface in overdue or activity tables). Willowbrook Village added
+// 2026-09-18: campaign has ended, no further reminders required.
+var WEEKLY_SUMMARY_EXCLUDED_PREFIXES = ["simpsonproperties", "psychobunny", "seaweeds", "seastorm", "willowbrookvillage"];
 function isExcludedFromWeeklySummary(clientName) {
   var s = canonicalClientSlug(clientName);
   if (!s) return false;
