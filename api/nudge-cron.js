@@ -779,6 +779,17 @@ export default async function handler(req, res) {
     slaDays: SLA_DAYS,
     bufferHours: BUFFER_HOURS,
     baseline: baselineTs ? new Date(baselineTs).toISOString() : null,
+    // Delivery-side signals so a dry-run diagnostic can prove end-to-end
+    // health without needing to inspect Vercel Function logs.
+    // canSend=false means GMAIL_USER or GMAIL_APP_PASSWORD is missing, in
+    // which case the cron runs but silently sends nothing.
+    delivery: {
+      canSend: canSend,
+      gmailUserSet: !!gmailUser,
+      gmailPassSet: !!gmailPass,
+      recipientCount: leadershipList.length,
+      recipients: leadershipList
+    },
     clientsTracked: identities.length,
     overdueCount: overdue.length,
     reminderCount: reminderQueue.length,
