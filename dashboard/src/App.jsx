@@ -691,12 +691,14 @@ function LinkedInSection(props){
   var accent=P.li||"#0A66C2";
   var pS=useState({loading:true,data:null,error:""}),paid=pS[0],setPaid=pS[1];
   var oS=useState({loading:true,data:null,error:""}),organic=oS[0],setOrganic=oS[1];
-  // Selection state — one per section, independent. Clicking a row toggles;
-  // clicking the same row again OR the × on the SHOWING chip clears back
-  // to the aggregate view. Paid and organic filter independently so a
-  // selected ad doesn't force a selected post and vice versa.
-  var sAd=useState(""),selAdId=sAd[0],setSelAdId=sAd[1];
-  var sPo=useState(""),selPostId=sPo[0],setSelPostId=sPo[1];
+  // Multi-expand accordion state (per user request 2026-09-18): each row
+  // can be independently expanded to show its own inline detail panel
+  // (KPI mini-tiles + fuller metrics), so the client doesn't have to
+  // scroll back to the top strip to see the numbers for a specific ad
+  // or post. Paid and organic each track their own expanded set. Values
+  // are arrays of ids for React-friendly identity; toggle helpers below.
+  var eAd=useState([]),expAdIds=eAd[0],setExpAdIds=eAd[1];
+  var ePo=useState([]),expPostIds=ePo[0],setExpPostIds=ePo[1];
   useEffect(function(){
     var q=(df&&dt)?("?from="+encodeURIComponent(df)+"&to="+encodeURIComponent(dt)):"";
     var st=session||((typeof sessionStorage!=="undefined")?(sessionStorage.getItem("gas_session")||""):"");
@@ -709,10 +711,9 @@ function LinkedInSection(props){
     };
     fetchOne("/api/linkedin/paid",setPaid);
     fetchOne("/api/linkedin/organic",setOrganic);
-    // Clear selections whenever the date range changes (their scoped KPIs
-    // could otherwise reference an item that no longer exists in the new
-    // period).
-    setSelAdId("");setSelPostId("");
+    // Reset the accordion whenever the date range changes so the
+    // expanded panels never reference an item that no longer exists.
+    setExpAdIds([]);setExpPostIds([]);
   },[df,dt,apiBase,session]);
   var pd=paid.data,od=organic.data;
   var isMock=(pd&&pd.source==="mock")||(od&&od.source==="mock");
@@ -721,27 +722,47 @@ function LinkedInSection(props){
   var _fmt=fmt||function(n){return String(Math.round(n||0));};
   var _fR=fR||function(n){return "R"+Math.round(n||0).toLocaleString();};
 
-  // Resolve current selections to the underlying record so the scoped KPI
-  // strips can read from them directly. Falls back to aggregate when null.
-  var selAd=(selAdId&&pd&&pd.ads)?pd.ads.find(function(a){return a.id===selAdId;}):null;
-  var selPost=(selPostId&&od&&od.posts)?od.posts.find(function(p){return p.id===selPostId;}):null;
+  // Multi-expand toggle helpers. Add id to the array if not present,
+  // remove if already there. Same shape works for both paid + organic.
+  var toggleId=function(id,list,setter){
+    var i=list.indexOf(id);
+    if(i>=0){var next=list.slice();next.splice(i,1);setter(next);}
+    else{setter(list.concat([id]));}
+  };
+  var expandAll=function(items,setter){setter(items.map(function(x){return x.id;}));};
+  var collapseAll=function(setter){setter([]);};
 
-  // KPI tile — compact, LinkedIn-accent variant.
-  var kpi=function(label,value,sub,scoped){
-    return <div style={{background:scoped?"rgba(10,102,194,0.14)":"rgba(10,102,194,0.06)",border:"1px solid "+(scoped?"rgba(10,102,194,0.55)":"rgba(10,102,194,0.28)"),borderLeft:"4px solid "+accent,borderRadius:12,padding:"14px 16px"}}>
+  // KPI tile — compact, LinkedIn-accent variant. Always renders aggregate
+  // (period totals) now that per-row detail lives inline in the expanded
+  // accordion panel below each row.
+  var kpi=function(label,value,sub){
+    return <div style={{background:"rgba(10,102,194,0.06)",border:"1px solid rgba(10,102,194,0.28)",borderLeft:"4px solid "+accent,borderRadius:12,padding:"14px 16px"}}>
       <div style={{fontSize:9,color:accent,fontFamily:fm,letterSpacing:2,fontWeight:800,textTransform:"uppercase",marginBottom:6}}>{label}</div>
       <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{value}</div>
       {sub?<div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:6}}>{sub}</div>:null}
     </div>;
   };
-  // "SHOWING: [name] ×" chip that appears above a KPI strip whenever a
-  // row is selected. Clicking anywhere on the chip clears the selection.
-  var showingChip=function(label,onClear){
-    return <div onClick={onClear} title="Click to clear the filter and return to the period aggregate" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8,background:accent+"22",border:"1px solid "+accent+"66",borderRadius:14,padding:"5px 11px",marginLeft:10,fontFamily:fm,verticalAlign:"middle"}}>
-      <span style={{fontSize:9,color:accent,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase"}}>Showing</span>
-      <span style={{fontSize:11,color:P.txt,fontWeight:700,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
-      <span style={{fontSize:14,color:accent,marginLeft:2,opacity:0.85,fontWeight:900,lineHeight:1}}>×</span>
+  // Compact KPI mini-tile used inside the expanded accordion panels.
+  // Smaller than the top-strip tile so a per-row 5-tile grid fits
+  // comfortably at ~140px per column.
+  var miniKpi=function(label,value,accentCol){
+    var col=accentCol||accent;
+    return <div style={{background:"rgba(10,102,194,0.10)",border:"1px solid "+col+"33",borderLeft:"3px solid "+col,borderRadius:8,padding:"9px 11px"}}>
+      <div style={{fontSize:8,color:col,fontFamily:fm,letterSpacing:1.8,fontWeight:800,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+      <div style={{fontSize:16,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{value}</div>
     </div>;
+  };
+  // Header controls (Expand all / Collapse all) shown next to each list title.
+  var listControls=function(items,expList,setter){
+    var allExpanded=items.length>0&&expList.length===items.length;
+    var noneExpanded=expList.length===0;
+    var btn=function(label,onClick,disabled){
+      return <button onClick={onClick} disabled={disabled} style={{background:"transparent",border:"1px solid "+accent+"55",borderRadius:6,padding:"3px 10px",color:disabled?P.dim:accent,fontSize:9,fontWeight:800,fontFamily:fm,letterSpacing:1.2,textTransform:"uppercase",cursor:disabled?"default":"pointer",marginLeft:8}}>{label}</button>;
+    };
+    return <span style={{marginLeft:12,verticalAlign:"middle"}}>
+      {btn("Expand all",function(){expandAll(items,setter);},allExpanded)}
+      {btn("Collapse all",function(){collapseAll(setter);},noneExpanded)}
+    </span>;
   };
   // Thumbnail block. If thumbUrl is present render the actual CDN image;
   // else a brand-tinted gradient card with the LinkedIn "in" glyph in the
@@ -799,34 +820,58 @@ function LinkedInSection(props){
     {errored?<div style={{padding:"20px 22px",borderRadius:10,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.3)",fontSize:12,color:P.txt,fontFamily:fm}}>LinkedIn data unavailable: {paid.error||organic.error}. Confirm the LinkedIn env vars in Vercel or re-run the OAuth callback.</div>:null}
 
     {!loading&&pd?<div>
-      {/* Paid KPIs, 6-tile strip. When an ad is selected the strip scopes to just that ad's numbers. */}
-      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
-        · Paid Performance
-        {selAd?showingChip(selAd.name,function(){setSelAdId("");}):null}
-      </div>
+      {/* Paid KPIs, 6-tile strip. Period aggregate; per-ad detail lives
+          inside each row's expanded accordion panel below. */}
+      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Paid Performance</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,marginBottom:20}}>
-        {kpi("Impressions",_fmt(selAd?selAd.impressions:pd.kpis.impressions),null,!!selAd)}
-        {kpi("Clicks",_fmt(selAd?selAd.clicks:pd.kpis.clicks),null,!!selAd)}
-        {kpi("CTR",((selAd?selAd.ctr:pd.kpis.ctr)||0).toFixed(2)+"%",null,!!selAd)}
-        {kpi("Spend",_fR(selAd?selAd.spend:pd.kpis.spend),null,!!selAd)}
-        {kpi("Cost per Click",(selAd?selAd.cpc:pd.kpis.cpc)>0?_fR(selAd?selAd.cpc:pd.kpis.cpc):"—",null,!!selAd)}
-        {kpi("Newsletter Sign-Ups",_fmt(selAd?selAd.conversions:pd.kpis.conversions),(!selAd&&pd.kpis.costPerConversion>0)?_fR(pd.kpis.costPerConversion)+" per sign-up":null,!!selAd)}
+        {kpi("Impressions",_fmt(pd.kpis.impressions),null)}
+        {kpi("Clicks",_fmt(pd.kpis.clicks),null)}
+        {kpi("CTR",(pd.kpis.ctr||0).toFixed(2)+"%",null)}
+        {kpi("Spend",_fR(pd.kpis.spend),null)}
+        {kpi("Cost per Click",pd.kpis.cpc>0?_fR(pd.kpis.cpc):"—",null)}
+        {kpi("Newsletter Sign-Ups",_fmt(pd.kpis.conversions),pd.kpis.costPerConversion>0?_fR(pd.kpis.costPerConversion)+" per sign-up":null)}
       </div>
 
-      {/* Top ads list — clickable rows with thumbnails */}
+      {/* Top ads list — accordion. Each row expands in place to show
+          per-ad detail (KPI mini-tiles + fuller name) without scrolling
+          back to the section top. Multi-expand: several rows can stay
+          open at once for side-by-side comparison. */}
       {pd.ads&&pd.ads.length>0?<div style={{marginBottom:20}}>
-        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Ads by Spend — click a row to scope the KPIs above</div>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+          · Top Ads by Spend — click a row to expand
+          {listControls(pd.ads.slice(0,5),expAdIds,setExpAdIds)}
+        </div>
         <div style={{background:"rgba(10,102,194,0.04)",borderRadius:12,border:"1px solid rgba(10,102,194,0.16)",overflow:"hidden"}}>
           {pd.ads.slice(0,5).map(function(a,i){
             var last=i===Math.min(pd.ads.length,5)-1;
-            var isSel=selAdId===a.id;
-            return <div key={a.id} onClick={function(){setSelAdId(isSel?"":a.id);}} style={{display:"grid",gridTemplateColumns:"60px 1fr 90px 80px 80px 90px",gap:12,padding:"12px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",alignItems:"center",cursor:"pointer",background:isSel?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease"}}>
-              {thumb(a.thumbUrl,a.thumbColor,a.thumbLabel,60)}
-              <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.name}>{a.name}</div>
-              <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.impressions)} imps</div>
-              <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.clicks)} clicks</div>
-              <div style={{fontSize:11,color:(a.ctr||0)>2?P.mint:P.label,fontFamily:fm,fontWeight:700,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{(a.ctr||0).toFixed(2)+"%"}</div>
-              <div style={{fontSize:12,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fR(a.spend)}</div>
+            var isExp=expAdIds.indexOf(a.id)>=0;
+            return <div key={a.id} style={{borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)"}}>
+              {/* Row — always visible */}
+              <div onClick={function(){toggleId(a.id,expAdIds,setExpAdIds);}} style={{display:"grid",gridTemplateColumns:"60px 1fr 90px 80px 80px 90px 20px",gap:12,padding:"12px 16px",alignItems:"center",cursor:"pointer",background:isExp?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease"}}>
+                {thumb(a.thumbUrl,a.thumbColor,a.thumbLabel,60)}
+                <div style={{fontSize:12,color:P.txt,fontFamily:ff,fontWeight:600,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.name}>{a.name}</div>
+                <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.impressions)} imps</div>
+                <div style={{fontSize:11,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fmt(a.clicks)} clicks</div>
+                <div style={{fontSize:11,color:(a.ctr||0)>2?P.mint:P.label,fontFamily:fm,fontWeight:700,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{(a.ctr||0).toFixed(2)+"%"}</div>
+                <div style={{fontSize:12,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>{_fR(a.spend)}</div>
+                <div style={{fontSize:14,color:accent,fontFamily:fm,fontWeight:900,textAlign:"center",transition:"transform 0.15s ease",transform:isExp?"rotate(90deg)":"rotate(0deg)"}}>›</div>
+              </div>
+              {/* Expanded detail panel — this ad's own numbers */}
+              {isExp?<div style={{padding:"14px 20px 18px 88px",background:"rgba(10,102,194,0.08)",borderTop:"1px dashed rgba(10,102,194,0.25)"}}>
+                <div style={{fontSize:13,color:P.txt,fontFamily:ff,fontWeight:700,marginBottom:12,lineHeight:1.5}}>{a.name}</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:12}}>
+                  {miniKpi("Impressions",_fmt(a.impressions))}
+                  {miniKpi("Clicks",_fmt(a.clicks))}
+                  {miniKpi("CTR",(a.ctr||0).toFixed(2)+"%")}
+                  {miniKpi("Spend",_fR(a.spend))}
+                  {miniKpi("Cost per Click",(a.cpc||0)>0?_fR(a.cpc):"—")}
+                </div>
+                {(a.conversions||0)>0?<div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+                  {miniKpi("Newsletter Sign-Ups",_fmt(a.conversions),P.mint)}
+                  {miniKpi("Cost per Sign-Up",a.spend>0&&a.conversions>0?_fR(a.spend/a.conversions):"—",P.mint)}
+                </div>:null}
+                <div style={{fontSize:9.5,color:P.caption,fontFamily:fm,fontStyle:"italic",marginTop:12,lineHeight:1.55}}>Audience demographic breakdown is section-level (below) — LinkedIn's Advertising API does not currently expose per-ad demographic pivots.</div>
+              </div>:null}
             </div>;
           })}
         </div>
@@ -848,36 +893,58 @@ function LinkedInSection(props){
     {!loading&&pd&&od?<div style={{height:1,background:"linear-gradient(90deg,transparent,"+accent+"40,transparent)",margin:"18px 0"}}/>:null}
 
     {!loading&&od?<div>
-      {/* Organic KPIs — 4-tile strip. When a post is selected, the two per-post tiles (Post Impressions, Engagement) scope to it. Followers + Subscribers stay page-level even when a post is selected (those are Page-level metrics that don't split per-post). */}
-      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
-        · Organic Company Page
-        {selPost?showingChip((selPost.commentary||"selected post").slice(0,60)+((selPost.commentary||"").length>60?"…":""),function(){setSelPostId("");}):null}
-      </div>
+      {/* Organic KPIs — 4-tile strip. Period aggregate; per-post detail
+          lives inside each row's expanded accordion panel below. */}
+      <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Organic Company Page</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-        {kpi("Followers",_fmt(od.kpis.followers),od.kpis.followerGrowth>0?"+"+_fmt(od.kpis.followerGrowth)+" this period":null,false)}
-        {kpi("Newsletter Subscribers",_fmt(od.kpis.subscribers||0),null,false)}
-        {kpi("Post Impressions",_fmt(selPost?selPost.impressions:od.kpis.postImpressions),((selPost?selPost.engagementRate:od.kpis.engagementRate)||0).toFixed(2)+"% engagement rate",!!selPost)}
-        {kpi(selPost?"Post Engagements":"Page Views",_fmt(selPost?selPost.engagement:od.kpis.pageViews),selPost?(_fmt(selPost.likes)+" likes · "+_fmt(selPost.comments)+" comments · "+_fmt(selPost.shares)+" shares"):(od.kpis.uniqueVisitors>0?_fmt(od.kpis.uniqueVisitors)+" unique":null),!!selPost)}
+        {kpi("Followers",_fmt(od.kpis.followers),od.kpis.followerGrowth>0?"+"+_fmt(od.kpis.followerGrowth)+" this period":null)}
+        {kpi("Newsletter Subscribers",_fmt(od.kpis.subscribers||0),null)}
+        {kpi("Post Impressions",_fmt(od.kpis.postImpressions),(od.kpis.engagementRate||0).toFixed(2)+"% engagement rate")}
+        {kpi("Page Views",_fmt(od.kpis.pageViews),od.kpis.uniqueVisitors>0?_fmt(od.kpis.uniqueVisitors)+" unique":null)}
       </div>
 
       {od.topPosts&&od.topPosts.length>0?<div>
-        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>· Top Organic Posts by Engagement Rate — click a row to scope the KPIs above</div>
+        <div style={{fontSize:12,color:P.label,fontFamily:fm,fontWeight:800,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+          · Top Organic Posts by Engagement Rate — click a row to expand
+          {listControls(od.topPosts,expPostIds,setExpPostIds)}
+        </div>
         <div style={{background:"rgba(10,102,194,0.04)",borderRadius:12,border:"1px solid rgba(10,102,194,0.16)",overflow:"hidden"}}>
           {od.topPosts.map(function(p,i){
             var last=i===od.topPosts.length-1;
-            var isSel=selPostId===p.id;
-            return <div key={p.id} onClick={function(){setSelPostId(isSel?"":p.id);}} style={{display:"grid",gridTemplateColumns:"60px 1fr",gap:14,padding:"14px 16px",borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)",cursor:"pointer",background:isSel?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease",alignItems:"flex-start"}}>
-              {thumb(p.thumbUrl,p.thumbColor,p.thumbLabel,60)}
-              <div>
-                <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.55,marginBottom:8}}>{p.commentary||"(post has no text)"}</div>
-                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.impressions)} impressions</span>
-                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.likes)} likes</span>
-                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.comments)} comments</span>
-                  <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.shares)} shares</span>
-                  <span style={{fontSize:10.5,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{(p.engagementRate||0).toFixed(2)+"% engagement rate"}</span>
+            var isExp=expPostIds.indexOf(p.id)>=0;
+            var publishedIso=p.publishedAt?new Date(p.publishedAt).toLocaleDateString("en-ZA",{year:"numeric",month:"short",day:"numeric"}):"";
+            return <div key={p.id} style={{borderBottom:last?"none":"1px solid rgba(10,102,194,0.12)"}}>
+              {/* Row — always visible */}
+              <div onClick={function(){toggleId(p.id,expPostIds,setExpPostIds);}} style={{display:"grid",gridTemplateColumns:"60px 1fr 20px",gap:14,padding:"14px 16px",cursor:"pointer",background:isExp?"rgba(10,102,194,0.14)":"transparent",transition:"background 0.15s ease",alignItems:"flex-start"}}>
+                {thumb(p.thumbUrl,p.thumbColor,p.thumbLabel,60)}
+                <div>
+                  <div style={{fontSize:12,color:P.txt,fontFamily:ff,lineHeight:1.55,marginBottom:8,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.commentary||"(post has no text)"}</div>
+                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.impressions)} impressions</span>
+                    <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.likes)} likes</span>
+                    <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.comments)} comments</span>
+                    <span style={{fontSize:10.5,color:P.label,fontFamily:fm,fontVariantNumeric:"tabular-nums"}}>{_fmt(p.shares)} shares</span>
+                    <span style={{fontSize:10.5,color:accent,fontFamily:fm,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{(p.engagementRate||0).toFixed(2)+"% engagement rate"}</span>
+                  </div>
                 </div>
+                <div style={{fontSize:14,color:accent,fontFamily:fm,fontWeight:900,textAlign:"center",transition:"transform 0.15s ease",transform:isExp?"rotate(90deg)":"rotate(0deg)",alignSelf:"center"}}>›</div>
               </div>
+              {/* Expanded detail panel — full post commentary + per-post KPI tiles */}
+              {isExp?<div style={{padding:"14px 20px 18px 88px",background:"rgba(10,102,194,0.08)",borderTop:"1px dashed rgba(10,102,194,0.25)"}}>
+                {publishedIso?<div style={{fontSize:9.5,color:accent,fontFamily:fm,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Published · {publishedIso}</div>:null}
+                <div style={{fontSize:13,color:P.txt,fontFamily:ff,fontWeight:500,lineHeight:1.65,marginBottom:14,padding:"10px 12px",background:"rgba(0,0,0,0.20)",borderRadius:8,borderLeft:"3px solid "+accent+"55"}}>{p.commentary||"(post has no text)"}</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:10}}>
+                  {miniKpi("Impressions",_fmt(p.impressions))}
+                  {miniKpi("Likes",_fmt(p.likes),P.mint)}
+                  {miniKpi("Comments",_fmt(p.comments),P.cyan)}
+                  {miniKpi("Shares",_fmt(p.shares),P.orchid)}
+                  {miniKpi("Engagement Rate",(p.engagementRate||0).toFixed(2)+"%",accent)}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+                  {miniKpi("Total Engagements",_fmt(p.engagement),accent)}
+                  {miniKpi("Post Clicks",_fmt(p.clicks||0))}
+                </div>
+              </div>:null}
             </div>;
           })}
         </div>
