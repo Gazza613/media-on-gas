@@ -251,7 +251,10 @@ function ConnectorsRail(props) {
 
   var itemStyle = { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, marginBottom: 4 };
 
-  return <div style={{ padding: "16px 14px", height: "100%", overflowY: "auto" }}>
+  // CSS-fix 2026-09-19: removed height:100% + overflowY:auto that was
+  // filling the entire middle scroll area and pushing the RecentSidebar
+  // sibling below the fold. Parent aside handles overflow.
+  return <div style={{ padding: "16px 14px 8px" }}>
     <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10, opacity: 0.75 }}>Connectors</div>
     {state.loading && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 10px" }}>Checking...</div>}
     {!state.loading && state.connectors.length === 0 && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 10px", lineHeight: 1.55 }}>
@@ -359,6 +362,7 @@ function RecentSidebar(props) {
   var threads = Array.isArray(props.threads) ? props.threads : [];
   var currentId = props.currentThreadId;
   var onOpen = props.onOpen, onDelete = props.onDelete, onRename = props.onRename;
+  var errorText = props.errorText || "";
   var hs = useState(null), hoverId = hs[0], setHoverId = hs[1];
 
   var handleRename = function (t) {
@@ -370,8 +374,13 @@ function RecentSidebar(props) {
   };
 
   return <div style={{ padding: "6px 10px 12px" }}>
-    <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, opacity: 0.75, padding: "0 4px" }}>Recent</div>
-    {threads.length === 0 && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 6px", lineHeight: 1.55 }}>Conversations you have with Sami will appear here.</div>}
+    <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, opacity: 0.75, padding: "0 4px" }}>Recent · {threads.length}</div>
+    {/* Surface any load/save error so the user sees Redis / auth issues
+        rather than assuming Sami just didn't save. */}
+    {errorText && <div style={{ fontSize: 10, color: P.critical || "#ef4444", fontFamily: fm, padding: "6px 8px", marginBottom: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, lineHeight: 1.45 }}>
+      Thread load/save error: {errorText}
+    </div>}
+    {threads.length === 0 && !errorText && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 6px", lineHeight: 1.55 }}>Conversations you have with Sami will appear here.</div>}
     {threads.map(function (t) {
       var active = t.id === currentId;
       var hovering = t.id === hoverId;
@@ -424,6 +433,7 @@ export default function CreateChatTab(props) {
   // Persistence state (Phase 2)
   var tids = useState(""), threadId = tids[0], setThreadId = tids[1]; // Current thread being edited
   var trs = useState([]), threads = trs[0], setThreads = trs[1];       // Sidebar list
+  var thErr = useState(""), threadErr = thErr[0], setThreadErr = thErr[1]; // Load/save error banner
 
   useEffect(function () {
     if (!busy) return;
@@ -436,8 +446,10 @@ export default function CreateChatTab(props) {
   }, [messages, busy]);
 
   // ---- Thread persistence (Phase 2) --------------------------------------
-  // Fetch the user's thread list on mount + whenever user changes. Kept
-  // simple: one POST { op: "list" } and set state.
+  // Fetch the user's thread list on mount + whenever user changes.
+  // Surfaces errors to the sidebar banner AND the browser console so
+  // we can trace persistence issues (see project_sami_hub_rebuild note
+  // on Redis failure modes).
   var fetchThreads = function () {
     if (!token || !user) return;
     fetch(apiBase + "/api/nlp/sami-threads", {
@@ -445,13 +457,26 @@ export default function CreateChatTab(props) {
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: JSON.stringify({ op: "list", user: user })
     })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && Array.isArray(d.threads)) setThreads(d.threads); })
-      .catch(function () { /* non-fatal, sidebar just stays empty */ });
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, ok: r.ok, data: d }; }); })
+      .then(function (x) {
+        try { console.log("[sami-threads] list", user, x.status, x.data); } catch (_) {}
+        if (!x.ok) {
+          setThreadErr(((x.data && x.data.error) || "list failed") + " (status " + x.status + ")");
+          return;
+        }
+        setThreadErr("");
+        if (Array.isArray(x.data.threads)) setThreads(x.data.threads);
+      })
+      .catch(function (e) {
+        try { console.error("[sami-threads] list network error", e); } catch (_) {}
+        setThreadErr("network error: " + (e && e.message || e));
+      });
   };
   useEffect(function () { fetchThreads(); }, [token, user]);
 
   // Save the current thread (upsert). Called after Sami's reply lands.
+  // Errors get logged AND surface in the sidebar banner so a silent
+  // Redis failure can't happen invisibly again.
   var saveThread = function (id, msgs) {
     if (!token || !user || !id || !msgs || msgs.length === 0) return;
     fetch(apiBase + "/api/nlp/sami-threads", {
@@ -459,9 +484,20 @@ export default function CreateChatTab(props) {
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs })
     })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && Array.isArray(d.threads)) setThreads(d.threads); })
-      .catch(function () { /* non-fatal — session continues, next save retries */ });
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, ok: r.ok, data: d }; }); })
+      .then(function (x) {
+        try { console.log("[sami-threads] save", user, id, x.status, "->", (x.data && x.data.threads && x.data.threads.length) || 0, "threads"); } catch (_) {}
+        if (!x.ok) {
+          setThreadErr(((x.data && x.data.error) || "save failed") + " (status " + x.status + ")");
+          return;
+        }
+        setThreadErr("");
+        if (Array.isArray(x.data.threads)) setThreads(x.data.threads);
+      })
+      .catch(function (e) {
+        try { console.error("[sami-threads] save network error", e); } catch (_) {}
+        setThreadErr("save network error: " + (e && e.message || e));
+      });
   };
 
   // Load a saved thread by id — replaces the current chat state.
@@ -634,6 +670,7 @@ export default function CreateChatTab(props) {
         <div style={{ marginTop: 4, borderTop: "1px solid " + P.rule, paddingTop: 8 }}>
           <RecentSidebar P={P} ff={ff} fm={fm}
             threads={threads} currentThreadId={threadId}
+            errorText={threadErr}
             onOpen={openThread} onDelete={deleteThread} onRename={renameThread} />
         </div>
       </div>
