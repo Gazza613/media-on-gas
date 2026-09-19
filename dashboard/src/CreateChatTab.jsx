@@ -272,6 +272,204 @@ function ConnectorsRail(props) {
   </div>;
 }
 
+// ---- Skills panel (Phase 4) ---------------------------------------------
+// Left-rail section listing reusable prompt patterns fetched from
+// /api/nlp/sami-skills. Clicking a skill injects its prompt text into
+// the chat composer for Sami to react to. Team-shared — every AM sees
+// the same list.
+
+function SkillsPanel(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var skills = Array.isArray(props.skills) ? props.skills : [];
+  var onInject = props.onInject, onManage = props.onManage;
+  var hs = useState(null), hoverId = hs[0], setHoverId = hs[1];
+  return <div style={{ padding: "6px 10px 12px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px 6px" }}>
+      <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", opacity: 0.75 }}>Skills</div>
+      <button onClick={onManage} title="Add / edit / delete skills"
+        style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 5, padding: "2px 7px", color: P.dim || P.sub, fontSize: 9, fontWeight: 800, fontFamily: fm, letterSpacing: 1, cursor: "pointer", textTransform: "uppercase" }}>Manage</button>
+    </div>
+    {skills.length === 0 && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 6px", lineHeight: 1.55 }}>No skills saved yet.</div>}
+    {skills.map(function (s) {
+      var hovering = hoverId === s.id;
+      return <div key={s.id} onClick={function () { onInject(s); }}
+        onMouseEnter={function () { setHoverId(s.id); }} onMouseLeave={function () { setHoverId(null); }}
+        title={s.description || s.prompt}
+        style={{ padding: "7px 8px", borderRadius: 8, marginBottom: 3, cursor: "pointer", background: hovering ? "rgba(255,255,255,0.03)" : "transparent" }}>
+        <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</div>
+        {s.description && <div style={{ fontSize: 9.5, color: P.caption || "#8B7FA3", fontFamily: fm, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.description}</div>}
+      </div>;
+    })}
+  </div>;
+}
+
+// ---- Memory panel (Phase 4) ---------------------------------------------
+// Shows a compact list of clients that have saved memory, click one to
+// open the manage modal. Memory injection happens server-side; this
+// panel is just visibility + editing.
+
+function MemoryPanel(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var clients = Array.isArray(props.clients) ? props.clients : [];
+  var onOpen = props.onOpen, onManage = props.onManage;
+  return <div style={{ padding: "6px 10px 12px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px 6px" }}>
+      <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", opacity: 0.75 }}>Memory</div>
+      <button onClick={onManage} title="View or edit per-client memory notes"
+        style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 5, padding: "2px 7px", color: P.dim || P.sub, fontSize: 9, fontWeight: 800, fontFamily: fm, letterSpacing: 1, cursor: "pointer", textTransform: "uppercase" }}>Manage</button>
+    </div>
+    {clients.length === 0 && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 6px", lineHeight: 1.55 }}>Ask Sami to "remember that Chilla ..." and it will appear here.</div>}
+    {clients.slice(0, 6).map(function (c) {
+      return <div key={c.slug} onClick={function () { onOpen(c); }}
+        style={{ padding: "6px 8px", borderRadius: 8, marginBottom: 2, cursor: "pointer" }} title={"Open " + c.name + " memory"}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+          <div style={{ fontSize: 9, color: P.caption || "#8B7FA3", fontFamily: fm }}>{c.noteCount || 0}</div>
+        </div>
+      </div>;
+    })}
+  </div>;
+}
+
+// ---- Scheduled strip (Phase 4) ------------------------------------------
+// Small compact list of the next 3 upcoming automated tasks (crons +
+// any Redis-tracked extras). Read-only, informational.
+
+function ScheduledStrip(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var items = Array.isArray(props.items) ? props.items : [];
+  var fmtWhen = function (iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    var delta = d.getTime() - Date.now();
+    if (delta < 3600 * 1000) return Math.max(1, Math.floor(delta / 60000)) + "m";
+    if (delta < 86400 * 1000) return Math.floor(delta / 3600000) + "h";
+    return Math.floor(delta / 86400000) + "d";
+  };
+  return <div style={{ padding: "6px 10px 12px" }}>
+    <div style={{ fontSize: 9, fontWeight: 900, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, opacity: 0.75, padding: "0 4px" }}>Scheduled</div>
+    {items.length === 0 && <div style={{ fontSize: 11, color: P.caption || "#8B7FA3", fontFamily: fm, padding: "6px 6px" }}>No scheduled tasks.</div>}
+    {items.slice(0, 5).map(function (t, i) {
+      return <div key={i} title={t.description || t.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 6px", borderRadius: 6, marginBottom: 2 }}>
+        <div style={{ fontSize: 11, color: P.txt, fontFamily: ff, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{t.label}</div>
+        <div style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, flex: "0 0 auto", marginLeft: 6 }}>in {fmtWhen(t.nextRunIso)}</div>
+      </div>;
+    })}
+  </div>;
+}
+
+// ---- Skills / Memory management modals ----------------------------------
+
+function SkillsModal(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var skills = Array.isArray(props.skills) ? props.skills : [];
+  var draft = props.draft || { id: "", label: "", description: "", prompt: "" };
+  var setDraft = props.setDraft;
+  return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={props.onClose}>
+    <div onClick={function (e) { e.stopPropagation(); }} style={{ maxWidth: 720, width: "100%", maxHeight: "85vh", overflowY: "auto", background: "#0d0520", border: "1px solid " + P.rule, borderRadius: 18, padding: "22px 24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 900, color: P.ember, letterSpacing: 3, fontFamily: fm, textTransform: "uppercase" }}>Skills library</div>
+        <button onClick={props.onClose} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 6, padding: "4px 10px", color: P.sub, fontSize: 10, fontWeight: 700, fontFamily: fm, letterSpacing: 1, cursor: "pointer", textTransform: "uppercase" }}>Close</button>
+      </div>
+      <div style={{ fontSize: 12, color: P.label || "#c9c1d5", fontFamily: ff, marginBottom: 16, lineHeight: 1.6 }}>Team-shared reusable prompts. Anyone can add, edit, or delete.</div>
+
+      <div style={{ marginBottom: 20, padding: "12px 14px", background: "rgba(249,98,3,0.04)", border: "1px solid rgba(249,98,3,0.22)", borderRadius: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: P.ember, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>{draft.id ? "Edit skill" : "Add new skill"}</div>
+        <input value={draft.label || ""} onChange={function (e) { setDraft(Object.assign({}, draft, { label: e.target.value })); }} placeholder="Short label (e.g. 'Draft a B2B lead campaign')"
+          style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 8, padding: "8px 12px", color: P.txt, fontSize: 12, fontFamily: ff, marginBottom: 8, outline: "none" }} />
+        <input value={draft.description || ""} onChange={function (e) { setDraft(Object.assign({}, draft, { description: e.target.value })); }} placeholder="One-line description (optional)"
+          style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 8, padding: "8px 12px", color: P.txt, fontSize: 12, fontFamily: ff, marginBottom: 8, outline: "none" }} />
+        <textarea value={draft.prompt || ""} onChange={function (e) { setDraft(Object.assign({}, draft, { prompt: e.target.value })); }} rows={5} placeholder="The full prompt Sami sees when the team clicks this skill"
+          style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 8, padding: "9px 12px", color: P.txt, fontSize: 12, fontFamily: ff, resize: "vertical", outline: "none", lineHeight: 1.55 }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button onClick={props.onSave} disabled={!draft.label || !draft.prompt}
+            style={{ background: (!draft.label || !draft.prompt) ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 8, padding: "8px 18px", color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: (!draft.label || !draft.prompt) ? "default" : "pointer", textTransform: "uppercase" }}>
+            {draft.id ? "Save changes" : "Add skill"}
+          </button>
+          {draft.id && <button onClick={function () { setDraft({ id: "", label: "", description: "", prompt: "" }); }}
+            style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "8px 14px", color: P.sub, fontSize: 11, fontWeight: 700, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>Cancel</button>}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {skills.map(function (s) {
+          return <div key={s.id} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid " + P.rule, borderRadius: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: P.txt, fontFamily: ff, marginBottom: 3 }}>{s.label}</div>
+                {s.description && <div style={{ fontSize: 11, color: P.label || "#c9c1d5", fontFamily: ff, marginBottom: 6, lineHeight: 1.5 }}>{s.description}</div>}
+                <div style={{ fontSize: 10.5, color: P.caption || "#8B7FA3", fontFamily: fm, lineHeight: 1.55, whiteSpace: "pre-wrap", maxHeight: 60, overflow: "hidden" }}>{s.prompt}</div>
+              </div>
+              <div style={{ display: "flex", gap: 4, flex: "0 0 auto" }}>
+                <button onClick={function () { setDraft({ id: s.id, label: s.label, description: s.description || "", prompt: s.prompt }); }}
+                  style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 5, padding: "3px 8px", color: P.sub, fontSize: 10, cursor: "pointer" }}>Edit</button>
+                <button onClick={function () { if (window.confirm("Delete '" + s.label + "'?")) props.onDelete(s.id); }}
+                  style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 5, padding: "3px 8px", color: P.critical || "#ef4444", fontSize: 10, cursor: "pointer" }}>Delete</button>
+              </div>
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
+}
+
+function MemoryModal(props) {
+  var P = props.P, ff = props.ff, fm = props.fm;
+  var client = props.client;
+  if (!client) return null;
+  var draft = props.draft || { id: "", label: "", value: "" };
+  var setDraft = props.setDraft;
+  var notes = Array.isArray(client.notes) ? client.notes : [];
+  return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={props.onClose}>
+    <div onClick={function (e) { e.stopPropagation(); }} style={{ maxWidth: 720, width: "100%", maxHeight: "85vh", overflowY: "auto", background: "#0d0520", border: "1px solid " + P.rule, borderRadius: 18, padding: "22px 24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 900, color: P.ember, letterSpacing: 3, fontFamily: fm, textTransform: "uppercase" }}>{client.name} · Memory</div>
+          <div style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, marginTop: 3 }}>@{client.slug} · {notes.length} note{notes.length === 1 ? "" : "s"}</div>
+        </div>
+        <button onClick={props.onClose} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 6, padding: "4px 10px", color: P.sub, fontSize: 10, fontWeight: 700, fontFamily: fm, letterSpacing: 1, cursor: "pointer", textTransform: "uppercase" }}>Close</button>
+      </div>
+
+      <div style={{ marginBottom: 20, padding: "12px 14px", background: "rgba(249,98,3,0.04)", border: "1px solid rgba(249,98,3,0.22)", borderRadius: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: P.ember, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>{draft.id ? "Edit note" : "Add note"}</div>
+        <input value={draft.label || ""} onChange={function (e) { setDraft(Object.assign({}, draft, { label: e.target.value })); }} placeholder="Short label (e.g. 'Standard budget', 'WhatsApp destination')"
+          style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 8, padding: "8px 12px", color: P.txt, fontSize: 12, fontFamily: ff, marginBottom: 8, outline: "none" }} />
+        <textarea value={draft.value || ""} onChange={function (e) { setDraft(Object.assign({}, draft, { value: e.target.value })); }} rows={3} placeholder="Full note text (Sami sees this verbatim when the client is mentioned)"
+          style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 8, padding: "9px 12px", color: P.txt, fontSize: 12, fontFamily: ff, resize: "vertical", outline: "none", lineHeight: 1.55 }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button onClick={props.onSaveNote} disabled={!draft.label || !draft.value}
+            style={{ background: (!draft.label || !draft.value) ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 8, padding: "8px 18px", color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: (!draft.label || !draft.value) ? "default" : "pointer", textTransform: "uppercase" }}>
+            {draft.id ? "Save note" : "Add note"}
+          </button>
+          {draft.id && <button onClick={function () { setDraft({ id: "", label: "", value: "" }); }}
+            style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 8, padding: "8px 14px", color: P.sub, fontSize: 11, fontWeight: 700, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>Cancel</button>}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {notes.map(function (n) {
+          return <div key={n.id} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid " + P.rule, borderRadius: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: P.solar || "#FFAA00", fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>{n.label}</div>
+                <div style={{ fontSize: 12, color: P.txt, fontFamily: ff, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{n.value}</div>
+              </div>
+              <div style={{ display: "flex", gap: 4, flex: "0 0 auto" }}>
+                <button onClick={function () { setDraft({ id: n.id, label: n.label, value: n.value }); }}
+                  style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 5, padding: "3px 8px", color: P.sub, fontSize: 10, cursor: "pointer" }}>Edit</button>
+                <button onClick={function () { if (window.confirm("Delete '" + n.label + "'?")) props.onDeleteNote(n.id); }}
+                  style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 5, padding: "3px 8px", color: P.critical || "#ef4444", fontSize: 10, cursor: "pointer" }}>Delete</button>
+              </div>
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
+}
+
 // ---- Creative pair card (Phase 3) ---------------------------------------
 // Rendered when Sami emits a <CREATIVE_PAIR_CARD> block after walking a
 // Drive/Dropbox folder. Shows the paired concepts as a grid of 1:1 +
@@ -435,6 +633,15 @@ export default function CreateChatTab(props) {
   var trs = useState([]), threads = trs[0], setThreads = trs[1];       // Sidebar list
   var thErr = useState(""), threadErr = thErr[0], setThreadErr = thErr[1]; // Load/save error banner
 
+  // Phase 4 state — Skills / Memory / Scheduled
+  var sks = useState([]), skills = sks[0], setSkills = sks[1];
+  var mcs = useState([]), memoryClients = mcs[0], setMemoryClients = mcs[1];
+  var scs = useState([]), scheduled = scs[0], setScheduled = scs[1];
+  var smd = useState(false), skillsModalOpen = smd[0], setSkillsModalOpen = smd[1];
+  var mmd = useState(null), memoryModalClient = mmd[0], setMemoryModalClient = mmd[1]; // full client record or null
+  var sdr = useState({ id: "", label: "", description: "", prompt: "" }), skillDraft = sdr[0], setSkillDraft = sdr[1];
+  var ndr = useState({ id: "", label: "", value: "" }), noteDraft = ndr[0], setNoteDraft = ndr[1];
+
   useEffect(function () {
     if (!busy) return;
     var id = setInterval(function () { setQuipIdx(function (i) { return (i + 1) % LOADERS.length; }); }, 2600);
@@ -530,6 +737,100 @@ export default function CreateChatTab(props) {
       .then(function (d) { if (d && Array.isArray(d.threads)) setThreads(d.threads); });
   };
 
+  // ---- Phase 4 fetchers (skills / memory / scheduled) ---
+  var fetchSkills = function () {
+    if (!token) return;
+    fetch(apiBase + "/api/nlp/sami-skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "list" })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.skills)) setSkills(d.skills); })
+      .catch(function () { /* non-fatal */ });
+  };
+  var fetchMemoryClients = function () {
+    if (!token || !user) return;
+    fetch(apiBase + "/api/nlp/sami-memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "list", user: user })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.clients)) setMemoryClients(d.clients); })
+      .catch(function () { /* non-fatal */ });
+  };
+  var fetchScheduled = function () {
+    if (!token) return;
+    fetch(apiBase + "/api/nlp/sami-scheduled", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token }
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.scheduled)) setScheduled(d.scheduled); })
+      .catch(function () { /* non-fatal */ });
+  };
+  useEffect(function () { fetchSkills(); fetchMemoryClients(); fetchScheduled(); }, [token, user]);
+
+  var saveSkill = function () {
+    if (!token || !skillDraft.label || !skillDraft.prompt) return;
+    fetch(apiBase + "/api/nlp/sami-skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "save", user: user, skill: skillDraft })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && Array.isArray(d.skills)) setSkills(d.skills);
+        setSkillDraft({ id: "", label: "", description: "", prompt: "" });
+      });
+  };
+  var deleteSkill = function (id) {
+    if (!token || !id) return;
+    fetch(apiBase + "/api/nlp/sami-skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "delete", id: id })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && Array.isArray(d.skills)) setSkills(d.skills); });
+  };
+  var injectSkill = function (skill) {
+    if (!skill || !skill.prompt) return;
+    setInput(skill.prompt);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  var openMemoryClient = function (meta) {
+    if (!token || !meta || !meta.slug) return;
+    fetch(apiBase + "/api/nlp/sami-memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "get", user: user, clientSlug: meta.slug, clientName: meta.name })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.client) setMemoryModalClient(d.client); });
+  };
+  var saveNote = function () {
+    if (!token || !memoryModalClient || !noteDraft.label || !noteDraft.value) return;
+    fetch(apiBase + "/api/nlp/sami-memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "upsertNote", user: user, clientSlug: memoryModalClient.slug, clientName: memoryModalClient.name, note: noteDraft })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.client) setMemoryModalClient(d.client);
+        if (d && Array.isArray(d.clients)) setMemoryClients(d.clients);
+        setNoteDraft({ id: "", label: "", value: "" });
+      });
+  };
+  var deleteNote = function (noteId) {
+    if (!token || !memoryModalClient || !noteId) return;
+    fetch(apiBase + "/api/nlp/sami-memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ op: "deleteNote", user: user, clientSlug: memoryModalClient.slug, noteId: noteId })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.client) setMemoryModalClient(d.client);
+        if (d && Array.isArray(d.clients)) setMemoryClients(d.clients);
+      });
+  };
+
   var deleteThread = function (id) {
     if (!token || !user || !id) return;
     fetch(apiBase + "/api/nlp/sami-threads", {
@@ -587,9 +888,23 @@ export default function CreateChatTab(props) {
           content: x.data.reply || "",
           cards: Array.isArray(x.data.cards) ? x.data.cards : [],
           pairCards: Array.isArray(x.data.pairCards) ? x.data.pairCards : [],
+          memories: Array.isArray(x.data.memories) ? x.data.memories : [],
           actions: Array.isArray(x.data.actions) ? x.data.actions : [],
           live: Array.isArray(x.data.actions) && x.data.actions.length > 0
         };
+        // Auto-persist any SAVE_MEMORY blocks Sami emitted (Phase 4).
+        // Fire-and-forget: refreshes the memory clients list after each
+        // save so the sidebar updates immediately.
+        if (samiTurn.memories.length > 0) {
+          samiTurn.memories.forEach(function (mem) {
+            fetch(apiBase + "/api/nlp/sami-memory", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+              body: JSON.stringify({ op: "upsertNote", user: user, clientSlug: mem.clientSlug, clientName: mem.clientName, note: { label: mem.label, value: mem.value } })
+            }).then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (d) { if (d && Array.isArray(d.clients)) setMemoryClients(d.clients); });
+          });
+        }
         var withReply = next.concat([samiTurn]);
         setMessages(withReply);
         // Seed each new approval card to pending status.
@@ -665,13 +980,30 @@ export default function CreateChatTab(props) {
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         <ConnectorsRail P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} />
-        {/* Phase 2 addition: Recent Conversations. User-scoped, click any
-            row to load its full history back into the main chat. */}
+        {/* Phase 2: Recent Conversations */}
         <div style={{ marginTop: 4, borderTop: "1px solid " + P.rule, paddingTop: 8 }}>
           <RecentSidebar P={P} ff={ff} fm={fm}
             threads={threads} currentThreadId={threadId}
             errorText={threadErr}
             onOpen={openThread} onDelete={deleteThread} onRename={renameThread} />
+        </div>
+        {/* Phase 4: Skills library — team-shared reusable prompts */}
+        <div style={{ marginTop: 4, borderTop: "1px solid " + P.rule, paddingTop: 8 }}>
+          <SkillsPanel P={P} ff={ff} fm={fm}
+            skills={skills}
+            onInject={injectSkill}
+            onManage={function () { setSkillDraft({ id: "", label: "", description: "", prompt: "" }); setSkillsModalOpen(true); }} />
+        </div>
+        {/* Phase 4: Memory — per-client notes Sami references automatically */}
+        <div style={{ marginTop: 4, borderTop: "1px solid " + P.rule, paddingTop: 8 }}>
+          <MemoryPanel P={P} ff={ff} fm={fm}
+            clients={memoryClients}
+            onOpen={openMemoryClient}
+            onManage={function () { setMemoryModalClient({ slug: "", name: "", notes: [] }); }} />
+        </div>
+        {/* Phase 4: Scheduled — read-only strip of upcoming automated tasks */}
+        <div style={{ marginTop: 4, borderTop: "1px solid " + P.rule, paddingTop: 8 }}>
+          <ScheduledStrip P={P} ff={ff} fm={fm} items={scheduled} />
         </div>
       </div>
       <div style={{ padding: "10px 14px", borderTop: "1px solid " + P.rule, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -798,5 +1130,15 @@ export default function CreateChatTab(props) {
         </button>
       </div>
     </section>
+
+    {/* Phase 4 modals (overlay, portal-like — mounted at hub root) */}
+    {skillsModalOpen && <SkillsModal P={P} ff={ff} fm={fm}
+      skills={skills} draft={skillDraft} setDraft={setSkillDraft}
+      onSave={saveSkill} onDelete={deleteSkill}
+      onClose={function () { setSkillsModalOpen(false); setSkillDraft({ id: "", label: "", description: "", prompt: "" }); }} />}
+    {memoryModalClient && <MemoryModal P={P} ff={ff} fm={fm}
+      client={memoryModalClient} draft={noteDraft} setDraft={setNoteDraft}
+      onSaveNote={saveNote} onDeleteNote={deleteNote}
+      onClose={function () { setMemoryModalClient(null); setNoteDraft({ id: "", label: "", value: "" }); }} />}
   </div>;
 }
