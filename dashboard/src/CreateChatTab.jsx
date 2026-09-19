@@ -551,6 +551,7 @@ export default function CreateChatTab(props) {
           content: x.data.reply || "",
           cards: Array.isArray(x.data.cards) ? x.data.cards : [],
           pairCards: Array.isArray(x.data.pairCards) ? x.data.pairCards : [],
+          actions: Array.isArray(x.data.actions) ? x.data.actions : [],
           live: Array.isArray(x.data.actions) && x.data.actions.length > 0
         };
         var withReply = next.concat([samiTurn]);
@@ -702,10 +703,25 @@ export default function CreateChatTab(props) {
                 status={cardStatus[c.id] || "pending"}
                 onApprove={handleApprove} onReject={handleReject} />;
             })}
-            {m.live && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 9, fontWeight: 700, color: P.mint || "#34D399", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>
+            {m.live && <div title={Array.isArray(m.actions) && m.actions.length ? ("Engine calls: " + m.actions.join(", ")) : "Live engine activity"}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 9, fontWeight: 700, color: P.mint || "#34D399", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", cursor: "help" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: P.mint || "#34D399" }} />
-              Live engine
+              Live engine · {(m.actions || []).length} call{(m.actions || []).length === 1 ? "" : "s"}
             </div>}
+            {/* When Sami replies to an approval with ZERO tool calls, surface
+                a visible warning — this is the exact silent-failure mode where
+                Sami acknowledges approval in text but never actually invokes
+                the write. Only shown for assistant turns that follow an
+                APPROVED/PAIRS_OK user message. */}
+            {(!m.live) && i > 0 && (function () {
+              var prev = messages[i - 1];
+              if (!prev || prev.role !== "user") return null;
+              if (!/^(APPROVED|PAIRS_OK): /.test(prev.content || "")) return null;
+              return <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 9, fontWeight: 800, color: P.critical || "#ef4444", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "3px 8px" }}
+                title="Sami acknowledged the approval in text but did not invoke a write tool. She should have called run_write_operation. Ask her to retry.">
+                ⚠ No tool call fired
+              </div>;
+            })()}
           </div>;
         })}
 
