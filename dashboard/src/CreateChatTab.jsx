@@ -759,6 +759,22 @@ export default function CreateChatTab(props) {
                 ⚠ No tool call fired
               </div>;
             })()}
+            {/* Prose-card anti-pattern detector: Sami mentioned '✓ Approve'
+                or similar as plain text but emitted NO APPROVAL_CARD tag.
+                Means she described the write but didn't wrap it in the
+                required format, so the user can't actually approve. Shows
+                a helpful nudge to ask her to retry in the correct format. */}
+            {(function () {
+              var hasCards = Array.isArray(m.cards) && m.cards.length > 0;
+              var hasPairCards = Array.isArray(m.pairCards) && m.pairCards.length > 0;
+              if (hasCards || hasPairCards) return null;
+              var text = String(m.content || "");
+              var mentionsApprove = /✓\s*Approve|Approve\s*✓|approval|APPROVED:/.test(text) && /(create|paused|budget|ad ?set|campaign|ad$|creative)/i.test(text);
+              if (!mentionsApprove) return null;
+              return <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.35)", borderRadius: 8, fontSize: 11, color: P.txt, fontFamily: fm, lineHeight: 1.55 }}>
+                <strong style={{ color: P.solar || "#FFAA00" }}>No interactive approval card was emitted.</strong> Sami described a proposed change in text but did not wrap it in the required approval format, so there is no button to click. Type <em>"emit that as a proper approval card"</em> or hit Send with an empty message to nudge her to retry.
+              </div>;
+            })()}
           </div>;
         })}
 
