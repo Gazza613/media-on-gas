@@ -195,13 +195,13 @@ export default async function handler(req, res) {
         return out;
       }).filter(function (m) { return m.content; });
 
-      // Audit fix #7: persist per-card approval / pair-confirm status
-      // so a reloaded thread doesn't render historic cards as pending
-      // (which would let a click re-fire the write, defeating the
-      // idempotency + nonce guards). Keys must match the id shape Sami
-      // emits; values must match the enum the frontend renders.
+      // Audit fix #7 + #6: persist per-card approval / pair-confirm /
+      // plan-approval status so a reloaded thread doesn't render
+      // historic cards as pending (which would let a click re-fire the
+      // write, defeating the idempotency + nonce guards).
       var cardStatus = sanitiseStatusMap(body.cardStatus, ["approved", "rejected", "pending"]);
       var pairStatus = sanitiseStatusMap(body.pairStatus, ["confirmed", "rejected", "pending"]);
+      var planStatus = sanitiseStatusMap(body.planStatus, ["approved", "rejected", "pending"]);
 
       var now = Date.now();
       var existing = await readThread(user, sid);
@@ -212,7 +212,8 @@ export default async function handler(req, res) {
         updatedAt: now,
         messages: messages,
         cardStatus: cardStatus,
-        pairStatus: pairStatus
+        pairStatus: pairStatus,
+        planStatus: planStatus
       };
       await writeThread(user, thread);
 

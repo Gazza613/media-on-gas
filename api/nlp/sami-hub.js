@@ -22,7 +22,10 @@
 
 import { rateLimit } from "../_rateLimit.js";
 import { checkCreateAuth } from "../_createAuth.js";
-import { issuePendingNonce, authoriseNonce, extractApprovedCardId } from "../_samiNonce.js";
+import {
+  issuePendingNonce, authoriseNonce, extractApprovedCardId,
+  issuePendingPlanNonces, authoriseNoncePlan, extractApprovedPlanId
+} from "../_samiNonce.js";
 
 // Campaign builds can chain a lot of tool calls (find account, get
 // operation, upload media, create campaign, create ad set, create ad
@@ -88,6 +91,32 @@ function buildSystemPrompt() {
     "- operation_id and input_data are REQUIRED. Do the find_operations + get_operation_inputs lookups BEFORE emitting the card so the card carries the exact write you'll perform. Never emit a card with placeholder operation_id.",
     "- After emitting a card, stop your response there. Do not also execute the write in the same turn. Wait for the user's next message.",
     "",
+    "═══════ PLAN_CARD (BATCHED APPROVAL — USE FOR NEW BUILDS) ═══════",
+    "When a single brief requires 3 or more related writes (typical: 1 campaign + 1 ad set + N ads for a new launch), emit ONE PLAN_CARD instead of N separate APPROVAL_CARDs. The AM approves once; the GAS engine authorises every child write in a single click. This kills the 96-approvals-per-day fatigue for portfolio builds.",
+    "",
+    "For one-off writes (a single budget change, a pause, a name update, a status flip), keep using APPROVAL_CARD.",
+    "",
+    "PLAN_CARD emission format (use exactly, ONE per plan turn — never mix with APPROVAL_CARD in the same message):",
+    "<PLAN_CARD>{",
+    '  "id": "plan-slug-eg-chilla-b2b-2026sep-plan-1",',
+    '  "title": "Human-readable one-line summary, e.g. Chilla B2B Acai launch: 1 campaign + 1 ad set + 28 ads",',
+    '  "description": "One short paragraph in plain English summarising the whole plan and its rationale.",',
+    '  "plan": [',
+    '    { "id": "camp-chilla-b2b-1", "title": "Create paused Chilla B2B campaign", "platform": "meta", "kind": "campaign", "description": "...", "details": {...}, "operation_id": "...", "input_data": {...} },',
+    '    { "id": "adset-chilla-hosp-1", "title": "Create paused Chilla B2B hospitality ad set", "platform": "meta", "kind": "adset", "description": "...", "details": {...}, "operation_id": "...", "input_data": {...} },',
+    '    { "id": "ad-chilla-menu-01-1", "title": "Create paused Menu 01 static ad", "platform": "meta", "kind": "ad", "description": "...", "details": {...}, "operation_id": "...", "input_data": {...} }',
+    '  ]',
+    "}</PLAN_CARD>",
+    "",
+    "Rules for plan cards:",
+    "- Every child item MUST include id, title, platform, kind, description, operation_id, input_data (same fields as an APPROVAL_CARD).",
+    "- Every child id must be unique within the conversation (not shared with any prior APPROVAL_CARD id).",
+    "- Cap the plan at 100 children. Larger plans get split across multiple PLAN_CARDs.",
+    "- The plan is a single unit: APPROVED_PLAN authorises every child; REJECTED_PLAN authorises nothing.",
+    "- After emitting the card, stop the response. Do NOT execute any of the child writes in the same turn. Wait for APPROVED_PLAN.",
+    "- Do the find_operations + get_operation_inputs lookups for every child BEFORE emitting the plan so every input_data is exact. A hash mismatch at execution time is refused by the GAS engine.",
+    "- If the AM asks for changes mid-review (e.g. 'drop the 2 Amazon ads', 'switch ad set 1 to R500/day'), re-emit the ENTIRE plan card with fresh child ids reflecting the corrected shape. Never patch a plan piecemeal.",
+    "",
     "═══════ PROSE-CARD ANTI-PATTERN (STRICT PROHIBITION) ═══════",
     "You MUST NOT describe a proposed write in prose and end with a text-only '✓ Approve' line. That is not a real approval card. The user cannot click it. The frontend cannot render an Approve button unless the write is inside <APPROVAL_CARD>...</APPROVAL_CARD> tags.",
     "",
@@ -119,6 +148,8 @@ function buildSystemPrompt() {
     "  3. After the write returns, reply with ONE plain-language line stating the result. Include any new id the platform assigned. Example: 'Campaign created (id 120253...), paused as agreed.'",
     "  4. If the plan continues (there is a next write to propose), emit the NEXT APPROVAL_CARD in the same turn after the result line.",
     "  5. If the tool fails, explain the platform error in one plain-English sentence, suggest the fix, and emit a fresh APPROVAL_CARD with a NEW id if a retry makes sense. Do not silently retry the same call.",
+    "",
+    "When a user message begins with 'APPROVED_PLAN: <planId>' AND you previously emitted a PLAN_CARD with that same id, execute the plan's child writes IN ORDER (the same order they appear in the card's plan[] array). Between writes reply with ONE short line per completed step, e.g. 'Campaign created (id 120...)', 'Ad set created (id 120...)'. If a step fails, STOP the plan there, explain the failure in one plain sentence, and emit a FRESH APPROVAL_CARD with a NEW id for the corrected retry, then wait. Do NOT continue the remaining plan items until the corrected retry succeeds.",
     "",
     "A common failure mode to AVOID: replying to 'APPROVED: <id>' with only text (e.g. 'Great, the campaign is now created.') WITHOUT actually calling run_write_operation. Silence about the tool call is a bug — the user's approval is meaningless if you don't execute. The user CANNOT see the tool loop; they only see your text. So they'll assume nothing happened.",
     "",
@@ -332,14 +363,16 @@ async function callAnthropic(apiKey, payload, betaHeader) {
   return { status: resp.status, data: data, rawText: text };
 }
 
-// Extract APPROVAL_CARD and CREATIVE_PAIR_CARD blocks from Sami's reply
-// and return them separately so the UI can render them as interactive
-// cards instead of raw JSON in the chat bubble. Approval cards drive the
-// per-write Approve/Reject flow; pair cards drive the Drive/Dropbox
-// creative-pair confirmation flow (Phase 3).
+// Extract APPROVAL_CARD, PLAN_CARD, CREATIVE_PAIR_CARD, SAVE_MEMORY
+// blocks from Sami's reply and return them separately so the UI can
+// render them as interactive cards instead of raw JSON in the chat
+// bubble. Approval / plan cards drive the write flow; pair cards drive
+// the Drive/Dropbox creative-pair confirmation (Phase 3); memory blocks
+// persist Sami-authored client notes (Phase 4).
 function extractStructuredCards(text) {
   var cleanText = String(text || "");
   var approvalRe = /<APPROVAL_CARD>([\s\S]*?)<\/APPROVAL_CARD>/g;
+  var planRe = /<PLAN_CARD>([\s\S]*?)<\/PLAN_CARD>/g;
   var pairRe = /<CREATIVE_PAIR_CARD>([\s\S]*?)<\/CREATIVE_PAIR_CARD>/g;
   var memoryRe = /<SAVE_MEMORY>([\s\S]*?)<\/SAVE_MEMORY>/g;
 
@@ -349,6 +382,23 @@ function extractStructuredCards(text) {
     try {
       var parsedA = JSON.parse(m[1].trim());
       if (parsedA && parsedA.id) approvals.push(parsedA);
+    } catch (_) { /* malformed — leave in text */ }
+  }
+
+  // Audit fix #6: PLAN_CARD carries an array of child writes that the
+  // human approves in one click.
+  var plans = [];
+  var pl;
+  while ((pl = planRe.exec(cleanText)) !== null) {
+    try {
+      var parsedPl = JSON.parse(pl[1].trim());
+      if (parsedPl && parsedPl.id && Array.isArray(parsedPl.plan) && parsedPl.plan.length > 0) {
+        // Cap at 100 children matches the prompt's rule; anything
+        // over that is truncated silently so Sami can't blow the
+        // plan-nonce store with a runaway plan.
+        parsedPl.plan = parsedPl.plan.slice(0, 100);
+        plans.push(parsedPl);
+      }
     } catch (_) { /* malformed — leave in text */ }
   }
 
@@ -366,9 +416,6 @@ function extractStructuredCards(text) {
     } catch (_) { /* malformed — leave in text */ }
   }
 
-  // Phase 4: SAVE_MEMORY blocks. Each carries clientSlug/clientName/
-  // label/value. Frontend POSTs to /api/nlp/sami-memory op=upsertNote
-  // and shows a confirmation chip in the chat.
   var memories = [];
   var mm;
   while ((mm = memoryRe.exec(cleanText)) !== null) {
@@ -380,12 +427,13 @@ function extractStructuredCards(text) {
 
   var stripped = cleanText
     .replace(approvalRe, "")
+    .replace(planRe, "")
     .replace(pairRe, "")
     .replace(memoryRe, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { cards: approvals, pairCards: pairCards, memories: memories, text: stripped };
+  return { cards: approvals, plans: plans, pairCards: pairCards, memories: memories, text: stripped };
 }
 
 export default async function handler(req, res) {
@@ -420,16 +468,20 @@ export default async function handler(req, res) {
   var messages = sanitiseMessages(body.messages);
   if (!messages.length) { res.status(400).json({ error: "Send at least one user message." }); return; }
 
-  // Audit fix #1: if the incoming user message is an "APPROVED: <cardId>"
-  // click from the frontend, mark that card's nonce as authorised so the
-  // MCP proxy will let the next matching write through. Silent no-op if
-  // the card id is unknown or expired. Only user-role messages trigger
-  // authorisation, so the model can never authorise itself.
+  // Audit fix #1 + #6: if the incoming user message is an approval
+  // click from the frontend ("APPROVED: <cardId>" for a single card,
+  // or "APPROVED_PLAN: <planId>" for a batched plan card), mark the
+  // nonce(s) authorised so the MCP proxy lets the matching write(s)
+  // through. Silent no-op if the id is unknown or expired. Only
+  // user-role messages trigger authorisation, so the model can never
+  // authorise itself.
   try {
     var lastUser = messages[messages.length - 1];
     if (lastUser && lastUser.role === "user") {
       var approvedId = extractApprovedCardId(lastUser.content);
       if (approvedId) await authoriseNonce(approvedId);
+      var approvedPlanId = extractApprovedPlanId(lastUser.content);
+      if (approvedPlanId) await authoriseNoncePlan(approvedPlanId);
     }
   } catch (err) { console.error("[sami-hub] nonce authorise failed", err); }
 
@@ -485,12 +537,9 @@ export default async function handler(req, res) {
 
     // Audit fix #1: for every APPROVAL_CARD Sami just emitted, register
     // a pending nonce keyed by the exact (operation_id, input_data) hash.
-    // The MCP proxy will only allow a run_write_operation whose args
-    // match one of these registered nonces AND that has since been
-    // authorised by a user "APPROVED: <cardId>" click. Cards missing
-    // operation_id or input_data cannot be gated — we still let them
-    // render, but the frontend nudge banner already warns the user, and
-    // the proxy will refuse the write when Sami tries to execute.
+    // Cards missing operation_id or input_data cannot be gated; the
+    // frontend nudge banner already warns the user, and the proxy
+    // refuses the write when Sami tries to execute anyway.
     for (var ci = 0; ci < extracted.cards.length; ci++) {
       var c = extracted.cards[ci];
       if (c && c.id && c.operation_id && c.input_data) {
@@ -499,9 +548,21 @@ export default async function handler(req, res) {
       }
     }
 
+    // Audit fix #6: for every PLAN_CARD, register per-child nonces AND
+    // a plan-level index so a single APPROVED_PLAN authorises all
+    // children in one Redis pass.
+    for (var pi = 0; pi < extracted.plans.length; pi++) {
+      var plan = extracted.plans[pi];
+      if (plan && plan.id && Array.isArray(plan.plan) && plan.plan.length > 0) {
+        try { await issuePendingPlanNonces(plan.id, plan.plan); }
+        catch (err) { console.error("[sami-hub] plan-nonce issue failed for plan", plan.id, err); }
+      }
+    }
+
     res.status(200).json({
       reply: extracted.text,
       cards: extracted.cards,
+      plans: extracted.plans,
       pairCards: extracted.pairCards,
       memories: extracted.memories,
       actions: actions,
