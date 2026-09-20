@@ -144,14 +144,24 @@ export default async function handler(req, res) {
     }
   }
 
-  // Forward to Markifact. For writes we force Accept: application/json
-  // so we get a single buffered response we can inspect + cache. For
-  // all other methods we pass through the client's Accept so Anthropic
-  // can use SSE if it wants to.
+  // Forward to Markifact. Force Accept: application/json on EVERY
+  // request (not just writes) so Markifact always responds with a
+  // single buffered JSON body. Streaming SSE responses through a
+  // Vercel serverless function was causing intermittent Sami "Network
+  // error" failures on the very first Anthropic → proxy handshake
+  // (initialize / tools/list): the piped stream did not flush headers
+  // reliably and Anthropic retried until the function hit its 240s
+  // maxDuration ceiling and Vercel returned a 504 HTML page that the
+  // frontend .then chain could not parse as JSON.
+  //
+  // MCP Streamable HTTP explicitly permits either response mode; the
+  // client (Anthropic) advertises both in its Accept header and the
+  // server chooses. Choosing JSON-only avoids the stream-pipe path
+  // entirely without breaking spec.
   var forwardHeaders = {
     "content-type": "application/json",
     "authorization": "Bearer " + mcpToken,
-    "accept": isWrite ? "application/json" : (req.headers.accept || "application/json, text/event-stream")
+    "accept": "application/json"
   };
   var sess = req.headers["mcp-session-id"];
   if (sess) forwardHeaders["mcp-session-id"] = sess;

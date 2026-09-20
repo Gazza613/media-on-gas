@@ -1190,7 +1190,19 @@ export default function CreateChatTab(props) {
         // and a page refresh / cross-device resume finds this conversation.
         saveThread(activeThreadId, withReply);
       })
-      .catch(function () { setBusy(false); setErr("Network error. Check your connection and try again."); });
+      .catch(function (e) {
+        setBusy(false);
+        var reason = (e && (e.name === "AbortError" ? "Request cancelled." : e.message)) || "unknown";
+        // Distinguish body-parse failures (Vercel 504 returning HTML)
+        // from actual network drops so the AM can see which one hit.
+        // "Failed to fetch" is Chrome's message for a real network
+        // failure. Everything else here is usually a non-JSON response.
+        var isNetFail = /failed to fetch|networkerror/i.test(reason);
+        setErr(isNetFail
+          ? ("Network error, check your connection and try again. (" + reason + ")")
+          : ("Sami's response was not readable. This usually means an upstream timeout. Retry in a moment. (" + reason + ")"));
+        try { console.error("[sami-hub] send failed:", e); } catch (_) {}
+      });
   };
 
   // Audit fix #7: persist card status the instant it changes so a
