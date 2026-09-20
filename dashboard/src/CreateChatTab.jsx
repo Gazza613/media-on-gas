@@ -329,6 +329,9 @@ function UsageStrip(props) {
   var P = props.P, ff = props.ff, fm = props.fm, apiBase = props.apiBase, token = props.token;
   var s0 = useState({ loading: true, daily: [], currentMonth: { total: 0, byUser: {} }, plan: { creditsLimit: 5000, alertAt: 4800, resetDay: 25 } });
   var state = s0[0], setState = s0[1];
+  // Collapsed by default so the chat area gets the vertical space it
+  // needs. Click the header row to expand into the full 3-panel view.
+  var os = useState(false), open = os[0], setOpen = os[1];
 
   useEffect(function () {
     if (!token) return;
@@ -395,13 +398,20 @@ function UsageStrip(props) {
   var cardBg = "rgba(255,255,255,0.02)";
   var kpiBg = "rgba(0,0,0,0.30)";
 
-  return <div style={{ borderTop: "1px solid " + P.rule, background: "rgba(0,0,0,0.20)", padding: "20px 22px" }}>
-    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
-      <span style={{ fontSize: 12, fontWeight: 900, color: P.ember, fontFamily: fm, letterSpacing: 3, textTransform: "uppercase" }}>Credit Usage Overview</span>
-      <span style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm }}>Monitor Markifact-tool consumption and trends</span>
-    </div>
+  return <div style={{ borderTop: "1px solid " + P.rule, background: "rgba(0,0,0,0.20)" }}>
+    {/* Always-visible compact header: percent, credits remaining, days
+        to reset. Click to expand into the full 3-panel dashboard. Keeps
+        the chat area tall by default. */}
+    <button onClick={function () { setOpen(!open); }}
+      style={{ width: "100%", background: "transparent", border: "none", borderBottom: open ? "1px solid " + P.rule : "none", padding: "12px 22px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", color: P.txt, fontFamily: fm, textAlign: "left" }}>
+      <span style={{ fontSize: 11, fontWeight: 900, color: P.ember, letterSpacing: 3, textTransform: "uppercase" }}>Credit Usage</span>
+      <span style={{ fontSize: 11, fontWeight: 800, color: ringColor }}>{(pct * 100).toFixed(0)}%</span>
+      <span style={{ fontSize: 11, color: P.label, fontWeight: 600 }}>{used.toLocaleString("en-ZA")} / {plan.creditsLimit.toLocaleString("en-ZA")}</span>
+      <span style={{ fontSize: 10, color: P.caption }}>· {remaining.toLocaleString("en-ZA")} remaining · resets in {daysToReset}d</span>
+      <span style={{ marginLeft: "auto", fontSize: 10, color: P.caption, letterSpacing: 1, textTransform: "uppercase" }}>{open ? "▲ Hide details" : "▼ Show details"}</span>
+    </button>
 
-    <div style={{ display: "grid", gap: 14 }}>
+    {open && <div style={{ padding: "16px 22px 20px", display: "grid", gap: 14 }}>
       {/* Panel 1: Credit Usage donut + three KPI cards */}
       <div style={{ background: cardBg, border: "1px solid " + P.rule, borderRadius: 14, padding: 20 }}>
         <div style={{ fontSize: 13, color: P.txt, fontFamily: fm, fontWeight: 800, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -486,7 +496,7 @@ function UsageStrip(props) {
           })}
         </div>
       </div>}
-    </div>
+    </div>}
   </div>;
 }
 
@@ -1363,7 +1373,8 @@ export default function CreateChatTab(props) {
           return;
         }
         if (!x.ok || !x.data) {
-          setErr((x.data && x.data.error) || "Sami hit a problem answering. Try again.");
+          setErr(((x.data && x.data.error) || "Sami hit a problem answering. Try again.") + (x.data && x.data.detail ? " — " + x.data.detail.slice(0, 240) : ""));
+          try { if (x.data && x.data.detail) console.error("[sami-hub] error detail:", x.data.detail); } catch (_) {}
           return;
         }
         var samiTurn = {
@@ -1763,13 +1774,13 @@ export default function CreateChatTab(props) {
 
       {err && <div style={{ margin: "0 22px 10px", padding: "9px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 11, color: P.critical || "#ef4444", fontFamily: fm }}>{err}</div>}
 
-      <div style={{ borderTop: "1px solid " + P.rule, padding: "14px 22px", display: "flex", gap: 12, alignItems: "flex-end" }}>
+      <div style={{ borderTop: "1px solid " + P.rule, padding: "16px 22px", display: "flex", gap: 12, alignItems: "flex-end", background: "rgba(20,10,40,0.4)" }}>
         <textarea ref={inputRef} value={input}
-          onChange={function (e) { setInput(e.target.value); }} onKeyDown={onKeyDown} rows={2}
+          onChange={function (e) { setInput(e.target.value); }} onKeyDown={onKeyDown} rows={3}
           placeholder="Ask Sami anything. Describe the campaign to build, or hit New task to reset."
-          style={{ flex: 1, resize: "none", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 12, padding: "11px 14px", color: P.txt, fontSize: 13, fontFamily: ff, lineHeight: 1.55, outline: "none" }} />
+          style={{ flex: 1, resize: "none", background: "rgba(60,40,90,0.55)", border: "1.5px solid rgba(249,98,3,0.35)", borderRadius: 12, padding: "13px 16px", color: P.txt, fontSize: 14, fontFamily: ff, lineHeight: 1.6, outline: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.25)" }} />
         <button onClick={function () { send(); }} disabled={busy || !input.trim()}
-          style={{ background: (busy || !input.trim()) ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 12, padding: "12px 20px", color: "#fff", fontSize: 12, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: (busy || !input.trim()) ? "default" : "pointer", textTransform: "uppercase" }}>
+          style={{ background: (busy || !input.trim()) ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 12, padding: "14px 24px", color: "#fff", fontSize: 12, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: (busy || !input.trim()) ? "default" : "pointer", textTransform: "uppercase" }}>
           Send
         </button>
       </div>
