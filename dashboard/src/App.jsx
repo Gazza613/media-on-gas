@@ -4199,7 +4199,7 @@ function CampaignAuditModal(props){
           {
             name: "The Watchers",
             color: "#FFAA00",
-            desc: "Scheduled crons that keep the platform honest while you sleep.",
+            desc: "Backend automation that keeps the platform honest while you sleep. Every cron plus the one email dispatcher that carries every transactional email.",
             agents: [
               { n: "Reconcile & Alert", d: "Daily 06:00 UTC cross-platform metric reconcile with delta email." },
               { n: "Daily SLA Nudge", d: "06:30 UTC leadership nudge for any client whose last report is > 7 days old." },
@@ -4210,19 +4210,8 @@ function CampaignAuditModal(props){
               { n: "FB Page Snapshot", d: "Daily 04:05 UTC follower count for whole-account growth math." },
               { n: "Perf Snapshot", d: "Daily 04:10 UTC ground-truth performance ledger used by every trend chart." },
               { n: "Best-Practice Refresh", d: "Monthly 1st 02:00 UTC benchmark refresh." },
-              { n: "Credit-Balance Alert", d: "Every 6h scan of Sami consumption; emails Gary once per month at 4,800 credits." }
-            ]
-          },
-          {
-            name: "The Messengers",
-            color: "#FF6B00",
-            desc: "Every transactional email the platform sends, all through the same Gmail SMTP transport.",
-            agents: [
-              { n: "SAMI ON Invite", d: "Fires when an admin grants Sami access. Prompts the member to set their PIN on next visit." },
-              { n: "PIN Reset Notice", d: "Fires when admin clears a member's PIN. Tells the member to set a fresh one." },
-              { n: "Team Invite", d: "Fires when a new team member is invited. Branded dark-glass template." },
-              { n: "Password Reset", d: "Admin-triggered password reset with 1h token." },
-              { n: "Client Share Link", d: "Signed client-view link with rate-limited view counting." }
+              { n: "Credit-Balance Alert", d: "Every 6h scan of Sami consumption; emails Gary once per month at 4,800 credits." },
+              { n: "Email Dispatcher", d: "Single Gmail SMTP transport carrying every transactional email: SAMI ON invites, PIN resets, team invites, password resets, client share links." }
             ]
           }
         ];
