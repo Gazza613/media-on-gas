@@ -37,6 +37,10 @@
     {
       "path": "/api/cron/refresh-best-practices",
       "schedule": "0 2 1 * *"
+    },
+    {
+      "path": "/api/sami-usage-alert",
+      "schedule": "0 */6 * * *"
     }
   ],
   "rewrites": [

@@ -445,14 +445,24 @@ export default async function handler(req, res) {
   if (!apiKey) { res.status(503).json({ error: "Sami Hub not configured (ANTHROPIC_API_KEY missing)." }); return; }
 
   // MCP endpoint: prefer the GAS approval-gated proxy when configured
-  // (server-side nonce enforcement + write idempotency, audit fixes 1 + 2).
-  // Falls back to direct upstream when the proxy env vars are not set so
-  // Sami keeps working during rollout and preview deploys without the
-  // extra env vars.
+  // (server-side nonce enforcement + write idempotency + usage
+  // attribution, audit fixes 1 + 2 + credit tracking). Falls back to
+  // direct upstream when the proxy env vars are not set so Sami keeps
+  // working during rollout and preview deploys.
+  //
+  // We append ?user=<auth.user> to the proxy URL so per-call usage
+  // counters can attribute Markifact-tool consumption to the team
+  // member driving the conversation (Anthropic makes the actual tool
+  // call, so the proxy has no other way to know who initiated it).
   var useProxy = !!process.env.SAMI_MCP_PROXY_URL && !!process.env.SAMI_MCP_PROXY_TOKEN;
-  var mcpUrl = useProxy
-    ? process.env.SAMI_MCP_PROXY_URL
-    : (process.env.MARKIFACT_MCP_URL || "https://api.markifact.com/mcp");
+  var mcpUrl;
+  if (useProxy) {
+    var base = process.env.SAMI_MCP_PROXY_URL;
+    var sep = base.indexOf("?") >= 0 ? "&" : "?";
+    mcpUrl = base + sep + "user=" + encodeURIComponent(auth.user);
+  } else {
+    mcpUrl = process.env.MARKIFACT_MCP_URL || "https://api.markifact.com/mcp";
+  }
   var mcpToken = useProxy
     ? process.env.SAMI_MCP_PROXY_TOKEN
     : process.env.MARKIFACT_MCP_TOKEN;

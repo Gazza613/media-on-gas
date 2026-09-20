@@ -28,6 +28,7 @@
 import crypto from "crypto";
 import { verifyNonceForCall, consumeNonce } from "../_samiNonce.js";
 import { validateWriteInput } from "../_samiWriteGuard.js";
+import { recordUsage } from "../_samiUsage.js";
 
 export const config = { maxDuration: 240 };
 
@@ -98,6 +99,12 @@ export default async function handler(req, res) {
   var isToolsCall = body && body.method === "tools/call";
   var toolName = isToolsCall && body.params ? String(body.params.name || "") : "";
   var isWrite = toolName === "run_write_operation";
+
+  // Usage attribution: sami-hub.js appends ?user=<slug> to the proxy
+  // URL when it configures mcp_servers, so every tools/call Anthropic
+  // fires reaches us with the current team member in the query string.
+  // Purely informational, never used for gating.
+  var attributedUser = String((req.query && req.query.user) || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 40) || "unknown";
 
   // Enforce approval nonce + write guard on writes. Reads (tools/list,
   // resources/*, run_operation, upload_media, initialize, etc.) pass
@@ -187,6 +194,13 @@ export default async function handler(req, res) {
       } catch (err) {
         console.warn("[mcp-proxy] response not JSON, skipping idempotency cache", err && err.message);
       }
+    }
+    // Record usage AFTER we know the response was accepted. Only
+    // counts tools/call (reads + writes). initialize / tools/list /
+    // resources/* etc. flow through but do not consume a Markifact
+    // operation, so we don't count them.
+    if (isToolsCall && upstream.status >= 200 && upstream.status < 300) {
+      recordUsage(attributedUser, { isWrite: isWrite });
     }
     res.setHeader("content-type", upstreamCT || "application/json");
     res.status(upstream.status).send(text);

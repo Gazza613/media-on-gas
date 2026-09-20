@@ -234,6 +234,123 @@ function ApprovalCard(props) {
   </div>;
 }
 
+// ---- Usage strip (credit tracking at the bottom of the hub) --------------
+//
+// Compact strip below the composer that surfaces Markifact MCP-tool
+// consumption vs the monthly allowance. Data source is
+// /api/nlp/sami-usage, which sums the per-call counters the MCP proxy
+// writes. Shows: donut (month-to-date vs 5,000), 30-day sparkline,
+// per-team-member split, days to reset.
+
+function UsageStrip(props) {
+  var P = props.P, ff = props.ff, fm = props.fm, apiBase = props.apiBase, token = props.token;
+  var s0 = useState({ loading: true, daily: [], currentMonth: { total: 0, byUser: {} }, plan: { creditsLimit: 5000, alertAt: 4800, resetDay: 25 } });
+  var state = s0[0], setState = s0[1];
+
+  useEffect(function () {
+    if (!token) return;
+    fetch(apiBase + "/api/nlp/sami-usage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        setState({ loading: false, daily: d.daily || [], currentMonth: d.currentMonth || { total: 0, byUser: {} }, plan: d.plan || state.plan });
+      })
+      .catch(function () { setState(Object.assign({}, state, { loading: false })); });
+  }, [token, apiBase]);
+
+  var plan = state.plan;
+  var used = state.currentMonth.total || 0;
+  var pct = plan.creditsLimit > 0 ? Math.min(1, used / plan.creditsLimit) : 0;
+  var alertPct = plan.creditsLimit > 0 ? plan.alertAt / plan.creditsLimit : 0.96;
+  var overAlert = used >= plan.alertAt;
+  var atLimit = used >= plan.creditsLimit;
+  var ringColor = atLimit ? (P.critical || "#ef4444")
+    : overAlert ? (P.solar || "#FFAA00")
+    : (P.mint || "#34D399");
+
+  // Days-to-reset assuming Markifact resets on the plan.resetDay of each month.
+  var now = new Date();
+  var day = now.getUTCDate();
+  var nextReset;
+  if (day < plan.resetDay) {
+    nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), plan.resetDay));
+  } else {
+    nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, plan.resetDay));
+  }
+  var daysToReset = Math.max(0, Math.ceil((nextReset.getTime() - now.getTime()) / (24 * 3600 * 1000)));
+
+  // Donut geometry (compact 56px).
+  var size = 56, stroke = 6, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  var offset = c * (1 - pct);
+
+  // Sparkline geometry (last 30 days, oldest→newest).
+  var trend = state.daily.slice().reverse();
+  var maxDay = trend.reduce(function (mx, d) { return Math.max(mx, d.total || 0); }, 1);
+  var swW = 220, swH = 40;
+  var trendPath = trend.map(function (d, i) {
+    var x = trend.length <= 1 ? 0 : (i / (trend.length - 1)) * swW;
+    var y = swH - ((d.total || 0) / maxDay) * (swH - 4) - 2;
+    return (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1);
+  }).join(" ");
+
+  // Per-user bars (current month), sorted desc.
+  var users = Object.keys(state.currentMonth.byUser || {}).map(function (u) {
+    return { user: u, n: state.currentMonth.byUser[u] };
+  }).sort(function (a, b) { return b.n - a.n; });
+  var userMax = users.reduce(function (mx, u) { return Math.max(mx, u.n); }, 1);
+
+  return <div style={{ borderTop: "1px solid " + P.rule, padding: "12px 22px", background: "rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ position: "relative", width: size, height: size }}>
+        <svg width={size} height={size} viewBox={"0 0 " + size + " " + size}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={ringColor} strokeWidth={stroke}
+            strokeDasharray={c.toFixed(2)} strokeDashoffset={offset.toFixed(2)}
+            strokeLinecap="round" transform={"rotate(-90 " + (size / 2) + " " + (size / 2) + ")"} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: P.txt, fontFamily: fm }}>
+          {(pct * 100).toFixed(0)}%
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.35 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Credits used this month</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: P.txt, fontFamily: fm }}>
+          {used.toLocaleString("en-ZA")} <span style={{ fontSize: 10, fontWeight: 600, color: P.sub }}>of {plan.creditsLimit.toLocaleString("en-ZA")}</span>
+        </span>
+        <span style={{ fontSize: 9, fontWeight: 700, color: overAlert ? ringColor : (P.caption || "#8B7FA3"), fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>
+          {overAlert ? "Over " + plan.alertAt + " · top up" : (plan.alertAt - used).toLocaleString("en-ZA") + " until alert"}
+          {" · "} resets in {daysToReset}d
+        </span>
+      </div>
+    </div>
+
+    {trend.length > 0 && <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.35, minWidth: swW + 20 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase" }}>Last 30 days</span>
+      <svg width={swW} height={swH} viewBox={"0 0 " + swW + " " + swH} style={{ marginTop: 3 }}>
+        {trendPath && <path d={trendPath} fill="none" stroke={P.ember || "#FF6B00"} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />}
+        {trendPath && <line x1={0} x2={swW} y1={swH - 1} y2={swH - 1} stroke="rgba(255,255,255,0.08)" />}
+      </svg>
+    </div>}
+
+    {users.length > 0 && <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", lineHeight: 1.35, gap: 3 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 2 }}>By team member (this month)</span>
+      {users.map(function (u) {
+        var barPct = userMax > 0 ? (u.n / userMax) : 0;
+        return <div key={u.user} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, fontFamily: fm, color: P.txt }}>
+          <span style={{ minWidth: 56, textTransform: "capitalize", color: P.label || "#c9c1d5" }}>{u.user}</span>
+          <div style={{ flex: 1, height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ width: (barPct * 100).toFixed(1) + "%", height: "100%", background: "linear-gradient(90deg,#FF3D00,#FF6B00)" }} />
+          </div>
+          <span style={{ minWidth: 40, textAlign: "right", fontWeight: 700 }}>{u.n.toLocaleString("en-ZA")}</span>
+        </div>;
+      })}
+    </div>}
+  </div>;
+}
+
 // ---- Plan card (audit fix #6, batched approval) --------------------------
 //
 // Sami emits <PLAN_CARD>{...}</PLAN_CARD> when a single brief requires 3+
@@ -1288,6 +1405,8 @@ export default function CreateChatTab(props) {
           Send
         </button>
       </div>
+
+      <UsageStrip P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} />
     </section>
 
     {/* Phase 4 modals (overlay, portal-like — mounted at hub root) */}
