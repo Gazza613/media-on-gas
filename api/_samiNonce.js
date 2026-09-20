@@ -181,3 +181,59 @@ export function extractApprovedCardId(userMessage) {
   var m = String(userMessage || "").match(/^\s*APPROVED:\s*([a-zA-Z0-9_-]+)/);
   return m ? normId(m[1]) : null;
 }
+
+// Audit fix #6 (PLAN_CARD batched approval).
+//
+// A PLAN_CARD groups N child writes under one human click. Each child
+// still gets its own per-write nonce (so the MCP proxy's per-call
+// gate + idempotency work unchanged). The plan record just tracks
+// which child ids belong together, so "APPROVED_PLAN: <planId>" can
+// authorise every child nonce in a single Redis round-trip.
+
+export function extractApprovedPlanId(userMessage) {
+  var m = String(userMessage || "").match(/^\s*APPROVED_PLAN:\s*([a-zA-Z0-9_-]+)/);
+  return m ? normId(m[1]) : null;
+}
+
+// Called by sami-hub.js when a PLAN_CARD is extracted from Sami's
+// reply. Registers per-child nonces (same shape as a lone APPROVAL_CARD
+// so the MCP proxy sees them identically) AND a plan-level index so
+// authoriseNoncePlan can flip them all at once. Returns the list of
+// child ids that were successfully registered (skipping malformed).
+export async function issuePendingPlanNonces(planId, children) {
+  var id = normId(planId);
+  if (!id || !Array.isArray(children) || children.length === 0) return [];
+  var registered = [];
+  for (var i = 0; i < children.length; i++) {
+    var c = children[i];
+    if (!c || !c.id || !c.operation_id || c.input_data == null) continue;
+    var rec = await issuePendingNonce(c.id, c.operation_id, c.input_data);
+    if (rec) registered.push(rec.cardId);
+  }
+  if (registered.length === 0) return [];
+  var planRec = { planId: id, childCardIds: registered, createdAt: Date.now(), authorisedAt: null };
+  await redisCmd(["SET", "sami:plan:" + id, JSON.stringify(planRec), "EX", String(NONCE_TTL_SECONDS)]);
+  return registered;
+}
+
+// Called by sami-hub.js when the incoming user message is
+// "APPROVED_PLAN: <planId>". Flips every child nonce to authorised in
+// one pass. Returns the number of children authorised, or 0 if the
+// plan id is unknown / expired.
+export async function authoriseNoncePlan(planId) {
+  var id = normId(planId);
+  if (!id) return 0;
+  var raw = await redisCmd(["GET", "sami:plan:" + id]);
+  if (!raw || !raw.result) return 0;
+  var plan;
+  try { plan = JSON.parse(raw.result); } catch (_) { return 0; }
+  if (!plan || !Array.isArray(plan.childCardIds) || plan.childCardIds.length === 0) return 0;
+  var count = 0;
+  for (var i = 0; i < plan.childCardIds.length; i++) {
+    var ok = await authoriseNonce(plan.childCardIds[i]);
+    if (ok) count++;
+  }
+  plan.authorisedAt = Date.now();
+  await redisCmd(["SET", "sami:plan:" + id, JSON.stringify(plan), "EX", String(NONCE_TTL_SECONDS)]);
+  return count;
+}

@@ -54,12 +54,12 @@ function fmtWhen(ms) {
   return dt.toLocaleDateString("en-ZA", { month: "short", day: "numeric" });
 }
 
-var STARTERS = [
-  "New campaign for Chilla, R10k lifetime, B2B lead gen on Meta.",
-  "What did we spend on MTN MoMo last week vs the week before?",
-  "Pause every Learnalot ad set that spent more than R300 in the last 7 days at above R25 per lead.",
-  "List every ad account and page I have access to right now."
-];
+var GUIDED_SKILL_ID = "guided-campaign-build";
+
+// Fallback prompt used when the skills list has not finished loading
+// yet. Sami's system prompt + the seeded skill carry the full checklist;
+// this short trigger message asks her to run it.
+var GUIDED_FALLBACK_PROMPT = "Run the GAS Guided Campaign Build. Walk me through every material campaign question one at a time, then emit a single PLAN_CARD covering every write to launch.";
 
 var LOADERS = [
   "Working through it, no shortcuts",
@@ -229,6 +229,66 @@ function ApprovalCard(props) {
       <button onClick={function () { props.onReject(card); }}
         style={{ background: "transparent", border: "1px solid " + (P.critical || "#ef4444") + "80", borderRadius: 8, padding: "9px 18px", color: P.critical || "#ef4444", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>
         ✗ Reject
+      </button>
+    </div>}
+  </div>;
+}
+
+// ---- Plan card (audit fix #6, batched approval) --------------------------
+//
+// Sami emits <PLAN_CARD>{...}</PLAN_CARD> when a single brief requires 3+
+// related writes (typical: campaign + ad set + N ads for a new launch).
+// The AM approves the whole plan once; the GAS engine authorises every
+// child write via a single Redis pass. Rejecting halts the entire plan.
+
+function PlanCard(props) {
+  var card = props.card, P = props.P, ff = props.ff, fm = props.fm;
+  var status = props.status || "pending";
+  var color = status === "approved" ? (P.mint || "#34D399")
+    : status === "rejected" ? (P.critical || "#ef4444")
+    : "#B085FF";
+  var writeCount = Array.isArray(card.plan) ? card.plan.length : 0;
+
+  return <div style={{
+    marginTop: 10, marginBottom: 4,
+    background: "rgba(255,255,255,0.02)",
+    border: "1px solid " + color + "55",
+    borderLeft: "4px solid " + color,
+    borderRadius: 12, padding: "14px 16px",
+    opacity: status === "rejected" ? 0.6 : 1
+  }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 9, fontWeight: 900, color: "#B085FF", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", background: "rgba(176,133,255,0.14)", border: "1px solid rgba(176,133,255,0.35)", borderRadius: 6, padding: "3px 8px" }}>
+        Plan · {writeCount} write{writeCount === 1 ? "" : "s"}
+      </span>
+      <span style={{ fontSize: 9, fontWeight: 800, color: color, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginLeft: "auto" }}>
+        {status === "approved" ? "✓ Plan approved" : status === "rejected" ? "✗ Plan rejected" : "Awaiting plan approval"}
+      </span>
+    </div>
+    <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: ff, marginBottom: 6, lineHeight: 1.45 }}>{card.title || "Proposed plan"}</div>
+    {card.description && <div style={{ fontSize: 12, color: P.label || "#c9c1d5", fontFamily: ff, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{card.description}</div>}
+    {writeCount > 0 && <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(0,0,0,0.25)", borderRadius: 8, fontSize: 11, fontFamily: fm, color: P.txt, lineHeight: 1.7, maxHeight: 260, overflowY: "auto" }}>
+      {card.plan.map(function (child, i) {
+        var kColor = child.platform === "meta" ? "#4599FF"
+          : child.platform === "tiktok" ? "#00F2EA"
+          : child.platform === "google" ? "#34A853"
+          : child.platform === "linkedin" ? "#0A66C2"
+          : (P.solar || "#FFAA00");
+        return <div key={child.id || i} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "3px 0", borderBottom: i < writeCount - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+          <span style={{ color: P.caption || "#8B7FA3", minWidth: 22, textAlign: "right", fontSize: 10 }}>{i + 1}.</span>
+          <span style={{ color: kColor, fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", minWidth: 108 }}>{(child.platform || "").toUpperCase()} · {(child.kind || "").toUpperCase()}</span>
+          <span style={{ flex: 1, color: P.txt, wordBreak: "break-word" }}>{child.title || child.id}</span>
+        </div>;
+      })}
+    </div>}
+    {status === "pending" && <div style={{ display: "flex", gap: 10 }}>
+      <button onClick={function () { props.onApprove(card); }}
+        style={{ background: "linear-gradient(135deg,#059669,#34D399)", border: "none", borderRadius: 8, padding: "9px 18px", color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>
+        ✓ Approve all {writeCount} writes
+      </button>
+      <button onClick={function () { props.onReject(card); }}
+        style={{ background: "transparent", border: "1px solid " + (P.critical || "#ef4444") + "80", borderRadius: 8, padding: "9px 18px", color: P.critical || "#ef4444", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>
+        ✗ Reject plan
       </button>
     </div>}
   </div>;
@@ -626,6 +686,8 @@ export default function CreateChatTab(props) {
   var cts = useState({}), cardStatus = cts[0], setCardStatus = cts[1];
   // Creative-pair-card statuses keyed by card id: 'pending' | 'confirmed'
   var pcs = useState({}), pairStatus = pcs[0], setPairStatus = pcs[1];
+  // Audit fix #6: PLAN_CARD statuses keyed by plan id.
+  var pls = useState({}), planStatus = pls[0], setPlanStatus = pls[1];
   var is = useState(""), input = is[0], setInput = is[1];
   var bs = useState(false), busy = bs[0], setBusy = bs[1];
   var es = useState(""), err = es[0], setErr = es[1];
@@ -702,10 +764,11 @@ export default function CreateChatTab(props) {
     opts = opts || {};
     var csOverride = opts.cardStatus !== undefined ? opts.cardStatus : cardStatus;
     var psOverride = opts.pairStatus !== undefined ? opts.pairStatus : pairStatus;
+    var planOverride = opts.planStatus !== undefined ? opts.planStatus : planStatus;
     fetch(apiBase + "/api/nlp/sami-threads", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs, cardStatus: csOverride, pairStatus: psOverride })
+      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs, cardStatus: csOverride, pairStatus: psOverride, planStatus: planOverride })
     })
       .then(function (r) { return r.json().then(function (d) { return { status: r.status, ok: r.ok, data: d }; }); })
       .then(function (x) {
@@ -740,6 +803,7 @@ export default function CreateChatTab(props) {
         setThreadId(d.thread.id);
         setCardStatus((d.thread.cardStatus && typeof d.thread.cardStatus === "object") ? d.thread.cardStatus : {});
         setPairStatus((d.thread.pairStatus && typeof d.thread.pairStatus === "object") ? d.thread.pairStatus : {});
+        setPlanStatus((d.thread.planStatus && typeof d.thread.planStatus === "object") ? d.thread.planStatus : {});
         setErr("");
       })
       .catch(function () { setErr("Could not load that conversation."); });
@@ -906,6 +970,7 @@ export default function CreateChatTab(props) {
           role: "assistant",
           content: x.data.reply || "",
           cards: Array.isArray(x.data.cards) ? x.data.cards : [],
+          plans: Array.isArray(x.data.plans) ? x.data.plans : [],
           pairCards: Array.isArray(x.data.pairCards) ? x.data.pairCards : [],
           memories: Array.isArray(x.data.memories) ? x.data.memories : [],
           actions: Array.isArray(x.data.actions) ? x.data.actions : [],
@@ -931,6 +996,14 @@ export default function CreateChatTab(props) {
           setCardStatus(function (cur) {
             var nextStatuses = Object.assign({}, cur);
             samiTurn.cards.forEach(function (c) { if (!nextStatuses[c.id]) nextStatuses[c.id] = "pending"; });
+            return nextStatuses;
+          });
+        }
+        // Seed each new plan card to pending too (audit fix #6).
+        if (samiTurn.plans.length > 0) {
+          setPlanStatus(function (cur) {
+            var nextStatuses = Object.assign({}, cur);
+            samiTurn.plans.forEach(function (p) { if (!nextStatuses[p.id]) nextStatuses[p.id] = "pending"; });
             return nextStatuses;
           });
         }
@@ -976,6 +1049,29 @@ export default function CreateChatTab(props) {
     send("PAIRS_OK: " + card.id);
   };
 
+  // Audit fix #6: plan-level approve/reject. Approving flips the plan
+  // status AND marks every child card as approved (so the inline child
+  // list renders resolved), then sends a single APPROVED_PLAN back to
+  // Sami; she executes each child write in order. Rejecting stops the
+  // whole plan.
+  var handleApprovePlan = function (plan) {
+    if (busy) return;
+    var nextPlan = Object.assign({}, planStatus, {}); nextPlan[plan.id] = "approved";
+    setPlanStatus(nextPlan);
+    var nextCard = Object.assign({}, cardStatus, {});
+    (plan.plan || []).forEach(function (c) { if (c && c.id) nextCard[c.id] = "approved"; });
+    setCardStatus(nextCard);
+    if (activeThreadId) saveThread(activeThreadId, messages, { cardStatus: nextCard, planStatus: nextPlan });
+    send("APPROVED_PLAN: " + plan.id);
+  };
+  var handleRejectPlan = function (plan) {
+    if (busy) return;
+    var nextPlan = Object.assign({}, planStatus, {}); nextPlan[plan.id] = "rejected";
+    setPlanStatus(nextPlan);
+    if (activeThreadId) saveThread(activeThreadId, messages, { planStatus: nextPlan });
+    send("REJECTED_PLAN: " + plan.id);
+  };
+
   var onKeyDown = function (e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
@@ -983,8 +1079,22 @@ export default function CreateChatTab(props) {
   // New task clears everything AND generates a fresh threadId so the next
   // send starts a new persisted thread instead of overwriting the last.
   var newTask = function () {
-    setMessages([]); setCardStatus({}); setErr(""); setInput("");
+    setMessages([]); setCardStatus({}); setPairStatus({}); setPlanStatus({}); setErr(""); setInput("");
     setThreadId(""); // Empty forces send() to mint a new id on next message
+  };
+
+  // Guided vs Self mode entry points shown on the empty-state screen.
+  // Guided pulls the guided-campaign-build skill prompt (falls back to a
+  // short trigger message if skills haven't loaded yet) and sends it,
+  // walking the AM through every mandatory question. Self is a no-op
+  // that focuses the composer for a freeform brief.
+  var startGuided = function () {
+    var guided = (skills || []).find(function (s) { return s && s.id === GUIDED_SKILL_ID; });
+    var prompt = (guided && guided.prompt) || GUIDED_FALLBACK_PROMPT;
+    send(prompt);
+  };
+  var startSelf = function () {
+    try { if (inputRef.current) inputRef.current.focus(); } catch (_) {}
   };
 
   // Audit fix #4: name-picker runs FIRST because the PIN endpoint now
@@ -1065,14 +1175,22 @@ export default function CreateChatTab(props) {
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "22px 26px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
         {empty && <div style={{ padding: "12px 4px 4px" }}>
           <div style={{ fontSize: 14, color: P.txt, fontFamily: ff, fontWeight: 700, marginBottom: 6 }}>What are we building?</div>
-          <div style={{ fontSize: 12, color: P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 18 }}>Tell Sami the client, objective, budget and dates in one message. She will ask for anything else she needs.</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {STARTERS.map(function (s, i) {
-              return <button key={i} onClick={function () { send(s); }}
-                style={{ background: "rgba(249,98,3,0.06)", border: "1px solid rgba(249,98,3,0.20)", borderRadius: 10, padding: "10px 14px", color: P.txt, fontSize: 12, fontFamily: ff, cursor: "pointer", textAlign: "left", lineHeight: 1.55 }}>
-                {s}
-              </button>;
-            })}
+          <div style={{ fontSize: 12, color: P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 18 }}>Pick Guided Build for a step-by-step brief so nothing gets missed, or Self Build to type your own brief.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
+            <button onClick={startGuided}
+              style={{ background: "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 12, padding: "18px 18px", color: "#fff", fontSize: 13, fontWeight: 800, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", cursor: "pointer", textAlign: "left" }}>
+              Guided Build
+              <div style={{ fontSize: 10, fontWeight: 600, opacity: 0.9, letterSpacing: 0.5, textTransform: "none", marginTop: 6, lineHeight: 1.5 }}>
+                Sami walks you through every material question, ends in one plan card for a single approval.
+              </div>
+            </button>
+            <button onClick={startSelf}
+              style={{ background: "rgba(249,98,3,0.08)", border: "1px solid rgba(249,98,3,0.30)", borderRadius: 12, padding: "18px 18px", color: P.txt, fontSize: 13, fontWeight: 800, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", cursor: "pointer", textAlign: "left" }}>
+              Self Build
+              <div style={{ fontSize: 10, fontWeight: 600, color: P.sub, letterSpacing: 0.5, textTransform: "none", marginTop: 6, lineHeight: 1.5 }}>
+                Type your own brief in one message. Sami asks anything she still needs.
+              </div>
+            </button>
           </div>
         </div>}
 
@@ -1081,9 +1199,11 @@ export default function CreateChatTab(props) {
             var isAppr = /^APPROVED: /.test(m.content);
             var isRej = /^REJECTED: /.test(m.content);
             var isPairOk = /^PAIRS_OK: /.test(m.content);
+            var isPlanAppr = /^APPROVED_PLAN: /.test(m.content);
+            var isPlanRej = /^REJECTED_PLAN: /.test(m.content);
             var bg, bd;
-            if (isAppr) { bg = "rgba(52,211,153,0.13)"; bd = "rgba(52,211,153,0.35)"; }
-            else if (isRej) { bg = "rgba(239,68,68,0.13)"; bd = "rgba(239,68,68,0.35)"; }
+            if (isAppr || isPlanAppr) { bg = "rgba(52,211,153,0.13)"; bd = "rgba(52,211,153,0.35)"; }
+            else if (isRej || isPlanRej) { bg = "rgba(239,68,68,0.13)"; bd = "rgba(239,68,68,0.35)"; }
             else if (isPairOk) { bg = "rgba(10,102,194,0.14)"; bd = "rgba(10,102,194,0.4)"; }
             else { bg = "rgba(249,98,3,0.13)"; bd = "rgba(249,98,3,0.3)"; }
             return <div key={i} style={{ alignSelf: "flex-end", maxWidth: "82%" }}>
@@ -1100,6 +1220,11 @@ export default function CreateChatTab(props) {
               return <CreativePairCard key={c.id} card={c} P={P} ff={ff} fm={fm}
                 status={pairStatus[c.id] || "pending"}
                 onConfirm={handleConfirmPair} />;
+            })}
+            {Array.isArray(m.plans) && m.plans.map(function (c) {
+              return <PlanCard key={c.id} card={c} P={P} ff={ff} fm={fm}
+                status={planStatus[c.id] || "pending"}
+                onApprove={handleApprovePlan} onReject={handleRejectPlan} />;
             })}
             {Array.isArray(m.cards) && m.cards.map(function (c) {
               return <ApprovalCard key={c.id} card={c} P={P} ff={ff} fm={fm}

@@ -67,13 +67,28 @@ async function redisCmd(args) {
 }
 
 var SKILLS_KEY = "sami:skills";
+var GUIDED_BUILD_SKILL_ID = "guided-campaign-build";
 
 async function readSkills() {
   var r = await redisCmd(["GET", SKILLS_KEY]);
   if (!r || !r.result) return seedDefaults();
   try {
     var parsed = JSON.parse(r.result);
-    return Array.isArray(parsed) ? parsed : seedDefaults();
+    if (!Array.isArray(parsed)) return seedDefaults();
+    // One-time silent migration: ensure the guided-build skill is
+    // always present so the "Guided Build" button on the new-chat
+    // screen can inject it, even for teams whose sami:skills key was
+    // seeded before the skill existed. Additive only, never rewrites
+    // an admin-edited version.
+    if (!parsed.find(function (s) { return s && s.id === GUIDED_BUILD_SKILL_ID; })) {
+      var defaults = seedDefaults();
+      var guided = defaults.find(function (s) { return s.id === GUIDED_BUILD_SKILL_ID; });
+      if (guided) {
+        parsed.unshift(guided);
+        try { await writeSkills(parsed); } catch (_) { /* non-fatal */ }
+      }
+    }
+    return parsed;
   } catch (_) { return seedDefaults(); }
 }
 async function writeSkills(arr) {
@@ -85,6 +100,52 @@ async function writeSkills(arr) {
 // These render as clickable prompts; the team can edit/delete/add later.
 function seedDefaults() {
   return [
+    {
+      id: GUIDED_BUILD_SKILL_ID,
+      label: "New Campaign — Guided Build",
+      description: "Walk through every material campaign question before building. Ends in one PLAN_CARD.",
+      prompt: [
+        "Run the GAS Guided Campaign Build. Your job: walk me through every material decision so I don't forget anything, then emit ONE PLAN_CARD covering every write required to launch.",
+        "",
+        "Start with:",
+        "\"Full brief already in hand? If yes, paste it and I'll build the plan card. If not, I'll walk you through step by step, one question at a time.\"",
+        "",
+        "If I paste a full brief, extract answers to the mandatory + relevant conditional questions below. Only re-ask the fields you cannot infer.",
+        "",
+        "If I want the guided flow, ask these ONE AT A TIME in order, waiting for each answer before the next. Confirm the answer briefly, then move on.",
+        "",
+        "MANDATORY (always ask, in this order):",
+        "  1. Client name.",
+        "  2. Objective (leads / traffic / awareness / sales / community / app installs).",
+        "  3. Destination (WhatsApp number, landing page URL, on-Meta form, IG DM, app install).",
+        "  4. Budget: amount + type (lifetime or daily) + currency (default ZAR).",
+        "  5. Dates: start and end (or say 'ongoing').",
+        "  6. Geographic focus (cities / radii / country / exclusions).",
+        "  7. Age range.",
+        "  8. Gender (all / male / female).",
+        "  9. Platforms (Facebook, Instagram, Messenger, Audience Network, WhatsApp Status, Threads). Ask which subset.",
+        " 10. Placements (Feed, Stories, Reels, Explore, Marketplace, In-Stream). Ask which subset.",
+        " 11. Creative on hand (Drive/Dropbox link OR 'will supply later'). If a folder link, walk the folder and emit a CREATIVE_PAIR_CARD before continuing.",
+        "",
+        "CONDITIONAL (ask only when they apply based on the answers above):",
+        "  - Pixel + optimisation event (traffic/sales/leads with a non-WhatsApp destination): is the pixel installed, which event is the goal?",
+        "  - CAPI dataset + WABA ID + CRM event (WhatsApp destination AND they want lead-quality optimisation): confirm dataset, WABA, and which CRM event marks a qualified lead.",
+        "  - Landing page URL + mobile-speed sanity (non-WhatsApp destination).",
+        "  - Custom-audience seed + exclusion list (retargeting or lookalike).",
+        "  - Frequency cap (awareness objective).",
+        "  - CBO vs ABO (any campaign). Default CBO unless the client uses ABO by convention.",
+        "  - Bid strategy: default 'Highest volume / lowest cost'. Only ask if the AM might want a cost cap or bid cap.",
+        "  - Ads copy + headline + CTA button (Chat now / Learn more / Sign up / Book now / etc). Ask for the exact copy and CTA per creative group if different.",
+        "  - Naming convention: GAS default is Client_Objective_Funding_YYYYMM_Variant for campaign, Audience_Geo_Demo_Placement for ad set, Format_Concept_Version for ad. Use it unless the client's saved memory overrides.",
+        "  - Compliance / brand-safety flags (health, financial, alcohol, minors).",
+        "",
+        "REFUSE to emit a PLAN_CARD until every mandatory field is answered AND every relevant conditional field is answered. If the AM says 'just build it', re-ask the missing questions before you emit anything.",
+        "",
+        "Once you have every answer, emit ONE PLAN_CARD containing every write required (campaign + ad set(s) + ad(s) + custom-audience uploads). Include the exact naming for each level. Every child must carry operation_id and input_data. Then STOP and wait for APPROVED_PLAN.",
+        "",
+        "Tone: senior strategist. Do NOT lecture. One question per turn. Assume the AM knows their craft."
+      ].join("\n")
+    },
     {
       id: "b2b-lead-draft",
       label: "Draft a B2B lead campaign",
