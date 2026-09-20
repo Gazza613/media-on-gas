@@ -77,7 +77,7 @@ export async function listUsers() {
   for (var i = 0; i < emails.length; i++) {
     var u = await getUser(emails[i]);
     if (u) {
-      // Never expose the password hash.
+      // Never expose the password hash or the sami-pin hash.
       out.push({
         email: u.email,
         name: u.name || "",
@@ -87,7 +87,12 @@ export async function listUsers() {
         createdAt: u.createdAt || null,
         activatedAt: u.activatedAt || null,
         lastLogin: u.lastLogin || null,
-        invitedBy: u.invitedBy || null
+        invitedBy: u.invitedBy || null,
+        samiAccess: samiAccessAllowed(u),
+        samiPinSet: !!u.samiPinHash,
+        samiSlug: u.samiSlug || null,
+        samiLastUnlock: u.samiLastUnlock || null,
+        samiUnlockCount: u.samiUnlockCount || 0
       });
     }
   }
@@ -109,6 +114,98 @@ export async function setUserActive(email, active) {
   u.revokedAt = !active ? new Date().toISOString() : null;
   await saveUser(u);
   return { ok: true };
+}
+
+// ─── Sami Hub per-user access + PIN ────────────────────────────────
+// Two orthogonal fields on the user record:
+//   samiAccess    boolean toggle the superadmin flips on the members
+//                 page. Off by default, so onboarding a member does
+//                 NOT grant Sami access unless the admin explicitly
+//                 enables it.
+//   samiPinHash   bcrypt hash of the member's own 4-digit PIN. Set
+//                 by the member themselves on first Sami visit (via
+//                 /api/sami-pin op=set). Admin cannot see it, but can
+//                 clear it via op=reset which forces a fresh setup.
+//   samiSlug      short kebab identifier used as the Redis-storage
+//                 namespace for the member's Sami threads / memory
+//                 audit trail / usage counters. Derived from the
+//                 email local-part on first enable, so back-compat
+//                 with the existing sami:threads:<slug> keys holds
+//                 for the original team (gary / sam / busi / claire /
+//                 donovan) without any migration.
+
+function slugifyEmail(email) {
+  var local = String(email || "").split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+  return local.slice(0, 60) || "user";
+}
+
+async function ensureSamiSlug(u) {
+  if (u.samiSlug) return u.samiSlug;
+  var base = slugifyEmail(u.email);
+  var slug = base;
+  var i = 2;
+  // Guard against slug collision when two members share the same email
+  // local-part on different domains (e.g. sam@a and sam@b).
+  while (true) {
+    var r = await redisCmd(["GET", "user:samiSlug:" + slug]);
+    var claim = r && r.result;
+    if (!claim || claim === u.email) break;
+    slug = base + "-" + i;
+    i++;
+    if (i > 20) { slug = base + "-" + crypto.randomBytes(2).toString("hex"); break; }
+  }
+  await redisCmd(["SET", "user:samiSlug:" + slug, u.email]);
+  return slug;
+}
+
+// Superadmin bypass: gary always has samiAccess implicitly so he can
+// migrate the rest of the team without locking himself out.
+export function samiAccessAllowed(u) {
+  if (!u) return false;
+  if (isSuperadminEmail(u.email)) return true;
+  return !!u.samiAccess;
+}
+
+export async function setSamiAccess(email, allowed) {
+  var u = await getUser(email);
+  if (!u) return { ok: false, reason: "not-found" };
+  u.samiAccess = !!allowed;
+  u.samiAccessUpdatedAt = new Date().toISOString();
+  if (allowed && !u.samiSlug) {
+    u.samiSlug = await ensureSamiSlug(u);
+  }
+  await saveUser(u);
+  return { ok: true, samiSlug: u.samiSlug || null };
+}
+
+export async function setSamiPinHash(email, hash) {
+  var u = await getUser(email);
+  if (!u) return { ok: false, reason: "not-found" };
+  if (!samiAccessAllowed(u)) return { ok: false, reason: "no-access" };
+  if (!u.samiSlug) u.samiSlug = await ensureSamiSlug(u);
+  u.samiPinHash = hash;
+  u.samiPinSetAt = new Date().toISOString();
+  await saveUser(u);
+  return { ok: true, samiSlug: u.samiSlug };
+}
+
+export async function clearSamiPin(email) {
+  var u = await getUser(email);
+  if (!u) return { ok: false, reason: "not-found" };
+  u.samiPinHash = null;
+  u.samiPinSetAt = null;
+  u.samiPinResetAt = new Date().toISOString();
+  await saveUser(u);
+  return { ok: true };
+}
+
+export async function recordSamiUnlock(email) {
+  var u = await getUser(email);
+  if (!u) return false;
+  u.samiLastUnlock = new Date().toISOString();
+  u.samiUnlockCount = (parseInt(u.samiUnlockCount || 0, 10) || 0) + 1;
+  await saveUser(u);
+  return true;
 }
 
 export async function recordLogin(email) {

@@ -15,14 +15,16 @@ export var MAX_DAILY_BUDGET_CENTS = 500000;       // R5,000 hard ceiling. Code c
 export var CREATE_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 export var META_API_VERSION = "v25.0";
 
-// The team members allowed to unlock the Create tab. Mirrored on the
-// frontend NamePicker and used to reject spoofed user identities in
-// issueCreateToken. Adding a member: add the slug here AND in
-// CreateChatTab.jsx TEAM_USERS AND in nudge-cron NUDGE_RECIPIENTS.
+// Legacy allowlist retained for the (rare) fallback path where
+// downstream code still calls normaliseUser without a live user record.
+// Live gating is now done in /api/create/auth against the users store
+// (samiAccess + samiPinHash on the user record). issueCreateToken just
+// requires a safely-shaped slug (kebab-ish, <= 60 chars).
 export var ALLOWED_USERS = ["gary", "sam", "busi", "claire", "donovan"];
 export function normaliseUser(raw) {
-  var s = String(raw || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
-  return ALLOWED_USERS.indexOf(s) >= 0 ? s : "";
+  var s = String(raw || "").toLowerCase().trim().replace(/[^a-z0-9-]/g, "");
+  s = s.replace(/-+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return s;
 }
 
 export var ALLOWED_OBJECTIVES = {
@@ -65,12 +67,12 @@ export function verifyPin(pin) {
   return timingSafeStrEqual(sha256Hex(pin), expected.toLowerCase());
 }
 
-// Audit fix #4: user is REQUIRED. issueCreateToken now refuses to mint
-// a token without a valid team-member slug so every downstream endpoint
-// can trust auth.user for identity.
+// Audit fix #4: user is REQUIRED. issueCreateToken refuses to mint a
+// token without a safely-shaped slug so every downstream endpoint can
+// trust auth.user for identity.
 export function issueCreateToken(user) {
   var u = normaliseUser(user);
-  if (!u) throw new Error("issueCreateToken: user must be one of " + ALLOWED_USERS.join(", "));
+  if (!u) throw new Error("issueCreateToken: user slug required (kebab-ish, <=60 chars)");
   var now = Math.floor(Date.now() / 1000);
   var body = { scope: "create", sub: u, iat: now, exp: now + CREATE_TOKEN_TTL_SECONDS };
   var header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
