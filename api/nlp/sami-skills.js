@@ -115,7 +115,10 @@ function seedDefaults() {
 // ---- Handler -------------------------------------------------------------
 
 export default async function handler(req, res) {
-  if (!checkCreateAuth(req, res)) return;
+  // Audit fix #4: skill authorship (createdBy / updatedBy) comes from
+  // the signed JWT, not body.user, so authorship can be trusted.
+  var auth = checkCreateAuth(req, res);
+  if (!auth) return;
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   if (!(await rateLimit(req, res, { maxPerMin: 30, maxPerHour: 200 }))) return;
 
@@ -143,7 +146,7 @@ export default async function handler(req, res) {
       var prompt = cleanStr(skillIn.prompt, MAX_PROMPT_LEN);
       if (!label || !prompt) { res.status(400).json({ error: "label and prompt are required." }); return; }
       var id = normSkillId(skillIn.id) || makeSkillId(label);
-      var user = cleanStr(body.user, 40) || "";
+      var user = auth.user;
       var current = await readSkills();
       var existing = current.find(function (s) { return s.id === id; });
       var now = Date.now();

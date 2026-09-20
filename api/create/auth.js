@@ -3,7 +3,7 @@
 // Rate limited tighter than read endpoints because this is the gate.
 
 import { rateLimit } from "../_rateLimit.js";
-import { setCreateCors, verifyPin, issueCreateToken, CREATE_TOKEN_TTL_SECONDS } from "../_createAuth.js";
+import { setCreateCors, verifyPin, issueCreateToken, normaliseUser, ALLOWED_USERS, CREATE_TOKEN_TTL_SECONDS } from "../_createAuth.js";
 
 export const config = { maxDuration: 60 };
 
@@ -25,6 +25,16 @@ export default async function handler(req, res) {
   var pin = (body && body.pin) ? String(body.pin) : "";
   if (!pin) { res.status(400).json({ error: "Missing pin" }); return; }
 
+  // Audit fix #4: user (team member picking their identity) is required
+  // and validated against the allowlist. The token is signed against
+  // this identity so downstream endpoints (threads, memory audit-trail,
+  // credit attribution) cannot be spoofed via body.user.
+  var user = normaliseUser(body && body.user);
+  if (!user) {
+    res.status(400).json({ error: "Pick your team-member identity. user must be one of: " + ALLOWED_USERS.join(", ") });
+    return;
+  }
+
   if (!verifyPin(pin)) {
     // Constant-ish delay smooths timing across the boundary regardless of
     // where the rejection actually fell (env missing vs hash mismatch).
@@ -33,6 +43,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  var token = issueCreateToken();
-  res.status(200).json({ token: token, expiresIn: CREATE_TOKEN_TTL_SECONDS });
+  var token = issueCreateToken(user);
+  res.status(200).json({ token: token, user: user, expiresIn: CREATE_TOKEN_TTL_SECONDS });
 }

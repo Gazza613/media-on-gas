@@ -1,15 +1,29 @@
 // PIN-gate auth for the Create tab. Lives separately from _auth.js because:
 //   - It uses its own JWT secret (CREATE_TAB_JWT_SECRET) so a leaked dashboard
 //     session token can't authorise campaign creation.
-//   - Tokens are short-lived (15 min) and stateless.
+//   - Tokens are short-lived (2h) and stateless.
 //   - Allowlist of ad accounts is read-validated server-side on every request,
 //     not just trusted from the client wizard.
+//   - Audit fix #4: JWT now carries the picked team member (sub claim) so
+//     per-user surfaces (threads, memory audit-trail, credit attribution)
+//     cannot be spoofed by passing body.user. Every endpoint reads the
+//     user from the JWT, not the request body.
 
 import crypto from "crypto";
 
 export var MAX_DAILY_BUDGET_CENTS = 500000;       // R5,000 hard ceiling. Code change + PR to raise.
 export var CREATE_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 export var META_API_VERSION = "v25.0";
+
+// The team members allowed to unlock the Create tab. Mirrored on the
+// frontend NamePicker and used to reject spoofed user identities in
+// issueCreateToken. Adding a member: add the slug here AND in
+// CreateChatTab.jsx TEAM_USERS AND in nudge-cron NUDGE_RECIPIENTS.
+export var ALLOWED_USERS = ["gary", "sam", "busi", "claire", "donovan"];
+export function normaliseUser(raw) {
+  var s = String(raw || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  return ALLOWED_USERS.indexOf(s) >= 0 ? s : "";
+}
 
 export var ALLOWED_OBJECTIVES = {
   OUTCOME_TRAFFIC: { optimization_goal: "LINK_CLICKS",        billing_event: "IMPRESSIONS" },
@@ -51,9 +65,14 @@ export function verifyPin(pin) {
   return timingSafeStrEqual(sha256Hex(pin), expected.toLowerCase());
 }
 
-export function issueCreateToken() {
+// Audit fix #4: user is REQUIRED. issueCreateToken now refuses to mint
+// a token without a valid team-member slug so every downstream endpoint
+// can trust auth.user for identity.
+export function issueCreateToken(user) {
+  var u = normaliseUser(user);
+  if (!u) throw new Error("issueCreateToken: user must be one of " + ALLOWED_USERS.join(", "));
   var now = Math.floor(Date.now() / 1000);
-  var body = { scope: "create", iat: now, exp: now + CREATE_TOKEN_TTL_SECONDS };
+  var body = { scope: "create", sub: u, iat: now, exp: now + CREATE_TOKEN_TTL_SECONDS };
   var header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   var bodyEncoded = b64url(JSON.stringify(body));
   var unsigned = header + "." + bodyEncoded;
@@ -74,6 +93,11 @@ export function verifyCreateToken(token) {
     var payload = JSON.parse(b64urlDecode(parts[1]).toString("utf-8"));
     if (payload.scope !== "create") return null;
     if (payload.exp && Math.floor(Date.now() / 1000) >= payload.exp) return null;
+    // Audit fix #4: any token without a valid user claim is rejected.
+    // Old pre-fix tokens (no sub) fail here → frontend re-PINs → new
+    // token includes user. Migration completes in one PIN entry.
+    payload.user = normaliseUser(payload.sub);
+    if (!payload.user) return null;
     return payload;
   } catch (_) { return null; }
 }
@@ -101,6 +125,13 @@ export function setCreateCors(req, res) {
   res.setHeader("X-Frame-Options", "DENY");
 }
 
+// Returns the verified JWT payload on success (object with .user, .sub,
+// .iat, .exp — .user is the normalised team-member slug). Returns false
+// after sending a 401 response. Callers that only need "is authed?" can
+// keep using `if (!checkCreateAuth(req, res)) return;`. Callers that need
+// the authenticated user should capture the return:
+//   var auth = checkCreateAuth(req, res); if (!auth) return;
+//   var user = auth.user;
 export function checkCreateAuth(req, res) {
   setCreateCors(req, res);
   if (req.method === "OPTIONS") { res.status(200).end(); return false; }
@@ -109,8 +140,8 @@ export function checkCreateAuth(req, res) {
   if (authHeader.indexOf("Bearer ") === 0) bearer = authHeader.substring(7);
   if (!bearer) { res.status(401).json({ error: "Missing Authorization bearer token" }); return false; }
   var payload = verifyCreateToken(bearer);
-  if (!payload) { res.status(401).json({ error: "Invalid or expired create-tab token" }); return false; }
-  return true;
+  if (!payload) { res.status(401).json({ error: "Invalid, expired, or user-less create-tab token. Please re-enter your PIN." }); return false; }
+  return payload;
 }
 
 // Comma-separated env var → trimmed array of `act_…` ids. Empty → empty.

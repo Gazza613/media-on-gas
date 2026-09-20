@@ -35,18 +35,6 @@ var MAX_MESSAGES_PER_THREAD = 200;
 var MAX_TITLE_LEN = 120;
 var MAX_MESSAGE_CHARS = 12000;
 
-// Whitelisted user slugs — same set as NUDGE_RECIPIENTS in nudge-cron.
-// If the team adds a member, add their slug here so their threads
-// namespace correctly. Case-insensitive on input; canonicalised to
-// lowercase for the storage key.
-var ALLOWED_USERS = ["gary", "sam", "busi", "claire", "donovan"];
-
-function normUser(raw) {
-  var s = String(raw || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
-  if (!s) return "";
-  return ALLOWED_USERS.indexOf(s) >= 0 ? s : "";
-}
-
 function cleanStr(v, max) {
   return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, max);
 }
@@ -134,7 +122,12 @@ async function deleteThreadKey(user, threadId) {
 // ---- Handler -------------------------------------------------------------
 
 export default async function handler(req, res) {
-  if (!checkCreateAuth(req, res)) return;
+  // Audit fix #4: user identity comes from the signed JWT (auth.user),
+  // NOT from body.user. Any body.user field is silently ignored — the
+  // frontend used to pass it and old clients might still, but Sam can
+  // no longer read Gary's threads by lying about the slug.
+  var auth = checkCreateAuth(req, res);
+  if (!auth) return;
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
 
@@ -147,11 +140,7 @@ export default async function handler(req, res) {
   if (typeof body === "string") { try { body = JSON.parse(body); } catch (_) { body = {}; } }
   body = body || {};
 
-  var user = normUser(body.user);
-  if (!user) {
-    res.status(400).json({ error: "Unknown or missing user. Send { user: 'gary'|'sam'|'busi'|'claire'|'donovan' }." });
-    return;
-  }
+  var user = auth.user;
 
   var op = String(body.op || "").toLowerCase();
 
