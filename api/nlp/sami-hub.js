@@ -649,12 +649,18 @@ export default async function handler(req, res) {
 
     if (result.status === 401 || result.status === 403) {
       console.error("sami-hub upstream auth failure", result.status, result.rawText && result.rawText.slice(0, 300));
-      res.status(502).json({ error: "The data engine rejected our credentials. Check ANTHROPIC_API_KEY and MARKIFACT_MCP_TOKEN." });
+      res.status(502).json({
+        error: "The data engine rejected our credentials. Check ANTHROPIC_API_KEY and MARKIFACT_MCP_TOKEN.",
+        detail: "upstream " + result.status + ": " + ((result.rawText || "").slice(0, 300))
+      });
       return;
     }
     if (result.status !== 200 || !result.data) {
       console.error("sami-hub upstream error", result.status, result.rawText && result.rawText.slice(0, 500));
-      res.status(502).json({ error: "Sami hit a problem answering. Try again in a moment." });
+      res.status(502).json({
+        error: "Sami hit a problem answering. Try again in a moment.",
+        detail: "upstream " + result.status + ": " + ((result.rawText || "").slice(0, 500))
+      });
       return;
     }
 
@@ -717,6 +723,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("sami-hub failed", err);
-    res.status(500).json({ error: "Sami hit a problem answering. Try again in a moment." });
+    res.status(500).json({
+      error: "Sami hit a problem answering. Try again in a moment.",
+      detail: String(err && err.message || err).slice(0, 300)
+    });
   }
 }
