@@ -3416,6 +3416,7 @@ function CampaignAuditModal(props){
           {props.isSuperadmin&&<button onClick={function(){view[1]("kpi");}} style={{background:view[0]==="kpi"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="kpi"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="kpi"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>KPI Profiles</button>}
           {props.isSuperadmin&&<button onClick={function(){view[1]("outcomes");}} style={{background:view[0]==="outcomes"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="outcomes"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="outcomes"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>Custom Outcomes</button>}
           {props.isSuperadmin&&<button onClick={function(){view[1]("sla");}} style={{background:view[0]==="sla"?P.ember+"25":"transparent",border:"1px solid "+(view[0]==="sla"?P.ember+"60":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="sla"?P.ember:P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>SLA Nudges</button>}
+          <button onClick={function(){view[1]("swarm");}} style={{background:view[0]==="swarm"?"linear-gradient(135deg,#B085FF25,#4599FF25)":"transparent",border:"1px solid "+(view[0]==="swarm"?"#B085FF80":"transparent"),borderRadius:8,padding:"8px 16px",color:view[0]==="swarm"?"#B085FF":P.label,fontSize:11,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>AI Swarm</button>
         </div>
         <div style={{display:"flex",gap:8}}>
           {view[0]==="audit"&&<button onClick={load} disabled={loading[0]} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:10,padding:"8px 14px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:loading[0]?"wait":"pointer",letterSpacing:1.5}}>{loading[0]?"LOADING...":"REFRESH"}</button>}
@@ -4032,6 +4033,8 @@ function CampaignAuditModal(props){
             <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
           </div>
 
+          {(function(){return null;})()}
+
           {/* Sami Hub credit consumption (superadmin only). Same
               counters the in-hub credit strip reads, but visible from
               the members admin view so the superadmin can see who is
@@ -4123,6 +4126,133 @@ function CampaignAuditModal(props){
               </div>
             </div>;
           })()}
+        </div>;
+      })()}
+
+      {view[0]==="swarm"&&(function(){
+        // Static enumeration of every AI-ish agent stitched into the
+        // Media on GAS platform. Grouped into "pods" for the same
+        // marketing-flex layout the reference screenshot uses.
+        // Adding a new agent: append to the right pod's list, bump
+        // the header count.
+        var pods = [
+          {
+            name: "The Brain",
+            color: "#B085FF",
+            desc: "Sami and her skills. The agents that plan, brief, and reason about your campaigns.",
+            agents: [
+              { n: "Sami", d: "Sonnet-5 strategist. Runs Build, Optimise, Read across Meta, TikTok, Google Ads, LinkedIn." },
+              { n: "Guided Build", d: "One-form brief-card flow. 11 mandatory fields prefilled from client memory, one submit to plan." },
+              { n: "Weekly Optimisation Audit", d: "7-dimension review: pace, headline KPIs, winners, leaks, creative fatigue, audience, structural." },
+              { n: "Deep Client Review", d: "30-day strategic narrative with structural moves and the next test to run." },
+              { n: "B2B Lead Draft", d: "Standard B2B qualification questions, then a lead-gen structure proposal." },
+              { n: "New Client Onboarding", d: "Walks the standard GAS onboarding checklist end-to-end." },
+              { n: "Creative Folder Review", d: "Walks a Drive/Dropbox folder, pairs 1:1 with 9:16, flags unpaired assets." },
+              { n: "Client Memory Injector", d: "Detects known clients by word-boundary match and injects their saved notes as authoritative preferences." },
+              { n: "Prompt Sentinel", d: "Catches Sami's silent-approval and prose-card anti-patterns before the AM sees them." }
+            ]
+          },
+          {
+            name: "The Gatekeepers",
+            color: "#FF3D00",
+            desc: "The safety trilogy. Every rand that could move passes through this pod first.",
+            agents: [
+              { n: "PIN Gate", d: "Per-member 4-digit PIN, bcrypt-hashed. Admin toggles Sami access; PIN is set by the member on first visit." },
+              { n: "JWT Signer", d: "Signs the picked identity into the create-tab token so every write is attributed to a real human." },
+              { n: "MCP Approval Proxy", d: "Anthropic tool calls route through here. Refuses every write without a matching human-authorised nonce." },
+              { n: "Nonce Store", d: "Per-user cryptographic binding of card → approval → write. A colleague can't authorise your card." },
+              { n: "Write Guard", d: "Server-side R5,000/day, R50,000 lifetime, always-PAUSED-on-create enforcement. Prompt-only rules become law." },
+              { n: "Idempotency Cache", d: "First success cached against the nonce. Vercel timeouts + retries can't duplicate a live campaign." },
+              { n: "Grounding Sentinel", d: "Scans every Sami reply and every card for R-values / percentages that weren't grounded in a live tool call." }
+            ]
+          },
+          {
+            name: "The Readers",
+            color: "#4599FF",
+            desc: "Live data ingestion. Feeds every dashboard number and every Sami claim.",
+            agents: [
+              { n: "Meta Ads", d: "Campaigns, ad sets, ads, insights, DCO variants, creative metadata." },
+              { n: "TikTok Ads", d: "Campaigns, ad groups, ads, image/video metadata (with cover-id filtering)." },
+              { n: "Google Ads", d: "GAQL over v-current, RDA asset resolution, PMax asset-group reads." },
+              { n: "LinkedIn Paid", d: "Campaign performance via the Advertising API." },
+              { n: "LinkedIn Organic", d: "Follower + engagement via the Community Management API." },
+              { n: "GA4", d: "Ecommerce funnel from item-view through purchase." },
+              { n: "WhatsApp CAPI", d: "QualifiedLead events pushed to Meta's dataset for optimisation and attribution." },
+              { n: "Drive / Dropbox", d: "Creative-folder walking with 1:1 / 9:16 pair detection." }
+            ]
+          },
+          {
+            name: "The Interpreters",
+            color: "#34D399",
+            desc: "Turn raw platform numbers into decisions, flags, and client-ready reports.",
+            agents: [
+              { n: "Command Centre Flags", d: "Date-scoped, objective-aware flag generator feeding Summary + Optimise views." },
+              { n: "Growth Plan Composer", d: "TL;DR + 5X + Structural Play + Crystal Ball narrative from live campaign state." },
+              { n: "Objective Classifier", d: "Name-tag-authoritative classifier, resolves Meta / TikTok API drift." },
+              { n: "Custom Outcomes Compiler", d: "Client-specific KPI shapes (Learnalot two-path leads, ecommerce funnels)." },
+              { n: "PDF Composer", d: "Full dashboard snapshot with Custom Outcomes read from the request body." },
+              { n: "Thumbnail Resolver", d: "Admin-override → native-cascade thumbnail resolution for every ad on every surface." },
+              { n: "MIXED Winner Ranker", d: "Objective-aware winning-creative selection across DCO multi-creative ads." },
+              { n: "Follower Reconciler", d: "Whole-account earnedTotal across Followers surfaces (Summary/Community/Deep Dive)." }
+            ]
+          },
+          {
+            name: "The Watchers",
+            color: "#FFAA00",
+            desc: "Scheduled crons that keep the platform honest while you sleep.",
+            agents: [
+              { n: "Reconcile & Alert", d: "Daily 06:00 UTC cross-platform metric reconcile with delta email." },
+              { n: "Daily SLA Nudge", d: "06:30 UTC leadership nudge for any client whose last report is > 7 days old." },
+              { n: "Daily Pulse Email", d: "06:15 UTC performance pulse for the team." },
+              { n: "Weekly Activity Summary", d: "Fri 08:00 UTC SLA table, reports sent, adoption scorecards." },
+              { n: "Weekly Client Pulse", d: "Mon 06:00 UTC performance pulse to clients." },
+              { n: "IG Follower Snapshot", d: "Daily 04:00 UTC growth-trendline baseline." },
+              { n: "FB Page Snapshot", d: "Daily 04:05 UTC follower count for whole-account growth math." },
+              { n: "Perf Snapshot", d: "Daily 04:10 UTC ground-truth performance ledger used by every trend chart." },
+              { n: "Best-Practice Refresh", d: "Monthly 1st 02:00 UTC benchmark refresh." },
+              { n: "Credit-Balance Alert", d: "Every 6h scan of Sami consumption; emails Gary once per month at 4,800 credits." }
+            ]
+          },
+          {
+            name: "The Messengers",
+            color: "#FF6B00",
+            desc: "Every transactional email the platform sends, all through the same Gmail SMTP transport.",
+            agents: [
+              { n: "SAMI ON Invite", d: "Fires when an admin grants Sami access. Prompts the member to set their PIN on next visit." },
+              { n: "PIN Reset Notice", d: "Fires when admin clears a member's PIN. Tells the member to set a fresh one." },
+              { n: "Team Invite", d: "Fires when a new team member is invited. Branded dark-glass template." },
+              { n: "Password Reset", d: "Admin-triggered password reset with 1h token." },
+              { n: "Client Share Link", d: "Signed client-view link with rate-limited view counting." }
+            ]
+          }
+        ];
+        var total = pods.reduce(function(s, p){ return s + p.agents.length; }, 0);
+        return <div style={{display:"flex",flexDirection:"column",gap:22,overflow:"auto"}}>
+          <div style={{background:"linear-gradient(135deg,rgba(176,133,255,0.10),rgba(69,153,255,0.06))",border:"1px solid rgba(176,133,255,0.35)",borderRadius:16,padding:"22px 24px"}}>
+            <div style={{fontSize:11,fontWeight:900,color:"#B085FF",fontFamily:fm,letterSpacing:3,textTransform:"uppercase",marginBottom:8}}>The AI Swarm</div>
+            <div style={{fontSize:26,fontWeight:900,color:P.txt,fontFamily:ff,marginBottom:6,letterSpacing:0.5}}>{total} agents at work</div>
+            <div style={{fontSize:13,color:P.label,fontFamily:ff,lineHeight:1.6}}>Every one is a real, working part of the Media on GAS platform. {pods.length} pods, each a specialist team behind the scenes.</div>
+          </div>
+          {pods.map(function(pod){
+            return <div key={pod.name}>
+              <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:12}}>
+                <span style={{fontSize:12,fontWeight:900,color:pod.color,fontFamily:fm,letterSpacing:3,textTransform:"uppercase"}}>{pod.name}</span>
+                <span style={{fontSize:11,fontWeight:800,color:P.caption,fontFamily:fm}}>· {pod.agents.length}</span>
+                <span style={{fontSize:11,color:P.caption,fontFamily:fm,fontStyle:"italic"}}>{pod.desc}</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {pod.agents.map(function(a){
+                  return <div key={a.n} style={{background:"rgba(0,0,0,0.30)",border:"1px solid "+P.rule,borderRadius:12,padding:"14px 16px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:pod.color,display:"inline-block"}}/>
+                      <span style={{fontSize:13,fontWeight:800,color:P.txt,fontFamily:ff}}>{a.n}</span>
+                    </div>
+                    <div style={{fontSize:11,color:P.label,fontFamily:ff,lineHeight:1.6}}>{a.d}</div>
+                  </div>;
+                })}
+              </div>
+            </div>;
+          })}
         </div>;
       })()}
 
