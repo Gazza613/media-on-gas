@@ -3233,6 +3233,27 @@ function CampaignAuditModal(props){
       .catch(function(){teamErr[1]("Connection error");});
   };
 
+  // Sami Hub per-user access toggle. Flipping on grants the member the
+  // ability to enter the Create & Optimise Hub (they still need to set
+  // their own 4-digit PIN on first visit). Flipping off blocks Sami
+  // access immediately, their next Sami call fails a fresh 401.
+  var toggleSami=function(email,currentlyAllowed){
+    if(!window.confirm((currentlyAllowed?"Revoke Sami Hub access for ":"Enable Sami Hub access for ")+email+"?"+(currentlyAllowed?"":"\n\nThey will be prompted to set their own 4-digit PIN on next Sami visit.")))return;
+    fetch(props.apiBase+"/api/users",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({action:currentlyAllowed?"sami-disable":"sami-enable",email:email})})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.ok)loadTeam();else teamErr[1](d.error||"Sami toggle failed");})
+      .catch(function(){teamErr[1]("Connection error");});
+  };
+  // Admin clears the target member's Sami PIN. They set a fresh one on
+  // their next Sami visit. Admin never sees the plaintext PIN or hash.
+  var resetSamiPin=function(email){
+    if(!window.confirm("Reset Sami PIN for "+email+"?\n\nThey will need to set a new 4-digit PIN on next Sami visit before they can enter the hub."))return;
+    fetch(props.apiBase+"/api/sami-pin",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""},body:JSON.stringify({op:"reset",email:email})})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d.ok)loadTeam();else teamErr[1](d.error||"PIN reset failed");})
+      .catch(function(){teamErr[1]("Connection error");});
+  };
+
   var load=function(){
     loading[1](true);err[1]("");
     fetch(props.apiBase+"/api/objective-audit",{headers:{"x-session-token":props.session||""}})
@@ -3952,20 +3973,35 @@ function CampaignAuditModal(props){
             </div>
             <div style={{border:"1px solid "+P.rule,borderRadius:10,background:"rgba(0,0,0,0.3)",overflow:"hidden"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:fm}}>
-                <thead><tr><th style={hdr}>Name</th><th style={hdr}>Email</th><th style={hdr}>Role</th><th style={hdr}>Status</th><th style={hdr}>Invited</th><th style={hdr}>Last Login</th><th style={Object.assign({},hdr,{textAlign:"right"})}>Action</th></tr></thead>
+                <thead><tr><th style={hdr}>Name</th><th style={hdr}>Email</th><th style={hdr}>Role</th><th style={hdr}>Status</th><th style={hdr}>Sami Hub</th><th style={hdr}>Invited</th><th style={hdr}>Last Login</th><th style={Object.assign({},hdr,{textAlign:"right"})}>Action</th></tr></thead>
                 <tbody>
-                  {users.length===0&&!teamLoading[0]?<tr><td colSpan={7} style={{padding:20,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm,fontStyle:"italic"}}>No team members yet. Invite someone above.</td></tr>:users.map(function(u){
+                  {users.length===0&&!teamLoading[0]?<tr><td colSpan={8} style={{padding:20,color:P.caption,textAlign:"center",fontSize:11,fontFamily:fm,fontStyle:"italic"}}>No team members yet. Invite someone above.</td></tr>:users.map(function(u){
                     var s=statusPill(u);
                     var canToggle=u.role!=="superadmin";
+                    var samiOn=!!u.samiAccess;
+                    var pinSet=!!u.samiPinSet;
+                    var samiColor=!samiOn?P.caption:(pinSet?P.mint:P.warning);
+                    var samiLabel=!samiOn?"OFF":(pinSet?"READY":"PIN NOT SET");
+                    var samiCount=u.samiUnlockCount||0;
                     return <tr key={u.email}>
                       <td style={Object.assign({},cell,{fontWeight:700})}>{u.name||"-"}</td>
                       <td style={Object.assign({},cell,{color:P.label})}>{u.email}</td>
                       <td style={cell}>{u.role==="superadmin"?"Super Admin":"Team Member"}</td>
                       <td style={cell}><span style={{background:s.color+"20",color:s.color,border:"1px solid "+s.color+"50",padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{s.label}</span></td>
+                      <td style={cell}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          <span title={samiCount+" unlock"+(samiCount===1?"":"s")+" recorded"} style={{background:samiColor+"20",color:samiColor,border:"1px solid "+samiColor+"50",padding:"2px 8px",borderRadius:5,fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase"}}>{samiLabel}</span>
+                          {samiOn&&samiCount>0&&<span style={{fontSize:10,color:P.caption}}>{samiCount}x</span>}
+                        </div>
+                      </td>
                       <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(u.createdAt)}</td>
                       <td style={Object.assign({},cell,{color:P.label})}>{fmtDate(u.lastLogin)}</td>
                       <td style={Object.assign({},cell,{textAlign:"right"})}>
-                        <div style={{display:"inline-flex",gap:6,alignItems:"center",justifyContent:"flex-end"}}>
+                        <div style={{display:"inline-flex",gap:6,alignItems:"center",justifyContent:"flex-end",flexWrap:"wrap"}}>
+                          {/* Sami Hub controls: RESET PIN only shows once a PIN is set. SAMI ON/OFF toggles access.
+                              Superadmin has implicit access (samiAccessAllowed in _users.js) and cannot be toggled. */}
+                          {samiOn&&pinSet&&u.role!=="superadmin"&&<button onClick={function(){resetSamiPin(u.email);}} title="Clear this member's Sami PIN so they set a new one" style={{background:"transparent",border:"1px solid "+P.solar+"60",borderRadius:6,padding:"4px 8px",color:P.solar,fontSize:9,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>RESET PIN</button>}
+                          {u.role!=="superadmin"&&<button onClick={function(){toggleSami(u.email,samiOn);}} title={samiOn?"Revoke Sami Hub access":"Grant Sami Hub access"} style={{background:samiOn?"transparent":P.cyan+"15",border:"1px solid "+(samiOn?P.critical+"60":P.cyan+"60"),borderRadius:6,padding:"4px 8px",color:samiOn?P.critical:P.cyan,fontSize:9,fontWeight:800,fontFamily:fm,cursor:"pointer",letterSpacing:1}}>{samiOn?"SAMI OFF":"SAMI ON"}</button>}
                           {/* Reset password — only for active accounts that have already activated.
                               Pending invites should be re-sent, not reset; revoked accounts must be
                               restored first. Superadmin self-resets via the login screen. */}
