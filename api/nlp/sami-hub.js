@@ -237,10 +237,17 @@ async function redisGet(key) {
 }
 
 // Detect which known-client slugs the user's most recent message
-// mentions. Reads the memory index (small, one Redis call) to find the
-// candidate list, then substring-matches each client name against the
-// last user message. Case-insensitive. Returns unique slugs, in order
-// they appear in the message.
+// mentions. Audit fix #5: matches on the display NAME with word
+// boundaries and rejects names shorter than 4 chars. This kills two
+// classes of false positive the audit flagged:
+//   (a) short slugs like "the" or "and" firing on every message,
+//   (b) "chilla" firing inside "chillaxing" (substring match on
+//       normalised text ignored word breaks).
+// Slug-only substring matching was dropped: users type names, not
+// slugs, so the coverage loss is nil while the false-positive surface
+// shrinks dramatically. If a client's display name is genuinely too
+// short (e.g. a 3-char brand) they should register an alias in memory,
+// not lower the threshold.
 async function detectMentionedClients(lastUserContent) {
   if (!lastUserContent) return [];
   var indexRaw = await redisGet("sami:memory:__index");
@@ -248,17 +255,14 @@ async function detectMentionedClients(lastUserContent) {
   var index;
   try { index = JSON.parse(indexRaw); } catch (_) { return []; }
   if (!Array.isArray(index) || index.length === 0) return [];
-  var lower = lastUserContent.toLowerCase();
-  // Normalise the message the same way the memory slug generator does:
-  // strip non-alphanumeric for slug-comparison, keep the original for
-  // brand-name substring matching. Both help catch variants.
-  var normalisedMsg = lower.replace(/[^a-z0-9]/g, "");
   var matches = [];
   index.forEach(function (rec) {
-    if (!rec || !rec.slug) return;
-    var slugMatched = rec.slug && normalisedMsg.indexOf(rec.slug) >= 0;
-    var nameMatched = rec.name && lower.indexOf(String(rec.name).toLowerCase()) >= 0;
-    if ((slugMatched || nameMatched) && matches.indexOf(rec.slug) < 0) matches.push(rec.slug);
+    if (!rec || !rec.slug || !rec.name) return;
+    var name = String(rec.name).trim();
+    if (name.length < 4) return;
+    var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    var re = new RegExp("\\b" + escaped + "\\b", "i");
+    if (re.test(lastUserContent) && matches.indexOf(rec.slug) < 0) matches.push(rec.slug);
   });
   return matches.slice(0, 3); // sanity cap: never inject more than 3 clients per turn
 }
