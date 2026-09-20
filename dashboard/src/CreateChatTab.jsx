@@ -103,14 +103,38 @@ function PinGate(props) {
   var mainName = readMainName();
   var mainEmail = readMainEmail();
 
-  // mode: "verify" (existing PIN) | "no-access" | "set-pin" (first-time set) | "signin"
-  var initMode = !session ? "signin" : "verify";
+  // mode: "verify" (existing PIN) | "no-access" | "set-pin" (first-time set) | "signin" | "checking"
+  // Start in "checking" when a session exists so the preflight status
+  // probe can decide where to land before showing anything the user
+  // has to interact with. Then set-pin, no-access, or verify.
+  var initMode = !session ? "signin" : "checking";
   var ms = useState(initMode), mode = ms[0], setMode = ms[1];
   var ps = useState(""), pin = ps[0], setPin = ps[1];
   var p2s = useState(""), pin2 = p2s[0], setPin2 = p2s[1];
   var es = useState(""), err = es[0], setErr = es[1];
   var ok = useState(""), okMsg = ok[0], setOkMsg = ok[1];
   var ls = useState(false), loading = ls[0], setLoading = ls[1];
+
+  // Preflight: ask the server what screen to show. Lets grow@ land
+  // straight on "Set your PIN" instead of typing something first, and
+  // lets a non-invited member see the "Ask an admin" screen immediately.
+  useEffect(function () {
+    if (!session) return;
+    fetch(apiBase + "/api/create/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-session-token": session },
+      body: JSON.stringify({ op: "status" })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (x) {
+        var code = x.data && x.data.code;
+        if (code === "no-access") setMode("no-access");
+        else if (code === "no-pin") { setMode("set-pin"); setOkMsg("Set a 4-digit Sami PIN to activate your access."); }
+        else if (code === "no-account") setMode("signin");
+        else setMode("verify");
+      })
+      .catch(function () { setMode("verify"); /* fall back to letting them try a PIN */ });
+  }, [apiBase, session]);
 
   var submitVerify = function (e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -167,6 +191,14 @@ function PinGate(props) {
       </div>
     </div>;
   };
+
+  if (mode === "checking") {
+    return Card(<div style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 0" }}>
+      <div style={{ width: 18, height: 18, border: "2px solid " + P.rule, borderTop: "2px solid " + P.ember, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+      <div style={{ fontSize: 12, color: P.label || P.sub, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase" }}>Checking your access...</div>
+      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+    </div>);
+  }
 
   if (mode === "signin") {
     return Card(<div>
