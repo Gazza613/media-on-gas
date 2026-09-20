@@ -88,7 +88,13 @@ function normId(raw) {
 // Called by sami-hub.js when an APPROVAL_CARD is extracted from Sami's
 // reply. Registers a pending nonce keyed by both the card id AND the
 // hash so the proxy can look it up either way.
-export async function issuePendingNonce(cardId, opId, inputData) {
+//
+// User scoping (final security fix): the nonce is bound to the samiSlug
+// that issued it. authoriseNonce refuses to flip the nonce unless the
+// same slug is doing the authorising. Prevents the cross-tenant "Sam
+// posts APPROVED: chilla-camp-1 in her thread and authorises Busi's
+// pending Chilla write" attack.
+export async function issuePendingNonce(cardId, opId, inputData, user) {
   var id = normId(cardId);
   if (!id || !opId || inputData == null) return null;
   var hash = hashCall(opId, inputData);
@@ -96,8 +102,10 @@ export async function issuePendingNonce(cardId, opId, inputData) {
     cardId: id,
     opId: String(opId),
     hash: hash,
+    issuedBy: normId(user) || null,
     createdAt: Date.now(),
     authorisedAt: null,
+    authorisedBy: null,
     usedAt: null,
     result: null
   };
@@ -109,17 +117,24 @@ export async function issuePendingNonce(cardId, opId, inputData) {
 
 // Called by sami-hub.js when an incoming user message is
 // "APPROVED: <cardId>". Marks the nonce authorised so the proxy will
-// let the next matching write through. Silent no-op if the card id is
-// unknown or the nonce has expired.
-export async function authoriseNonce(cardId) {
+// let the next matching write through, ONLY if the user matches the
+// one who issued the card. Silent no-op if the card id is unknown,
+// expired, or the caller is not the issuer.
+export async function authoriseNonce(cardId, user) {
   var id = normId(cardId);
   if (!id) return false;
+  var u = normId(user);
   var raw = await redisCmd(["GET", "sami:nonce:" + id]);
   if (!raw || !raw.result) return false;
   var rec;
   try { rec = JSON.parse(raw.result); } catch (_) { return false; }
+  // Cross-user guard: only the same slug that issued the card can
+  // authorise it. Legacy records without issuedBy (pre-fix) still
+  // work to avoid breaking in-flight cards during the deploy.
+  if (rec.issuedBy && u && rec.issuedBy !== u) return false;
   if (rec.authorisedAt) return true;
   rec.authorisedAt = Date.now();
+  rec.authorisedBy = u || null;
   await redisCmd(["SET", "sami:nonce:" + id, JSON.stringify(rec), "EX", String(NONCE_TTL_SECONDS)]);
   return true;
 }
@@ -200,40 +215,47 @@ export function extractApprovedPlanId(userMessage) {
 // so the MCP proxy sees them identically) AND a plan-level index so
 // authoriseNoncePlan can flip them all at once. Returns the list of
 // child ids that were successfully registered (skipping malformed).
-export async function issuePendingPlanNonces(planId, children) {
+// User scoping matches issuePendingNonce (only the issuing user can
+// approve).
+export async function issuePendingPlanNonces(planId, children, user) {
   var id = normId(planId);
   if (!id || !Array.isArray(children) || children.length === 0) return [];
+  var u = normId(user);
   var registered = [];
   for (var i = 0; i < children.length; i++) {
     var c = children[i];
     if (!c || !c.id || !c.operation_id || c.input_data == null) continue;
-    var rec = await issuePendingNonce(c.id, c.operation_id, c.input_data);
+    var rec = await issuePendingNonce(c.id, c.operation_id, c.input_data, u);
     if (rec) registered.push(rec.cardId);
   }
   if (registered.length === 0) return [];
-  var planRec = { planId: id, childCardIds: registered, createdAt: Date.now(), authorisedAt: null };
+  var planRec = { planId: id, childCardIds: registered, issuedBy: u || null, createdAt: Date.now(), authorisedAt: null, authorisedBy: null };
   await redisCmd(["SET", "sami:plan:" + id, JSON.stringify(planRec), "EX", String(NONCE_TTL_SECONDS)]);
   return registered;
 }
 
 // Called by sami-hub.js when the incoming user message is
 // "APPROVED_PLAN: <planId>". Flips every child nonce to authorised in
-// one pass. Returns the number of children authorised, or 0 if the
-// plan id is unknown / expired.
-export async function authoriseNoncePlan(planId) {
+// one pass. Refuses if the caller is not the plan's issuer. Returns
+// the number of children authorised, or 0 if the plan id is unknown,
+// expired, or the caller is not authorised.
+export async function authoriseNoncePlan(planId, user) {
   var id = normId(planId);
   if (!id) return 0;
+  var u = normId(user);
   var raw = await redisCmd(["GET", "sami:plan:" + id]);
   if (!raw || !raw.result) return 0;
   var plan;
   try { plan = JSON.parse(raw.result); } catch (_) { return 0; }
   if (!plan || !Array.isArray(plan.childCardIds) || plan.childCardIds.length === 0) return 0;
+  if (plan.issuedBy && u && plan.issuedBy !== u) return 0;
   var count = 0;
   for (var i = 0; i < plan.childCardIds.length; i++) {
-    var ok = await authoriseNonce(plan.childCardIds[i]);
+    var ok = await authoriseNonce(plan.childCardIds[i], u);
     if (ok) count++;
   }
   plan.authorisedAt = Date.now();
+  plan.authorisedBy = u || null;
   await redisCmd(["SET", "sami:plan:" + id, JSON.stringify(plan), "EX", String(NONCE_TTL_SECONDS)]);
   return count;
 }

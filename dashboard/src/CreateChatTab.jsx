@@ -1175,10 +1175,11 @@ export default function CreateChatTab(props) {
     var csOverride = opts.cardStatus !== undefined ? opts.cardStatus : cardStatus;
     var psOverride = opts.pairStatus !== undefined ? opts.pairStatus : pairStatus;
     var planOverride = opts.planStatus !== undefined ? opts.planStatus : planStatus;
+    var brOverride = opts.briefStatus !== undefined ? opts.briefStatus : briefStatus;
     fetch(apiBase + "/api/nlp/sami-threads", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs, cardStatus: csOverride, pairStatus: psOverride, planStatus: planOverride })
+      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs, cardStatus: csOverride, pairStatus: psOverride, planStatus: planOverride, briefStatus: brOverride })
     })
       .then(function (r) { return r.json().then(function (d) { return { status: r.status, ok: r.ok, data: d }; }); })
       .then(function (x) {
@@ -1214,6 +1215,7 @@ export default function CreateChatTab(props) {
         setCardStatus((d.thread.cardStatus && typeof d.thread.cardStatus === "object") ? d.thread.cardStatus : {});
         setPairStatus((d.thread.pairStatus && typeof d.thread.pairStatus === "object") ? d.thread.pairStatus : {});
         setPlanStatus((d.thread.planStatus && typeof d.thread.planStatus === "object") ? d.thread.planStatus : {});
+        setBriefStatus((d.thread.briefStatus && typeof d.thread.briefStatus === "object") ? d.thread.briefStatus : {});
         setErr("");
       })
       .catch(function () { setErr("Could not load that conversation."); });
@@ -1519,7 +1521,12 @@ export default function CreateChatTab(props) {
     var next = Object.assign({}, briefStatus, {}); next[card.id] = "submitted";
     setBriefStatus(next);
     if (threadId) saveThread(threadId, messages);
-    var body = "BRIEF_FILLED: " + card.id + "\n" + JSON.stringify(filledFields, null, 2);
+    // JSON.stringify without indent halves the payload size so it
+    // stays under sami-hub's MAX_MESSAGE_CHARS=8000 even with a full
+    // copy_primary_text + long creative URL. The pre-fix version
+    // used null-2 indent which pushed >10KB briefs past truncation
+    // and produced invalid JSON on Sami's end.
+    var body = "BRIEF_FILLED: " + card.id + "\n" + JSON.stringify(filledFields);
     send(body);
   };
 
