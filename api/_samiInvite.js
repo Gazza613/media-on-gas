@@ -53,7 +53,7 @@ export async function sendSamiAccessGrantedEmail(user, invitedByName) {
   if (!email) return { sent: false, reason: "no-email" };
 
   var body = [
-    "    <div style=\"font-size:16px;font-weight:800;margin-bottom:12px\">Hi " + escapeHtml(name) + ", you now have access to Sami.</div>",
+    "    <div style=\"font-size:16px;font-weight:800;margin-bottom:12px\">Hi " + escapeHtml(name) + ", you now have access to the Media Create &amp; Optimisation Hub.</div>",
     "    <div style=\"font-size:13px;line-height:1.65;color:#c9c1d5;margin-bottom:16px\">",
     "      " + escapeHtml(invitedByName || "Your admin") + " has enabled you to use the Create & Optimise Hub. Sami plans campaigns with you and pushes the changes live to Meta, TikTok, Google Ads and LinkedIn, with every write paused and awaiting your approval.",
     "    </div>",
