@@ -15,6 +15,7 @@ import {
   getUser, normalizeEmail, isSuperadminEmail,
   hashPassword, setSamiPinHash, clearSamiPin, samiAccessAllowed
 } from "./_users.js";
+import { sendSamiPinResetEmail } from "./_samiInvite.js";
 
 function isValidPin(raw) {
   return typeof raw === "string" && /^\d{4}$/.test(raw);
@@ -67,9 +68,17 @@ export default async function handler(req, res) {
         res.status(400).json({ error: "Superadmin PIN can only be reset by the superadmin themselves via op=set." });
         return;
       }
+      var priorReset = await getUser(targetEmail);
       var r2 = await clearSamiPin(targetEmail);
       if (!r2.ok) { res.status(400).json({ error: r2.reason || "failed" }); return; }
-      res.status(200).json({ ok: true, samiPinSet: false });
+      var emailed = false, emailReason = "";
+      try {
+        var resetByName = (session && (session.name || session.email)) || "An admin";
+        var rMail = await sendSamiPinResetEmail(priorReset || { email: targetEmail }, resetByName);
+        emailed = !!(rMail && rMail.sent);
+        emailReason = rMail && rMail.reason ? rMail.reason : "";
+      } catch (e) { console.error("[sami-pin] reset email failed", e); emailReason = String(e && e.message || e); }
+      res.status(200).json({ ok: true, samiPinSet: false, emailed: emailed, emailReason: emailReason });
       return;
     }
 
