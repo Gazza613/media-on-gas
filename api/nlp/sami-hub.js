@@ -540,24 +540,35 @@ function extractStructuredCards(text) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // Grounding-enforcement heuristic. If Sami's reply text contains
-  // hard numbers (R-values or percentages) BUT no MCP tool calls
-  // fired in this turn, flag it so the frontend renders an "unverified
-  // numbers" warning. The prompt already forbids inventing numbers,
-  // this catches drift. Skip on turns that contain a card (the card
-  // itself likely carries numeric context that the model reused from
-  // an earlier tool call in the same conversation).
-  var unverifiedNumbers = false;
-  if (approvals.length === 0 && plans.length === 0 && briefs.length === 0 && pairCards.length === 0) {
-    // Look for currency amounts (R 5,000 / R5000 / R6 632,73), or
-    // explicit percentages (12%, 4.5 %). One-off "R" letters like
-    // "Rand" won't match because R is followed by non-digit whitespace.
-    var currencyRe = /R\s*[\d]{2,}[\d.,\s]*/;
-    var percentRe = /\d+(?:[.,]\d+)?\s*%/;
-    if (currencyRe.test(stripped) || percentRe.test(stripped)) {
-      unverifiedNumbers = true;
-    }
+  // Grounding-enforcement heuristic. If ANY hard number (R-value or
+  // percentage) appears in the reply text OR in any card's description /
+  // details, flag unverifiedNumbers. The frontend uses actions.length
+  // to decide whether to actually SHOW the badge (turns with tool
+  // calls are trusted). Previous version suppressed on any card
+  // presence, which let Sami fabricate numbers inside a plan-card
+  // description with a benign brief-card also emitted in the same turn.
+  var currencyRe = /R\s*[\d]{2,}[\d.,\s]*/;
+  var percentRe = /\d+(?:[.,]\d+)?\s*%/;
+  function containsHardNumber(t) {
+    var s = String(t || "");
+    return currencyRe.test(s) || percentRe.test(s);
   }
+  var unverifiedNumbers = false;
+  if (containsHardNumber(stripped)) unverifiedNumbers = true;
+  approvals.concat(plans).forEach(function (card) {
+    if (!card) return;
+    if (containsHardNumber(card.description)) unverifiedNumbers = true;
+    if (card.details && typeof card.details === "object") {
+      Object.keys(card.details).forEach(function (k) {
+        if (containsHardNumber(card.details[k])) unverifiedNumbers = true;
+      });
+    }
+    if (Array.isArray(card.plan)) {
+      card.plan.forEach(function (child) {
+        if (child && containsHardNumber(child.description)) unverifiedNumbers = true;
+      });
+    }
+  });
 
   return { cards: approvals, plans: plans, briefs: briefs, pairCards: pairCards, memories: memories, text: stripped, unverifiedNumbers: unverifiedNumbers };
 }
@@ -618,9 +629,9 @@ export default async function handler(req, res) {
     var lastUser = messages[messages.length - 1];
     if (lastUser && lastUser.role === "user") {
       var approvedId = extractApprovedCardId(lastUser.content);
-      if (approvedId) await authoriseNonce(approvedId);
+      if (approvedId) await authoriseNonce(approvedId, auth.user);
       var approvedPlanId = extractApprovedPlanId(lastUser.content);
-      if (approvedPlanId) await authoriseNoncePlan(approvedPlanId);
+      if (approvedPlanId) await authoriseNoncePlan(approvedPlanId, auth.user);
     }
   } catch (err) { console.error("[sami-hub] nonce authorise failed", err); }
 
@@ -688,18 +699,19 @@ export default async function handler(req, res) {
     for (var ci = 0; ci < extracted.cards.length; ci++) {
       var c = extracted.cards[ci];
       if (c && c.id && c.operation_id && c.input_data) {
-        try { await issuePendingNonce(c.id, c.operation_id, c.input_data); }
+        try { await issuePendingNonce(c.id, c.operation_id, c.input_data, auth.user); }
         catch (err) { console.error("[sami-hub] nonce issue failed for card", c.id, err); }
       }
     }
 
     // Audit fix #6: for every PLAN_CARD, register per-child nonces AND
     // a plan-level index so a single APPROVED_PLAN authorises all
-    // children in one Redis pass.
+    // children in one Redis pass. Both are user-scoped so only the
+    // member who received the plan can approve it.
     for (var pi = 0; pi < extracted.plans.length; pi++) {
       var plan = extracted.plans[pi];
       if (plan && plan.id && Array.isArray(plan.plan) && plan.plan.length > 0) {
-        try { await issuePendingPlanNonces(plan.id, plan.plan); }
+        try { await issuePendingPlanNonces(plan.id, plan.plan, auth.user); }
         catch (err) { console.error("[sami-hub] plan-nonce issue failed for plan", plan.id, err); }
       }
     }

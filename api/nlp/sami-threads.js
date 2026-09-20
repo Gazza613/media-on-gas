@@ -242,24 +242,37 @@ export default async function handler(req, res) {
       var messagesIn = Array.isArray(body.messages) ? body.messages : null;
       if (!messagesIn) { res.status(400).json({ error: "Missing messages array." }); return; }
 
-      // Sanitise messages: role + content are mandatory; cards + live are
-      // optional pass-throughs used by the frontend's approval-card UI.
+      // Sanitise messages: role + content are mandatory; every card
+      // array + optional flags pass through so a reloaded thread
+      // renders every interactive block Sami originally emitted
+      // (previously only `cards` + `live` survived — plans, briefs,
+      // pairCards, memories, actions, unverifiedNumbers all vanished
+      // on reload, killing the Approve-plan button / brief form /
+      // pairing UI mid-build).
       var messages = messagesIn.slice(-MAX_MESSAGES_PER_THREAD).map(function (m) {
         var role = (m && m.role === "user") ? "user" : "assistant";
         var content = cleanStr(m && m.content, MAX_MESSAGE_CHARS);
         var out = { role: role, content: content };
         if (m && Array.isArray(m.cards) && m.cards.length > 0) out.cards = m.cards;
+        if (m && Array.isArray(m.plans) && m.plans.length > 0) out.plans = m.plans;
+        if (m && Array.isArray(m.briefs) && m.briefs.length > 0) out.briefs = m.briefs;
+        if (m && Array.isArray(m.pairCards) && m.pairCards.length > 0) out.pairCards = m.pairCards;
+        if (m && Array.isArray(m.memories) && m.memories.length > 0) out.memories = m.memories;
+        if (m && Array.isArray(m.actions) && m.actions.length > 0) out.actions = m.actions;
         if (m && m.live) out.live = true;
+        if (m && m.unverifiedNumbers) out.unverifiedNumbers = true;
         return out;
       }).filter(function (m) { return m.content; });
 
       // Audit fix #7 + #6: persist per-card approval / pair-confirm /
-      // plan-approval status so a reloaded thread doesn't render
-      // historic cards as pending (which would let a click re-fire the
-      // write, defeating the idempotency + nonce guards).
+      // plan-approval / brief-submit status so a reloaded thread
+      // doesn't render historic cards as pending (which would let a
+      // click re-fire the write, defeating the idempotency + nonce
+      // guards).
       var cardStatus = sanitiseStatusMap(body.cardStatus, ["approved", "rejected", "pending"]);
       var pairStatus = sanitiseStatusMap(body.pairStatus, ["confirmed", "rejected", "pending"]);
       var planStatus = sanitiseStatusMap(body.planStatus, ["approved", "rejected", "pending"]);
+      var briefStatus = sanitiseStatusMap(body.briefStatus, ["submitted", "pending"]);
 
       var now = Date.now();
       var existing = await readThread(user, sid);
@@ -271,7 +284,8 @@ export default async function handler(req, res) {
         messages: messages,
         cardStatus: cardStatus,
         pairStatus: pairStatus,
-        planStatus: planStatus
+        planStatus: planStatus,
+        briefStatus: briefStatus
       };
       await writeThread(user, thread);
 
