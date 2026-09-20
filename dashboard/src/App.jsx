@@ -6324,14 +6324,15 @@ export default function MediaOnGas(){
     tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)}];
     if(ecoOn)tabs.push({id:"ecommerce",label:"Ecommerce",icon:Ic.cart(P.mint,16)});
   } else {
-    // Optimisation tab dropped from the nav — every actionable signal it
-    // surfaced now lives in the Command Centre (priority buckets,
-    // ATTENTION / WATCH LIST cards, Growth Plan with TL;DR + 5X +
-    // Structural Play + Crystal Ball). The Ack/Resolve workflow that
-    // was the only unique value the tab carried isn't used by the team.
-    // genFlags() stays alive because Pulse + Command Centre still
-    // consume parts of it; only the surface route is removed.
-    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"command",label:"Optimise",icon:Ic.person(P.solar,16)},{id:"create",label:"Create",icon:Ic.bolt(P.ember,16)}];
+    // 2026-09-20: Optimise (Command Centre) tab folded into the Create
+    // hub. Sami now runs the strategist optimisation workflow via
+    // seeded Skills ("Weekly optimisation audit", "Deep client
+    // optimisation review") that produce PLAN_CARDs the AM approves
+    // in one click. Command Centre code stays in App.jsx (unreachable
+    // from nav) for one release cycle in case we need to fall back;
+    // genFlags() remains active because Pulse still consumes it.
+    // Nav renames Create -> Create & Optimise to reflect the merger.
+    tabs=[{id:"summary",label:"Summary",icon:Ic.crown(P.ember,16)},{id:"overview",label:"Deep Dive",icon:Ic.chart(P.orchid,16)},{id:"creative",label:"Creative",icon:Ic.fire(P.blaze,16)},{id:"demographics",label:"Demographics",icon:Ic.globe(P.cyan,16)},{id:"community",label:"Community",icon:Ic.users(P.mint,16)},{id:"targeting",label:"Targeting",icon:Ic.radar(P.solar,16)},{id:"create",label:"Create & Optimise",icon:Ic.bolt(P.ember,16)}];
     // Ecommerce tab is ALWAYS visible to the GAS team (even when the
     // selected client has no GA4 connection — the panel itself renders a
     // "no ecommerce connection yet" empty state). Clients still only see
