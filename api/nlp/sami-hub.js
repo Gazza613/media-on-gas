@@ -165,6 +165,27 @@ function buildSystemPrompt() {
     "- The card is a READ operation, not a write. No approval needed on the card itself. But every subsequent Meta upload IS a write and MUST be an APPROVAL_CARD.",
     "- When the user replies 'PAIRS_OK: <id>' (matching the card id), proceed to Meta-upload approval cards. When they reply with 'PAIRS_FIX: <id> — ...' or plain-language feedback about specific pairs, adjust and re-emit the card.",
     "",
+    "═══════ CLIENT MEMORY (PHASE 4) ═══════",
+    "When a user message mentions a client by name (MTN MoMo, Learnalot, Chilla, Boston City Campus, Sea Weeds, Sea Storm, Psycho Bunny, Willowbrook Village, Simpson Properties, etc.), the client's saved memory notes are automatically injected into the message context before you see it, wrapped in a <CLIENT_MEMORY client='<slug>'>...</CLIENT_MEMORY> block. Treat those notes as authoritative preferences that override defaults:",
+    "  - 'Standard budget' notes drive the default budget suggestion when the user doesn't specify.",
+    "  - 'Naming convention' notes override the generic GAS naming rules above for that client.",
+    "  - 'Approved persona' notes tell you which audience shape to lean towards.",
+    "  - 'WhatsApp number' notes give you the destination without re-asking.",
+    "  - Any 'Never / Always' note is a hard rule — do not violate.",
+    "  Never mention 'memory' or 'notes' in your reply. Just use the values as if you already knew them (they represent standing decisions the team made).",
+    "",
+    "When the user says something like 'remember that Chilla always ...' or 'save this for MTN MoMo: ...' or 'from now on for Learnalot: ...', emit a SAVE_MEMORY block instead of just acknowledging. The frontend will persist it and confirm.",
+    "",
+    "SAVE_MEMORY emission format (use exactly, one block per note):",
+    "<SAVE_MEMORY>{",
+    '  "clientSlug": "mtnmomo | learnalot | chilla | ..." (lowercase alphanumeric, no punctuation),',
+    '  "clientName": "MTN MoMo | Learnalot | Chilla | ..." (display name),',
+    '  "label": "Short 2-5 word label (e.g. Standard budget, WhatsApp destination, Approved persona)",',
+    '  "value": "Full note text, up to a sentence or two."',
+    "}</SAVE_MEMORY>",
+    "",
+    "Do NOT emit SAVE_MEMORY unless the user explicitly asked you to remember something. Do NOT auto-save preferences you inferred from a conversation. Memory is opt-in per team direction.",
+    "",
     "═══════ WHAT TO DO WHEN A NEW SESSION OPENS ═══════",
     "If the user starts a session with an open-ended message like 'help me' or 'new campaign', greet briefly in one line and ask what client, what objective, and what budget/dates. Do not lecture."
   ].join("\n");
@@ -187,6 +208,89 @@ function sanitiseMessages(raw) {
   });
   while (out.length && out[0].role !== "user") out.shift();
   return out;
+}
+
+// Phase 4: shared Redis helpers used to inject client-memory context
+// into the last user message when a known client is mentioned. Same
+// Upstash shape sami-memory.js uses.
+function getRedisCreds() {
+  var url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
+  var token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
+  if (!url || !token) return null;
+  return { url: url.replace(/\/+$/, ""), token: token };
+}
+async function redisGet(key) {
+  var creds = getRedisCreds();
+  if (!creds) return null;
+  try {
+    var r = await fetch(creds.url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + creds.token, "Content-Type": "application/json" },
+      body: JSON.stringify(["GET", key])
+    });
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d && d.result ? d.result : null;
+  } catch (_) { return null; }
+}
+
+// Detect which known-client slugs the user's most recent message
+// mentions. Reads the memory index (small, one Redis call) to find the
+// candidate list, then substring-matches each client name against the
+// last user message. Case-insensitive. Returns unique slugs, in order
+// they appear in the message.
+async function detectMentionedClients(lastUserContent) {
+  if (!lastUserContent) return [];
+  var indexRaw = await redisGet("sami:memory:__index");
+  if (!indexRaw) return [];
+  var index;
+  try { index = JSON.parse(indexRaw); } catch (_) { return []; }
+  if (!Array.isArray(index) || index.length === 0) return [];
+  var lower = lastUserContent.toLowerCase();
+  // Normalise the message the same way the memory slug generator does:
+  // strip non-alphanumeric for slug-comparison, keep the original for
+  // brand-name substring matching. Both help catch variants.
+  var normalisedMsg = lower.replace(/[^a-z0-9]/g, "");
+  var matches = [];
+  index.forEach(function (rec) {
+    if (!rec || !rec.slug) return;
+    var slugMatched = rec.slug && normalisedMsg.indexOf(rec.slug) >= 0;
+    var nameMatched = rec.name && lower.indexOf(String(rec.name).toLowerCase()) >= 0;
+    if ((slugMatched || nameMatched) && matches.indexOf(rec.slug) < 0) matches.push(rec.slug);
+  });
+  return matches.slice(0, 3); // sanity cap: never inject more than 3 clients per turn
+}
+
+async function fetchClientMemory(slug) {
+  var raw = await redisGet("sami:memory:" + slug);
+  if (!raw) return null;
+  try { return JSON.parse(raw); }
+  catch (_) { return null; }
+}
+
+// Take the last user message and prepend <CLIENT_MEMORY> blocks for any
+// mentioned known clients. Sami's system prompt teaches her to read
+// these as authoritative preferences.
+async function injectClientMemory(messages) {
+  if (!messages.length) return messages;
+  var last = messages[messages.length - 1];
+  if (!last || last.role !== "user") return messages;
+  var slugs = await detectMentionedClients(last.content);
+  if (slugs.length === 0) return messages;
+  var blocks = [];
+  for (var i = 0; i < slugs.length; i++) {
+    var rec = await fetchClientMemory(slugs[i]);
+    if (!rec || !Array.isArray(rec.notes) || rec.notes.length === 0) continue;
+    var lines = rec.notes.map(function (n) { return "  - " + n.label + ": " + n.value; }).join("\n");
+    blocks.push("<CLIENT_MEMORY client=\"" + (rec.slug || slugs[i]) + "\" name=\"" + (rec.name || slugs[i]) + "\">\n" + lines + "\n</CLIENT_MEMORY>");
+  }
+  if (blocks.length === 0) return messages;
+  var withCtx = messages.slice();
+  withCtx[withCtx.length - 1] = {
+    role: "user",
+    content: blocks.join("\n\n") + "\n\n" + last.content
+  };
+  return withCtx;
 }
 
 function anthropicPayload(messages, systemPrompt, mcpUrl, mcpToken, legacyShape) {
@@ -231,6 +335,7 @@ function extractStructuredCards(text) {
   var cleanText = String(text || "");
   var approvalRe = /<APPROVAL_CARD>([\s\S]*?)<\/APPROVAL_CARD>/g;
   var pairRe = /<CREATIVE_PAIR_CARD>([\s\S]*?)<\/CREATIVE_PAIR_CARD>/g;
+  var memoryRe = /<SAVE_MEMORY>([\s\S]*?)<\/SAVE_MEMORY>/g;
 
   var approvals = [];
   var m;
@@ -247,7 +352,6 @@ function extractStructuredCards(text) {
     try {
       var parsedP = JSON.parse(p[1].trim());
       if (parsedP && parsedP.id) {
-        // Normalise shape so the frontend can rely on arrays existing.
         parsedP.pairs = Array.isArray(parsedP.pairs) ? parsedP.pairs : [];
         parsedP.squareOnly = Array.isArray(parsedP.squareOnly) ? parsedP.squareOnly : [];
         parsedP.verticalOnly = Array.isArray(parsedP.verticalOnly) ? parsedP.verticalOnly : [];
@@ -256,13 +360,26 @@ function extractStructuredCards(text) {
     } catch (_) { /* malformed — leave in text */ }
   }
 
+  // Phase 4: SAVE_MEMORY blocks. Each carries clientSlug/clientName/
+  // label/value. Frontend POSTs to /api/nlp/sami-memory op=upsertNote
+  // and shows a confirmation chip in the chat.
+  var memories = [];
+  var mm;
+  while ((mm = memoryRe.exec(cleanText)) !== null) {
+    try {
+      var parsedM = JSON.parse(mm[1].trim());
+      if (parsedM && parsedM.clientSlug && parsedM.label && parsedM.value) memories.push(parsedM);
+    } catch (_) { /* malformed — leave in text */ }
+  }
+
   var stripped = cleanText
     .replace(approvalRe, "")
     .replace(pairRe, "")
+    .replace(memoryRe, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { cards: approvals, pairCards: pairCards, text: stripped };
+  return { cards: approvals, pairCards: pairCards, memories: memories, text: stripped };
 }
 
 export default async function handler(req, res) {
@@ -286,6 +403,12 @@ export default async function handler(req, res) {
 
   var messages = sanitiseMessages(body.messages);
   if (!messages.length) { res.status(400).json({ error: "Send at least one user message." }); return; }
+
+  // Phase 4: auto-inject saved client-memory notes into the last user
+  // message when any known client is mentioned. Non-fatal on failure —
+  // Sami still gets the raw message even if the Redis lookup errors.
+  try { messages = await injectClientMemory(messages); }
+  catch (err) { console.error("[sami-hub] memory injection failed", err); }
 
   var systemPrompt = buildSystemPrompt();
 
@@ -335,6 +458,7 @@ export default async function handler(req, res) {
       reply: extracted.text,
       cards: extracted.cards,
       pairCards: extracted.pairCards,
+      memories: extracted.memories,
       actions: actions,
       stopReason: result.data.stop_reason || null
     });
