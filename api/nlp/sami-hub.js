@@ -22,6 +22,7 @@
 
 import { rateLimit } from "../_rateLimit.js";
 import { checkCreateAuth } from "../_createAuth.js";
+import { issuePendingNonce, authoriseNonce, extractApprovedCardId } from "../_samiNonce.js";
 
 // Campaign builds can chain a lot of tool calls (find account, get
 // operation, upload media, create campaign, create ad set, create ad
@@ -136,6 +137,7 @@ function buildSystemPrompt() {
     "- Every new campaign/ad set/ad is PAUSED on creation. Never launch anything live.",
     "- Ad budgets that exceed R50,000 lifetime require the user to type the exact spend number as part of the approval message (belt and braces).",
     "- If Meta or another platform rejects a write, explain the error in plain English, suggest the fix, and offer a retry approval card. Do NOT retry the same write automatically.",
+    "- The GAS approval gate runs server-side. It refuses any write whose input_data has changed since the APPROVAL_CARD was emitted, or whose card the user has not clicked Approve on. If you see a 'Refused by GAS approval gate' error, do NOT silently retry the same call. Tell the user which card was not approved (by card id) and either wait for them to click Approve or emit a fresh APPROVAL_CARD with a new id and the exact updated input_data.",
     "",
     "═══════ WORKING WITH CREATIVE (DRIVE / DROPBOX) ═══════",
     "When the user pastes a Drive or Dropbox folder link, or asks you to look up assets for a client, follow this sequence:",
@@ -390,12 +392,22 @@ export default async function handler(req, res) {
   var apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) { res.status(503).json({ error: "Sami Hub not configured (ANTHROPIC_API_KEY missing)." }); return; }
 
-  var mcpToken = process.env.MARKIFACT_MCP_TOKEN;
+  // MCP endpoint: prefer the GAS approval-gated proxy when configured
+  // (server-side nonce enforcement + write idempotency, audit fixes 1 + 2).
+  // Falls back to direct upstream when the proxy env vars are not set so
+  // Sami keeps working during rollout and preview deploys without the
+  // extra env vars.
+  var useProxy = !!process.env.SAMI_MCP_PROXY_URL && !!process.env.SAMI_MCP_PROXY_TOKEN;
+  var mcpUrl = useProxy
+    ? process.env.SAMI_MCP_PROXY_URL
+    : (process.env.MARKIFACT_MCP_URL || "https://api.markifact.com/mcp");
+  var mcpToken = useProxy
+    ? process.env.SAMI_MCP_PROXY_TOKEN
+    : process.env.MARKIFACT_MCP_TOKEN;
   if (!mcpToken) {
-    res.status(503).json({ error: "Sami Hub data engine not configured yet. Set MARKIFACT_MCP_TOKEN in Vercel and redeploy." });
+    res.status(503).json({ error: "Sami Hub data engine not configured yet." });
     return;
   }
-  var mcpUrl = process.env.MARKIFACT_MCP_URL || "https://api.markifact.com/mcp";
 
   var body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch (_) { body = {}; } }
@@ -403,6 +415,19 @@ export default async function handler(req, res) {
 
   var messages = sanitiseMessages(body.messages);
   if (!messages.length) { res.status(400).json({ error: "Send at least one user message." }); return; }
+
+  // Audit fix #1: if the incoming user message is an "APPROVED: <cardId>"
+  // click from the frontend, mark that card's nonce as authorised so the
+  // MCP proxy will let the next matching write through. Silent no-op if
+  // the card id is unknown or expired. Only user-role messages trigger
+  // authorisation, so the model can never authorise itself.
+  try {
+    var lastUser = messages[messages.length - 1];
+    if (lastUser && lastUser.role === "user") {
+      var approvedId = extractApprovedCardId(lastUser.content);
+      if (approvedId) await authoriseNonce(approvedId);
+    }
+  } catch (err) { console.error("[sami-hub] nonce authorise failed", err); }
 
   // Phase 4: auto-inject saved client-memory notes into the last user
   // message when any known client is mentioned. Non-fatal on failure —
@@ -453,6 +478,22 @@ export default async function handler(req, res) {
 
     var scrubbed = scrub(replyRaw);
     var extracted = extractStructuredCards(scrubbed);
+
+    // Audit fix #1: for every APPROVAL_CARD Sami just emitted, register
+    // a pending nonce keyed by the exact (operation_id, input_data) hash.
+    // The MCP proxy will only allow a run_write_operation whose args
+    // match one of these registered nonces AND that has since been
+    // authorised by a user "APPROVED: <cardId>" click. Cards missing
+    // operation_id or input_data cannot be gated — we still let them
+    // render, but the frontend nudge banner already warns the user, and
+    // the proxy will refuse the write when Sami tries to execute.
+    for (var ci = 0; ci < extracted.cards.length; ci++) {
+      var c = extracted.cards[ci];
+      if (c && c.id && c.operation_id && c.input_data) {
+        try { await issuePendingNonce(c.id, c.operation_id, c.input_data); }
+        catch (err) { console.error("[sami-hub] nonce issue failed for card", c.id, err); }
+      }
+    }
 
     res.status(200).json({
       reply: extracted.text,
