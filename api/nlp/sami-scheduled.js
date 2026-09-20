@@ -28,7 +28,9 @@ var CRON_MANIFEST = [
   { path: "/api/weekly-pulse",           schedule: "0 6 * * 1",   label: "Weekly client pulse",     description: "Monday morning weekly performance pulse to clients." },
   { path: "/api/ig-snapshot",            schedule: "0 4 * * *",   label: "IG follower snapshot",    description: "Records daily Instagram follower counts for growth trendlines." },
   { path: "/api/fb-page-snapshot",       schedule: "5 4 * * *",   label: "FB page snapshot",        description: "Records daily Facebook page follower counts." },
-  { path: "/api/sami-usage-alert",       schedule: "0 */6 * * *", label: "Sami credit-balance alert", description: "Emails the owner once per month when Markifact MCP-tool usage crosses 4,800 of the 5,000 monthly credits so extra credits can be topped up in time." }
+  { path: "/api/sami-usage-alert",       schedule: "0 */6 * * *", label: "Sami credit-balance alert", description: "Emails the owner once per month when Markifact MCP-tool usage crosses 4,800 of the 5,000 monthly credits so extra credits can be topped up in time." },
+  { path: "/api/perf-snapshot",          schedule: "10 4 * * *",  label: "Perf snapshot",              description: "Records the daily perf-snapshot the dashboard uses for trend charts and reconciliation." },
+  { path: "/api/cron/refresh-best-practices", schedule: "0 2 1 * *", label: "Best practices refresh",  description: "Monthly refresh of best-practice benchmark data used across the dashboard." }
 ];
 
 // UTC → SAST for display. All Vercel crons are UTC. SAST = UTC+2.

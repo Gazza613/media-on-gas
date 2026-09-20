@@ -266,6 +266,24 @@ async function redisGet(key) {
     return d && d.result ? d.result : null;
   } catch (_) { return null; }
 }
+// Hash counterpart for the memory-index refactor. Reads the hash-shape
+// index (field = client slug, value = JSON meta) that sami-memory.js
+// now writes to, so client-memory auto-injection keeps working after
+// the legacy sami:memory:__index blob has been migrated away.
+async function redisHgetall(key) {
+  var creds = getRedisCreds();
+  if (!creds) return null;
+  try {
+    var r = await fetch(creds.url, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + creds.token, "Content-Type": "application/json" },
+      body: JSON.stringify(["HGETALL", key])
+    });
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d && Array.isArray(d.result) ? d.result : null;
+  } catch (_) { return null; }
+}
 
 // Detect which known-client slugs the user's most recent message
 // mentions. Audit fix #5: matches on the display NAME with word
@@ -281,11 +299,29 @@ async function redisGet(key) {
 // not lower the threshold.
 async function detectMentionedClients(lastUserContent) {
   if (!lastUserContent) return [];
-  var indexRaw = await redisGet("sami:memory:__index");
-  if (!indexRaw) return [];
-  var index;
-  try { index = JSON.parse(indexRaw); } catch (_) { return []; }
-  if (!Array.isArray(index) || index.length === 0) return [];
+  // Read the hash-shape index (sami-memory.js writes here post-refactor).
+  // Fall back to the legacy JSON blob key so client memory keeps
+  // resolving even in the tiny window before sami-memory.js has been
+  // called once to trigger its lazy migration.
+  var index = [];
+  var hashRaw = await redisHgetall("sami:memory:index:hash");
+  if (hashRaw && hashRaw.length > 0) {
+    for (var h = 0; h < hashRaw.length; h += 2) {
+      try {
+        var meta = JSON.parse(hashRaw[h + 1]);
+        if (meta && meta.slug) index.push(meta);
+      } catch (_) { /* skip corrupt row */ }
+    }
+  } else {
+    var legacyRaw = await redisGet("sami:memory:__index");
+    if (legacyRaw) {
+      try {
+        var parsed = JSON.parse(legacyRaw);
+        if (Array.isArray(parsed)) index = parsed;
+      } catch (_) { /* fall through */ }
+    }
+  }
+  if (index.length === 0) return [];
   var matches = [];
   index.forEach(function (rec) {
     if (!rec || !rec.slug || !rec.name) return;

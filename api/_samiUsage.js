@@ -88,7 +88,13 @@ export async function recordUsage(user, opts) {
       ["INCR", "sami:usage:user:" + day + ":" + u],
       ["EXPIRE", "sami:usage:user:" + day + ":" + u, String(USAGE_TTL_SECONDS)],
       ["SADD", "sami:usage:days", day],
-      ["EXPIRE", "sami:usage:days", String(USAGE_TTL_SECONDS)]
+      ["EXPIRE", "sami:usage:days", String(USAGE_TTL_SECONDS)],
+      // Track the set of members who have EVER had a counter written,
+      // so readUsageDaily can iterate them dynamically instead of
+      // depending on a hardcoded 5-member list that misses invited
+      // team members added via the Members-page SAMI ON toggle.
+      ["SADD", "sami:usage:users", u],
+      ["EXPIRE", "sami:usage:users", String(USAGE_TTL_SECONDS)]
     ];
     if (isWrite) {
       cmds.push(["INCR", "sami:usage:writes:" + day]);
@@ -102,6 +108,11 @@ export async function recordUsage(user, opts) {
 
 // Read the last N calendar days of usage. Returns [{date, total,
 // writes, byUser}] newest-first, one entry per day with data.
+//
+// User list is discovered dynamically from the sami:usage:users set
+// that recordUsage() SADDs on every call. Previous hardcoded 5-member
+// list missed any member the admin invited later via the Members
+// SAMI ON toggle, so their credits burned invisibly.
 export async function readUsageDaily(daysBack) {
   var n = Math.min(Math.max(parseInt(daysBack, 10) || 30, 1), 90);
   var dates = [];
@@ -111,27 +122,29 @@ export async function readUsageDaily(daysBack) {
     d.setUTCDate(d.getUTCDate() - i);
     dates.push(d.toISOString().slice(0, 10));
   }
-  // Batch every "total" + "writes" lookup, plus per-user lookup for
-  // each team member for each date. The team is small enough that
-  // this pipeline stays small (~5 users * 30 days * 3 keys ~= 450).
-  var TEAM = ["gary", "sam", "busi", "claire", "donovan"];
+  // Pull the active user set. Empty set = no usage yet = no per-user
+  // rows returned, which the frontend renders as an empty By-team-member
+  // panel (not shown).
+  var usersRes = await redisCmd(["SMEMBERS", "sami:usage:users"]);
+  var team = usersRes && Array.isArray(usersRes.result) ? usersRes.result.slice() : [];
+  team.sort();
   var cmds = [];
   dates.forEach(function (day) {
     cmds.push(["GET", "sami:usage:total:" + day]);
     cmds.push(["GET", "sami:usage:writes:" + day]);
-    TEAM.forEach(function (u) { cmds.push(["GET", "sami:usage:user:" + day + ":" + u]); });
+    team.forEach(function (u) { cmds.push(["GET", "sami:usage:user:" + day + ":" + u]); });
   });
   var res = await redisPipeline(cmds) || [];
   var out = [];
-  var stride = 2 + TEAM.length;
+  var stride = 2 + team.length;
   for (var d2 = 0; d2 < dates.length; d2++) {
     var base = d2 * stride;
     var total = parseInt((res[base] && res[base].result) || "0", 10) || 0;
     var writes = parseInt((res[base + 1] && res[base + 1].result) || "0", 10) || 0;
     var byUser = {};
-    for (var u2 = 0; u2 < TEAM.length; u2++) {
+    for (var u2 = 0; u2 < team.length; u2++) {
       var v = parseInt((res[base + 2 + u2] && res[base + 2 + u2].result) || "0", 10) || 0;
-      if (v > 0) byUser[TEAM[u2]] = v;
+      if (v > 0) byUser[team[u2]] = v;
     }
     out.push({ date: dates[d2], total: total, writes: writes, byUser: byUser });
   }
