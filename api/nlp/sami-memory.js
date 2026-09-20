@@ -107,7 +107,11 @@ async function bumpIndex(slug, name, noteCount) {
 }
 
 export default async function handler(req, res) {
-  if (!checkCreateAuth(req, res)) return;
+  // Audit fix #4: audit-trail user (updatedBy on notes) comes from the
+  // signed JWT, not body.user. Prevents a team member from attributing
+  // a memory change to someone else.
+  var auth = checkCreateAuth(req, res);
+  if (!auth) return;
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   if (!(await rateLimit(req, res, { maxPerMin: 40, maxPerHour: 300 }))) return;
 
@@ -120,7 +124,7 @@ export default async function handler(req, res) {
   if (typeof body === "string") { try { body = JSON.parse(body); } catch (_) { body = {}; } }
   body = body || {};
   var op = String(body.op || "").toLowerCase();
-  var user = cleanStr(body.user, 40) || "";
+  var user = auth.user;
 
   try {
     if (op === "list") {

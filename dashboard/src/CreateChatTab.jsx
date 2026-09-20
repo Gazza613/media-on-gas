@@ -96,6 +96,10 @@ function clearToken() {
 
 function PinGate(props) {
   var P = props.P, ff = props.ff, fm = props.fm, apiBase = props.apiBase;
+  // Audit fix #4: user identity is included in the PIN request so the
+  // token is signed against a specific team member. Parent guarantees a
+  // valid user is set before rendering PinGate.
+  var user = props.user;
   var ps = useState(""), pin = ps[0], setPin = ps[1];
   var es = useState(""), err = es[0], setErr = es[1];
   var ls = useState(false), loading = ls[0], setLoading = ls[1];
@@ -104,11 +108,12 @@ function PinGate(props) {
     if (e && e.preventDefault) e.preventDefault();
     if (loading) return;
     if (!pin) { setErr("Enter your PIN."); return; }
+    if (!user) { setErr("Pick your team-member identity first."); return; }
     setLoading(true); setErr("");
     fetch(apiBase + "/api/create/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: pin })
+      body: JSON.stringify({ pin: pin, user: user })
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (x) {
@@ -957,15 +962,19 @@ export default function CreateChatTab(props) {
     setThreadId(""); // Empty forces send() to mint a new id on next message
   };
 
-  if (!token) {
-    return <PinGate P={P} ff={ff} fm={fm} apiBase={apiBase}
-      onAuthed={function (t, ttlSec) { storeToken(t, ttlSec); setToken(t); }} />;
-  }
-  // Second gate: pick your team-member identity so Sami threads namespace
-  // per user. Shows once, persisted in localStorage.
+  // Audit fix #4: name-picker runs FIRST because the PIN endpoint now
+  // signs the picked user into the JWT (so downstream Sami endpoints can
+  // trust auth.user without accepting a spoofable body.user). Order was
+  // previously PIN → name; swapping means a first-time visitor picks
+  // their name once and the PIN is bound to that identity for the
+  // 2-hour session.
   if (!user) {
     return <NamePicker P={P} ff={ff} fm={fm}
       onPick={function (slug) { writeUser(slug); setUser(slug); }} />;
+  }
+  if (!token) {
+    return <PinGate P={P} ff={ff} fm={fm} apiBase={apiBase} user={user}
+      onAuthed={function (t, ttlSec) { storeToken(t, ttlSec); setToken(t); }} />;
   }
 
   var empty = messages.length === 0;
