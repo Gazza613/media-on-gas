@@ -490,6 +490,145 @@ function UsageStrip(props) {
   </div>;
 }
 
+// ---- Brief card (world-class UX: one-form new-build) ---------------------
+//
+// Sami emits <BRIEF_CARD>{...}</BRIEF_CARD> as her first substantive
+// message when the AM initiates a new campaign build. Rather than a
+// 15-turn Q&A, the AM sees an editable form with every material
+// decision, fields prefilled from client memory (badged AUTO), missing
+// required fields painted amber, one Submit that fires a "BRIEF_FILLED:
+// <id>" user message with the finalised JSON. Sami reads that JSON and
+// emits a PLAN_CARD straight away.
+
+var OBJECTIVES = ["leads", "traffic", "awareness", "sales", "community", "app-installs"];
+var DEST_KINDS = ["whatsapp", "landing-page", "form", "ig-dm", "app-install"];
+var PLATFORMS = [
+  { id: "facebook", label: "Facebook" },
+  { id: "instagram", label: "Instagram" },
+  { id: "messenger", label: "Messenger" },
+  { id: "audience-network", label: "Audience Network" },
+  { id: "wa-status", label: "WhatsApp Status" },
+  { id: "threads", label: "Threads" }
+];
+var PLACEMENTS = [
+  { id: "feed", label: "Feed" },
+  { id: "stories", label: "Stories" },
+  { id: "reels", label: "Reels" },
+  { id: "explore", label: "Explore" },
+  { id: "marketplace", label: "Marketplace" },
+  { id: "in-stream", label: "In-stream" },
+  { id: "wa-status", label: "WA Status" }
+];
+
+function BriefCard(props) {
+  var card = props.card, P = props.P, ff = props.ff, fm = props.fm;
+  var status = props.status || "pending";
+  var color = status === "submitted" ? (P.mint || "#34D399") : "#4599FF";
+  var initialFields = Object.assign({}, card.fields || {});
+  var fs = useState(initialFields), fields = fs[0], setFields = fs[1];
+  var prefilled = card.prefilled_from_memory || [];
+  var needed = card.unknown_but_needed || [];
+
+  var setF = function (k, v) { setFields(function (cur) { var n = Object.assign({}, cur); n[k] = v; return n; }); };
+  var toggleInArr = function (k, id) {
+    setFields(function (cur) {
+      var arr = Array.isArray(cur[k]) ? cur[k].slice() : [];
+      var i = arr.indexOf(id);
+      if (i >= 0) arr.splice(i, 1); else arr.push(id);
+      var n = Object.assign({}, cur); n[k] = arr; return n;
+    });
+  };
+
+  var fieldStyle = function (k) {
+    var isMissing = needed.indexOf(k) >= 0 && (fields[k] === "" || fields[k] === null || fields[k] === undefined || (Array.isArray(fields[k]) && fields[k].length === 0));
+    var borderColor = isMissing ? (P.solar || "#FFAA00") : P.rule;
+    return { width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + borderColor, borderRadius: 8, padding: "8px 12px", color: P.txt, fontSize: 12, fontFamily: ff, outline: "none" };
+  };
+  var labelStyle = { fontSize: 10, fontWeight: 800, color: P.label || "#c9c1d5", fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 };
+  var autoBadge = function (k) {
+    if (prefilled.indexOf(k) < 0) return null;
+    return <span style={{ fontSize: 8, fontWeight: 800, color: P.mint || "#34D399", background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.35)", padding: "1px 5px", borderRadius: 3, letterSpacing: 0.5 }}>AUTO</span>;
+  };
+  var neededBadge = function (k) {
+    if (needed.indexOf(k) < 0) return null;
+    return <span style={{ fontSize: 8, fontWeight: 800, color: P.solar || "#FFAA00", background: "rgba(255,170,0,0.12)", border: "1px solid rgba(255,170,0,0.35)", padding: "1px 5px", borderRadius: 3, letterSpacing: 0.5 }}>NEEDED</span>;
+  };
+  var chip = function (k, l) { return <div style={labelStyle}>{l}{autoBadge(k)}{neededBadge(k)}</div>; };
+  var togglePill = function (isOn, onClick, label) {
+    return <button type="button" onClick={onClick} style={{ background: isOn ? "linear-gradient(135deg,#FF3D00,#FF6B00)" : "transparent", border: "1px solid " + (isOn ? "transparent" : P.rule), borderRadius: 16, padding: "5px 12px", color: isOn ? "#fff" : P.label, fontSize: 10, fontWeight: 700, fontFamily: fm, cursor: "pointer", letterSpacing: 0.5 }}>{label}</button>;
+  };
+
+  var doSubmit = function () {
+    if (status !== "pending") return;
+    props.onSubmit(card, fields);
+  };
+
+  return <div style={{
+    marginTop: 10, marginBottom: 4,
+    background: "rgba(255,255,255,0.02)",
+    border: "1px solid " + color + "55",
+    borderLeft: "4px solid " + color,
+    borderRadius: 12, padding: "16px 18px"
+  }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 9, fontWeight: 900, color: "#4599FF", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", background: "rgba(69,153,255,0.14)", border: "1px solid rgba(69,153,255,0.35)", borderRadius: 6, padding: "3px 8px" }}>Brief · edit and submit</span>
+      <span style={{ fontSize: 9, fontWeight: 800, color: color, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", marginLeft: "auto" }}>{status === "submitted" ? "✓ Submitted" : "Awaiting your review"}</span>
+    </div>
+    <div style={{ fontSize: 13, fontWeight: 700, color: P.txt, fontFamily: ff, marginBottom: 12, lineHeight: 1.45 }}>{card.title || "Campaign brief"}</div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div>{chip("client", "Client")}<input value={fields.client || ""} onChange={function (e) { setF("client", e.target.value); }} style={fieldStyle("client")} placeholder="Chilla" /></div>
+      <div>{chip("objective", "Objective")}<select value={fields.objective || ""} onChange={function (e) { setF("objective", e.target.value); }} style={fieldStyle("objective")}><option value="">(pick one)</option>{OBJECTIVES.map(function (o) { return <option key={o} value={o}>{o}</option>; })}</select></div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10, marginBottom: 10 }}>
+      <div>{chip("destination_kind", "Destination")}<select value={fields.destination_kind || ""} onChange={function (e) { setF("destination_kind", e.target.value); }} style={fieldStyle("destination_kind")}><option value="">(pick)</option>{DEST_KINDS.map(function (k) { return <option key={k} value={k}>{k}</option>; })}</select></div>
+      <div>{chip("destination_value", (fields.destination_kind === "landing-page" ? "URL" : fields.destination_kind === "whatsapp" ? "WhatsApp number" : "Value"))}<input value={fields.destination_value || ""} onChange={function (e) { setF("destination_value", e.target.value); }} style={fieldStyle("destination_value")} placeholder={fields.destination_kind === "whatsapp" ? "+27 83 634 5845" : ""} /></div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div>{chip("budget_amount", "Budget")}<input type="number" value={fields.budget_amount == null ? "" : fields.budget_amount} onChange={function (e) { setF("budget_amount", e.target.value === "" ? "" : Number(e.target.value)); }} style={fieldStyle("budget_amount")} placeholder="10000" /></div>
+      <div><div style={labelStyle}>Budget type</div><div style={{ display: "flex", gap: 6 }}>{["lifetime", "daily"].map(function (t) { return togglePill(fields.budget_type === t, function () { setF("budget_type", t); }, t); })}</div></div>
+      <div>{chip("budget_currency", "Currency")}<input value={fields.budget_currency || "ZAR"} onChange={function (e) { setF("budget_currency", e.target.value); }} style={fieldStyle("budget_currency")} /></div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div>{chip("date_start", "Start date")}<input type="date" value={fields.date_start || ""} onChange={function (e) { setF("date_start", e.target.value); }} style={fieldStyle("date_start")} /></div>
+      <div>{chip("date_end", "End date")}<input type="date" value={fields.date_end || ""} onChange={function (e) { setF("date_end", e.target.value); }} style={fieldStyle("date_end")} /></div>
+    </div>
+
+    <div style={{ marginBottom: 10 }}>{chip("geography", "Geography")}<input value={fields.geography || ""} onChange={function (e) { setF("geography", e.target.value); }} style={fieldStyle("geography")} placeholder="Johannesburg, Cape Town, Durban" /></div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 10, marginBottom: 10 }}>
+      <div>{chip("age_min", "Age min")}<input type="number" value={fields.age_min == null ? "" : fields.age_min} onChange={function (e) { setF("age_min", e.target.value === "" ? "" : Number(e.target.value)); }} style={fieldStyle("age_min")} placeholder="25" /></div>
+      <div>{chip("age_max", "Age max")}<input type="number" value={fields.age_max == null ? "" : fields.age_max} onChange={function (e) { setF("age_max", e.target.value === "" ? "" : Number(e.target.value)); }} style={fieldStyle("age_max")} placeholder="55" /></div>
+      <div><div style={labelStyle}>Gender</div><div style={{ display: "flex", gap: 6 }}>{["all", "male", "female"].map(function (g) { return togglePill(fields.gender === g, function () { setF("gender", g); }, g); })}</div></div>
+    </div>
+
+    <div style={{ marginBottom: 10 }}>{chip("platforms", "Platforms")}<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{PLATFORMS.map(function (p) { var on = Array.isArray(fields.platforms) && fields.platforms.indexOf(p.id) >= 0; return togglePill(on, function () { toggleInArr("platforms", p.id); }, p.label); })}</div></div>
+    <div style={{ marginBottom: 10 }}>{chip("placements", "Placements")}<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{PLACEMENTS.map(function (p) { var on = Array.isArray(fields.placements) && fields.placements.indexOf(p.id) >= 0; return togglePill(on, function () { toggleInArr("placements", p.id); }, p.label); })}</div></div>
+    <div style={{ marginBottom: 10 }}>{chip("creative", "Creative")}<input value={fields.creative || ""} onChange={function (e) { setF("creative", e.target.value); }} style={fieldStyle("creative")} placeholder="Dropbox / Drive folder link, or 'will supply later'" /></div>
+
+    <details style={{ marginBottom: 12 }}>
+      <summary style={{ cursor: "pointer", fontSize: 10, fontWeight: 800, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", padding: "4px 0" }}>Advanced (copy, CTA, budget mode, bid strategy)</summary>
+      <div style={{ display: "grid", gap: 10, paddingTop: 8 }}>
+        <div>{chip("copy_headline", "Ad headline")}<input value={fields.copy_headline || ""} onChange={function (e) { setF("copy_headline", e.target.value); }} style={fieldStyle("copy_headline")} placeholder="Your Next Best Seller Starts Here" /></div>
+        <div>{chip("copy_primary_text", "Primary text")}<textarea value={fields.copy_primary_text || ""} onChange={function (e) { setF("copy_primary_text", e.target.value); }} rows={3} style={fieldStyle("copy_primary_text")} placeholder="Book your FREE Tasting..." /></div>
+        <div>{chip("cta", "CTA button")}<input value={fields.cta || ""} onChange={function (e) { setF("cta", e.target.value); }} style={fieldStyle("cta")} placeholder="Chat now / Learn more / Sign up" /></div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div><div style={labelStyle}>Budget mode</div><div style={{ display: "flex", gap: 6 }}>{["cbo", "abo"].map(function (m) { return togglePill(fields.cbo_or_abo === m, function () { setF("cbo_or_abo", m); }, m.toUpperCase()); })}</div></div>
+          <div>{chip("bid_strategy", "Bid strategy")}<input value={fields.bid_strategy || "highest-volume"} onChange={function (e) { setF("bid_strategy", e.target.value); }} style={fieldStyle("bid_strategy")} /></div>
+        </div>
+      </div>
+    </details>
+
+    {status === "pending" && <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      <button onClick={doSubmit} style={{ background: "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 8, padding: "10px 22px", color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>Submit brief · build the plan</button>
+      {needed.length > 0 && <span style={{ fontSize: 10, color: P.solar || "#FFAA00", fontFamily: fm }}>Amber-bordered fields still needed.</span>}
+    </div>}
+  </div>;
+}
+
 // ---- Plan card (audit fix #6, batched approval) --------------------------
 //
 // Sami emits <PLAN_CARD>{...}</PLAN_CARD> when a single brief requires 3+
@@ -947,6 +1086,8 @@ export default function CreateChatTab(props) {
   var pcs = useState({}), pairStatus = pcs[0], setPairStatus = pcs[1];
   // Audit fix #6: PLAN_CARD statuses keyed by plan id.
   var pls = useState({}), planStatus = pls[0], setPlanStatus = pls[1];
+  // World-class UX: BRIEF_CARD statuses keyed by brief id.
+  var brs = useState({}), briefStatus = brs[0], setBriefStatus = brs[1];
   var is = useState(""), input = is[0], setInput = is[1];
   var bs = useState(false), busy = bs[0], setBusy = bs[1];
   var es = useState(""), err = es[0], setErr = es[1];
@@ -1230,10 +1371,12 @@ export default function CreateChatTab(props) {
           content: x.data.reply || "",
           cards: Array.isArray(x.data.cards) ? x.data.cards : [],
           plans: Array.isArray(x.data.plans) ? x.data.plans : [],
+          briefs: Array.isArray(x.data.briefs) ? x.data.briefs : [],
           pairCards: Array.isArray(x.data.pairCards) ? x.data.pairCards : [],
           memories: Array.isArray(x.data.memories) ? x.data.memories : [],
           actions: Array.isArray(x.data.actions) ? x.data.actions : [],
-          live: Array.isArray(x.data.actions) && x.data.actions.length > 0
+          live: Array.isArray(x.data.actions) && x.data.actions.length > 0,
+          unverifiedNumbers: !!x.data.unverifiedNumbers
         };
         // Auto-persist any SAVE_MEMORY blocks Sami emitted (Phase 4).
         // Fire-and-forget: refreshes the memory clients list after each
@@ -1263,6 +1406,14 @@ export default function CreateChatTab(props) {
           setPlanStatus(function (cur) {
             var nextStatuses = Object.assign({}, cur);
             samiTurn.plans.forEach(function (p) { if (!nextStatuses[p.id]) nextStatuses[p.id] = "pending"; });
+            return nextStatuses;
+          });
+        }
+        // Seed each new brief card to pending.
+        if (samiTurn.briefs.length > 0) {
+          setBriefStatus(function (cur) {
+            var nextStatuses = Object.assign({}, cur);
+            samiTurn.briefs.forEach(function (b) { if (!nextStatuses[b.id]) nextStatuses[b.id] = "pending"; });
             return nextStatuses;
           });
         }
@@ -1347,6 +1498,18 @@ export default function CreateChatTab(props) {
     setPlanStatus(nextPlan);
     if (threadId) saveThread(threadId, messages, { planStatus: nextPlan });
     send("REJECTED_PLAN: " + plan.id);
+  };
+
+  // Brief card submission. Sends "BRIEF_FILLED: <id>" followed by a
+  // JSON body of the finalised fields. Sami parses and emits the
+  // matching PLAN_CARD straight away, skipping the 15-turn Q&A.
+  var handleSubmitBrief = function (card, filledFields) {
+    if (busy) return;
+    var next = Object.assign({}, briefStatus, {}); next[card.id] = "submitted";
+    setBriefStatus(next);
+    if (threadId) saveThread(threadId, messages);
+    var body = "BRIEF_FILLED: " + card.id + "\n" + JSON.stringify(filledFields, null, 2);
+    send(body);
   };
 
   var onKeyDown = function (e) {
@@ -1513,10 +1676,12 @@ export default function CreateChatTab(props) {
             var isPairOk = /^PAIRS_OK: /.test(m.content);
             var isPlanAppr = /^APPROVED_PLAN: /.test(m.content);
             var isPlanRej = /^REJECTED_PLAN: /.test(m.content);
+            var isBriefFilled = /^BRIEF_FILLED: /.test(m.content);
             var bg, bd;
             if (isAppr || isPlanAppr) { bg = "rgba(52,211,153,0.13)"; bd = "rgba(52,211,153,0.35)"; }
             else if (isRej || isPlanRej) { bg = "rgba(239,68,68,0.13)"; bd = "rgba(239,68,68,0.35)"; }
             else if (isPairOk) { bg = "rgba(10,102,194,0.14)"; bd = "rgba(10,102,194,0.4)"; }
+            else if (isBriefFilled) { bg = "rgba(69,153,255,0.14)"; bd = "rgba(69,153,255,0.4)"; }
             else { bg = "rgba(249,98,3,0.13)"; bd = "rgba(249,98,3,0.3)"; }
             return <div key={i} style={{ alignSelf: "flex-end", maxWidth: "82%" }}>
               <div style={{
@@ -1533,11 +1698,19 @@ export default function CreateChatTab(props) {
                 status={pairStatus[c.id] || "pending"}
                 onConfirm={handleConfirmPair} />;
             })}
+            {Array.isArray(m.briefs) && m.briefs.map(function (c) {
+              return <BriefCard key={c.id} card={c} P={P} ff={ff} fm={fm}
+                status={briefStatus[c.id] || "pending"}
+                onSubmit={handleSubmitBrief} />;
+            })}
             {Array.isArray(m.plans) && m.plans.map(function (c) {
               return <PlanCard key={c.id} card={c} P={P} ff={ff} fm={fm}
                 status={planStatus[c.id] || "pending"}
                 onApprove={handleApprovePlan} onReject={handleRejectPlan} />;
             })}
+            {m.unverifiedNumbers && <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, fontSize: 10, color: P.critical || "#ef4444", fontFamily: fm, letterSpacing: 0.5 }}>
+              ⚠ Unverified numbers. This reply contains figures but no live tool call ran this turn. Ask Sami to pull the source data before relying on them.
+            </div>}
             {Array.isArray(m.cards) && m.cards.map(function (c) {
               return <ApprovalCard key={c.id} card={c} P={P} ff={ff} fm={fm}
                 status={cardStatus[c.id] || "pending"}

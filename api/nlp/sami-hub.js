@@ -91,6 +91,59 @@ function buildSystemPrompt() {
     "- operation_id and input_data are REQUIRED. Do the find_operations + get_operation_inputs lookups BEFORE emitting the card so the card carries the exact write you'll perform. Never emit a card with placeholder operation_id.",
     "- After emitting a card, stop your response there. Do not also execute the write in the same turn. Wait for the user's next message.",
     "",
+    "═══════ BRIEF_CARD (STRUCTURED BRIEF, USE FOR NEW CAMPAIGN BUILDS) ═══════",
+    "When the AM initiates a new campaign build (Guided Build button, freeform brief, 'new campaign', 'let's build', etc.), your FIRST substantive message should be a BRIEF_CARD that captures every material decision in one editable form. The AM edits, submits, and you go straight to a PLAN_CARD without a 15-turn Q&A. This is the primary path; the one-question-at-a-time flow is reserved for AMs who explicitly opt out.",
+    "",
+    "Two entry points:",
+    "  1. Enough info in the opening turn to prefill: extract what the AM already said, emit the BRIEF_CARD prefilled with those fields, use client memory to fill any others, and leave truly-unknown fields empty flagged as unknown_but_needed. If they wrote 'Chilla, R10k lifetime B2B lead gen', fill client=Chilla, objective=leads, budget={amount:10000, type:lifetime}, plus everything Chilla's memory has (WhatsApp number, standard placements, naming pattern).",
+    "  2. No client mentioned and no fields given: ask ONE clarifying question in one short sentence: 'Which client are we building for?' Wait for the answer, then on the next turn use the injected memory to emit the fully prefilled card. Never ask more than one question before emitting the card.",
+    "",
+    "BRIEF_CARD emission format (use exactly, ONE per new build):",
+    "<BRIEF_CARD>{",
+    '  "id": "brief-slug-eg-chilla-b2b-2026sep-1",',
+    '  "title": "Human-readable one-line summary, e.g. Chilla B2B Acai lead gen brief",',
+    '  "clientMemoryUsed": "chilla",',
+    '  "fields": {',
+    '    "client": "Chilla",',
+    '    "objective": "leads",',
+    '    "destination_kind": "whatsapp",',
+    '    "destination_value": "+27 83 634 5845",',
+    '    "budget_amount": 10000,',
+    '    "budget_type": "lifetime",',
+    '    "budget_currency": "ZAR",',
+    '    "date_start": "2026-09-18",',
+    '    "date_end": "2026-10-18",',
+    '    "geography": "Johannesburg, Cape Town, Durban",',
+    '    "age_min": 25,',
+    '    "age_max": 55,',
+    '    "gender": "all",',
+    '    "platforms": ["facebook", "instagram"],',
+    '    "placements": ["feed", "stories", "reels", "wa-status"],',
+    '    "creative": "https://www.dropbox.com/...",',
+    '    "cbo_or_abo": "cbo",',
+    '    "bid_strategy": "highest-volume",',
+    '    "copy_headline": "",',
+    '    "copy_primary_text": "",',
+    '    "cta": ""',
+    '  },',
+    '  "prefilled_from_memory": ["destination_value", "geography"],',
+    '  "unknown_but_needed": ["copy_headline", "copy_primary_text", "cta"]',
+    "}</BRIEF_CARD>",
+    "",
+    "Rules for BRIEF_CARD:",
+    "- One BRIEF_CARD per build. Only re-emit if the AM asks for a change to a field they cannot edit inline, or if the filled brief comes back with missing mandatory fields.",
+    "- Every field in `fields` must be present (empty string / null / [] if unknown), so the frontend can always render a full form.",
+    "- `prefilled_from_memory` lists field keys where you populated the value from the client's saved memory. The UI badges those fields so the AM sees where the default came from.",
+    "- `unknown_but_needed` lists field keys where the value is missing AND the field is required to build. The UI paints those amber so the AM knows what to fill.",
+    "- Copy / headline / CTA fields: leave empty unless the AM provided them in the opening turn. The AM fills these in the card.",
+    "- Never emit an APPROVAL_CARD or PLAN_CARD in the same turn as a BRIEF_CARD. The card IS the read step.",
+    "",
+    "When the user submits the filled brief, their next message will start with 'BRIEF_FILLED: <briefId>' followed by a JSON payload of the finalised fields. On that turn you MUST:",
+    "  1. Parse the JSON.",
+    "  2. If any mandatory field is missing (client, objective, destination_kind, destination_value, budget_amount, budget_type, dates, geography, age_min, age_max, gender, at least one platform, at least one placement, at least one creative link OR explicit 'will supply later'), emit ONE fresh BRIEF_CARD with just the missing fields flagged, ask the AM to fill them, stop.",
+    "  3. If everything is present, run the necessary read tool calls (find_operations, get_operation_inputs, walk any creative folder link), then emit ONE PLAN_CARD covering every write required. Do not narrate; just the PLAN_CARD.",
+    "  4. Never ask conversational follow-ups after a valid BRIEF_FILLED — go straight to the plan.",
+    "",
     "═══════ PLAN_CARD (BATCHED APPROVAL — USE FOR NEW BUILDS) ═══════",
     "When a single brief requires 3 or more related writes (typical: 1 campaign + 1 ad set + N ads for a new launch), emit ONE PLAN_CARD instead of N separate APPROVAL_CARDs. The AM approves once; the GAS engine authorises every child write in a single click. This kills the 96-approvals-per-day fatigue for portfolio builds.",
     "",
@@ -409,6 +462,7 @@ function extractStructuredCards(text) {
   var cleanText = String(text || "");
   var approvalRe = /<APPROVAL_CARD>([\s\S]*?)<\/APPROVAL_CARD>/g;
   var planRe = /<PLAN_CARD>([\s\S]*?)<\/PLAN_CARD>/g;
+  var briefRe = /<BRIEF_CARD>([\s\S]*?)<\/BRIEF_CARD>/g;
   var pairRe = /<CREATIVE_PAIR_CARD>([\s\S]*?)<\/CREATIVE_PAIR_CARD>/g;
   var memoryRe = /<SAVE_MEMORY>([\s\S]*?)<\/SAVE_MEMORY>/g;
 
@@ -434,6 +488,22 @@ function extractStructuredCards(text) {
         // plan-nonce store with a runaway plan.
         parsedPl.plan = parsedPl.plan.slice(0, 100);
         plans.push(parsedPl);
+      }
+    } catch (_) { /* malformed — leave in text */ }
+  }
+
+  // Brief cards drive the one-form-fill new-build UX (replaces the
+  // 15-turn interrogation). No nonce needed here because the card is
+  // a read step, not a write.
+  var briefs = [];
+  var br;
+  while ((br = briefRe.exec(cleanText)) !== null) {
+    try {
+      var parsedBr = JSON.parse(br[1].trim());
+      if (parsedBr && parsedBr.id && parsedBr.fields && typeof parsedBr.fields === "object") {
+        parsedBr.prefilled_from_memory = Array.isArray(parsedBr.prefilled_from_memory) ? parsedBr.prefilled_from_memory : [];
+        parsedBr.unknown_but_needed = Array.isArray(parsedBr.unknown_but_needed) ? parsedBr.unknown_but_needed : [];
+        briefs.push(parsedBr);
       }
     } catch (_) { /* malformed — leave in text */ }
   }
@@ -464,12 +534,32 @@ function extractStructuredCards(text) {
   var stripped = cleanText
     .replace(approvalRe, "")
     .replace(planRe, "")
+    .replace(briefRe, "")
     .replace(pairRe, "")
     .replace(memoryRe, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { cards: approvals, plans: plans, pairCards: pairCards, memories: memories, text: stripped };
+  // Grounding-enforcement heuristic. If Sami's reply text contains
+  // hard numbers (R-values or percentages) BUT no MCP tool calls
+  // fired in this turn, flag it so the frontend renders an "unverified
+  // numbers" warning. The prompt already forbids inventing numbers,
+  // this catches drift. Skip on turns that contain a card (the card
+  // itself likely carries numeric context that the model reused from
+  // an earlier tool call in the same conversation).
+  var unverifiedNumbers = false;
+  if (approvals.length === 0 && plans.length === 0 && briefs.length === 0 && pairCards.length === 0) {
+    // Look for currency amounts (R 5,000 / R5000 / R6 632,73), or
+    // explicit percentages (12%, 4.5 %). One-off "R" letters like
+    // "Rand" won't match because R is followed by non-digit whitespace.
+    var currencyRe = /R\s*[\d]{2,}[\d.,\s]*/;
+    var percentRe = /\d+(?:[.,]\d+)?\s*%/;
+    if (currencyRe.test(stripped) || percentRe.test(stripped)) {
+      unverifiedNumbers = true;
+    }
+  }
+
+  return { cards: approvals, plans: plans, briefs: briefs, pairCards: pairCards, memories: memories, text: stripped, unverifiedNumbers: unverifiedNumbers };
 }
 
 export default async function handler(req, res) {
@@ -608,13 +698,21 @@ export default async function handler(req, res) {
       }
     }
 
+    // Grounding-enforcement: the extractor flagged unverified numbers
+    // by string-match alone. Override the flag if the current turn
+    // actually ran MCP tool calls — those numbers came from a live
+    // read, so they're verified.
+    var unverified = !!extracted.unverifiedNumbers && actions.length === 0;
+
     res.status(200).json({
       reply: extracted.text,
       cards: extracted.cards,
       plans: extracted.plans,
+      briefs: extracted.briefs,
       pairCards: extracted.pairCards,
       memories: extracted.memories,
       actions: actions,
+      unverifiedNumbers: unverified,
       stopReason: result.data.stop_reason || null
     });
   } catch (err) {
