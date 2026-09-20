@@ -1279,6 +1279,13 @@ export default function CreateChatTab(props) {
   var startSelf = function () {
     try { if (inputRef.current) inputRef.current.focus(); } catch (_) {}
   };
+  // Generic skill trigger: finds a seeded skill by id and fires its
+  // prompt as a fresh user message. Used by the Weekly Audit / Deep
+  // Review buttons on the empty-state screen.
+  var startSkillById = function (id) {
+    var skill = (skills || []).find(function (s) { return s && s.id === id; });
+    if (skill && skill.prompt) send(skill.prompt);
+  };
 
   // Per-user auth: no NamePicker. Identity comes from the main
   // dashboard session, the admin toggles Sami access on the Members
@@ -1366,9 +1373,9 @@ export default function CreateChatTab(props) {
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "22px 26px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
         {empty && <div style={{ padding: "12px 4px 4px" }}>
-          <div style={{ fontSize: 14, color: P.txt, fontFamily: ff, fontWeight: 700, marginBottom: 6 }}>What are we building?</div>
-          <div style={{ fontSize: 12, color: P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 18 }}>Pick Guided Build for a step-by-step brief so nothing gets missed, or Self Build to type your own brief.</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 8 }}>
+          <div style={{ fontSize: 14, color: P.txt, fontFamily: ff, fontWeight: 700, marginBottom: 6 }}>Build something new</div>
+          <div style={{ fontSize: 12, color: P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 14 }}>Pick Guided Build for a step-by-step brief so nothing gets missed, or Self Build to type your own brief.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
             <button onClick={startGuided}
               style={{ background: "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 12, padding: "18px 18px", color: "#fff", fontSize: 13, fontWeight: 800, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", cursor: "pointer", textAlign: "left" }}>
               Guided Build
@@ -1381,6 +1388,25 @@ export default function CreateChatTab(props) {
               Self Build
               <div style={{ fontSize: 10, fontWeight: 600, color: P.sub, letterSpacing: 0.5, textTransform: "none", marginTop: 6, lineHeight: 1.5 }}>
                 Type your own brief in one message. Sami asks anything she still needs.
+              </div>
+            </button>
+          </div>
+
+          <div style={{ fontSize: 14, color: P.txt, fontFamily: ff, fontWeight: 700, marginBottom: 6 }}>Optimise an existing client</div>
+          <div style={{ fontSize: 12, color: P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 14 }}>Sami pulls live performance, flags leaks and winners, and produces a single plan card of the changes she recommends.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <button onClick={function () { startSkillById("weekly-optimisation-audit"); }}
+              style={{ background: "rgba(10,102,194,0.10)", border: "1px solid rgba(10,102,194,0.35)", borderRadius: 12, padding: "18px 18px", color: P.txt, fontSize: 13, fontWeight: 800, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", cursor: "pointer", textAlign: "left" }}>
+              Weekly Audit
+              <div style={{ fontSize: 10, fontWeight: 600, color: P.sub, letterSpacing: 0.5, textTransform: "none", marginTop: 6, lineHeight: 1.5 }}>
+                7-day review: pace, headline KPIs, winners, leaks, creative fatigue, structural. Plan card of actions.
+              </div>
+            </button>
+            <button onClick={function () { startSkillById("deep-client-review"); }}
+              style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.30)", borderRadius: 12, padding: "18px 18px", color: P.txt, fontSize: 13, fontWeight: 800, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase", cursor: "pointer", textAlign: "left" }}>
+              Deep Review
+              <div style={{ fontSize: 10, fontWeight: 600, color: P.sub, letterSpacing: 0.5, textTransform: "none", marginTop: 6, lineHeight: 1.5 }}>
+                30-day strategic review with performance narrative, structural moves, next test, plus optional plan card.
               </div>
             </button>
           </div>
