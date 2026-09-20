@@ -75,17 +75,67 @@ async function redisCmd(args) {
     return null;
   }
 }
-var INDEX_KEY = "sami:memory:__index";
+// Audit fix #7b: the memory index is a Redis hash (field = client slug)
+// so Sami-authored SAVE_MEMORY blocks and admin modal saves cannot
+// clobber each other. Client records themselves live at their own
+// sami:memory:<slug> keys already.
+var LEGACY_INDEX_KEY = "sami:memory:__index";
+var INDEX_HASH_KEY = "sami:memory:index:hash";
 function clientKey(slug) { return "sami:memory:" + slug; }
 
-async function readIndex() {
-  var r = await redisCmd(["GET", INDEX_KEY]);
-  if (!r || !r.result) return [];
-  try { var parsed = JSON.parse(r.result); return Array.isArray(parsed) ? parsed : []; }
-  catch (_) { return []; }
+async function migrateLegacyMemoryIndex() {
+  var legacy = await redisCmd(["GET", LEGACY_INDEX_KEY]);
+  if (!legacy || !legacy.result) return [];
+  var parsed;
+  try { parsed = JSON.parse(legacy.result); } catch (_) { parsed = null; }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    await redisCmd(["DEL", LEGACY_INDEX_KEY]);
+    return [];
+  }
+  for (var i = 0; i < parsed.length; i++) {
+    var m = parsed[i];
+    if (m && m.slug) await redisCmd(["HSET", INDEX_HASH_KEY, m.slug, JSON.stringify(m)]);
+  }
+  await redisCmd(["DEL", LEGACY_INDEX_KEY]);
+  return parsed;
 }
-async function writeIndex(arr) {
-  await redisCmd(["SET", INDEX_KEY, JSON.stringify((Array.isArray(arr) ? arr : []).slice(0, MAX_CLIENTS))]);
+
+async function readIndex() {
+  var r = await redisCmd(["HGETALL", INDEX_HASH_KEY]);
+  var raw = r && Array.isArray(r.result) ? r.result : [];
+  var out = [];
+  if (raw.length === 0) {
+    var migrated = await migrateLegacyMemoryIndex();
+    if (migrated.length === 0) return [];
+    migrated.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+    return migrated.slice(0, MAX_CLIENTS);
+  }
+  for (var j = 0; j < raw.length; j += 2) {
+    try {
+      var m = JSON.parse(raw[j + 1]);
+      if (m && m.slug) out.push(m);
+    } catch (_) { /* skip corrupt row */ }
+  }
+  out.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+  return out.slice(0, MAX_CLIENTS);
+}
+
+async function upsertIndexEntry(meta) {
+  if (!meta || !meta.slug) return;
+  await redisCmd(["HSET", INDEX_HASH_KEY, meta.slug, JSON.stringify(meta)]);
+  var sz = await redisCmd(["HLEN", INDEX_HASH_KEY]);
+  var count = sz && sz.result ? parseInt(sz.result, 10) : 0;
+  if (count > MAX_CLIENTS) {
+    var all = await readIndex();
+    var toDrop = all.slice(MAX_CLIENTS);
+    for (var k = 0; k < toDrop.length; k++) {
+      await redisCmd(["HDEL", INDEX_HASH_KEY, toDrop[k].slug]);
+    }
+  }
+}
+
+async function deleteIndexEntry(slug) {
+  await redisCmd(["HDEL", INDEX_HASH_KEY, slug]);
 }
 async function readClient(slug) {
   var r = await redisCmd(["GET", clientKey(slug)]);
@@ -98,12 +148,9 @@ async function writeClient(record) {
   await redisCmd(["SET", clientKey(record.slug), JSON.stringify(record)]);
 }
 async function bumpIndex(slug, name, noteCount) {
-  var idx = await readIndex();
-  var without = idx.filter(function (r) { return r.slug !== slug; });
   var meta = { slug: slug, name: name, updatedAt: Date.now(), noteCount: noteCount };
-  without.unshift(meta);
-  await writeIndex(without);
-  return without;
+  await upsertIndexEntry(meta);
+  return await readIndex();
 }
 
 export default async function handler(req, res) {
@@ -200,8 +247,8 @@ export default async function handler(req, res) {
       var wSlug = normSlug(body.clientSlug);
       if (!wSlug) { res.status(400).json({ error: "clientSlug required." }); return; }
       await redisCmd(["DEL", clientKey(wSlug)]);
-      var wIdx = (await readIndex()).filter(function (r) { return r.slug !== wSlug; });
-      await writeIndex(wIdx);
+      await deleteIndexEntry(wSlug);
+      var wIdx = await readIndex();
       res.status(200).json({ clients: wIdx });
       return;
     }

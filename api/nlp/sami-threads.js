@@ -105,21 +105,79 @@ async function redisCmd(args) {
   }
 }
 
-function indexKey(user) { return "sami:threads:" + user; }
+// Audit fix #7b: the threads index is now a Redis hash (one field per
+// thread meta) so two concurrent saves can never clobber each other.
+// Previous shape was a single JSON blob at sami:threads:<user> which
+// suffered the GET-mutate-SET race the audit flagged. Full-thread
+// records live at their own per-key sami:thread:<user>:<threadId>
+// already, no race there.
+var LEGACY_INDEX_PREFIX = "sami:threads:";
+function indexKey(user) { return "sami:threads:hash:" + user; }
 function threadKey(user, threadId) { return "sami:thread:" + user + ":" + threadId; }
 
-async function readIndex(user) {
-  var r = await redisCmd(["GET", indexKey(user)]);
-  if (!r || !r.result) return [];
-  try {
-    var parsed = JSON.parse(r.result);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) { return []; }
+// Lazy migration: if the hash is empty but the legacy single-blob key
+// exists, seed the hash from it and delete the legacy key. Safe to
+// call from every read — the branch only fires once per user then the
+// hash keeps satisfying subsequent reads.
+async function migrateLegacyIndex(user) {
+  var legacy = await redisCmd(["GET", LEGACY_INDEX_PREFIX + user]);
+  if (!legacy || !legacy.result) return [];
+  var parsed;
+  try { parsed = JSON.parse(legacy.result); } catch (_) { parsed = null; }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    await redisCmd(["DEL", LEGACY_INDEX_PREFIX + user]);
+    return [];
+  }
+  for (var i = 0; i < parsed.length; i++) {
+    var m = parsed[i];
+    if (m && m.id) await redisCmd(["HSET", indexKey(user), m.id, JSON.stringify(m)]);
+  }
+  await redisCmd(["DEL", LEGACY_INDEX_PREFIX + user]);
+  return parsed;
 }
 
-async function writeIndex(user, arr) {
-  arr = (Array.isArray(arr) ? arr : []).slice(0, MAX_THREADS_PER_USER);
-  await redisCmd(["SET", indexKey(user), JSON.stringify(arr)]);
+async function readIndex(user) {
+  var r = await redisCmd(["HGETALL", indexKey(user)]);
+  var raw = r && Array.isArray(r.result) ? r.result : [];
+  if (raw.length === 0) {
+    // Nothing in the hash: run the one-time migration from the legacy
+    // blob if it exists. Returns the seeded array directly so this call
+    // does not need a second HGETALL round trip.
+    var migrated = await migrateLegacyIndex(user);
+    if (migrated.length === 0) return [];
+    migrated.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+    return migrated.slice(0, MAX_THREADS_PER_USER);
+  }
+  var out = [];
+  for (var j = 0; j < raw.length; j += 2) {
+    try {
+      var meta = JSON.parse(raw[j + 1]);
+      if (meta && meta.id) out.push(meta);
+    } catch (_) { /* skip corrupt row */ }
+  }
+  out.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+  return out.slice(0, MAX_THREADS_PER_USER);
+}
+
+async function upsertIndexEntry(user, meta) {
+  if (!meta || !meta.id) return;
+  await redisCmd(["HSET", indexKey(user), meta.id, JSON.stringify(meta)]);
+  // Cap enforcement: if the hash grew past the per-user cap, prune the
+  // oldest entries. Done after the write so a fresh save is never the
+  // one dropped by its own cap-check.
+  var sz = await redisCmd(["HLEN", indexKey(user)]);
+  var count = sz && sz.result ? parseInt(sz.result, 10) : 0;
+  if (count > MAX_THREADS_PER_USER) {
+    var current = await readIndex(user);
+    var toDrop = current.slice(MAX_THREADS_PER_USER);
+    for (var k = 0; k < toDrop.length; k++) {
+      await redisCmd(["HDEL", indexKey(user), toDrop[k].id]);
+    }
+  }
+}
+
+async function deleteIndexEntry(user, threadId) {
+  await redisCmd(["HDEL", indexKey(user), threadId]);
 }
 
 async function readThread(user, threadId) {
@@ -217,14 +275,14 @@ export default async function handler(req, res) {
       };
       await writeThread(user, thread);
 
-      // Upsert into the index, moving this thread to the top.
-      var idxS = await readIndex(user);
-      var withoutThis = idxS.filter(function (t) { return t.id !== sid; });
+      // Upsert the hash entry then re-read the sorted, capped index.
+      // Concurrent-save-safe: writing one hash field cannot clobber
+      // another team member's thread meta.
       var meta = { id: sid, title: thread.title, updatedAt: now, msgCount: messages.length };
-      withoutThis.unshift(meta);
-      await writeIndex(user, withoutThis);
+      await upsertIndexEntry(user, meta);
+      var fresh = await readIndex(user);
 
-      res.status(200).json({ thread: thread, threads: withoutThis.slice(0, MAX_THREADS_PER_USER) });
+      res.status(200).json({ thread: thread, threads: fresh });
       return;
     }
 
@@ -238,12 +296,9 @@ export default async function handler(req, res) {
       t2.title = newTitle;
       t2.updatedAt = Date.now();
       await writeThread(user, t2);
-      // Reflect in the index too.
-      var idxR = await readIndex(user);
-      var updated = idxR.map(function (m) {
-        return m.id === rid ? Object.assign({}, m, { title: newTitle, updatedAt: t2.updatedAt }) : m;
-      });
-      await writeIndex(user, updated);
+      // Reflect the rename in the hash entry.
+      await upsertIndexEntry(user, { id: rid, title: newTitle, updatedAt: t2.updatedAt, msgCount: Array.isArray(t2.messages) ? t2.messages.length : 0 });
+      var updated = await readIndex(user);
       res.status(200).json({ threads: updated });
       return;
     }
@@ -252,9 +307,8 @@ export default async function handler(req, res) {
       var did = normThreadId(body.threadId);
       if (!did) { res.status(400).json({ error: "Invalid threadId." }); return; }
       await deleteThreadKey(user, did);
-      var idxD = await readIndex(user);
-      var pruned = idxD.filter(function (m) { return m.id !== did; });
-      await writeIndex(user, pruned);
+      await deleteIndexEntry(user, did);
+      var pruned = await readIndex(user);
       res.status(200).json({ threads: pruned });
       return;
     }

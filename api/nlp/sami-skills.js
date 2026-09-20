@@ -66,34 +66,91 @@ async function redisCmd(args) {
   }
 }
 
-var SKILLS_KEY = "sami:skills";
+// Audit fix #7b: skills live in a Redis hash (field = skill id) instead
+// of a single JSON blob at sami:skills, so two admins editing the
+// library simultaneously cannot clobber each other.
+var LEGACY_SKILLS_KEY = "sami:skills";
+var SKILLS_HASH_KEY = "sami:skills:hash";
 var GUIDED_BUILD_SKILL_ID = "guided-campaign-build";
 
-async function readSkills() {
-  var r = await redisCmd(["GET", SKILLS_KEY]);
-  if (!r || !r.result) return seedDefaults();
-  try {
-    var parsed = JSON.parse(r.result);
-    if (!Array.isArray(parsed)) return seedDefaults();
-    // One-time silent migration: ensure the guided-build skill is
-    // always present so the "Guided Build" button on the new-chat
-    // screen can inject it, even for teams whose sami:skills key was
-    // seeded before the skill existed. Additive only, never rewrites
-    // an admin-edited version.
-    if (!parsed.find(function (s) { return s && s.id === GUIDED_BUILD_SKILL_ID; })) {
-      var defaults = seedDefaults();
-      var guided = defaults.find(function (s) { return s.id === GUIDED_BUILD_SKILL_ID; });
-      if (guided) {
-        parsed.unshift(guided);
-        try { await writeSkills(parsed); } catch (_) { /* non-fatal */ }
-      }
-    }
-    return parsed;
-  } catch (_) { return seedDefaults(); }
+async function seedSkillsHash(list) {
+  for (var i = 0; i < list.length; i++) {
+    var s = list[i];
+    if (s && s.id) await redisCmd(["HSET", SKILLS_HASH_KEY, s.id, JSON.stringify(s)]);
+  }
 }
-async function writeSkills(arr) {
-  arr = (Array.isArray(arr) ? arr : []).slice(0, MAX_SKILLS);
-  await redisCmd(["SET", SKILLS_KEY, JSON.stringify(arr)]);
+
+async function migrateLegacySkills() {
+  var legacy = await redisCmd(["GET", LEGACY_SKILLS_KEY]);
+  if (!legacy || !legacy.result) return [];
+  var parsed;
+  try { parsed = JSON.parse(legacy.result); } catch (_) { parsed = null; }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    await redisCmd(["DEL", LEGACY_SKILLS_KEY]);
+    return [];
+  }
+  await seedSkillsHash(parsed);
+  await redisCmd(["DEL", LEGACY_SKILLS_KEY]);
+  return parsed;
+}
+
+async function ensureGuidedBuildSkill(currentList) {
+  if (currentList.find(function (s) { return s && s.id === GUIDED_BUILD_SKILL_ID; })) return currentList;
+  var defaults = seedDefaults();
+  var guided = defaults.find(function (s) { return s && s.id === GUIDED_BUILD_SKILL_ID; });
+  if (!guided) return currentList;
+  try { await redisCmd(["HSET", SKILLS_HASH_KEY, guided.id, JSON.stringify(guided)]); }
+  catch (_) { /* non-fatal */ }
+  return [guided].concat(currentList);
+}
+
+async function readSkills() {
+  var r = await redisCmd(["HGETALL", SKILLS_HASH_KEY]);
+  var raw = r && Array.isArray(r.result) ? r.result : [];
+  var list = [];
+  if (raw.length === 0) {
+    var migrated = await migrateLegacySkills();
+    if (migrated.length === 0) {
+      // Empty store: seed the defaults into the hash so subsequent
+      // writes stay in the concurrent-safe path.
+      var defaults = seedDefaults();
+      await seedSkillsHash(defaults);
+      return defaults.slice(0, MAX_SKILLS);
+    }
+    list = migrated;
+  } else {
+    for (var i = 0; i < raw.length; i += 2) {
+      try {
+        var s = JSON.parse(raw[i + 1]);
+        if (s && s.id) list.push(s);
+      } catch (_) { /* skip corrupt row */ }
+    }
+  }
+  list.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+  list = await ensureGuidedBuildSkill(list);
+  return list.slice(0, MAX_SKILLS);
+}
+
+async function writeSkill(skill) {
+  if (!skill || !skill.id) return;
+  await redisCmd(["HSET", SKILLS_HASH_KEY, skill.id, JSON.stringify(skill)]);
+  // Cap enforcement: if the hash grew past the library cap, prune the
+  // oldest entries. Done after the write so a fresh save cannot be the
+  // one dropped by its own cap-check.
+  var sz = await redisCmd(["HLEN", SKILLS_HASH_KEY]);
+  var count = sz && sz.result ? parseInt(sz.result, 10) : 0;
+  if (count > MAX_SKILLS) {
+    var all = await readSkills();
+    var toDrop = all.slice(MAX_SKILLS);
+    for (var k = 0; k < toDrop.length; k++) {
+      await redisCmd(["HDEL", SKILLS_HASH_KEY, toDrop[k].id]);
+    }
+  }
+}
+
+async function deleteSkill(skillId) {
+  if (!skillId) return;
+  await redisCmd(["HDEL", SKILLS_HASH_KEY, skillId]);
 }
 
 // First-run default skills so the sidebar isn't empty for the first user.
@@ -208,8 +265,11 @@ export default async function handler(req, res) {
       if (!label || !prompt) { res.status(400).json({ error: "label and prompt are required." }); return; }
       var id = normSkillId(skillIn.id) || makeSkillId(label);
       var user = auth.user;
-      var current = await readSkills();
-      var existing = current.find(function (s) { return s.id === id; });
+      // Read only the one existing field we care about so a concurrent
+      // save on a different skill cannot influence createdBy/createdAt.
+      var existingRaw = await redisCmd(["HGET", SKILLS_HASH_KEY, id]);
+      var existing = null;
+      if (existingRaw && existingRaw.result) { try { existing = JSON.parse(existingRaw.result); } catch (_) {} }
       var now = Date.now();
       var record = {
         id: id, label: label, description: description, prompt: prompt,
@@ -217,19 +277,17 @@ export default async function handler(req, res) {
         createdBy: existing ? existing.createdBy : user,
         createdAt: existing ? existing.createdAt : now
       };
-      var next = current.filter(function (s) { return s.id !== id; });
-      next.unshift(record);
-      await writeSkills(next);
-      res.status(200).json({ skills: next.slice(0, MAX_SKILLS) });
+      await writeSkill(record);
+      var next = await readSkills();
+      res.status(200).json({ skills: next });
       return;
     }
 
     if (op === "delete") {
       var did = normSkillId(body.id);
       if (!did) { res.status(400).json({ error: "id required." }); return; }
-      var currentD = await readSkills();
-      var pruned = currentD.filter(function (s) { return s.id !== did; });
-      await writeSkills(pruned);
+      await deleteSkill(did);
+      var pruned = await readSkills();
       res.status(200).json({ skills: pruned });
       return;
     }
