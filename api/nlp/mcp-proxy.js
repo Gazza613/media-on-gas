@@ -27,6 +27,7 @@
 
 import crypto from "crypto";
 import { verifyNonceForCall, consumeNonce } from "../_samiNonce.js";
+import { validateWriteInput } from "../_samiWriteGuard.js";
 
 export const config = { maxDuration: 240 };
 
@@ -98,23 +99,38 @@ export default async function handler(req, res) {
   var toolName = isToolsCall && body.params ? String(body.params.name || "") : "";
   var isWrite = toolName === "run_write_operation";
 
-  // Enforce approval nonce on writes. Reads (tools/list, resources/*,
-  // run_operation, upload_media, initialize, etc.) pass through
-  // unchanged. run_operation on Markifact is limited to
+  // Enforce approval nonce + write guard on writes. Reads (tools/list,
+  // resources/*, run_operation, upload_media, initialize, etc.) pass
+  // through unchanged. run_operation on Markifact is limited to
   // requires_approval:false operations by design, so no gate needed.
   if (isWrite) {
     var args = (body.params && body.params.arguments) || {};
+
+    // Audit fix #3: server-side budget / status / name validation.
+    // Runs first so a bad payload gets the most human-readable error
+    // message rather than a generic "nonce missing" if both fail.
+    var guard = validateWriteInput(args.operation_id, args.input_data);
+    if (!guard.ok) {
+      console.warn("[mcp-proxy] refused write op (guard)", args.operation_id, "-", guard.reason);
+      res.status(200).json(mcpToolError(body.id, guard.reason));
+      return;
+    }
+    if (guard.warnings && guard.warnings.length) {
+      console.log("[mcp-proxy] write guard warnings", args.operation_id, guard.warnings);
+    }
+
+    // Audit fix #1: server-issued approval nonce lookup.
     var check = await verifyNonceForCall(args.operation_id, args.input_data);
     if (!check.ok) {
-      console.warn("[mcp-proxy] refused write op", args.operation_id, "-", check.reason);
+      console.warn("[mcp-proxy] refused write op (nonce)", args.operation_id, "-", check.reason);
       res.status(200).json(mcpToolError(body.id, check.reason));
       return;
     }
     if (check.cached) {
-      // Retry hit the cache. Idempotency: return the exact original
+      // Audit fix #2: retry hit the cache. Return the exact original
       // response verbatim so Anthropic/Sami treats it as if the call
-      // just succeeded again. Meta/TikTok/Google were only touched
-      // once (the first call).
+      // just succeeded again. Meta / TikTok / Google were only
+      // touched once (the first call).
       console.log("[mcp-proxy] idempotent replay for", args.operation_id, "card", check.cardId);
       res.status(200).json(check.cached);
       return;
