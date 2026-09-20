@@ -47,6 +47,24 @@ function normThreadId(raw) {
   return s;
 }
 
+// Audit fix #7: sanitise a per-card status map before persisting. Card
+// ids follow the same allowlisted-slug shape Sami emits, and status
+// must be one of the enum values the frontend actually renders.
+// Everything else is silently dropped (never trust the client blob).
+function sanitiseStatusMap(raw, allowed) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  var out = {};
+  var keys = Object.keys(raw).slice(0, 200);
+  keys.forEach(function (k) {
+    if (typeof k !== "string" || k.length === 0 || k.length > 120) return;
+    if (!/^[a-zA-Z0-9_-]+$/.test(k)) return;
+    var v = String(raw[k] == null ? "" : raw[k]);
+    if (allowed.indexOf(v) < 0) return;
+    out[k] = v;
+  });
+  return out;
+}
+
 // Auto-title from first user message: first ~60 chars, break on sentence
 // end or newline where possible. Kept simple; users can rename.
 function autoTitle(messages) {
@@ -177,6 +195,14 @@ export default async function handler(req, res) {
         return out;
       }).filter(function (m) { return m.content; });
 
+      // Audit fix #7: persist per-card approval / pair-confirm status
+      // so a reloaded thread doesn't render historic cards as pending
+      // (which would let a click re-fire the write, defeating the
+      // idempotency + nonce guards). Keys must match the id shape Sami
+      // emits; values must match the enum the frontend renders.
+      var cardStatus = sanitiseStatusMap(body.cardStatus, ["approved", "rejected", "pending"]);
+      var pairStatus = sanitiseStatusMap(body.pairStatus, ["confirmed", "rejected", "pending"]);
+
       var now = Date.now();
       var existing = await readThread(user, sid);
       var thread = {
@@ -184,7 +210,9 @@ export default async function handler(req, res) {
         title: cleanStr(body.title, MAX_TITLE_LEN) || (existing && existing.title) || autoTitle(messages),
         createdAt: (existing && existing.createdAt) || now,
         updatedAt: now,
-        messages: messages
+        messages: messages,
+        cardStatus: cardStatus,
+        pairStatus: pairStatus
       };
       await writeThread(user, thread);
 
