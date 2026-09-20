@@ -4137,80 +4137,94 @@ function CampaignAuditModal(props){
         // the header count.
         var pods = [
           {
-            name: "The Brain",
+            name: "The Strategists",
             color: "#B085FF",
-            desc: "Sami and her skills. The agents that plan, brief, and reason about your campaigns.",
+            desc: "The senior media brain of the platform. Plans your campaigns, walks every material decision, ends with a plan card you approve in one click.",
             agents: [
-              { n: "Sami", d: "Sonnet-5 strategist. Runs Build, Optimise, Read across Meta, TikTok, Google Ads, LinkedIn." },
-              { n: "Guided Build", d: "One-form brief-card flow. 11 mandatory fields prefilled from client memory, one submit to plan." },
-              { n: "Weekly Optimisation Audit", d: "7-dimension review: pace, headline KPIs, winners, leaks, creative fatigue, audience, structural." },
-              { n: "Deep Client Review", d: "30-day strategic narrative with structural moves and the next test to run." },
-              { n: "B2B Lead Draft", d: "Standard B2B qualification questions, then a lead-gen structure proposal." },
-              { n: "New Client Onboarding", d: "Walks the standard GAS onboarding checklist end-to-end." },
-              { n: "Creative Folder Review", d: "Walks a Drive/Dropbox folder, pairs 1:1 with 9:16, flags unpaired assets." },
-              { n: "Client Memory Injector", d: "Detects known clients by word-boundary match and injects their saved notes as authoritative preferences." },
-              { n: "Prompt Sentinel", d: "Catches Sami's silent-approval and prose-card anti-patterns before the AM sees them." }
+              { n: "Sami", d: "The strategist you talk to. Sonnet-5 reasoning grounded in your live Meta, TikTok, Google, LinkedIn data. Never invents a number." },
+              { n: "Guided Build", d: "Walks 11 material questions (client, objective, budget, dates, audience, placements, creative) before you approve anything. Nothing critical is ever missed." },
+              { n: "Weekly Audit Composer", d: "7-dimension weekly review: pace vs plan, headline KPIs, winners to scale, leaks to cut, creative fatigue, audience health, structural hygiene." },
+              { n: "Deep Client Reviewer", d: "30-day strategic narrative for the marketing director. What is working, what is leaking, structural moves, the next test to run." },
+              { n: "Growth Plan Composer", d: "Every dashboard client sees: TL;DR headline, 5X Move (the scale bet), Structural Play (the fix), Crystal Ball (the forecast)." },
+              { n: "Onboarding Coach", d: "Walks the full new-client checklist so nothing gets missed between contract and first live campaign." },
+              { n: "Client Memory Curator", d: "Remembers every client's rules: standard budget, WhatsApp number, forbidden phrasing, audience overlays. Applied automatically on every future build." },
+              { n: "Naming Convention Enforcer", d: "GAS 3-level naming (Client_Objective_Funding, Audience_Geo_Demo_Placement, Format_Concept_Version) applied to every campaign, ad set, ad." }
             ]
           },
           {
-            name: "The Gatekeepers",
-            color: "#FF3D00",
-            desc: "The safety trilogy. Every rand that could move passes through this pod first.",
-            agents: [
-              { n: "PIN Gate", d: "Per-member 4-digit PIN, bcrypt-hashed. Admin toggles Sami access; PIN is set by the member on first visit." },
-              { n: "JWT Signer", d: "Signs the picked identity into the create-tab token so every write is attributed to a real human." },
-              { n: "MCP Approval Proxy", d: "Anthropic tool calls route through here. Refuses every write without a matching human-authorised nonce." },
-              { n: "Nonce Store", d: "Per-user cryptographic binding of card → approval → write. A colleague can't authorise your card." },
-              { n: "Write Guard", d: "Server-side R5,000/day, R50,000 lifetime, always-PAUSED-on-create enforcement. Prompt-only rules become law." },
-              { n: "Idempotency Cache", d: "First success cached against the nonce. Vercel timeouts + retries can't duplicate a live campaign." },
-              { n: "Grounding Sentinel", d: "Scans every Sami reply and every card for R-values / percentages that weren't grounded in a live tool call." }
-            ]
-          },
-          {
-            name: "The Readers",
+            name: "The Analysts",
             color: "#4599FF",
-            desc: "Live data ingestion. Feeds every dashboard number and every Sami claim.",
+            desc: "The team that reads your performance and grades it. Every number your client sees was measured and benchmarked here.",
             agents: [
-              { n: "Meta Ads", d: "Campaigns, ad sets, ads, insights, DCO variants, creative metadata." },
-              { n: "TikTok Ads", d: "Campaigns, ad groups, ads, image/video metadata (with cover-id filtering)." },
-              { n: "Google Ads", d: "GAQL over v-current, RDA asset resolution, PMax asset-group reads." },
-              { n: "LinkedIn Paid", d: "Campaign performance via the Advertising API." },
-              { n: "LinkedIn Organic", d: "Follower + engagement via the Community Management API." },
-              { n: "GA4", d: "Ecommerce funnel from item-view through purchase." },
-              { n: "WhatsApp CAPI", d: "QualifiedLead events pushed to Meta's dataset for optimisation and attribution." },
-              { n: "Drive / Dropbox", d: "Creative-folder walking with 1:1 / 9:16 pair detection." }
+              { n: "Creative Judge", d: "Grades every ad against Meta, TikTok, Google benchmarks. CTR, CPM, CPC, cost-per-result — labelled EXCELLENT, GOOD, ON TRACK or OPTIMISE." },
+              { n: "Targeting Analyst", d: "Reads audience shape, geography, age, gender, exclusions. Flags mismatches (B2B campaign running on consumer placements, LAL under-sized, etc)." },
+              { n: "Placement Optimiser", d: "Assesses which placements (Feed vs Reels vs Stories vs WA Status vs Explore) are delivering per objective, recommends manual pins." },
+              { n: "Creative Fatigue Detector", d: "Frequency > 4 flag, plus rising-frequency trend detection. Tells you which ads to rotate and when." },
+              { n: "Winner Ranker", d: "Objective-aware winning-creative selection. Awareness ranks on impressions + CPM; lead-gen ranks on cost-per-lead; sales on ROAS." },
+              { n: "DCO Variant Analyst", d: "For multi-creative Meta ads, identifies the best-performing variant per placement instead of averaging." },
+              { n: "Cross-Platform Efficiency", d: "Meta vs TikTok vs Google side-by-side; flags CPM gaps > 3x that warrant budget rebalance." },
+              { n: "Community Growth Tracker", d: "Whole-account earnedTotal followers + likes with daily snapshot deltas." },
+              { n: "Ecommerce Funnel Analyst", d: "GA4 funnel from item-view through purchase, per-client shape (Sea Weeds / Sea Storm / Psycho Bunny)." },
+              { n: "WhatsApp Attribution Assessor", d: "messaging_conversation_started_7d attribution with CAPI-QualifiedLead blending (Learnalot two-path leads)." }
             ]
           },
           {
-            name: "The Interpreters",
+            name: "The Optimisers",
             color: "#34D399",
-            desc: "Turn raw platform numbers into decisions, flags, and client-ready reports.",
+            desc: "The team that turns numbers into decisions. Reads every campaign, buckets what's working from what's not, and proposes the change.",
             agents: [
-              { n: "Command Centre Flags", d: "Date-scoped, objective-aware flag generator feeding Summary + Optimise views." },
-              { n: "Growth Plan Composer", d: "TL;DR + 5X + Structural Play + Crystal Ball narrative from live campaign state." },
-              { n: "Objective Classifier", d: "Name-tag-authoritative classifier, resolves Meta / TikTok API drift." },
-              { n: "Custom Outcomes Compiler", d: "Client-specific KPI shapes (Learnalot two-path leads, ecommerce funnels)." },
-              { n: "PDF Composer", d: "Full dashboard snapshot with Custom Outcomes read from the request body." },
-              { n: "Thumbnail Resolver", d: "Admin-override → native-cascade thumbnail resolution for every ad on every surface." },
-              { n: "MIXED Winner Ranker", d: "Objective-aware winning-creative selection across DCO multi-creative ads." },
-              { n: "Follower Reconciler", d: "Whole-account earnedTotal across Followers surfaces (Summary/Community/Deep Dive)." }
+              { n: "Objective Classifier", d: "Reads campaign name-tag AND platform API objective, routes each campaign to the right analysis. Handles Meta / TikTok API drift." },
+              { n: "Command Centre Flags", d: "Date-scoped, objective-aware flag generator. Buckets every issue as CRITICAL / WARNING / INFO / POSITIVE with a specific recommendation." },
+              { n: "Budget Pacing Guardian", d: "Daily + lifetime + ABO pace math. Under-pacing? Over-pacing? Days remaining, R/day required to land on plan." },
+              { n: "Spend Leak Detector", d: "Ad sets above the client's cost-per-result target with meaningful spend. Recommends pause or refresh." },
+              { n: "Scale Winner Detector", d: "Ad sets under target CPA with headroom. Recommends 10-20% budget lifts (never doubled, never on < R500 signal)." },
+              { n: "Structural Auditor", d: "Objective / optimization_goal mismatch, naming drift, missing tracking, missing CAPI feedback, exclusion overdue." },
+              { n: "Retargeting Advisor", d: "Recommends when to layer in warm-audience retargeting, which creatives to reserve, which exclusions to add." }
             ]
           },
           {
-            name: "The Watchers",
-            color: "#FFAA00",
-            desc: "Backend automation that keeps the platform honest while you sleep. Every cron plus the one email dispatcher that carries every transactional email.",
+            name: "The Watchdogs",
+            color: "#FF3D00",
+            desc: "The pod that protects your budget. Every rand that could move passes through this team first. Nothing spends without a human click.",
             agents: [
-              { n: "Reconcile & Alert", d: "Daily 06:00 UTC cross-platform metric reconcile with delta email." },
-              { n: "Daily SLA Nudge", d: "06:30 UTC leadership nudge for any client whose last report is > 7 days old." },
-              { n: "Daily Pulse Email", d: "06:15 UTC performance pulse for the team." },
-              { n: "Weekly Activity Summary", d: "Fri 08:00 UTC SLA table, reports sent, adoption scorecards." },
-              { n: "Weekly Client Pulse", d: "Mon 06:00 UTC performance pulse to clients." },
-              { n: "IG Follower Snapshot", d: "Daily 04:00 UTC growth-trendline baseline." },
-              { n: "FB Page Snapshot", d: "Daily 04:05 UTC follower count for whole-account growth math." },
-              { n: "Perf Snapshot", d: "Daily 04:10 UTC ground-truth performance ledger used by every trend chart." },
-              { n: "Best-Practice Refresh", d: "Monthly 1st 02:00 UTC benchmark refresh." },
-              { n: "Credit-Balance Alert", d: "Every 6h scan of Sami consumption; emails Gary once per month at 4,800 credits." },
+              { n: "Always-Paused Rail", d: "Every new campaign, ad set, and ad is created PAUSED. Nothing ever launches live without a human unpausing it." },
+              { n: "Spend Cap Enforcer", d: "Server-side R5,000/day per ad set + R50,000 lifetime hard cap. Prompt-only rules become law before any write fires." },
+              { n: "Approval Nonce Guard", d: "Per-user cryptographic binding of card → approval → write. A colleague cannot authorise your card, even by accident." },
+              { n: "Idempotency Guard", d: "Retry-safe writes. If the network drops mid-launch, the same click never doubles the campaign." },
+              { n: "Unverified-Numbers Sentinel", d: "Scans every reply for currency and percentage values not grounded in a live data pull. Paints a red chip if drift is detected." },
+              { n: "Client-Scope Enforcer", d: "Every client-facing surface filters to only that client's ad accounts. No cross-client data leakage." },
+              { n: "PIN Gate", d: "Per-member 4-digit PIN, bcrypt-hashed. Sami access is per-member, revoke-able instantly from the Members page." }
+            ]
+          },
+          {
+            name: "The Data Feeders",
+            color: "#00F2EA",
+            desc: "Live connections to every platform your campaigns run on. Every dashboard number lands here first.",
+            agents: [
+              { n: "Meta Ads Reader", d: "Campaigns, ad sets, ads, insights, DCO variants, creative metadata, WhatsApp CAPI events, page follower snapshots." },
+              { n: "TikTok Ads Reader", d: "Campaigns, ad groups, ads, image and video metadata with cover-id filtering." },
+              { n: "Google Ads Reader", d: "GAQL over the current API version, RDA asset resolution, PMax asset-group reads." },
+              { n: "LinkedIn Paid Reader", d: "Campaign performance via the Advertising API." },
+              { n: "LinkedIn Organic Reader", d: "Follower and engagement via the Community Management API." },
+              { n: "GA4 Reader", d: "Ecommerce funnel from item-view through purchase, all custom-outcome events." },
+              { n: "Drive / Dropbox Reader", d: "Creative folder walking with 1:1 / 9:16 pair detection for placement matching." },
+              { n: "Perf Snapshot Recorder", d: "Daily 04:10 UTC snapshot of every live campaign, the ground-truth ledger used by every trend chart." }
+            ]
+          },
+          {
+            name: "The Composers",
+            color: "#FFAA00",
+            desc: "The team that turns raw analysis into client-ready output. Reports, PDFs, emails, chips, thumbnails, everything the client actually sees.",
+            agents: [
+              { n: "Custom Outcomes Compiler", d: "Client-specific KPI shapes (Learnalot PSI Form + WhatsApp CAPI two-path leads, MTN MoMo Community Growth, ecommerce funnels)." },
+              { n: "PDF Composer", d: "Full dashboard snapshot as a shareable PDF, with Custom Outcomes preserved via request-body pass-through." },
+              { n: "Thumbnail Resolver", d: "Admin-override → Meta / TikTok / Google native cascade for every ad on every surface. Never a broken image." },
+              { n: "Follower Reconciler", d: "Whole-account earnedTotal across every Followers surface (Summary, Community, Demographics, Deep Dive) so numbers never disagree." },
+              { n: "Chip Renamer", d: "Client-facing tone: AVERAGE becomes ON TRACK, REVIEW becomes OPTIMISE. Same grading, softer voice." },
+              { n: "Growth Trendline Composer", d: "30-day growth trend from perf-snapshot ledger. Every trend chart on the platform." },
+              { n: "Weekly Client Pulse", d: "Mon 06:00 UTC performance pulse to clients. Auto-composed from live numbers." },
+              { n: "Ground-Truth Reconciler", d: "Daily 06:00 UTC cross-platform metric reconcile with delta email. Catches any surface disagreement before the client does." },
+              { n: "Best-Practice Refresher", d: "Monthly benchmark refresh (CTR/CPC/CPM industry ranges by platform) so every grading stays current." },
               { n: "Email Dispatcher", d: "Single Gmail SMTP transport carrying every transactional email: SAMI ON invites, PIN resets, team invites, password resets, client share links." }
             ]
           }
