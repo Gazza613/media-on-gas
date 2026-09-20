@@ -437,7 +437,10 @@ function extractStructuredCards(text) {
 }
 
 export default async function handler(req, res) {
-  if (!checkCreateAuth(req, res)) return;
+  // Capture the verified JWT payload so downstream code (proxy-URL
+  // user attribution, nonce authorisation) can trust auth.user.
+  var auth = checkCreateAuth(req, res);
+  if (!auth) return;
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   if (!(await rateLimit(req, res, { maxPerMin: 20, maxPerHour: 240 }))) return;
 

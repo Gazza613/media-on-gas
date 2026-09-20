@@ -1302,21 +1302,25 @@ export default function CreateChatTab(props) {
     if (busy) return;
     var next = Object.assign({}, cardStatus, {}); next[card.id] = "approved";
     setCardStatus(next);
-    if (activeThreadId) saveThread(activeThreadId, messages, { cardStatus: next });
+    // Bug fix: use the `threadId` state variable, not `activeThreadId`
+    // (which is a local `var` scoped only inside send()). Referencing
+    // it here in strict mode threw a ReferenceError and killed the
+    // whole approve flow before the server ever heard about it.
+    if (threadId) saveThread(threadId, messages, { cardStatus: next });
     send("APPROVED: " + card.id);
   };
   var handleReject = function (card) {
     if (busy) return;
     var next = Object.assign({}, cardStatus, {}); next[card.id] = "rejected";
     setCardStatus(next);
-    if (activeThreadId) saveThread(activeThreadId, messages, { cardStatus: next });
+    if (threadId) saveThread(threadId, messages, { cardStatus: next });
     send("REJECTED: " + card.id);
   };
   var handleConfirmPair = function (card) {
     if (busy) return;
     var next = Object.assign({}, pairStatus, {}); next[card.id] = "confirmed";
     setPairStatus(next);
-    if (activeThreadId) saveThread(activeThreadId, messages, { pairStatus: next });
+    if (threadId) saveThread(threadId, messages, { pairStatus: next });
     send("PAIRS_OK: " + card.id);
   };
 
@@ -1332,14 +1336,16 @@ export default function CreateChatTab(props) {
     var nextCard = Object.assign({}, cardStatus, {});
     (plan.plan || []).forEach(function (c) { if (c && c.id) nextCard[c.id] = "approved"; });
     setCardStatus(nextCard);
-    if (activeThreadId) saveThread(activeThreadId, messages, { cardStatus: nextCard, planStatus: nextPlan });
+    // Bug fix (same as handleApprove): use `threadId` state, not the
+    // send()-local `activeThreadId`.
+    if (threadId) saveThread(threadId, messages, { cardStatus: nextCard, planStatus: nextPlan });
     send("APPROVED_PLAN: " + plan.id);
   };
   var handleRejectPlan = function (plan) {
     if (busy) return;
     var nextPlan = Object.assign({}, planStatus, {}); nextPlan[plan.id] = "rejected";
     setPlanStatus(nextPlan);
-    if (activeThreadId) saveThread(activeThreadId, messages, { planStatus: nextPlan });
+    if (threadId) saveThread(threadId, messages, { planStatus: nextPlan });
     send("REJECTED_PLAN: " + plan.id);
   };
 
