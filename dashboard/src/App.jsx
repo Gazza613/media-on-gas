@@ -3233,6 +3233,21 @@ function CampaignAuditModal(props){
       .catch(function(){teamErr[1]("Connection error");});
   };
 
+  // Superadmin-visible Sami Hub credit consumption view. Fetched once
+  // when Team Access loads (view === "users") so the roster and the
+  // usage picture render together. Same underlying counters the Sami
+  // hub credit strip reads, but session-authenticated so the admin
+  // can see it without unlocking Sami.
+  var samiUsageState=useState({loading:false,daily:[],currentMonth:{total:0,writes:0,byUser:{}},plan:{creditsLimit:5000,alertAt:4800,resetDay:25}});
+  var loadSamiUsage=function(){
+    if(!props.isSuperadmin)return;
+    samiUsageState[1](Object.assign({},samiUsageState[0],{loading:true}));
+    fetch(props.apiBase+"/api/sami-usage-admin",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""}})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(d){if(d)samiUsageState[1]({loading:false,daily:d.daily||[],currentMonth:d.currentMonth||{total:0,writes:0,byUser:{}},plan:d.plan||samiUsageState[0].plan});else samiUsageState[1](Object.assign({},samiUsageState[0],{loading:false}));})
+      .catch(function(){samiUsageState[1](Object.assign({},samiUsageState[0],{loading:false}));});
+  };
+
   // Sami Hub per-user access toggle. Flipping on grants the member the
   // ability to enter the Create & Optimise Hub (they still need to set
   // their own 4-digit PIN on first visit). Flipping off blocks Sami
@@ -3284,7 +3299,7 @@ function CampaignAuditModal(props){
   useEffect(function(){if(!props.open){dbgState[1]({loading:false,error:"",rows:null});dbgQ[1]("");}},[props.open]);
   useEffect(function(){if(props.open&&view[0]==="reconcile"&&recRows[0].length===0)loadReconcile(false);},[props.open,view[0]]);
   useEffect(function(){if(props.open&&view[0]==="usage")loadUsage();},[props.open,view[0]]);
-  useEffect(function(){if(props.open&&view[0]==="users"&&props.isSuperadmin)loadTeam();},[props.open,view[0],props.isSuperadmin]);
+  useEffect(function(){if(props.open&&view[0]==="users"&&props.isSuperadmin){loadTeam();loadSamiUsage();}},[props.open,view[0],props.isSuperadmin]);
 
   var data=rows[0]||[];
   var q=(query[0]||"").toLowerCase().trim();
@@ -4016,6 +4031,98 @@ function CampaignAuditModal(props){
             </div>
             <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
           </div>
+
+          {/* Sami Hub credit consumption (superadmin only). Same
+              counters the in-hub credit strip reads, but visible from
+              the members admin view so the superadmin can see who is
+              burning credits without unlocking Sami. */}
+          {(function(){
+            var su=samiUsageState[0];
+            var plan=su.plan||{creditsLimit:5000,alertAt:4800,resetDay:25};
+            var used=(su.currentMonth&&su.currentMonth.total)||0;
+            var remaining=Math.max(0,plan.creditsLimit-used);
+            var pct=plan.creditsLimit>0?Math.min(1,used/plan.creditsLimit):0;
+            var overAlert=used>=plan.alertAt;
+            var atLimit=used>=plan.creditsLimit;
+            var ringColor=atLimit?P.critical:overAlert?P.solar:P.mint;
+            var now=new Date();
+            var day=now.getUTCDate();
+            var nextReset=day<plan.resetDay?new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),plan.resetDay)):new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()+1,plan.resetDay));
+            var daysToReset=Math.max(0,Math.ceil((nextReset.getTime()-now.getTime())/(24*3600*1000)));
+            var trend=(su.daily||[]).slice().reverse();
+            var maxDay=trend.reduce(function(mx,d){return Math.max(mx,d.total||0);},100);
+            var yMax=Math.max(200,Math.ceil(maxDay/200)*200);
+            var swW=640,swH=140,swPadL=40,swPadB=22,swPadT=6;
+            var chartW=swW-swPadL-8,chartH=swH-swPadB-swPadT;
+            var trendPath=trend.map(function(d,i){var x=swPadL+(trend.length<=1?0:(i/(trend.length-1))*chartW);var y=swPadT+chartH-((d.total||0)/yMax)*chartH;return (i===0?"M":"L")+x.toFixed(1)+" "+y.toFixed(1);}).join(" ");
+            var fillPath=trend.length>0&&trendPath?trendPath+" L "+(swPadL+chartW).toFixed(1)+" "+(swPadT+chartH).toFixed(1)+" L "+swPadL+" "+(swPadT+chartH).toFixed(1)+" Z":"";
+            var byUserObj=(su.currentMonth&&su.currentMonth.byUser)||{};
+            var users=Object.keys(byUserObj).map(function(u){return{user:u,n:byUserObj[u]};}).sort(function(a,b){return b.n-a.n;});
+            var userMax=users.reduce(function(mx,u){return Math.max(mx,u.n);},1);
+            var size=110,stroke=12,r=(size-stroke)/2,c=2*Math.PI*r,offset=c*(1-pct);
+            return <div style={{marginTop:26}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Sami Hub Usage</span>
+                <span style={{fontSize:11,color:P.label,fontFamily:fm}}>Markifact-tool credits consumed, per team member</span>
+                <button onClick={loadSamiUsage} disabled={su.loading} style={{marginLeft:"auto",background:"transparent",border:"1px solid "+P.rule,borderRadius:8,padding:"6px 12px",color:P.label,fontSize:10,fontWeight:800,fontFamily:fm,cursor:su.loading?"wait":"pointer",letterSpacing:1.5}}>{su.loading?"LOADING":"REFRESH"}</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:18}}>
+                  <div style={{fontSize:12,color:P.txt,fontFamily:fm,fontWeight:800,marginBottom:14}}>Credit Usage</div>
+                  <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:20,alignItems:"center"}}>
+                    <div style={{position:"relative",width:size,height:size,justifySelf:"start"}}>
+                      <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
+                        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke}/>
+                        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={ringColor} strokeWidth={stroke} strokeDasharray={c.toFixed(2)} strokeDashoffset={offset.toFixed(2)} strokeLinecap="round" transform={"rotate(-90 "+(size/2)+" "+(size/2)+")"}/>
+                      </svg>
+                      <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                        <div style={{fontSize:22,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1}}>{(pct*100).toFixed(0)}%</div>
+                        <div style={{fontSize:9,color:P.caption,fontFamily:fm,marginTop:3}}>{used.toLocaleString("en-ZA")}</div>
+                      </div>
+                    </div>
+                    <div style={{display:"grid",gap:8}}>
+                      <div style={{padding:"8px 12px",background:"rgba(0,0,0,0.35)",borderRadius:8,border:"1px solid "+P.rule}}>
+                        <div style={{fontSize:9,fontWeight:700,color:P.caption,fontFamily:fm,letterSpacing:1,textTransform:"capitalize"}}>Credits remaining</div>
+                        <div style={{fontSize:18,fontWeight:900,color:overAlert?ringColor:P.txt,fontFamily:fm,lineHeight:1,marginTop:2}}>{remaining.toLocaleString("en-ZA")} <span style={{fontSize:10,fontWeight:600,color:P.caption}}>/ {plan.creditsLimit.toLocaleString("en-ZA")}</span></div>
+                      </div>
+                      <div style={{padding:"8px 12px",background:"rgba(0,0,0,0.35)",borderRadius:8,border:"1px solid "+P.rule}}>
+                        <div style={{fontSize:9,fontWeight:700,color:P.caption,fontFamily:fm,letterSpacing:1,textTransform:"capitalize"}}>Resets in</div>
+                        <div style={{fontSize:18,fontWeight:900,color:P.txt,fontFamily:fm,lineHeight:1,marginTop:2}}>{daysToReset} days <span style={{fontSize:10,fontWeight:600,color:P.caption}}>· alert at {plan.alertAt.toLocaleString("en-ZA")}</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:18}}>
+                  <div style={{fontSize:12,color:P.txt,fontFamily:fm,fontWeight:800,marginBottom:10}}>Usage trend (30 days)</div>
+                  <svg width="100%" height={swH} viewBox={"0 0 "+swW+" "+swH} preserveAspectRatio="none" style={{display:"block"}}>
+                    {[0,0.25,0.5,0.75,1].map(function(f,i){var y=swPadT+chartH*(1-f);var val=Math.round(yMax*f);return <g key={i}><line x1={swPadL} x2={swPadL+chartW} y1={y} y2={y} stroke="rgba(255,255,255,0.06)" strokeDasharray="2,3"/><text x={swPadL-6} y={y+3} fill={P.caption} fontSize={9} fontFamily={fm} textAnchor="end">{val.toLocaleString("en-ZA")}</text></g>;})}
+                    {fillPath&&<path d={fillPath} fill={(P.ember||"#FF6B00")+"22"}/>}
+                    {trendPath&&<path d={trendPath} fill="none" stroke={P.ember||"#FF6B00"} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>}
+                    {trend.length>0&&(function(){var pts=[0,Math.floor((trend.length-1)*0.33),Math.floor((trend.length-1)*0.66),trend.length-1];return pts.filter(function(i){return trend[i];}).map(function(i,ii){var x=swPadL+(trend.length<=1?0:(i/(trend.length-1))*chartW);var dLabel=trend[i].date?new Date(trend[i].date+"T00:00:00Z").toLocaleDateString("en-ZA",{month:"short",day:"numeric"}):"";return <text key={ii} x={x} y={swH-6} fill={P.caption} fontSize={9} fontFamily={fm} textAnchor="middle">{dLabel}</text>;});})()}
+                  </svg>
+                </div>
+              </div>
+              <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:18,marginTop:14}}>
+                <div style={{fontSize:12,color:P.txt,fontFamily:fm,fontWeight:800,marginBottom:12}}>By team member (this month) · {users.length+" contributor"+(users.length===1?"":"s")}</div>
+                {users.length===0
+                  ? <div style={{padding:16,textAlign:"center",color:P.caption,fontSize:11,fontStyle:"italic",fontFamily:fm}}>No Sami-tool calls yet this month. Once the team starts using the Create & Optimise hub, per-user consumption shows here.</div>
+                  : <div style={{display:"grid",gap:9}}>
+                      {users.map(function(u){
+                        var barPct=userMax>0?(u.n/userMax):0;
+                        var uPctOfLimit=plan.creditsLimit>0?((u.n/plan.creditsLimit)*100).toFixed(1):"0";
+                        return <div key={u.user} style={{display:"flex",alignItems:"center",gap:12,fontSize:12,fontFamily:fm,color:P.txt}}>
+                          <span style={{minWidth:110,textTransform:"capitalize",color:P.label,fontWeight:700}}>{u.user}</span>
+                          <div style={{flex:1,height:9,background:"rgba(255,255,255,0.06)",borderRadius:5,overflow:"hidden"}}>
+                            <div style={{width:(barPct*100).toFixed(1)+"%",height:"100%",background:"linear-gradient(90deg,#FF3D00,#FF6B00)"}}/>
+                          </div>
+                          <span style={{minWidth:110,textAlign:"right",fontWeight:800}}>{u.n.toLocaleString("en-ZA")} <span style={{fontSize:10,fontWeight:600,color:P.caption}}>({uPctOfLimit}%)</span></span>
+                        </div>;
+                      })}
+                    </div>}
+                <div style={{fontSize:10,color:P.caption,fontFamily:fm,marginTop:10,lineHeight:1.6,fontStyle:"italic"}}>Counter reflects Markifact tools/call events the GAS approval-gated proxy has attributed to each member via their JWT sub. New members appear here after their first Sami-driven MCP call.</div>
+              </div>
+            </div>;
+          })()}
         </div>;
       })()}
 
