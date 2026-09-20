@@ -686,15 +686,26 @@ export default function CreateChatTab(props) {
   };
   useEffect(function () { fetchThreads(); }, [token, user]);
 
-  // Save the current thread (upsert). Called after Sami's reply lands.
-  // Errors get logged AND surface in the sidebar banner so a silent
-  // Redis failure can't happen invisibly again.
-  var saveThread = function (id, msgs) {
+  // Save the current thread (upsert). Called after Sami's reply lands
+  // and whenever an approval/rejection changes card state. Errors get
+  // logged AND surface in the sidebar banner so a silent Redis failure
+  // can't happen invisibly again.
+  //
+  // Audit fix #7: cardStatus / pairStatus are persisted alongside
+  // messages so a page reload restores approved / rejected cards
+  // instead of showing them as pending (which would let a re-click
+  // fire the write again, defeating the nonce + idempotency guards).
+  // The caller may pass explicit override objects when the current
+  // state closure is stale (e.g. inside a setState callback).
+  var saveThread = function (id, msgs, opts) {
     if (!token || !user || !id || !msgs || msgs.length === 0) return;
+    opts = opts || {};
+    var csOverride = opts.cardStatus !== undefined ? opts.cardStatus : cardStatus;
+    var psOverride = opts.pairStatus !== undefined ? opts.pairStatus : pairStatus;
     fetch(apiBase + "/api/nlp/sami-threads", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs })
+      body: JSON.stringify({ op: "save", user: user, threadId: id, messages: msgs, cardStatus: csOverride, pairStatus: psOverride })
     })
       .then(function (r) { return r.json().then(function (d) { return { status: r.status, ok: r.ok, data: d }; }); })
       .then(function (x) {
@@ -713,6 +724,8 @@ export default function CreateChatTab(props) {
   };
 
   // Load a saved thread by id — replaces the current chat state.
+  // Audit fix #7: restore persisted cardStatus / pairStatus so an
+  // approved card reads as approved (not pending) after reload.
   var openThread = function (id) {
     if (!token || !user || !id) return;
     fetch(apiBase + "/api/nlp/sami-threads", {
@@ -725,7 +738,8 @@ export default function CreateChatTab(props) {
         if (!d || !d.thread) return;
         setMessages(Array.isArray(d.thread.messages) ? d.thread.messages : []);
         setThreadId(d.thread.id);
-        setCardStatus({}); // Reset approval states; historic cards read as pending unless we tracked them.
+        setCardStatus((d.thread.cardStatus && typeof d.thread.cardStatus === "object") ? d.thread.cardStatus : {});
+        setPairStatus((d.thread.pairStatus && typeof d.thread.pairStatus === "object") ? d.thread.pairStatus : {});
         setErr("");
       })
       .catch(function () { setErr("Could not load that conversation."); });
@@ -935,19 +949,30 @@ export default function CreateChatTab(props) {
       .catch(function () { setBusy(false); setErr("Network error. Check your connection and try again."); });
   };
 
+  // Audit fix #7: persist card status the instant it changes so a
+  // reload or crash between Approve-click and Sami's reply doesn't
+  // reset the card to pending. Fire-and-forget save with the new
+  // state passed explicitly (setState is async so closure would
+  // capture the stale value otherwise).
   var handleApprove = function (card) {
     if (busy) return;
-    setCardStatus(function (cur) { var n = Object.assign({}, cur); n[card.id] = "approved"; return n; });
+    var next = Object.assign({}, cardStatus, {}); next[card.id] = "approved";
+    setCardStatus(next);
+    if (activeThreadId) saveThread(activeThreadId, messages, { cardStatus: next });
     send("APPROVED: " + card.id);
   };
   var handleReject = function (card) {
     if (busy) return;
-    setCardStatus(function (cur) { var n = Object.assign({}, cur); n[card.id] = "rejected"; return n; });
+    var next = Object.assign({}, cardStatus, {}); next[card.id] = "rejected";
+    setCardStatus(next);
+    if (activeThreadId) saveThread(activeThreadId, messages, { cardStatus: next });
     send("REJECTED: " + card.id);
   };
   var handleConfirmPair = function (card) {
     if (busy) return;
-    setPairStatus(function (cur) { var n = Object.assign({}, cur); n[card.id] = "confirmed"; return n; });
+    var next = Object.assign({}, pairStatus, {}); next[card.id] = "confirmed";
+    setPairStatus(next);
+    if (activeThreadId) saveThread(activeThreadId, messages, { pairStatus: next });
     send("PAIRS_OK: " + card.id);
   };
 
