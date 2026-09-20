@@ -15,25 +15,23 @@ import { useState, useEffect, useRef } from "react";
 
 var TOKEN_KEY = "gas_create_token";
 var TOKEN_EXP_KEY = "gas_create_token_exp";
-// Per-user thread namespacing. The PIN JWT is team-shared so it can't tell
-// Gary from Sam. We persist the current user's identity in localStorage on
-// first visit (via NamePicker below) and pass it as ?user=<slug> to every
-// /api/nlp/sami-threads call. Allowlist mirrors nudge-cron NUDGE_RECIPIENTS.
-var USER_KEY = "gas_sami_user";
-var TEAM_USERS = [
-  { slug: "gary", name: "Gary Berman" },
-  { slug: "sam", name: "Sam" },
-  { slug: "busi", name: "Busi Mntungwa" },
-  { slug: "claire", name: "Claire Chrystal" },
-  { slug: "donovan", name: "Donovan" }
-];
+// Per-user identity is now bound to the main dashboard session: the
+// admin toggles Sami Hub access on the Members page, the member sets
+// their own 4-digit PIN on first Sami visit, and the server issues the
+// create-tab JWT signed with a samiSlug derived from the member's
+// email. No localStorage identity — no spoofable NamePicker.
 
-function readUser() {
-  try { var v = localStorage.getItem(USER_KEY); return v && TEAM_USERS.some(function (u) { return u.slug === v; }) ? v : ""; }
+function readMainSession() {
+  try { return sessionStorage.getItem("gas_session") || ""; }
   catch (_) { return ""; }
 }
-function writeUser(slug) {
-  try { localStorage.setItem(USER_KEY, slug); } catch (_) { /* non-fatal */ }
+function readMainName() {
+  try { return sessionStorage.getItem("gas_name") || ""; }
+  catch (_) { return ""; }
+}
+function readMainEmail() {
+  try { return sessionStorage.getItem("gas_email") || ""; }
+  catch (_) { return ""; }
 }
 
 // Thread id generator: sortable + short + collision-safe enough for a
@@ -93,83 +91,136 @@ function clearToken() {
 }
 
 // ---- PIN gate ------------------------------------------------------------
+// Session-bound per-member gate. The Members admin toggles Sami access;
+// the member sets their own 4-digit PIN on first visit; each session
+// unlocks via that PIN. The server derives the samiSlug from the
+// member's email so identity flows end-to-end without any spoofable
+// client-supplied user field.
 
 function PinGate(props) {
   var P = props.P, ff = props.ff, fm = props.fm, apiBase = props.apiBase;
-  // Audit fix #4: user identity is included in the PIN request so the
-  // token is signed against a specific team member. Parent guarantees a
-  // valid user is set before rendering PinGate.
-  var user = props.user;
+  var session = readMainSession();
+  var mainName = readMainName();
+  var mainEmail = readMainEmail();
+
+  // mode: "verify" (existing PIN) | "no-access" | "set-pin" (first-time set) | "signin"
+  var initMode = !session ? "signin" : "verify";
+  var ms = useState(initMode), mode = ms[0], setMode = ms[1];
   var ps = useState(""), pin = ps[0], setPin = ps[1];
+  var p2s = useState(""), pin2 = p2s[0], setPin2 = p2s[1];
   var es = useState(""), err = es[0], setErr = es[1];
+  var ok = useState(""), okMsg = ok[0], setOkMsg = ok[1];
   var ls = useState(false), loading = ls[0], setLoading = ls[1];
 
-  var submit = function (e) {
+  var submitVerify = function (e) {
     if (e && e.preventDefault) e.preventDefault();
     if (loading) return;
-    if (!pin) { setErr("Enter your PIN."); return; }
-    if (!user) { setErr("Pick your team-member identity first."); return; }
-    setLoading(true); setErr("");
+    if (!/^\d{4}$/.test(pin)) { setErr("PIN must be 4 digits."); return; }
+    setLoading(true); setErr(""); setOkMsg("");
     fetch(apiBase + "/api/create/auth", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: pin, user: user })
+      headers: { "Content-Type": "application/json", "x-session-token": session },
+      body: JSON.stringify({ pin: pin })
     })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
       .then(function (x) {
-        if (!x.ok || !x.data || !x.data.token) {
-          setErr((x.data && x.data.error) || "Invalid PIN.");
-          setLoading(false); return;
-        }
         setLoading(false);
-        props.onAuthed(x.data.token, x.data.expiresIn);
+        if (x.ok && x.data && x.data.token) {
+          props.onAuthed(x.data.token, x.data.expiresIn, x.data.user || "", x.data.name || mainName);
+          return;
+        }
+        var code = x.data && x.data.code;
+        if (code === "no-session") { setMode("signin"); setErr(x.data.error || "Sign in first."); return; }
+        if (code === "no-access") { setMode("no-access"); setErr(""); return; }
+        if (code === "no-pin") { setMode("set-pin"); setPin(""); setErr(""); setOkMsg("Set a 4-digit Sami PIN to finish activating your access."); return; }
+        setErr((x.data && x.data.error) || "Invalid PIN.");
       })
       .catch(function () { setErr("Network error. Try again."); setLoading(false); });
   };
 
-  return <div style={{ display: "flex", justifyContent: "center", padding: "60px 20px" }}>
-    <div style={{ maxWidth: 440, width: "100%", background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, padding: "34px 32px" }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: P.ember, letterSpacing: 3, fontFamily: fm, textTransform: "uppercase", marginBottom: 8 }}>Sami · Campaign Hub</div>
-      <div style={{ fontSize: 18, fontWeight: 900, color: P.txt, fontFamily: ff, marginBottom: 6 }}>Enter your PIN</div>
-      <div style={{ fontSize: 12, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 22 }}>
-        Sami builds campaigns and makes real changes to live ad accounts. Every write is paused on creation and requires you to approve it. PIN gate keeps everyone but the team out.
-      </div>
-      <form onSubmit={submit}>
-        <input type="password" inputMode="numeric" autoComplete="one-time-code" value={pin}
-          onChange={function (e) { setPin(e.target.value); }} placeholder="Enter PIN"
-          style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 10, padding: "12px 16px", color: P.txt, fontSize: 16, fontFamily: fm, letterSpacing: 6, outline: "none", marginBottom: 14, textAlign: "center" }} />
-        {err && <div style={{ fontSize: 11, color: P.critical || "#ef4444", fontFamily: fm, marginBottom: 12 }}>{err}</div>}
-        <button type="submit" disabled={loading} style={{ width: "100%", background: loading ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 10, padding: "12px 0", color: "#fff", fontSize: 12, fontWeight: 800, fontFamily: fm, letterSpacing: 2, cursor: loading ? "default" : "pointer" }}>
-          {loading ? "Checking..." : "Unlock"}
-        </button>
-      </form>
-    </div>
-  </div>;
-}
+  var submitSetPin = function (e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (loading) return;
+    if (!/^\d{4}$/.test(pin)) { setErr("PIN must be exactly 4 digits."); return; }
+    if (pin !== pin2) { setErr("The two PINs do not match."); return; }
+    setLoading(true); setErr(""); setOkMsg("");
+    fetch(apiBase + "/api/sami-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-session-token": session },
+      body: JSON.stringify({ op: "set", pin: pin })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (x) {
+        setLoading(false);
+        if (!x.ok) { setErr((x.data && x.data.error) || "Could not set PIN."); return; }
+        setOkMsg("PIN set. Enter it below to unlock Sami.");
+        setMode("verify"); setPin2("");
+      })
+      .catch(function () { setErr("Network error. Try again."); setLoading(false); });
+  };
 
-// ---- Name picker ---------------------------------------------------------
-// One-time modal on first Sami Hub visit. Threads namespace by user so
-// each AM sees only their own Recent Conversations. Team-only allowlist.
+  var Card = function (children) {
+    return <div style={{ display: "flex", justifyContent: "center", padding: "60px 20px" }}>
+      <div style={{ maxWidth: 460, width: "100%", background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, padding: "34px 32px" }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: P.ember, letterSpacing: 3, fontFamily: fm, textTransform: "uppercase", marginBottom: 8 }}>Sami · Campaign Hub</div>
+        {children}
+      </div>
+    </div>;
+  };
 
-function NamePicker(props) {
-  var P = props.P, ff = props.ff, fm = props.fm;
-  return <div style={{ display: "flex", justifyContent: "center", padding: "60px 20px" }}>
-    <div style={{ maxWidth: 480, width: "100%", background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, padding: "30px 32px" }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: P.ember, letterSpacing: 3, fontFamily: fm, textTransform: "uppercase", marginBottom: 8 }}>Sami · Who's chatting?</div>
-      <div style={{ fontSize: 13, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 22 }}>
-        Pick your name so Sami saves your conversations to your own Recent list. This stays in your browser and you can change it later from the sidebar.
+  if (mode === "signin") {
+    return Card(<div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: P.txt, fontFamily: ff, marginBottom: 6 }}>Sign in first</div>
+      <div style={{ fontSize: 12, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7 }}>
+        Sami requires a dashboard session. Sign in to the main dashboard, then come back to the Create tab and enter your Sami PIN.
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {TEAM_USERS.map(function (u) {
-          return <button key={u.slug} onClick={function () { props.onPick(u.slug); }}
-            style={{ background: "rgba(249,98,3,0.06)", border: "1px solid rgba(249,98,3,0.28)", borderRadius: 12, padding: "14px 16px", color: P.txt, fontSize: 13, fontWeight: 700, fontFamily: ff, cursor: "pointer", textAlign: "left" }}>
-            {u.name}
-            <div style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, marginTop: 3, letterSpacing: 1 }}>@{u.slug}</div>
-          </button>;
-        })}
+    </div>);
+  }
+
+  if (mode === "no-access") {
+    return Card(<div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: P.txt, fontFamily: ff, marginBottom: 6 }}>Sami Hub is not enabled for you</div>
+      <div style={{ fontSize: 12, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 14 }}>
+        Ask an admin to switch on Sami Hub access for {mainEmail || "your account"} from the Members page. Once they do, refresh this tab and you'll be prompted to set your 4-digit PIN.
       </div>
+      <button onClick={function () { window.location.reload(); }} style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 10, padding: "10px 16px", color: P.label, fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 2, cursor: "pointer", textTransform: "uppercase" }}>Refresh</button>
+    </div>);
+  }
+
+  if (mode === "set-pin") {
+    return Card(<form onSubmit={submitSetPin}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: P.txt, fontFamily: ff, marginBottom: 6 }}>Set your Sami PIN</div>
+      <div style={{ fontSize: 12, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 18 }}>
+        Pick a 4-digit PIN {mainName ? "for " + mainName : ""}. You'll use it each time you unlock Sami. An admin can reset it but nobody, including admins, can see it.
+      </div>
+      <input type="password" inputMode="numeric" autoComplete="new-password" maxLength={4} value={pin}
+        onChange={function (e) { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); }} placeholder="New 4-digit PIN"
+        style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 10, padding: "12px 16px", color: P.txt, fontSize: 16, fontFamily: fm, letterSpacing: 6, outline: "none", marginBottom: 10, textAlign: "center" }} />
+      <input type="password" inputMode="numeric" autoComplete="new-password" maxLength={4} value={pin2}
+        onChange={function (e) { setPin2(e.target.value.replace(/\D/g, "").slice(0, 4)); }} placeholder="Confirm PIN"
+        style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 10, padding: "12px 16px", color: P.txt, fontSize: 16, fontFamily: fm, letterSpacing: 6, outline: "none", marginBottom: 14, textAlign: "center" }} />
+      {okMsg && <div style={{ fontSize: 11, color: P.mint || "#34D399", fontFamily: fm, marginBottom: 10 }}>{okMsg}</div>}
+      {err && <div style={{ fontSize: 11, color: P.critical || "#ef4444", fontFamily: fm, marginBottom: 12 }}>{err}</div>}
+      <button type="submit" disabled={loading} style={{ width: "100%", background: loading ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 10, padding: "12px 0", color: "#fff", fontSize: 12, fontWeight: 800, fontFamily: fm, letterSpacing: 2, cursor: loading ? "default" : "pointer" }}>
+        {loading ? "Setting..." : "Set PIN"}
+      </button>
+    </form>);
+  }
+
+  return Card(<form onSubmit={submitVerify}>
+    <div style={{ fontSize: 18, fontWeight: 900, color: P.txt, fontFamily: ff, marginBottom: 6 }}>Enter your Sami PIN</div>
+    <div style={{ fontSize: 12, color: P.label || P.sub, fontFamily: ff, lineHeight: 1.7, marginBottom: 22 }}>
+      {mainName ? "Signed in as " + mainName + ". " : ""}Sami builds campaigns and makes real changes to live ad accounts. Every write is paused on creation and requires you to approve it.
     </div>
-  </div>;
+    <input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={4} value={pin}
+      onChange={function (e) { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); }} placeholder="4-digit PIN"
+      style={{ width: "100%", boxSizing: "border-box", background: "rgba(40,25,60,0.5)", border: "1px solid " + P.rule, borderRadius: 10, padding: "12px 16px", color: P.txt, fontSize: 16, fontFamily: fm, letterSpacing: 6, outline: "none", marginBottom: 14, textAlign: "center" }} />
+    {okMsg && <div style={{ fontSize: 11, color: P.mint || "#34D399", fontFamily: fm, marginBottom: 10 }}>{okMsg}</div>}
+    {err && <div style={{ fontSize: 11, color: P.critical || "#ef4444", fontFamily: fm, marginBottom: 12 }}>{err}</div>}
+    <button type="submit" disabled={loading} style={{ width: "100%", background: loading ? P.dim : "linear-gradient(135deg,#FF3D00,#FF6B00)", border: "none", borderRadius: 10, padding: "12px 0", color: "#fff", fontSize: 12, fontWeight: 800, fontFamily: fm, letterSpacing: 2, cursor: loading ? "default" : "pointer" }}>
+      {loading ? "Checking..." : "Unlock"}
+    </button>
+  </form>);
 }
 
 // ---- Approval card --------------------------------------------------------
@@ -794,8 +845,11 @@ export default function CreateChatTab(props) {
   var P = props.P, ff = props.ff, fm = props.fm, Ic = props.Ic, apiBase = props.apiBase || "";
   var stored = readStoredToken();
   var ts = useState(stored ? stored.token : null), token = ts[0], setToken = ts[1];
-  // User identity (per-user thread namespacing). Empty → NamePicker gate.
-  var us = useState(readUser()), user = us[0], setUser = us[1];
+  // User identity + display name: derived from the main dashboard
+  // session and populated after a successful PIN unlock (the server
+  // returns the samiSlug the JWT was signed with). Empty until then.
+  var us = useState(""), user = us[0], setUser = us[1];
+  var uns = useState(readMainName()), userName = uns[0], setUserName = uns[1];
 
   // Chat state
   var ms = useState([]), messages = ms[0], setMessages = ms[1];
@@ -1214,19 +1268,28 @@ export default function CreateChatTab(props) {
     try { if (inputRef.current) inputRef.current.focus(); } catch (_) {}
   };
 
-  // Audit fix #4: name-picker runs FIRST because the PIN endpoint now
-  // signs the picked user into the JWT (so downstream Sami endpoints can
-  // trust auth.user without accepting a spoofable body.user). Order was
-  // previously PIN → name; swapping means a first-time visitor picks
-  // their name once and the PIN is bound to that identity for the
-  // 2-hour session.
-  if (!user) {
-    return <NamePicker P={P} ff={ff} fm={fm}
-      onPick={function (slug) { writeUser(slug); setUser(slug); }} />;
-  }
+  // Per-user auth: no NamePicker. Identity comes from the main
+  // dashboard session, the admin toggles Sami access on the Members
+  // page, and PinGate handles the "no access", "set PIN first",
+  // and "enter PIN" flows in one component. After a successful
+  // unlock the server returns the samiSlug the JWT was signed with,
+  // which becomes `user` for thread namespacing.
   if (!token) {
-    return <PinGate P={P} ff={ff} fm={fm} apiBase={apiBase} user={user}
-      onAuthed={function (t, ttlSec) { storeToken(t, ttlSec); setToken(t); }} />;
+    return <PinGate P={P} ff={ff} fm={fm} apiBase={apiBase}
+      onAuthed={function (t, ttlSec, slug, name) {
+        storeToken(t, ttlSec);
+        setToken(t);
+        if (slug) setUser(slug);
+        if (name) setUserName(name);
+      }} />;
+  }
+  // Defensive: if the token exists but user slug is empty (e.g. page
+  // reloaded with a cached token), fall back to the main-session email
+  // local-part so the UI has something to render immediately. The
+  // downstream endpoints trust the JWT anyway.
+  if (!user) {
+    var fallbackSlug = String(readMainEmail() || "").split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 60);
+    if (fallbackSlug) setUser(fallbackSlug);
   }
 
   var empty = messages.length === 0;
@@ -1269,12 +1332,12 @@ export default function CreateChatTab(props) {
       </div>
       <div style={{ padding: "10px 14px", borderTop: "1px solid " + P.rule, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.35 }}>
-          <span style={{ fontSize: 10, color: P.txt, fontFamily: fm, fontWeight: 700 }}>{(TEAM_USERS.find(function (u) { return u.slug === user; }) || {}).name || user}</span>
+          <span style={{ fontSize: 10, color: P.txt, fontFamily: fm, fontWeight: 700 }}>{userName || user || "Signed in"}</span>
           <span style={{ fontSize: 8, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 1, textTransform: "uppercase" }}>@{user}</span>
         </div>
-        <button onClick={function () { writeUser(""); setUser(""); }} title="Switch to a different team member"
+        <button onClick={function () { clearToken(); setToken(null); }} title="Lock Sami (main dashboard session stays)"
           style={{ background: "transparent", border: "1px solid " + P.rule, borderRadius: 6, padding: "4px 8px", color: P.dim || P.sub, fontSize: 9, fontWeight: 700, fontFamily: fm, letterSpacing: 1, cursor: "pointer", textTransform: "uppercase" }}>
-          Switch
+          Lock
         </button>
       </div>
     </aside>

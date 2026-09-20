@@ -106,6 +106,37 @@ export default function TeamAccessPanel(props) {
       .catch(function() { teamErr[1]("Connection error"); });
   };
 
+  // Sami Hub per-user access toggle. Flipping on grants the member the
+  // ability to enter Sami (they still need to set their own 4-digit PIN
+  // on first visit). Flipping off blocks Sami access immediately —
+  // their next Sami call fails a fresh 401 with a "no-access" reason.
+  var toggleSami = function(email, currentlyAllowed) {
+    if (!window.confirm((currentlyAllowed ? "Revoke Sami Hub access for " : "Enable Sami Hub access for ") + email + "?" + (currentlyAllowed ? "" : "\n\nThey will be prompted to set their own 4-digit PIN on next Sami visit."))) return;
+    fetch(apiBase + "/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-session-token": session },
+      body: JSON.stringify({ action: currentlyAllowed ? "sami-disable" : "sami-enable", email: email })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.ok) loadTeam(); else teamErr[1](d.error || "Sami toggle failed"); })
+      .catch(function() { teamErr[1]("Connection error"); });
+  };
+
+  // Admin clears the target member's Sami PIN. They set a fresh one on
+  // their next Sami visit. Admin never sees the plaintext PIN itself,
+  // and never sees the hash — only that a PIN was set.
+  var resetSamiPin = function(email) {
+    if (!window.confirm("Reset Sami PIN for " + email + "?\n\nThey will need to set a new 4-digit PIN on next Sami visit before they can enter the hub.")) return;
+    fetch(apiBase + "/api/sami-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-session-token": session },
+      body: JSON.stringify({ op: "reset", email: email })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.ok) loadTeam(); else teamErr[1](d.error || "PIN reset failed"); })
+      .catch(function() { teamErr[1]("Connection error"); });
+  };
+
   // Admin-triggered password reset. Mints a 1h reset token + emails
   // the target user. Also returns the resetUrl so the admin can copy
   // it into Slack as a fallback for inboxes that delay or filter.
@@ -176,23 +207,40 @@ export default function TeamAccessPanel(props) {
         </div>
         <div style={{ border: "1px solid " + P.rule, borderRadius: 10, background: "rgba(0,0,0,0.3)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: fm }}>
-            <thead><tr><th style={hdr}>Name</th><th style={hdr}>Email</th><th style={hdr}>Role</th><th style={hdr}>Status</th><th style={hdr}>Invited</th><th style={hdr}>Last Login</th><th style={Object.assign({}, hdr, { textAlign: "right" })}>Action</th></tr></thead>
+            <thead><tr><th style={hdr}>Name</th><th style={hdr}>Email</th><th style={hdr}>Role</th><th style={hdr}>Status</th><th style={hdr}>Sami Hub</th><th style={hdr}>Invited</th><th style={hdr}>Last Login</th><th style={Object.assign({}, hdr, { textAlign: "right" })}>Action</th></tr></thead>
             <tbody>
               {users.length === 0 && !teamLoading[0]
-                ? <tr><td colSpan={7} style={{ padding: 20, color: P.caption, textAlign: "center", fontSize: 11, fontFamily: fm, fontStyle: "italic" }}>No team members yet. Invite someone above.</td></tr>
+                ? <tr><td colSpan={8} style={{ padding: 20, color: P.caption, textAlign: "center", fontSize: 11, fontFamily: fm, fontStyle: "italic" }}>No team members yet. Invite someone above.</td></tr>
                 : users.map(function(u) {
                     var s = statusPill(u);
                     var canToggle = u.role !== "superadmin";
+                    var samiOn = !!u.samiAccess;
+                    var pinSet = !!u.samiPinSet;
+                    var samiChipColor = !samiOn ? P.caption : (pinSet ? P.mint : P.warning);
+                    var samiChipLabel = !samiOn ? "OFF" : (pinSet ? "READY" : "PIN NOT SET");
+                    var samiCount = u.samiUnlockCount || 0;
                     return (
                       <tr key={u.email}>
                         <td style={Object.assign({}, cell, { fontWeight: 700 })}>{u.name || "-"}</td>
                         <td style={Object.assign({}, cell, { color: P.label })}>{u.email}</td>
                         <td style={cell}>{u.role === "superadmin" ? "Super Admin" : "Team Member"}</td>
                         <td style={cell}><span style={{ background: s.color + "20", color: s.color, border: "1px solid " + s.color + "50", padding: "2px 8px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" }}>{s.label}</span></td>
+                        <td style={cell}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span title={samiCount + " unlock" + (samiCount === 1 ? "" : "s") + " recorded"} style={{ background: samiChipColor + "20", color: samiChipColor, border: "1px solid " + samiChipColor + "50", padding: "2px 8px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase" }}>{samiChipLabel}</span>
+                            {samiOn && samiCount > 0 && <span style={{ fontSize: 10, color: P.caption }}>{samiCount}x</span>}
+                          </div>
+                        </td>
                         <td style={Object.assign({}, cell, { color: P.label })}>{fmtDate(u.createdAt)}</td>
                         <td style={Object.assign({}, cell, { color: P.label })}>{fmtDate(u.lastLogin)}</td>
                         <td style={Object.assign({}, cell, { textAlign: "right" })}>
-                          <div style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                          <div style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            {samiOn && pinSet && u.role !== "superadmin" && (
+                              <button onClick={function() { resetSamiPin(u.email); }} title="Clear this member's Sami PIN so they set a new one" style={{ background: "transparent", border: "1px solid " + P.solar + "60", borderRadius: 6, padding: "4px 8px", color: P.solar, fontSize: 9, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1 }}>RESET PIN</button>
+                            )}
+                            {u.role !== "superadmin" && (
+                              <button onClick={function() { toggleSami(u.email, samiOn); }} title={samiOn ? "Revoke Sami Hub access" : "Grant Sami Hub access"} style={{ background: samiOn ? "transparent" : P.cyan + "15", border: "1px solid " + (samiOn ? P.critical + "60" : P.cyan + "60"), borderRadius: 6, padding: "4px 8px", color: samiOn ? P.critical : P.cyan, fontSize: 9, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1 }}>{samiOn ? "SAMI OFF" : "SAMI ON"}</button>
+                            )}
                             {u.role !== "superadmin" && u.active && u.status === "active" && (
                               <button onClick={function() { adminResetUser(u.email); }} title="Send a password reset link" style={{ background: "transparent", border: "1px solid " + P.solar + "60", borderRadius: 6, padding: "4px 10px", color: P.solar, fontSize: 10, fontWeight: 800, fontFamily: fm, cursor: "pointer", letterSpacing: 1 }}>RESET</button>
                             )}
@@ -207,7 +255,9 @@ export default function TeamAccessPanel(props) {
             </tbody>
           </table>
         </div>
-        <div style={{ fontSize: 11, color: P.label, fontFamily: fm, marginTop: 10, lineHeight: 1.6 }}>Revoking access invalidates the user's next login request.</div>
+        <div style={{ fontSize: 11, color: P.label, fontFamily: fm, marginTop: 10, lineHeight: 1.6 }}>
+          Revoking access invalidates the user's next login request. Sami Hub is a separate toggle: a member with dashboard access still cannot enter Sami unless SAMI ON is set. Reset PIN forces them to set a fresh 4-digit PIN on next Sami visit.
+        </div>
       </div>
     </div>
   );

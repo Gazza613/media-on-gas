@@ -1,6 +1,6 @@
 import { rateLimit } from "./_rateLimit.js";
 import { getSession } from "./auth.js";
-import { listUsers, setUserActive, isSuperadminEmail, normalizeEmail, getUser } from "./_users.js";
+import { listUsers, setUserActive, isSuperadminEmail, normalizeEmail, getUser, setSamiAccess, clearSamiPin } from "./_users.js";
 
 // Superadmin-only. GET -> list all users. POST -> revoke/restore an account.
 
@@ -30,6 +30,21 @@ export default async function handler(req, res) {
       if (!r.ok) { res.status(400).json({ error: r.reason || "failed" }); return; }
       var updated = await getUser(email);
       res.status(200).json({ ok: true, user: updated ? { email: updated.email, active: updated.active, status: updated.passwordHash ? (updated.active ? "active" : "revoked") : "pending_invite" } : null });
+      return;
+    }
+
+    // Sami Hub per-user access controls. Superadmin only.
+    if (action === "sami-enable" || action === "sami-disable") {
+      var r2 = await setSamiAccess(email, action === "sami-enable");
+      if (!r2.ok) { res.status(400).json({ error: r2.reason || "failed" }); return; }
+      res.status(200).json({ ok: true, samiAccess: action === "sami-enable", samiSlug: r2.samiSlug || null });
+      return;
+    }
+
+    if (action === "sami-reset-pin") {
+      var r3 = await clearSamiPin(email);
+      if (!r3.ok) { res.status(400).json({ error: r3.reason || "failed" }); return; }
+      res.status(200).json({ ok: true, samiPinSet: false });
       return;
     }
 
