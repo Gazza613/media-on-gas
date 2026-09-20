@@ -44,7 +44,23 @@ export default async function handler(req, res) {
   if (typeof body === "string") {
     try { body = JSON.parse(body); } catch (_) { body = {}; }
   }
-  var pin = (body && body.pin) ? String(body.pin) : "";
+  body = body || {};
+  var op = String(body.op || "verify").toLowerCase();
+
+  // Preflight status probe. PinGate on the frontend calls this on
+  // mount so it can land on the correct screen (no-access / set-pin /
+  // ready-to-verify) without asking the user to type a PIN first.
+  // Never returns anything sensitive; just the gate state.
+  if (op === "status") {
+    var pre = await getUser(session.email);
+    if (!pre) { res.status(401).json({ code: "no-account" }); return; }
+    if (!samiAccessAllowed(pre)) { res.status(200).json({ code: "no-access", name: pre.name || null }); return; }
+    if (!pre.samiPinHash) { res.status(200).json({ code: "no-pin", name: pre.name || null }); return; }
+    res.status(200).json({ code: "ready", name: pre.name || null });
+    return;
+  }
+
+  var pin = body.pin ? String(body.pin) : "";
   if (!pin) { res.status(400).json({ error: "Missing PIN.", code: "missing-pin" }); return; }
 
   var me = await getUser(session.email);
