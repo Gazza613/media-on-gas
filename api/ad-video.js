@@ -227,12 +227,12 @@ export default async function handler(req, res) {
 
   var cacheKey = platform + "|" + videoId;
   var cached = resolveCache[cacheKey];
-  // bust=1 skips the 10-min resolve cache. The client sends this after a
+  // bust=<any truthy> skips the 10-min resolve cache. The client sends this after a
   // mid-playback error (typically the Meta signed CDN URL expired while the
   // video was paused or muted, so the byte-range refetch on unmute fails).
   // Dropping the cache forces a fresh /video/{id}?source=... lookup so the
   // retry gets a brand-new signed URL with a fresh expiry window.
-  var bust = req.query.bust === "1";
+  var bust = !!(req.query.bust && String(req.query.bust) !== "0");
   if (bust) delete resolveCache[cacheKey];
   if (!bust && cached && Date.now() - cached.ts < RESOLVE_TTL_MS) {
     if (req.query.resolveOnly === "1") {
@@ -284,20 +284,52 @@ export default async function handler(req, res) {
   // because it consumes egress bandwidth per byte, only fires when
   // explicitly requested.
   if (req.query.proxy === "1") {
-    try {
-      var upstream = await fetch(resolved.url);
-      if (!upstream.ok) { res.status(upstream.status).end(); return; }
+    // CORS headers are set on EVERY exit path (success, upstream error,
+    // proxy failure) so the browser <video> element gets a proper
+    // fetch-level failure it can retry, not a CORS-tainted opaque error
+    // that never surfaces a diagnosis. Without this the thumbnail
+    // override modal read every Meta blip as the same generic
+    // "Video failed to load" — no signal, no retry, no root cause.
+    var _setCors = function () {
       res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Range");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+    };
+    _setCors();
+    if (req.method === "OPTIONS") { res.status(204).end(); return; }
+    try {
+      // Forward Range: the <video> element issues Range requests when
+      // seeking (which is exactly what the frame picker does) and
+      // expects a 206 Partial Content response with Content-Range /
+      // Accept-Ranges. Without this the browser was buffering the whole
+      // MP4 on every seek, hitting Vercel timeout, and abandoning with
+      // a generic media-error → the "Video failed to load" banner.
+      var upstreamHeaders = {};
+      if (req.headers["range"]) upstreamHeaders["Range"] = req.headers["range"];
+      var upstream = await fetch(resolved.url, { headers: upstreamHeaders });
+      if (!upstream.ok && upstream.status !== 206) {
+        // Non-OK from Meta — surface a small JSON body with the status
+        // so the client can log it, and use 502 for auth / rate-limit
+        // failures so a browser retry with `?bust=1` self-heals a stale
+        // signed URL. 404s stay 404 (nothing to retry).
+        var _mapStatus = upstream.status === 404 ? 404 : 502;
+        res.status(_mapStatus).json({ error: "Upstream " + upstream.status, upstreamStatus: upstream.status });
+        return;
+      }
       res.setHeader("Content-Type", upstream.headers.get("Content-Type") || "video/mp4");
+      res.setHeader("Cache-Control", "private, max-age=600");
+      res.setHeader("Accept-Ranges", "bytes");
+      var upRange = upstream.headers.get("Content-Range");
+      if (upRange) res.setHeader("Content-Range", upRange);
       var upLen = upstream.headers.get("Content-Length");
       if (upLen) res.setHeader("Content-Length", upLen);
-      res.setHeader("Cache-Control", "private, max-age=600");
       var buf = Buffer.from(await upstream.arrayBuffer());
-      res.status(200).send(buf);
+      res.status(upstream.status === 206 ? 206 : 200).send(buf);
       return;
     } catch (proxyErr) {
       console.error("ad-video proxy error", proxyErr);
-      res.status(502).json({ error: "Proxy failed" });
+      res.status(502).json({ error: "Proxy failed", detail: String(proxyErr && proxyErr.message || proxyErr) });
       return;
     }
   }

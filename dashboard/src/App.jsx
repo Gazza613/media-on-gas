@@ -2023,6 +2023,15 @@ function ThumbOverrideModal(props){
   var er=useState(""),errMsg=er[0],setErrMsg=er[1];
   var vs=useState({loading:false,error:"",loaded:false}),videoState=vs[0],setVideoState=vs[1];
   var videoRef=useRef(null);
+  // bust seed for the video URL. Bumped on retry so the browser
+  // re-hits the proxy with a fresh signed URL (bypasses ad-video's
+  // 10min resolve cache), self-healing an expired Meta CDN link
+  // without a full modal reopen.
+  var vb=useState(0),videoBust=vb[0],setVideoBust=vb[1];
+  // Guard against auto-retrying more than once per open so a genuinely
+  // broken video (404, deleted asset) surfaces the manual retry button
+  // instead of looping.
+  var autoRetriedRef=useRef(false);
   var authHeaders=function(){var h={"Content-Type":"application/json"};if(props.session)h["x-session-token"]=props.session;return h;};
   useEffect(function(){
     if(!ad||!ad.adId)return;
@@ -2138,7 +2147,7 @@ function ThumbOverrideModal(props){
   // route through /api/ad-video (RDA ads are still images even for
   // YouTube variants, which use YouTube thumbnails directly).
   var canPickFrame=!!(ad.videoId&&videoPlatform);
-  var videoSrc=canPickFrame?(props.apiBase+"/api/ad-video?platform="+videoPlatform+"&id="+encodeURIComponent(ad.videoId)+"&adId="+encodeURIComponent(ad.adId)+"&proxy=1"+(props.session?"&st="+encodeURIComponent(props.session):"")):"";
+  var videoSrc=canPickFrame?(props.apiBase+"/api/ad-video?platform="+videoPlatform+"&id="+encodeURIComponent(ad.videoId)+"&adId="+encodeURIComponent(ad.adId)+"&proxy=1"+(videoBust>0?"&bust="+videoBust:"")+(props.session?"&st="+encodeURIComponent(props.session):"")):"";
   return <div onClick={function(e){if(e.target===e.currentTarget)props.onClose();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
     <div style={{background:"#0f0722",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,padding:26,maxWidth:560,width:"100%",boxShadow:"0 24px 60px rgba(0,0,0,0.6)",maxHeight:"90vh",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
@@ -2167,11 +2176,28 @@ function ThumbOverrideModal(props){
           playsInline
           preload="metadata"
           style={{width:"100%",maxHeight:280,background:"#000",borderRadius:6,display:"block",marginBottom:8}}
-          onLoadedData={function(){setVideoState({loading:false,error:"",loaded:true});}}
+          onLoadedData={function(){autoRetriedRef.current=false;setVideoState({loading:false,error:"",loaded:true});}}
           onLoadStart={function(){setVideoState({loading:true,error:"",loaded:false});}}
-          onError={function(){setVideoState({loading:false,error:"could not load video",loaded:false});}}
+          onError={function(){
+            // Auto-retry once with a fresh signed URL. Meta's video
+            // permalink is signed with a ~30min expiry, and ad-video's
+            // resolve cache is 10min — a lookup that hit the cache
+            // right at the tail of Meta's signature window will fail
+            // the first proxy fetch; a bust=1 second attempt gets a
+            // freshly resolved URL and almost always succeeds.
+            if(!autoRetriedRef.current){
+              autoRetriedRef.current=true;
+              setVideoBust(function(n){return n+1;});
+              return;
+            }
+            setVideoState({loading:false,error:"could not load video",loaded:false});
+          }}
         />
-        {videoState.error&&<div style={{fontSize:10,color:"#F43F5E",marginBottom:6,fontFamily:"Helvetica,Arial,sans-serif"}}>Video failed to load. Meta CDN sometimes rate-limits — try again in a few seconds, or upload a screenshot below instead.</div>}
+        {videoState.error&&<div style={{marginBottom:6}}>
+          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif"}}>Video failed to load after one auto-retry. Meta signed URL may have expired, the CDN may be rate-limiting, or the video was removed from the ad account.</div>
+          <button onClick={function(){autoRetriedRef.current=false;setVideoBust(function(n){return n+1;});setVideoState({loading:true,error:"",loaded:false});}} style={{marginTop:6,background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:6,padding:"5px 10px",color:"#F43F5E",fontSize:10,fontWeight:800,fontFamily:"monospace",letterSpacing:1.2,cursor:"pointer",textTransform:"uppercase"}}>Retry Load</button>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:8,fontFamily:"Helvetica,Arial,sans-serif"}}>or upload / paste a screenshot below.</span>
+        </div>}
         <button onClick={captureFrame} disabled={!videoState.loaded} style={{background:videoState.loaded?"#34D399":"rgba(255,255,255,0.1)",border:"none",borderRadius:6,padding:"8px 14px",color:videoState.loaded?"#062014":"rgba(255,255,255,0.4)",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:videoState.loaded?"pointer":"not-allowed",textTransform:"uppercase",width:"100%"}}>Capture Frame at Current Time</button>
       </div>}
       <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:8}}>{canPickFrame?"OR UPLOAD REPLACEMENT":"UPLOAD REPLACEMENT"}</div>
