@@ -98,6 +98,44 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Diagnostic mode: POST with ?diag=1 (and the valid bearer) returns
+  // a JSON dump of env-var presence + a live initialize probe to
+  // Markifact. Lets us distinguish "proxy broken" from "wrong bearer"
+  // from "wrong URL" from "Markifact down" without needing Vercel logs.
+  if (req.query && req.query.diag === "1") {
+    var live = { attempted: false, status: null, ok: null, contentType: null, bodyPreview: null, error: null };
+    try {
+      var probe = await fetch(mcpUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "accept": "application/json",
+          "authorization": "Bearer " + mcpToken
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "gas-diag", version: "1.0" } } })
+      });
+      live.attempted = true;
+      live.status = probe.status;
+      live.ok = probe.ok;
+      live.contentType = probe.headers.get("content-type") || null;
+      var probeText = await probe.text();
+      live.bodyPreview = probeText.slice(0, 400);
+    } catch (err) { live.error = String(err && err.message || err).slice(0, 240); }
+    res.status(200).json({
+      diag: true,
+      time: new Date().toISOString(),
+      envPresent: {
+        SAMI_MCP_PROXY_TOKEN: !!envStr("SAMI_MCP_PROXY_TOKEN"),
+        MARKIFACT_MCP_TOKEN: !!mcpToken,
+        MARKIFACT_MCP_URL: !!envStr("MARKIFACT_MCP_URL")
+      },
+      upstreamUrl: mcpUrl,
+      attributedUser: String((req.query && req.query.user) || "unknown"),
+      liveInitializeProbe: live
+    });
+    return;
+  }
+
   var body = null;
   if (req.method === "POST") {
     body = req.body;
