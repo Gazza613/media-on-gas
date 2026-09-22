@@ -39,12 +39,22 @@ function timingSafeStrEqual(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
+// Trim env vars the same way sami-hub does. A trailing newline (a
+// common Vercel paste hazard) on SAMI_MCP_PROXY_TOKEN made verifyProxyAuth
+// silently reject every Anthropic request with 401, which Anthropic
+// surfaced back to the user as the opaque "mcp_servers[0]: Error while
+// communicating with MCP server." Same class of paste bug that killed
+// SAMI_MCP_PROXY_URL earlier.
+function envStr(k) {
+  var v = process.env[k];
+  return v == null ? "" : String(v).replace(/[\r\n\t]+/g, "").trim();
+}
 function verifyProxyAuth(req) {
-  var expected = process.env.SAMI_MCP_PROXY_TOKEN;
+  var expected = envStr("SAMI_MCP_PROXY_TOKEN");
   if (!expected) return false;
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
   if (authHeader.indexOf("Bearer ") !== 0) return false;
-  return timingSafeStrEqual(authHeader.substring(7), expected);
+  return timingSafeStrEqual(authHeader.substring(7).trim(), expected);
 }
 
 // Build the MCP-shape error payload Sami will see in her tool result
@@ -77,8 +87,12 @@ export default async function handler(req, res) {
     return;
   }
 
-  var mcpToken = process.env.MARKIFACT_MCP_TOKEN;
-  var mcpUrl = process.env.MARKIFACT_MCP_URL || "https://api.markifact.com/mcp";
+  // Same trim treatment for the upstream Markifact credentials. A stray
+  // newline on MARKIFACT_MCP_TOKEN would make Markifact 401 us, which
+  // Anthropic then surfaces to the user as "Error while communicating"
+  // with no actionable detail.
+  var mcpToken = envStr("MARKIFACT_MCP_TOKEN");
+  var mcpUrl = envStr("MARKIFACT_MCP_URL") || "https://api.markifact.com/mcp";
   if (!mcpToken) {
     res.status(503).json({ error: "Upstream data engine not configured" });
     return;
