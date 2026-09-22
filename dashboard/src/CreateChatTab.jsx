@@ -1445,15 +1445,16 @@ export default function CreateChatTab(props) {
       .catch(function (e) {
         setBusy(false);
         var reason = (e && (e.name === "AbortError" ? "Request cancelled." : e.message)) || "unknown";
-        // Distinguish body-parse failures (Vercel 504 returning HTML)
-        // from actual network drops so the AM can see which one hit.
-        // "Failed to fetch" is Chrome's message for a real network
-        // failure. Everything else here is usually a non-JSON response.
         var isNetFail = /failed to fetch|networkerror/i.test(reason);
+        // Framed as a transient blip so the AM knows to just retry
+        // (Send again with the same text), NOT that they got signed
+        // out or something is broken. Real session bounces come from
+        // the shared 30-min idle timer on the main dashboard, not
+        // from Sami errors.
         setErr(isNetFail
-          ? ("Network error, check your connection and try again. (" + reason + ")")
-          : ("Sami's response was not readable. This usually means an upstream timeout. Retry in a moment. (" + reason + ")"));
-        try { console.error("[sami-hub] send failed:", e); } catch (_) {}
+          ? "Sami didn't reach the server that time. Usually a blip, hit Send to retry."
+          : "Sami's response was cut short. Retry in a moment.");
+        try { console.error("[sami-hub] send failed:", e, "reason:", reason); } catch (_) {}
       });
   };
 
