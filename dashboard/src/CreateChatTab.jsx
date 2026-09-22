@@ -1629,7 +1629,8 @@ export default function CreateChatTab(props) {
 
   var empty = messages.length === 0;
 
-  return <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 0, minHeight: "78vh", background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, overflow: "hidden" }}>
+  return <div>
+  <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 0, minHeight: "78vh", background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, overflow: "hidden" }}>
     {/* Left rail — connectors + New task */}
     <aside style={{ borderRight: "1px solid " + P.rule, background: "rgba(0,0,0,0.20)", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "18px 14px 12px", borderBottom: "1px solid " + P.rule }}>
@@ -1835,8 +1836,6 @@ export default function CreateChatTab(props) {
           Send
         </button>
       </div>
-
-      <UsageStrip P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} />
     </section>
 
     {/* Phase 4 modals (overlay, portal-like — mounted at hub root) */}
@@ -1848,5 +1847,15 @@ export default function CreateChatTab(props) {
       client={memoryModalClient} draft={noteDraft} setDraft={setNoteDraft}
       onSaveNote={saveNote} onDeleteNote={deleteNote}
       onClose={function () { setMemoryModalClient(null); setNoteDraft({ id: "", label: "", value: "" }); }} />}
+  </div>
+
+  {/* UsageStrip lives OUTSIDE the fixed-height hub section so the
+      composer inside is always reachable at the bottom of the 78vh
+      viewport, and the credit dashboard just extends the page-scroll
+      below it. Expanded by default per Gary's request; header row
+      still toggles collapse. */}
+  <div style={{ marginTop: 14, background: P.glass, border: "1px solid " + P.rule, borderRadius: 18, overflow: "hidden" }}>
+    <UsageStrip P={P} ff={ff} fm={fm} apiBase={apiBase} token={token} />
+  </div>
   </div>;
 }
