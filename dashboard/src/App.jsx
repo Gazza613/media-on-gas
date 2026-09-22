@@ -1937,7 +1937,8 @@ var AGENCY_NAMES={"gas agency":true,"gas":true};
 var CLIENT_LOGOS={
   mtnmomo:"/clients/mtn-momo.png",
   mtnmomopos:"/clients/mtn-momo.png",
-  learnalot:"/clients/learnalot.png"
+  learnalot:"/clients/learnalot.png",
+  chilla:"/clients/chilla.png"
 };
 function clientLogoForName(name){
   var s=String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"");
@@ -3543,7 +3544,7 @@ function CampaignAuditModal(props){
               // GAS_<Client>_..._July_2026 variant collapses to the same
               // brand key. Falls back to the raw canonical when no known
               // brand matches (unmapped clients still group per-slug).
-              var KNOWN_BRAND_KEYS=["simpsonproperties","willowbrookvillage","concordcollege","edencollege","psychobunnyza","psychobunny","mtnmomopos","mtnmomo","mtnkhava","seaweeds","seastorm","learnalot","gasagency"];
+              var KNOWN_BRAND_KEYS=["simpsonproperties","willowbrookvillage","concordcollege","edencollege","psychobunnyza","psychobunny","mtnmomopos","mtnmomo","mtnkhava","seaweeds","seastorm","learnalot","chilla","gasagency"];
               var slaBrandKey=function(raw){
                 var s=String(raw||"").toLowerCase()
                   .replace(/\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/g," ")
@@ -3563,7 +3564,7 @@ function CampaignAuditModal(props){
               // Best display name per group: prefer a known-brand pretty name
               // ('Learnalot', 'MTN MoMo') over the raw slug blob so the table
               // reads cleanly even when the audit log stored a long slug.
-              var BRAND_DISPLAY={simpsonproperties:"Simpson Properties",willowbrookvillage:"Willowbrook Village",concordcollege:"Concord College",edencollege:"Eden College",psychobunny:"Psycho Bunny",psychobunnyza:"Psycho Bunny",mtnmomo:"MTN MoMo",mtnmomopos:"MTN MoMo POS",mtnkhava:"MTN Khava",seaweeds:"Sea Weeds",seastorm:"Sea Storm",learnalot:"Learnalot",gasagency:"GAS Agency"};
+              var BRAND_DISPLAY={simpsonproperties:"Simpson Properties",willowbrookvillage:"Willowbrook Village",concordcollege:"Concord College",edencollege:"Eden College",psychobunny:"Psycho Bunny",psychobunnyza:"Psycho Bunny",mtnmomo:"MTN MoMo",mtnmomopos:"MTN MoMo POS",mtnkhava:"MTN Khava",seaweeds:"Sea Weeds",seastorm:"Sea Storm",learnalot:"Learnalot",chilla:"Chilla",gasagency:"GAS Agency"};
               var groups={};
               sorted.forEach(function(e){
                 var raw=e.clientSlug||e.clientName||"unknown";
@@ -6581,10 +6582,16 @@ export default function MediaOnGas(){
   // by slug.
   useEffect(function(){
     if(!isAuthed())return;
-    fetch(API+"/api/custom-outcomes?client=learnalot"+(customOutcomesRev>0?"&fresh="+customOutcomesRev:""),{headers:authHeaders()})
-      .then(function(r){return r.json();})
-      .then(function(d){if(d&&d.ok&&Array.isArray(d.outcomes)){setCustomOutcomes(function(prev){var next=Object.assign({},prev);next[d.client||"learnalot"]=d.outcomes;return next;});}})
-      .catch(function(){});
+    // Fetch every client that stores CAPI-derived custom outcomes.
+    // Server auto-scopes for client tokens and returns [] for unknown
+    // slugs, so an unused key is a no-op. Chilla is here for parity
+    // with Learnalot even though its outcomes may be empty today.
+    ["learnalot","chilla"].forEach(function(cs){
+      fetch(API+"/api/custom-outcomes?client="+cs+(customOutcomesRev>0?"&fresh="+customOutcomesRev:""),{headers:authHeaders()})
+        .then(function(r){return r.json();})
+        .then(function(d){if(d&&d.ok&&Array.isArray(d.outcomes)){setCustomOutcomes(function(prev){var next=Object.assign({},prev);next[d.client||cs]=d.outcomes;return next;});}})
+        .catch(function(){});
+    });
   },[session,viewToken,customOutcomesRev]);
 
   var benchmarks={
@@ -9493,11 +9500,17 @@ export default function MediaOnGas(){
                   WhatsApp campaign being in the current selection. */}
               {(function(){
                 if(!demoData||!Array.isArray(demoData.ageGender))return null;
+                // WhatsApp Audience panel fires for Learnalot AND Chilla
+                // (both run WA-first campaigns). Detection: a WA campaign
+                // in the selection belonging to either client (substring
+                // on account/campaign name + a WA campaign-tag hit).
                 var learnalotWApp=(computed.allSelected||[]).some(function(c){
                   var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
                   var cn=String(c.campaignName||"").toLowerCase();
-                  return (an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0)
-                    &&(cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0);
+                  var isWACampaign=cn.indexOf("_wapp_")>=0||cn.indexOf("wapp_")>=0||cn.indexOf("_whatsapp_")>=0;
+                  var isTaggedClient=an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0
+                    ||an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;
+                  return isTaggedClient&&isWACampaign;
                 });
                 if(!learnalotWApp)return null;
                 // Recompute WhatsApp Marketing-API conversations + manual
@@ -9507,7 +9520,13 @@ export default function MediaOnGas(){
                 // the render tree).
                 var _monthsInRange={};
                 if(df&&dt){var _d=new Date(df+"T00:00:00Z"),_e=new Date(dt+"T00:00:00Z");if(!isNaN(_d.getTime())&&!isNaN(_e.getTime())){while(_d<=_e){var _y=_d.getUTCFullYear(),_m=_d.getUTCMonth()+1;_monthsInRange[_y+"-"+(_m<10?"0":"")+_m]=1;_d.setUTCMonth(_d.getUTCMonth()+1);}}}
-                var _coArr=Array.isArray(customOutcomes["learnalot"])?customOutcomes["learnalot"].filter(function(o){return _monthsInRange[o.month];}):[];
+                // Custom-outcomes lookup keyed by whichever client's WA
+                // campaigns are actually in the selection (currently
+                // Learnalot has CAPI events entered, Chilla does not —
+                // but the fetch is client-agnostic so the lookup is too).
+                var _coArrL=Array.isArray(customOutcomes["learnalot"])?customOutcomes["learnalot"].filter(function(o){return _monthsInRange[o.month];}):[];
+                var _coArrC=Array.isArray(customOutcomes["chilla"])?customOutcomes["chilla"].filter(function(o){return _monthsInRange[o.month];}):[];
+                var _coArr=_coArrL.concat(_coArrC);
                 var _waLeadsCount=_coArr.reduce(function(t,o){var s=String(o.label||"").toLowerCase();return t+((s.indexOf("whatsapp")>=0||s.indexOf("wapp")>=0||s.indexOf(" wa ")>=0)?Number(o.count||0):0);},0);
                 var _formLeadsCount=0;
                 (computed.allSelected||[]).forEach(function(c){

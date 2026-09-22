@@ -1062,10 +1062,15 @@ function renderCommentaryBlock(summary, profile, extras) {
   // split language may appear in the narrative. Every other
   // two-path client (none today) keeps the legacy blended-lead
   // phrasing.
+  // Conversation-first narrative gate fires for Learnalot AND Chilla
+  // (both are WA-first; the narrative avoids lead/CPL language for
+  // either). Strict all-selected match so a mixed admin selection
+  // doesn't strip lead language from other clients' reports.
   var _isLearnalotNarrative = (xopts.campaigns || summary.campaigns || []).length > 0 && (xopts.campaigns || summary.campaigns || []).every(function(c) {
     var an = String(c.accountName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     var cn = String(c.campaignName || "").toLowerCase();
-    return an.indexOf("learnalot") >= 0 || cn.indexOf("learnalot") >= 0;
+    return an.indexOf("learnalot") >= 0 || cn.indexOf("learnalot") >= 0
+      || an.indexOf("chilla") >= 0 || cn.indexOf("chilla") >= 0;
   });
   if (_isLearnalotNarrative && _wa2.conversations > 0) {
     // Learnalot: conversation-only narrative. No blended leads,
@@ -1283,7 +1288,10 @@ function buildEmailHtml(opts) {
     // Learnalot is a horizontal wordmark (icon + "Learnalot" text)
     // at a ~4:1 aspect ratio; at 200px it still read heavy per
     // owner feedback. Matched to the MTN MoMo override at 150px.
-    learnalot: 150
+    learnalot: 150,
+    // Chilla assumed wordmark (matched to Learnalot's override until
+    // owner supplies the actual aspect ratio).
+    chilla: 150
   };
   var canonSlug = canonicalClientSlug(opts.clientSlug);
   var logoWidth = 300;
@@ -1628,7 +1636,8 @@ export default async function handler(req, res) {
     var FALLBACK_CLIENT_LOGOS = {
       mtnmomo: "/clients/mtn-momo.png",
       mtnmomopos: "/clients/mtn-momo.png",
-      learnalot: "/clients/learnalot.png"
+      learnalot: "/clients/learnalot.png",
+      chilla: "/clients/chilla.png"
     };
     var _resolvedLogoPath = "";
     if (kpiProfile && kpiProfile.logoUrl) {
@@ -1763,12 +1772,13 @@ export default async function handler(req, res) {
       var txtFollows = parseFloat(g.pageLikes || 0) + parseFloat(g.follows || 0);
       var txtAppStore = parseFloat(g.appStoreClicks || 0);
       var txtLp = parseFloat(g.landingPageClicks || 0);
-      // Learnalot: conversation-first plain-text lines (no leads).
-      // Same detection pattern the HTML narrative uses at line ~1046.
+      // Learnalot + Chilla: conversation-first plain-text lines
+      // (no leads). Same detection pattern the HTML narrative uses.
       var _txtIsLearnalot = (summary.campaigns || []).length > 0 && (summary.campaigns || []).every(function(c) {
         var an = String(c.accountName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         var cn = String(c.campaignName || "").toLowerCase();
-        return an.indexOf("learnalot") >= 0 || cn.indexOf("learnalot") >= 0;
+        return an.indexOf("learnalot") >= 0 || cn.indexOf("learnalot") >= 0
+          || an.indexOf("chilla") >= 0 || cn.indexOf("chilla") >= 0;
       });
       if (_txtIsLearnalot) {
         var _txtWaConv = 0, _txtWaEng3 = 0, _txtWaSpend = 0;

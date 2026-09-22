@@ -27,6 +27,17 @@ function escapeHtmlLocal(s) {
     .replace(/'/g, "&#39;");
 }
 
+// Slug substring check used across the report builder to fire the
+// conversation-first (WA-first) treatment: octet render, no-lead
+// narrative, WA audience block. Currently matches Learnalot AND
+// Chilla — both clients run WhatsApp Conversations as their primary
+// BOFU metric. Widening this helper (rather than each of the four
+// call sites) keeps the two clients in lockstep.
+function isConversationFirstSlug(slug) {
+  var s = String(slug || "").toLowerCase();
+  return s.indexOf("learnalot") >= 0 || s.indexOf("chilla") >= 0;
+}
+
 function fmtNum(n) {
   var v = parseFloat(n);
   if (isNaN(v)) return "0";
@@ -747,7 +758,7 @@ function renderBofuSection(opts) {
   // reports even in periods where all counts happen to be zero, so the
   // layout stays consistent). Every other single-path client keeps the
   // standard renderBofuObjective sub for Leads.
-  var _isLearnalot = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  var _isLearnalot = isConversationFirstSlug(opts.clientSlug);
   var wa = book.whatsapp;
   var coList = Array.isArray(opts.customOutcomes) ? opts.customOutcomes : [];
   var _monthsInRange = {};
@@ -1528,7 +1539,7 @@ function renderAudienceSection(opts) {
 // the report is for Learnalot AND demographics carry
 // messagingConversations from at least one WhatsApp campaign.
 function renderLearnalotWhatsAppAudience(opts) {
-  var isLearnalot = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  var isLearnalot = isConversationFirstSlug(opts.clientSlug);
   if (!isLearnalot) return "";
   var demo = opts.demographics;
   if (!demo || !Array.isArray(demo.ageGender)) return "";
@@ -1911,7 +1922,7 @@ function renderExecutiveSummary(opts) {
   // headline "Leads Captured" tile and the narrative reconcile with
   // the dashboard's Total Leads (blended) tile. Non-Learnalot clients
   // fall through with waLeadTotalX=0 → totalLeads == formLeadsCountX.
-  var _isLearnalotX = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  var _isLearnalotX = isConversationFirstSlug(opts.clientSlug);
   var waLeadTotalX = 0;
   var waSpendX = 0;
   if (_isLearnalotX) {
@@ -2120,7 +2131,7 @@ function renderClosingNote(opts) {
   // qualified leads) so the closing page reconciles with the octet
   // and the executive summary tile. Every other client keeps
   // g.leads verbatim.
-  var _isLearnalotCN = String(opts.clientSlug || "").toLowerCase().indexOf("learnalot") >= 0;
+  var _isLearnalotCN = isConversationFirstSlug(opts.clientSlug);
   var _formLeadsCountCN = (book.byObjective && book.byObjective["Leads"] && book.byObjective["Leads"].global.result) || 0;
   var _waLeadTotalCN = 0;
   if (_isLearnalotCN && Array.isArray(opts.customOutcomes) && opts.from && opts.to) {
