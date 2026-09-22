@@ -3239,6 +3239,16 @@ function CampaignAuditModal(props){
   // hub credit strip reads, but session-authenticated so the admin
   // can see it without unlocking Sami.
   var samiUsageState=useState({loading:false,daily:[],currentMonth:{total:0,writes:0,byUser:{}},plan:{creditsLimit:5000,alertAt:4800,resetDay:25}});
+  // MCP connection diagnostic. One-click test of the sami-hub →
+  // mcp-proxy → Markifact chain, run against the actual env vars.
+  var samiDiagState=useState({loading:false,result:null,err:""});
+  var runSamiDiag=function(){
+    samiDiagState[1]({loading:true,result:null,err:""});
+    fetch(props.apiBase+"/api/sami-mcp-diag-admin",{method:"POST",headers:{"Content-Type":"application/json","x-session-token":props.session||""}})
+      .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d};});})
+      .then(function(x){samiDiagState[1]({loading:false,result:x.ok?x.data:null,err:x.ok?"":((x.data&&x.data.error)||"Diagnostic failed")});})
+      .catch(function(e){samiDiagState[1]({loading:false,result:null,err:"Network error: "+(e&&e.message||e)});});
+  };
   var loadSamiUsage=function(){
     if(!props.isSuperadmin)return;
     samiUsageState[1](Object.assign({},samiUsageState[0],{loading:true}));
@@ -4033,7 +4043,46 @@ function CampaignAuditModal(props){
             <div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:10,lineHeight:1.6}}>Revoking an access account invalidates the user's next login request.</div>
           </div>
 
-          {(function(){return null;})()}
+          {(function(){
+            var d=samiDiagState[0];
+            var v=d.result&&d.result.verdict;
+            var levelColor=v?(v.level==="ok"?P.mint:v.level==="critical"?P.critical:P.warning||P.solar):P.caption;
+            return <div style={{marginTop:20,background:"rgba(0,0,0,0.3)",border:"1px solid "+P.rule,borderRadius:12,padding:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:12,fontWeight:900,color:P.ember,fontFamily:fm,letterSpacing:2,textTransform:"uppercase"}}>Sami connection diagnostic</span>
+                <span style={{fontSize:11,color:P.label,fontFamily:fm}}>One-click test of sami-hub → proxy → Markifact.</span>
+                <button onClick={runSamiDiag} disabled={d.loading} style={{marginLeft:"auto",background:d.loading?"#555":gEmber,border:"none",borderRadius:8,padding:"8px 16px",color:"#fff",fontSize:11,fontWeight:800,fontFamily:fm,cursor:d.loading?"wait":"pointer",letterSpacing:1.5,textTransform:"uppercase"}}>{d.loading?"Running...":"Run Diagnostic"}</button>
+              </div>
+              {d.err&&<div style={{fontSize:11,color:P.critical,fontFamily:fm,marginTop:8}}>{d.err}</div>}
+              {d.result&&<div style={{marginTop:12,display:"grid",gap:10}}>
+                <div style={{padding:"12px 14px",background:levelColor+"18",border:"1px solid "+levelColor+"55",borderRadius:8,fontSize:12,color:levelColor,fontFamily:fm,lineHeight:1.5,fontWeight:600}}>
+                  <span style={{fontSize:9,fontWeight:900,letterSpacing:2,textTransform:"uppercase",marginRight:8}}>{v?v.level:"—"}</span>
+                  {v?v.msg:"No verdict"}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:11,fontFamily:fm}}>
+                  <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.35)",borderRadius:8,border:"1px solid "+P.rule}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.caption,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Env vars present</div>
+                    {Object.keys(d.result.envPresent||{}).map(function(k){var ok=d.result.envPresent[k];return <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",color:P.txt}}>
+                      <span>{k}</span>
+                      <span style={{color:ok?P.mint:P.critical,fontWeight:800}}>{ok?"✓ set":"✗ missing"}</span>
+                    </div>;})}
+                  </div>
+                  <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.35)",borderRadius:8,border:"1px solid "+P.rule}}>
+                    <div style={{fontSize:9,fontWeight:800,color:P.caption,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Upstream probe</div>
+                    <div style={{color:P.label}}>URL: <span style={{color:P.txt,wordBreak:"break-all"}}>{d.result.upstreamUrl||"—"}</span></div>
+                    <div style={{color:P.label,marginTop:4}}>Status: <span style={{color:d.result.liveInitializeProbe&&d.result.liveInitializeProbe.ok?P.mint:P.critical,fontWeight:800}}>{d.result.liveInitializeProbe?d.result.liveInitializeProbe.status||"—":"—"}</span></div>
+                    <div style={{color:P.label,marginTop:4}}>Content-type: <span style={{color:P.txt}}>{d.result.liveInitializeProbe?d.result.liveInitializeProbe.contentType||"—":"—"}</span></div>
+                    {d.result.liveInitializeProbe&&d.result.liveInitializeProbe.error&&<div style={{color:P.critical,marginTop:4,fontSize:10}}>{d.result.liveInitializeProbe.error}</div>}
+                  </div>
+                </div>
+                {d.result.liveInitializeProbe&&d.result.liveInitializeProbe.bodyPreview&&<div style={{padding:"10px 12px",background:"rgba(0,0,0,0.5)",borderRadius:8,border:"1px solid "+P.rule,fontSize:10,fontFamily:"Menlo,Consolas,monospace",color:P.label,whiteSpace:"pre-wrap",wordBreak:"break-all",maxHeight:180,overflowY:"auto"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:P.caption,letterSpacing:1,textTransform:"uppercase",marginBottom:6,fontFamily:fm}}>Response body (first 500 chars)</div>
+                  {d.result.liveInitializeProbe.bodyPreview}
+                </div>}
+              </div>}
+              {!d.result&&!d.err&&<div style={{fontSize:11,color:P.label,fontFamily:fm,marginTop:10,fontStyle:"italic"}}>Click Run Diagnostic to verify the sami-hub → mcp-proxy → Markifact chain is healthy. No copying of secrets required.</div>}
+            </div>;
+          })()}
 
           {/* Sami Hub credit consumption (superadmin only). Same
               counters the in-hub credit strip reads, but visible from
