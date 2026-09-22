@@ -31,7 +31,7 @@ import {
 // operation, upload media, create campaign, create ad set, create ad
 // x N, retry after Meta rejects, etc). 240s gives headroom without
 // hitting Vercel's 300s ceiling.
-export const config = { maxDuration: 240 };
+export const config = { maxDuration: 300 };
 
 var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 var MODEL = "claude-sonnet-5";

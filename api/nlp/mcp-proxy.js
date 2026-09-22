@@ -30,7 +30,7 @@ import { verifyNonceForCall, consumeNonce } from "../_samiNonce.js";
 import { validateWriteInput } from "../_samiWriteGuard.js";
 import { recordUsage } from "../_samiUsage.js";
 
-export const config = { maxDuration: 240 };
+export const config = { maxDuration: 300 };
 
 function timingSafeStrEqual(a, b) {
   var aBuf = Buffer.from(String(a || ""), "utf8");
