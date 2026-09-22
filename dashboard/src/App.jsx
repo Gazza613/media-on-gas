@@ -9411,12 +9411,15 @@ export default function MediaOnGas(){
                   shared, so any tweak there flows here automatically.
                   showCommentary:false skips the momentum/attention block
                   on Summary, kept only on the Optimisation tab.
-                  Suppressed on Learnalot (admin + client) — the client's
-                  goal is lead capture across the two paths, which the
-                  octet + standRow already frame; the platform trend
-                  matrix adds visual noise without new signal for this
-                  client. */}
-              {!(function(){return (computed.allSelected||[]).some(function(c){var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");var cn=String(c.campaignName||"").toLowerCase();return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;});})()&&renderTrendlines({showCommentary:false})}
+                  Suppressed on Learnalot AND Chilla (conversation-first
+                  clients). The matrix reads leads/store clicks/followers/
+                  landing-page/community-reach — none of which are the
+                  headline KPI for WA-first clients — so it renders as a
+                  mostly-empty grid with a misleading "LEAD GEN 0" row.
+                  The octet + funnel + insights narrative above already
+                  frame the conversation story properly. If we ever build
+                  a conversation-volume trendline matrix, drop this gate. */}
+              {!(function(){return (computed.allSelected||[]).some(function(c){var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");var cn=String(c.campaignName||"").toLowerCase();return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0||an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;});})()&&renderTrendlines({showCommentary:false})}
 
               {/* Placement Performance Assessment — sub-platform breakdown
                   showing where the budget is delivering and what each
