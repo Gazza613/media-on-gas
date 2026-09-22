@@ -594,18 +594,28 @@ export default async function handler(req, res) {
   // counters can attribute Markifact-tool consumption to the team
   // member driving the conversation (Anthropic makes the actual tool
   // call, so the proxy has no other way to know who initiated it).
-  var useProxy = !!process.env.SAMI_MCP_PROXY_URL && !!process.env.SAMI_MCP_PROXY_TOKEN;
+  // Trim EVERY env value we read here. A trailing newline (a common
+  // Vercel paste hazard) inside an mcp_servers.url makes Anthropic's
+  // validator reject the whole request with
+  // "must not contain control characters (e.g., newline)". Same risk
+  // on the bearer, so trim that too.
+  function envStr(k) {
+    var v = process.env[k];
+    return v == null ? "" : String(v).replace(/[\r\n\t]+/g, "").trim();
+  }
+  var proxyUrlEnv = envStr("SAMI_MCP_PROXY_URL");
+  var proxyTokenEnv = envStr("SAMI_MCP_PROXY_TOKEN");
+  var mcpDirectUrlEnv = envStr("MARKIFACT_MCP_URL");
+  var mcpDirectTokenEnv = envStr("MARKIFACT_MCP_TOKEN");
+  var useProxy = !!proxyUrlEnv && !!proxyTokenEnv;
   var mcpUrl;
   if (useProxy) {
-    var base = process.env.SAMI_MCP_PROXY_URL;
-    var sep = base.indexOf("?") >= 0 ? "&" : "?";
-    mcpUrl = base + sep + "user=" + encodeURIComponent(auth.user);
+    var sep = proxyUrlEnv.indexOf("?") >= 0 ? "&" : "?";
+    mcpUrl = proxyUrlEnv + sep + "user=" + encodeURIComponent(auth.user);
   } else {
-    mcpUrl = process.env.MARKIFACT_MCP_URL || "https://api.markifact.com/mcp";
+    mcpUrl = mcpDirectUrlEnv || "https://api.markifact.com/mcp";
   }
-  var mcpToken = useProxy
-    ? process.env.SAMI_MCP_PROXY_TOKEN
-    : process.env.MARKIFACT_MCP_TOKEN;
+  var mcpToken = useProxy ? proxyTokenEnv : mcpDirectTokenEnv;
   if (!mcpToken) {
     res.status(503).json({ error: "Sami Hub data engine not configured yet." });
     return;
