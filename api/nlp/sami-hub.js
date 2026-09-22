@@ -540,37 +540,71 @@ function extractStructuredCards(text) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // Grounding-enforcement heuristic. If ANY hard number (R-value or
-  // percentage) appears in the reply text OR in any card's description /
-  // details, flag unverifiedNumbers. The frontend uses actions.length
-  // to decide whether to actually SHOW the badge (turns with tool
-  // calls are trusted). Previous version suppressed on any card
-  // presence, which let Sami fabricate numbers inside a plan-card
-  // description with a benign brief-card also emitted in the same turn.
-  var currencyRe = /R\s*[\d]{2,}[\d.,\s]*/;
-  var percentRe = /\d+(?:[.,]\d+)?\s*%/;
-  function containsHardNumber(t) {
-    var s = String(t || "");
-    return currencyRe.test(s) || percentRe.test(s);
+  return { cards: approvals, plans: plans, briefs: briefs, pairCards: pairCards, memories: memories, text: stripped };
+}
+
+// Pull every currency amount and percentage out of a chunk of text as
+// normalised digit strings ("R10,000" → "10000", "12.5%" → "12.5%").
+// Used by the grounding check to compare Sami's numbers against
+// numbers the user typed in recent turns — echoing back a user-
+// supplied figure to confirm the brief is not fabrication.
+function extractNumericFacts(text) {
+  var s = String(text || "");
+  var out = [];
+  var m;
+  var curRe = /R\s*(\d[\d.,\s]*)/g;
+  while ((m = curRe.exec(s)) !== null) {
+    var digits = m[1].replace(/[\s,]/g, "").replace(/\.+$/, "");
+    if (digits && digits.length >= 2) out.push("R" + digits);
   }
-  var unverifiedNumbers = false;
-  if (containsHardNumber(stripped)) unverifiedNumbers = true;
-  approvals.concat(plans).forEach(function (card) {
+  var pctRe = /(\d+(?:[.,]\d+)?)\s*%/g;
+  while ((m = pctRe.exec(s)) !== null) {
+    out.push(m[1].replace(/,/g, ".") + "%");
+  }
+  return out;
+}
+
+// Compute unverifiedNumbers flag. Sami's reply + any emitted card
+// descriptions may contain hard numbers. We flag them ONLY if:
+//   - the turn ran zero MCP tool calls (nothing was pulled from a
+//     live source), AND
+//   - at least one number in Sami's output does NOT appear in a
+//     recent user turn (i.e. Sami originated the number, not echoed
+//     one back to confirm the brief).
+function computeUnverifiedNumbers(extracted, messages, actionsCount) {
+  if (actionsCount > 0) return false;
+  var samiNumbers = extractNumericFacts(extracted.text);
+  extracted.cards.concat(extracted.plans).forEach(function (card) {
     if (!card) return;
-    if (containsHardNumber(card.description)) unverifiedNumbers = true;
+    samiNumbers = samiNumbers.concat(extractNumericFacts(card.description));
     if (card.details && typeof card.details === "object") {
       Object.keys(card.details).forEach(function (k) {
-        if (containsHardNumber(card.details[k])) unverifiedNumbers = true;
+        samiNumbers = samiNumbers.concat(extractNumericFacts(card.details[k]));
       });
     }
     if (Array.isArray(card.plan)) {
       card.plan.forEach(function (child) {
-        if (child && containsHardNumber(child.description)) unverifiedNumbers = true;
+        if (child) samiNumbers = samiNumbers.concat(extractNumericFacts(child.description));
       });
     }
   });
-
-  return { cards: approvals, plans: plans, briefs: briefs, pairCards: pairCards, memories: memories, text: stripped, unverifiedNumbers: unverifiedNumbers };
+  if (samiNumbers.length === 0) return false;
+  var userNumbers = {};
+  var recentUser = messages.filter(function (m) { return m && m.role === "user"; }).slice(-6);
+  recentUser.forEach(function (m) {
+    extractNumericFacts(m.content).forEach(function (n) { userNumbers[n] = true; });
+    // Also index bare-digit versions so "10000" typed without the R
+    // prefix still matches an "R10000" from Sami.
+    var bareRe = /\b(\d{2,})\b/g;
+    var bm;
+    var bareText = String(m.content || "");
+    while ((bm = bareRe.exec(bareText)) !== null) {
+      userNumbers["R" + bm[1]] = true;
+      userNumbers[bm[1] + "%"] = true;
+    }
+  });
+  var unaccounted = samiNumbers.filter(function (n) { return !userNumbers[n]; });
+  return unaccounted.length > 0;
 }
 
 export default async function handler(req, res) {
@@ -726,11 +760,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // Grounding-enforcement: the extractor flagged unverified numbers
-    // by string-match alone. Override the flag if the current turn
-    // actually ran MCP tool calls — those numbers came from a live
-    // read, so they're verified.
-    var unverified = !!extracted.unverifiedNumbers && actions.length === 0;
+    // Grounding-enforcement: flag any Sami number not backed by a
+    // live tool call, EXCEPT numbers that appear in the recent user
+    // turns (Sami echoing back a user-supplied figure to confirm the
+    // brief is not fabrication).
+    var unverified = computeUnverifiedNumbers(extracted, messages, actions.length);
 
     res.status(200).json({
       reply: extracted.text,
