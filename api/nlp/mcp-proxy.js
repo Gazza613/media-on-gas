@@ -191,8 +191,22 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("[mcp-proxy] upstream fetch failed", err);
-    res.status(502).json({ error: "Upstream data engine unreachable" });
+    // Wrap the fetch failure in an MCP-shape error so Anthropic
+    // (which then surfaces it back to sami-hub) gets a specific
+    // reason instead of the opaque "Error while communicating".
+    res.status(200).json({
+      jsonrpc: "2.0",
+      id: (body && body.id != null) ? body.id : null,
+      error: { code: -32000, message: "GAS proxy: upstream fetch failed: " + String(err && err.message || err).slice(0, 200) }
+    });
     return;
+  }
+
+  // Log any non-2xx from Markifact so we can see it in Vercel Runtime
+  // Logs. Anthropic's "Error while communicating" surfaces zero
+  // upstream context, so this is our only trail.
+  if (upstream.status >= 400) {
+    console.warn("[mcp-proxy] upstream returned", upstream.status, "content-type", upstream.headers.get("content-type"), "for method", body && body.method);
   }
 
   var upstreamCT = upstream.headers.get("content-type") || "";
