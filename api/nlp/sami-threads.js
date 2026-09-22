@@ -258,6 +258,7 @@ export default async function handler(req, res) {
         if (m && Array.isArray(m.briefs) && m.briefs.length > 0) out.briefs = m.briefs;
         if (m && Array.isArray(m.pairCards) && m.pairCards.length > 0) out.pairCards = m.pairCards;
         if (m && Array.isArray(m.memories) && m.memories.length > 0) out.memories = m.memories;
+        if (m && Array.isArray(m.results) && m.results.length > 0) out.results = m.results;
         if (m && Array.isArray(m.actions) && m.actions.length > 0) out.actions = m.actions;
         if (m && m.live) out.live = true;
         if (m && m.unverifiedNumbers) out.unverifiedNumbers = true;

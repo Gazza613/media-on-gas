@@ -26,6 +26,7 @@ import {
   issuePendingNonce, authoriseNonce, extractApprovedCardId,
   issuePendingPlanNonces, authoriseNoncePlan, extractApprovedPlanId
 } from "../_samiNonce.js";
+import { logResults } from "../_samiResults.js";
 
 // Campaign builds can chain a lot of tool calls (find account, get
 // operation, upload media, create campaign, create ad set, create ad
@@ -184,6 +185,39 @@ function buildSystemPrompt() {
     "- After emitting the card, stop the response. Do NOT execute any of the child writes in the same turn. Wait for APPROVED_PLAN.",
     "- Do the find_operations + get_operation_inputs lookups for every child BEFORE emitting the plan so every input_data is exact. A hash mismatch at execution time is refused by the GAS engine.",
     "- If the AM asks for changes mid-review (e.g. 'drop the 2 Amazon ads', 'switch ad set 1 to R500/day'), re-emit the ENTIRE plan card with fresh child ids reflecting the corrected shape. Never patch a plan piecemeal.",
+    "",
+    "═══════ RESULT_CARD (EMIT AFTER EVERY SUCCESSFUL WRITE) ═══════",
+    "Every time run_write_operation returns a success, IMMEDIATELY emit a RESULT_CARD summarising what was created — one per successful write, in the same turn as the confirmation line. The card carries the platform-assigned resource id, status, budget, and a direct 'open in platform' URL so the AM can click through instead of hunting for it in Ads Manager. The GAS engine also logs each result to the Live Campaign State header so the whole team sees what got shipped today without scrolling the chat.",
+    "",
+    "RESULT_CARD emission format (use exactly, one per successful write):",
+    "<RESULT_CARD>{",
+    '  "id": "result-<uniqueslug>",',
+    '  "platform": "meta | tiktok | google | linkedin",',
+    '  "kind": "campaign | adset | ad | media | audience",',
+    '  "operation_id": "the exact engine operation id that fired",',
+    '  "resource_id": "the id the platform returned (e.g. 12025... for Meta)",',
+    '  "resource_name": "the name of what was created (matches the naming convention)",',
+    '  "status": "PAUSED (always, unless the user unpaused mid-conversation)",',
+    '  "budget": {"amount": 500000, "type": "daily", "currency": "ZAR"} OR null for ads/media/audience,',
+    '  "client": "Chilla (display name of the client this write belongs to)",',
+    '  "parent_id": "the campaign_id if this is an adset, the adset_id if this is an ad — null otherwise",',
+    '  "open_url": "the direct platform URL to open this resource"',
+    "}</RESULT_CARD>",
+    "",
+    "Open-URL patterns to construct:",
+    "  Meta campaign: https://business.facebook.com/adsmanager/manage/campaigns?act=<ACCOUNT_ID_WITHOUT_ACT>&selected_campaign_ids=<CAMPAIGN_ID>",
+    "  Meta ad set:  https://business.facebook.com/adsmanager/manage/adsets?act=<ACCOUNT_ID>&selected_adset_ids=<ADSET_ID>",
+    "  Meta ad:      https://business.facebook.com/adsmanager/manage/ads?act=<ACCOUNT_ID>&selected_ad_ids=<AD_ID>",
+    "  TikTok:       https://ads.tiktok.com/i18n/perf/campaign?aadvid=<ADVERTISER_ID>&object_id=<ID>",
+    "  Google Ads:   https://ads.google.com/aw/campaigns?workspaceId=<CUSTOMER_ID>&campaignId=<CAMPAIGN_ID>",
+    "  LinkedIn:     https://www.linkedin.com/campaignmanager/accounts/<ACCOUNT_ID>/campaigns/<CAMPAIGN_ID>",
+    "",
+    "Rules for RESULT_CARD:",
+    "- One card per successful write. No card if the write failed or was rejected by the platform.",
+    "- Emit the plain-language confirmation line FIRST ('Campaign created (id 120...), paused as agreed.'), then the RESULT_CARD in the same turn.",
+    "- Set client to the DISPLAY name (e.g. 'MTN MoMo', not 'mtnmomo').",
+    "- parent_id links ad sets to campaigns and ads to ad sets so the Live State header can group them.",
+    "- open_url is required. If you truly cannot construct one (unusual platform), leave it as empty string but never as 'null' text.",
     "",
     "═══════ PROSE-CARD ANTI-PATTERN (STRICT PROHIBITION) ═══════",
     "You MUST NOT describe a proposed write in prose and end with a text-only '✓ Approve' line. That is not a real approval card. The user cannot click it. The frontend cannot render an Approve button unless the write is inside <APPROVAL_CARD>...</APPROVAL_CARD> tags.",
@@ -505,6 +539,7 @@ function extractStructuredCards(text) {
   var briefRe = /<BRIEF_CARD>([\s\S]*?)<\/BRIEF_CARD>/g;
   var pairRe = /<CREATIVE_PAIR_CARD>([\s\S]*?)<\/CREATIVE_PAIR_CARD>/g;
   var memoryRe = /<SAVE_MEMORY>([\s\S]*?)<\/SAVE_MEMORY>/g;
+  var resultRe = /<RESULT_CARD>([\s\S]*?)<\/RESULT_CARD>/g;
 
   var approvals = [];
   var m;
@@ -576,16 +611,29 @@ function extractStructuredCards(text) {
     } catch (_) { /* malformed — leave in text */ }
   }
 
+  // RESULT_CARD blocks. Each summarises one successful write; logged
+  // to the Live Campaign State store so the header shows what shipped
+  // today without the AM scrolling.
+  var results = [];
+  var rr;
+  while ((rr = resultRe.exec(cleanText)) !== null) {
+    try {
+      var parsedR = JSON.parse(rr[1].trim());
+      if (parsedR && (parsedR.resource_id || parsedR.id)) results.push(parsedR);
+    } catch (_) { /* malformed — leave in text */ }
+  }
+
   var stripped = cleanText
     .replace(approvalRe, "")
     .replace(planRe, "")
     .replace(briefRe, "")
     .replace(pairRe, "")
     .replace(memoryRe, "")
+    .replace(resultRe, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return { cards: approvals, plans: plans, briefs: briefs, pairCards: pairCards, memories: memories, text: stripped };
+  return { cards: approvals, plans: plans, briefs: briefs, pairCards: pairCards, memories: memories, results: results, text: stripped };
 }
 
 // Pull every currency amount and percentage out of a chunk of text as
@@ -839,6 +887,14 @@ export default async function handler(req, res) {
       }
     }
 
+    // 10x live-state: log every RESULT_CARD Sami just emitted so the
+    // Live Campaign State header shows what got created today without
+    // the AM scrolling. Fire-and-forget: a Redis blip cannot break
+    // the chat flow.
+    if (extracted.results.length > 0) {
+      logResults(auth.user, extracted.results).catch(function (e) { console.error("[sami-hub] logResults failed", e); });
+    }
+
     // Grounding-enforcement: flag any Sami number not backed by a
     // live tool call, EXCEPT numbers that appear in the recent user
     // turns (Sami echoing back a user-supplied figure to confirm the
@@ -864,6 +920,7 @@ export default async function handler(req, res) {
       briefs: extracted.briefs,
       pairCards: extracted.pairCards,
       memories: extracted.memories,
+      results: extracted.results,
       actions: actions,
       unverifiedNumbers: unverified,
       truncated: truncated || hasOpenTag,
