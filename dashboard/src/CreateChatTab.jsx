@@ -329,9 +329,10 @@ function UsageStrip(props) {
   var P = props.P, ff = props.ff, fm = props.fm, apiBase = props.apiBase, token = props.token;
   var s0 = useState({ loading: true, daily: [], currentMonth: { total: 0, byUser: {} }, plan: { creditsLimit: 5000, alertAt: 4800, resetDay: 25 } });
   var state = s0[0], setState = s0[1];
-  // Collapsed by default so the chat area gets the vertical space it
-  // needs. Click the header row to expand into the full 3-panel view.
-  var os = useState(false), open = os[0], setOpen = os[1];
+  // Expanded by default so the AM sees the credit picture without
+  // having to click. The header row still toggles for anyone who
+  // wants more vertical room for the chat area.
+  var os = useState(true), open = os[0], setOpen = os[1];
 
   useEffect(function () {
     if (!token) return;
@@ -496,6 +497,10 @@ function UsageStrip(props) {
           })}
         </div>
       </div>}
+
+      <div style={{ fontSize: 10, color: P.caption, fontFamily: fm, lineHeight: 1.6, fontStyle: "italic", padding: "0 4px" }}>
+        Counter tracks every MCP tool call the GAS proxy forwards to Markifact. A one-to-one match with Markifact's own billing dashboard depends on their per-op pricing (some reads may be free, some writes may cost more than one credit). Cross-check against markifact.com/billing weekly, adjust the alert threshold if the ratio drifts.
+      </div>
     </div>}
   </div>;
 }
