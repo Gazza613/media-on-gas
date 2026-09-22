@@ -36,7 +36,16 @@ export const config = { maxDuration: 300 };
 var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 var MODEL = "claude-sonnet-5";
 var MAX_OUTPUT_TOKENS = 4000;
-var MAX_HISTORY_MESSAGES = 40;   // Longer than Media AI — build sessions run long
+// Real Guided Build sessions (11 mandatory questions + creative walk
+// + pair confirm + plan approve + writes) push past 40 turns easily.
+// We keep the FIRST HISTORY_HEAD_KEEP turns AND the LAST HISTORY_TAIL_
+// KEEP turns, dropping the middle. The head guarantees Sami always
+// has the opening brief (client, objective, budget, dates, destination)
+// even in a 200-turn session — she was previously re-asking those
+// once they scrolled out of the 40-turn sliding window.
+var HISTORY_HEAD_KEEP = 12;
+var HISTORY_TAIL_KEEP = 60;
+var MAX_HISTORY_MESSAGES = HISTORY_HEAD_KEEP + HISTORY_TAIL_KEEP;
 var MAX_MESSAGE_CHARS = 8000;    // Approval-card blobs + creative-list payloads need room
 var SERVER_NAME = "gas-data-engine";
 
@@ -291,14 +300,31 @@ function scrub(text) {
 
 function sanitiseMessages(raw) {
   if (!Array.isArray(raw)) return [];
-  var out = [];
-  raw.slice(-MAX_HISTORY_MESSAGES).forEach(function (m) {
+  // Clean every message first (role check, char cap, empty strip).
+  var clean = [];
+  raw.forEach(function (m) {
     if (!m || (m.role !== "user" && m.role !== "assistant")) return;
     var content = typeof m.content === "string" ? m.content : "";
     content = content.slice(0, MAX_MESSAGE_CHARS).trim();
     if (!content) return;
-    out.push({ role: m.role, content: content });
+    clean.push({ role: m.role, content: content });
   });
+  var out;
+  if (clean.length <= HISTORY_HEAD_KEEP + HISTORY_TAIL_KEEP) {
+    out = clean.slice();
+  } else {
+    // Drop the middle. Insert a system-role synthetic user turn as a
+    // bridge so Sami knows some intervening turns were elided instead
+    // of thinking the conversation jumped abruptly.
+    var head = clean.slice(0, HISTORY_HEAD_KEEP);
+    var tail = clean.slice(-HISTORY_TAIL_KEEP);
+    var dropped = clean.length - head.length - tail.length;
+    var bridge = {
+      role: "user",
+      content: "(" + dropped + " earlier turns elided to fit context. The opening brief above and the last " + HISTORY_TAIL_KEEP + " turns below are the authoritative record — do not re-ask for information already answered in the head or tail.)"
+    };
+    out = head.concat([bridge]).concat(tail);
+  }
   while (out.length && out[0].role !== "user") out.shift();
   return out;
 }
