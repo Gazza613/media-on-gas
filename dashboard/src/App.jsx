@@ -8867,6 +8867,15 @@ export default function MediaOnGas(){
                   var cn=String(c.campaignName||"").toLowerCase();
                   return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
                 });
+                // Chilla runs the same WhatsApp-Conversations-first
+                // treatment as Learnalot on the BOFU block (2026-09-22
+                // owner ask). Detected the same way — substring scan on
+                // the selection's account / campaign name.
+                var chillaInSel=(computed.allSelected||[]).some(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;
+                });
                 var monthsInRange={};
                 if(df&&dt){
                   var _d=new Date(df+"T00:00:00Z"),_e=new Date(dt+"T00:00:00Z");
@@ -8874,7 +8883,8 @@ export default function MediaOnGas(){
                     while(_d<=_e){var _y=_d.getUTCFullYear(),_m=_d.getUTCMonth()+1;monthsInRange[_y+"-"+(_m<10?"0":"")+_m]=1;_d.setUTCMonth(_d.getUTCMonth()+1);}
                   }
                 }
-                var coArr=(learnalotInSel&&Array.isArray(customOutcomes["learnalot"]))?customOutcomes["learnalot"].filter(function(o){return monthsInRange[o.month];}):[];
+                var _coKey=learnalotInSel?"learnalot":(chillaInSel?"chilla":null);
+                var coArr=(_coKey&&Array.isArray(customOutcomes[_coKey]))?customOutcomes[_coKey].filter(function(o){return monthsInRange[o.month];}):[];
                 // For a WhatsApp-labelled outcome the "cost" is the paid
                 // spend of the WhatsApp campaign in the current selection
                 // (Cost per Lead = campaign spend / manually-recorded
@@ -8917,7 +8927,13 @@ export default function MediaOnGas(){
                 // Total Leads, Conv-to-Lead) are pulled out of the
                 // standard grid so they don't render twice.
                 var waEngaged3=(waObjRec&&waObjRec.wa)?parseFloat(waObjRec.wa.engaged3||0):0;
-                var showLearnalotOctet=learnalotInSel&&(formLeadsCount>0||waLeadsCount>0||waConversations>0);
+                // showLearnalotOctet: fires the WhatsApp-conversations
+                // BOFU treatment. Named for Learnalot historically, now
+                // also serves Chilla (pure-WhatsApp client, no PSI Form
+                // leads or CAPI QualifiedLead custom outcome). Blended-
+                // leads and total-leads tiles below stay Learnalot-only
+                // via their own explicit gate.
+                var showLearnalotOctet=(learnalotInSel||chillaInSel)&&(formLeadsCount>0||waLeadsCount>0||waConversations>0);
                 var formCpl=formLeadsCount>0?(formLeadsSpend/formLeadsCount):0;
                 var waCpl=waLeadsCount>0&&waSpend>0?(waSpend/waLeadsCount):0;
                 var blendedCpl=totalLeadsCount>0?(totalLeadsSpend/totalLeadsCount):0;
@@ -8974,9 +8990,15 @@ export default function MediaOnGas(){
                     mkTile("wa-conv",      "Conversations Started",fmt(waConversations),                                    P.mint,   "ad-attributed within 7 days of click"),
                     mkTile("wa-cpc",       "Cost per Conversation",_waCostPerConvTile>0?fR(_waCostPerConvTile):"—",         P.orchid, "WhatsApp spend / conversations"),
                     mkTile("wa-engaged",   "Engaged 3+ Messages",  fmt(waEngaged3),                                         P.solar,  "three or more messages exchanged"),
-                    mkTile("wa-rate",      "Engagement Rate",      _waEngRateTile>0?_waEngRateTile.toFixed(2)+"%":"—",      P.cyan,   fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages"),
-                    mkTile("wa-leads",     "Leads",                fmt(waLeadsCount),                                       P.rose,   _waCplTile>0?fR(_waCplTile)+" per lead":"CAPI QualifiedLead events")
+                    mkTile("wa-rate",      "Engagement Rate",      _waEngRateTile>0?_waEngRateTile.toFixed(2)+"%":"—",      P.cyan,   fmt(waEngaged3)+" of "+fmt(waConversations)+" reached 3+ messages")
                   ];
+                  // Leads tile only when the client actually has a
+                  // CAPI QualifiedLead custom outcome recorded (Learnalot
+                  // path). Suppressed on pure-WhatsApp clients (Chilla)
+                  // so the row doesn't read a misleading "0 leads".
+                  if(waLeadsCount>0){
+                    summaryTiles.push(mkTile("wa-leads","Leads",fmt(waLeadsCount),P.rose,_waCplTile>0?fR(_waCplTile)+" per lead":"CAPI QualifiedLead events"));
+                  }
                   // ── Row 2: WhatsApp message funnel ──────────────────
                   // Reach → Conversations → First Reply → Engaged 3+.
                   // Widths scale to the top-of-funnel value so drop-off
@@ -9060,13 +9082,13 @@ export default function MediaOnGas(){
                       ];})}
                     </div>
                     <div style={{marginTop:12,paddingTop:10,borderTop:"1px solid "+P.rule,fontSize:10,color:P.caption,fontFamily:fm,lineHeight:1.5}}>
-                      <strong style={{color:P.txt,fontWeight:800}}>Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users. CAPI Qualified Leads above are captured independently by the bot and reconcile against the "Unique Users" column in Meta Events Manager, not against these depth counters.
+                      <strong style={{color:P.txt,fontWeight:800}}>Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users.{waLeadsCount>0?" CAPI Qualified Leads above are captured independently by the bot and reconcile against the \"Unique Users\" column in Meta Events Manager, not against these depth counters.":""}
                     </div>
                   </div>:null;
                   return <div style={{marginBottom:filteredObjKeys.length>0||filteredCoArr.length>0?20:0}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14}}>{summaryTiles}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat("+summaryTiles.length+",1fr)",gap:14}}>{summaryTiles}</div>
                     <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:"1px solid "+P.rule,fontSize:11,color:P.caption,fontFamily:fm,lineHeight:1.5}}>
-                      <strong style={{color:P.txt,fontWeight:800}}>Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter but ARE captured in the Leads database.
+                      <strong style={{color:P.txt,fontWeight:800}}>Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter{waLeadsCount>0?" but ARE captured in the Leads database":""}.
                     </div>
                     {funnelBlock}
                     {efficiencyTiles.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginTop:14}}>{efficiencyTiles}</div>}
@@ -9839,11 +9861,23 @@ export default function MediaOnGas(){
                   var cn=String(c.campaignName||"").toLowerCase();
                   return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
                 });
+                // Chilla: same conversation-first Top Ads treatment as
+                // Learnalot (2026-09-22 owner ask). Strict all-Chilla
+                // check so mixed selections don't zero-rank other
+                // clients' ads. `_selWaConvoTA` is the union — the
+                // downstream rewrites/sorters branch on the union so
+                // Learnalot's behaviour is untouched.
+                var _selAllChillaTA=(computed.allSelected||[]).length>0&&(computed.allSelected||[]).every(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;
+                });
+                var _selWaConvoTA=_selAllLearnalotTA||_selAllChillaTA;
                 var objGroups=[
-                  {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:_selAllLearnalotTA?"by WhatsApp conversations & cost per conversation":"by leads & cost per lead"},
+                  {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:_selWaConvoTA?"by WhatsApp conversations & cost per conversation":"by leads & cost per lead"},
                   {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
                   {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
-                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:_selAllLearnalotTA?"by WhatsApp conversations & cost per conversation":"by clicks to landing page"},
+                  {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:_selWaConvoTA?"by WhatsApp conversations & cost per conversation":"by clicks to landing page"},
                   {key:"community_reach",label:"COMMUNITY REACH",accent:P.momoYellow,criterion:"by reach & CPM"}
                 ];
 
@@ -9891,10 +9925,10 @@ export default function MediaOnGas(){
                     var platAds=filteredAds.filter(function(a){return platformGroup(a.platform)===pg.key;});
                     if(platAds.length===0)return;
                     var objAds;
-                    if(_selAllLearnalotTA){
-                      // Learnalot override, applies to every objective
-                      // section: rewrite each ad's `results` to WA
-                      // conversations count and `resultType` to
+                    if(_selWaConvoTA){
+                      // Learnalot + Chilla override, applies to every
+                      // objective section: rewrite each ad's `results`
+                      // to WA conversations count and `resultType` to
                       // "conversations". The card renderer downstream
                       // already handles resultType="conversations" via
                       // resultLabel/costPerLabel (WA CONVOS / COST PER
@@ -10008,11 +10042,11 @@ export default function MediaOnGas(){
                     }
                     if(objAds.length===0)return;
                     var sorter;
-                    // Learnalot override always ranks by results DESC
-                    // then cost-per ASC (leadSort) — since results is
-                    // now WA conversations count, that's exactly the
-                    // ranking the owner requested.
-                    if(_selAllLearnalotTA)sorter=leadSort;
+                    // Learnalot + Chilla override always rank by
+                    // results DESC then cost-per ASC (leadSort) — since
+                    // results is now WA conversations count, that's
+                    // exactly the ranking the owner requested.
+                    if(_selWaConvoTA)sorter=leadSort;
                     else if(og.key==="leads"||og.key==="followers")sorter=leadSort;
                     else if(og.key==="landingpage") sorter=landingPageSort;
                     else if(og.key==="community_reach") sorter=communityReachSort;
@@ -11195,15 +11229,23 @@ export default function MediaOnGas(){
                   var cn=String(c.campaignName||"").toLowerCase();
                   return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
                 });
+                // Chilla: same WA-conversation ranking as Learnalot on
+                // the Top Ads preview grid too (2026-09-22 owner ask).
+                var _selAllChilla=(computed.allSelected||[]).length>0&&(computed.allSelected||[]).every(function(c){
+                  var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+                  var cn=String(c.campaignName||"").toLowerCase();
+                  return an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;
+                });
+                var _selWaConvo=_selAllLearnalot||_selAllChilla;
                 return objSections.map(function(sec){
                 var arr=byObj[sec.key]||[];
                 if(arr.length===0)return null;
-                // Learnalot mode: rewrite each ad's results / resultType
-                // to the WA-conversation count (0 for ads with no WA
-                // CTA) so both the sort AND the card render use the
-                // new metric with no per-card branching downstream.
-                // Non-Learnalot: arr is untouched.
-                if(_selAllLearnalot){
+                // Learnalot / Chilla mode: rewrite each ad's results /
+                // resultType to the WA-conversation count (0 for ads
+                // with no WA CTA) so both the sort AND the card render
+                // use the new metric with no per-card branching
+                // downstream. Other clients: arr is untouched.
+                if(_selWaConvo){
                   arr=arr.map(function(a){
                     var wa=parseInt(a.messagingConversations7d||0,10);
                     return Object.assign({},a,{results:wa,resultType:"conversations"});
