@@ -242,15 +242,52 @@ export default async function handler(req, res) {
     try {
       var thumbsUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "/thumbnails?fields=uri,is_preferred,width,height,scale&access_token=" + metaTokenT;
       var thumbsRes = await fetch(thumbsUrl);
+      var _thumbsFailStatus = 0;
+      var _thumbsFailBody = "";
       if (!thumbsRes.ok) {
-        var _tbody = "";
-        try { _tbody = (await thumbsRes.text()).slice(0, 200); } catch (_) {}
-        console.error("[ad-video thumbnails] upstream fail", { videoId: videoId, adId: adId, status: thumbsRes.status, bodyPreview: _tbody });
-        res.status(502).json({ error: "Meta thumbnails fetch failed", upstreamStatus: thumbsRes.status });
+        try { _thumbsFailBody = (await thumbsRes.text()).slice(0, 300); } catch (_) {}
+        _thumbsFailBody = _thumbsFailBody.replace(/access_token=[^&"\s]+/g, "access_token=<redacted>");
+        _thumbsFailStatus = thumbsRes.status;
+        console.error("[ad-video thumbnails] /thumbnails upstream fail, trying ?fields=picture fallback", { videoId: videoId, adId: adId, status: thumbsRes.status, bodyPreview: _thumbsFailBody });
+      }
+      var thumbsData = thumbsRes.ok ? await thumbsRes.json() : null;
+      var list = thumbsData && Array.isArray(thumbsData.data) ? thumbsData.data : [];
+      // Fallback: if /thumbnails returned no rows (empty data OR
+      // the endpoint 4xx'd), try the video's `picture` field which
+      // is the single Meta-preferred thumbnail. picture is more
+      // permissive on scope than /thumbnails and works for most
+      // Instagram-native and dark-post creatives that /thumbnails
+      // refuses. Ship it as a one-item list so the picker still
+      // renders.
+      if (list.length === 0) {
+        try {
+          var picUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "?fields=picture&access_token=" + metaTokenT;
+          var picRes = await fetch(picUrl);
+          if (picRes.ok) {
+            var picData = await picRes.json();
+            if (picData && picData.picture) {
+              list = [{ uri: picData.picture, is_preferred: true, width: null, height: null }];
+              console.log("[ad-video thumbnails] recovered via ?fields=picture fallback", { videoId: videoId, adId: adId });
+            }
+          } else {
+            var _pbody = "";
+            try { _pbody = (await picRes.text()).slice(0, 200); } catch (_) {}
+            _pbody = _pbody.replace(/access_token=[^&"\s]+/g, "access_token=<redacted>");
+            console.error("[ad-video thumbnails] ?fields=picture also failed", { videoId: videoId, status: picRes.status, bodyPreview: _pbody });
+          }
+        } catch (picErr) { console.error("[ad-video thumbnails] picture fallback error", picErr && picErr.message); }
+      }
+      // If both endpoints came back empty, surface the original
+      // /thumbnails error to the operator (more informative than a
+      // silent empty picker).
+      if (list.length === 0 && _thumbsFailStatus > 0) {
+        res.status(502).json({
+          error: "Meta thumbnails fetch failed",
+          upstreamStatus: _thumbsFailStatus,
+          upstreamBodyPreview: _thumbsFailBody
+        });
         return;
       }
-      var thumbsData = await thumbsRes.json();
-      var list = Array.isArray(thumbsData.data) ? thumbsData.data : [];
       // Preferred thumbnail first (Meta's own default pick), then
       // rest in descending resolution so the highest-res frame the
       // operator might want is easy to spot.

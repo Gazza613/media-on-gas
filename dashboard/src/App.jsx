@@ -2215,12 +2215,31 @@ function ThumbOverrideModal(props){
                 if(unrecoverable&&videoPlatform==="meta"&&ad.videoId){
                   setThumbsState({loading:true,error:"",list:[]});
                   fetch(props.apiBase+"/api/ad-video?platform=meta&id="+encodeURIComponent(ad.videoId)+"&adId="+encodeURIComponent(ad.adId)+"&thumbnails=1"+(props.session?"&st="+encodeURIComponent(props.session):""))
-                    .then(function(tr){return tr.ok?tr.json():Promise.reject(new Error("HTTP "+tr.status));})
-                    .then(function(td){
-                      var list=Array.isArray(td.thumbnails)?td.thumbnails:[];
-                      setThumbsState({loading:false,error:list.length===0?"Meta returned no auto-generated thumbnails for this video":"",list:list});
+                    .then(function(tr){
+                      var st=tr.status;
+                      return tr.text().then(function(body){
+                        var parsed=null;try{parsed=JSON.parse(body);}catch(_){}
+                        if(!tr.ok){
+                          // Surface Meta's actual error, not just an HTTP
+                          // status. Server passes upstreamStatus +
+                          // upstreamBodyPreview so the operator sees
+                          // whether Meta 400'd (permissions), 404'd (video
+                          // not found via that path), or something else.
+                          var upStatus=parsed&&parsed.upstreamStatus?parsed.upstreamStatus:st;
+                          var upBody=parsed&&parsed.upstreamBodyPreview?parsed.upstreamBodyPreview:body.slice(0,200);
+                          var msg="Meta thumbnails endpoint returned "+upStatus+(upBody?" · "+upBody:"");
+                          setThumbsState({loading:false,error:msg,list:[]});
+                          return null;
+                        }
+                        return parsed;
+                      });
                     })
-                    .catch(function(te){setThumbsState({loading:false,error:"Thumbnails fetch failed: "+(te.message||te),list:[]});});
+                    .then(function(td){
+                      if(!td)return;
+                      var list=Array.isArray(td.thumbnails)?td.thumbnails:[];
+                      setThumbsState({loading:false,error:list.length===0?"Meta returned no auto-generated thumbnails for this video (data field was empty)":"",list:list});
+                    })
+                    .catch(function(te){setThumbsState({loading:false,error:"Network / parse error: "+(te.message||te),list:[]});});
                 }
               });
             }).catch(function(fetchErr){
