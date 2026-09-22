@@ -40,7 +40,7 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "accept": "application/json",
+          "accept": "application/json, text/event-stream",
           "authorization": "Bearer " + mcpToken
         },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "gas-diag", version: "1.0" } } })
