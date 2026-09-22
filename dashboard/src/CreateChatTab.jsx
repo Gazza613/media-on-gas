@@ -948,6 +948,39 @@ function MemoryModal(props) {
 // (posts PAIRS_OK: <id> back to Sami) or types free-language corrections
 // (e.g. "pair Menu_03_v2 with Menu_03_9x16 instead") to reassign.
 
+// Google Drive and Dropbox share-URLs render as HTML PAGES, not as
+// images — a raw <img src="https://www.dropbox.com/scl/fi/..."> or
+// "https://drive.google.com/file/d/xxx/view" produces no picture even
+// though the URL is valid. Rewrite to the platform's raw-content
+// host so the thumbnail actually loads.
+function renderableImageUrl(rawUrl) {
+  if (!rawUrl) return "";
+  var s = String(rawUrl).trim();
+
+  // Google Drive: /file/d/<ID>/view?... -> /uc?export=view&id=<ID>
+  var m = s.match(/^https?:\/\/drive\.google\.com\/file\/d\/([^\/?#]+)/);
+  if (m) return "https://drive.google.com/uc?export=view&id=" + m[1];
+  // Google Drive: /open?id=<ID>
+  m = s.match(/^https?:\/\/drive\.google\.com\/open\?id=([^&]+)/);
+  if (m) return "https://drive.google.com/uc?export=view&id=" + m[1];
+  // Google Drive: /uc?... (already renderable)
+  if (/^https?:\/\/drive\.google\.com\/uc\?/.test(s)) return s;
+
+  // Dropbox: force the raw-content host + raw=1 param so the browser
+  // gets the file bytes instead of the preview HTML page.
+  if (/^https?:\/\/(www|dl)\.dropbox\.com\//.test(s)) {
+    var u = s.replace(/:\/\/www\.dropbox\.com/, "://dl.dropboxusercontent.com")
+             .replace(/[?&]dl=[01]/g, "")
+             .replace(/[?&]raw=[01]/g, "");
+    if (u.indexOf("?") >= 0) u += "&raw=1"; else u += "?raw=1";
+    return u;
+  }
+
+  // Everything else (Meta CDN, direct image host, uploaded asset URL)
+  // pass through unchanged.
+  return s;
+}
+
 function CreativePairCard(props) {
   var card = props.card, P = props.P, ff = props.ff, fm = props.fm;
   var status = props.status || "pending"; // pending | confirmed
@@ -959,10 +992,11 @@ function CreativePairCard(props) {
 
   var thumb = function (file, aspect) {
     if (!file) return <div style={{ background: "rgba(255,255,255,0.04)", border: "1px dashed " + P.rule, borderRadius: 6, aspectRatio: aspect === "9x16" ? "9/16" : "1/1", display: "flex", alignItems: "center", justifyContent: "center", color: P.caption || "#8B7FA3", fontSize: 9, fontFamily: fm }}>Missing</div>;
+    var imgUrl = renderableImageUrl(file.url);
     return <div style={{ background: "#0a1830", border: "1px solid " + accent + "33", borderRadius: 6, overflow: "hidden", aspectRatio: aspect === "9x16" ? "9/16" : "1/1", position: "relative" }}>
-      {file.url
-        ? <img src={file.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={function (e) { e.currentTarget.style.display = "none"; }} />
-        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: P.caption || "#8B7FA3", fontSize: 9, fontFamily: fm }}>No preview</div>
+      {imgUrl
+        ? <img src={imgUrl} alt={file.name || ""} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={function (e) { e.currentTarget.style.display = "none"; var parent = e.currentTarget.parentNode; if (parent) { var fallback = document.createElement("div"); fallback.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#8B7FA3;font-size:9px;padding:6px;box-sizing:border-box"; fallback.textContent = file.name || "Preview unavailable"; parent.insertBefore(fallback, e.currentTarget); } }} />
+        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", color: P.caption || "#8B7FA3", fontSize: 9, fontFamily: fm, padding: 6, boxSizing: "border-box" }}>{file.name || "No preview"}</div>
       }
       <div style={{ position: "absolute", bottom: 2, left: 2, right: 2, fontSize: 7.5, color: "#fff", fontFamily: fm, fontWeight: 800, letterSpacing: 0.5, textAlign: "center", textShadow: "0 1px 2px rgba(0,0,0,0.7)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{aspect}</div>
     </div>;
