@@ -1423,7 +1423,8 @@ export default function CreateChatTab(props) {
           memories: Array.isArray(x.data.memories) ? x.data.memories : [],
           actions: Array.isArray(x.data.actions) ? x.data.actions : [],
           live: Array.isArray(x.data.actions) && x.data.actions.length > 0,
-          unverifiedNumbers: !!x.data.unverifiedNumbers
+          unverifiedNumbers: !!x.data.unverifiedNumbers,
+          truncated: !!x.data.truncated
         };
         // Auto-persist any SAVE_MEMORY blocks Sami emitted (Phase 4).
         // Fire-and-forget: refreshes the memory clients list after each
@@ -1763,6 +1764,9 @@ export default function CreateChatTab(props) {
             })}
             {m.unverifiedNumbers && <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, fontSize: 10, color: P.critical || "#ef4444", fontFamily: fm, letterSpacing: 0.5 }}>
               ⚠ Unverified numbers. This reply contains figures but no live tool call ran this turn. Ask Sami to pull the source data before relying on them.
+            </div>}
+            {m.truncated && <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(255,170,0,0.10)", border: "1px solid rgba(255,170,0,0.35)", borderRadius: 8, fontSize: 10, color: P.solar || "#FFAA00", fontFamily: fm, letterSpacing: 0.5 }}>
+              ⚠ Sami's response was cut short (likely too many writes in one plan). Ask her to split the plan into two smaller cards, or retry the same message.
             </div>}
             {Array.isArray(m.cards) && m.cards.map(function (c) {
               return <ApprovalCard key={c.id} card={c} P={P} ff={ff} fm={fm}

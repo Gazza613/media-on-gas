@@ -35,7 +35,13 @@ export const config = { maxDuration: 300 };
 
 var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 var MODEL = "claude-sonnet-5";
-var MAX_OUTPUT_TOKENS = 4000;
+// Sonnet-5 supports 8k output tokens. Full PLAN_CARD JSON for a
+// realistic build (campaign + ad set + N ads, each with an operation_id
+// and full input_data payload) can easily blow past 4k and get
+// truncated mid-JSON — the frontend then can't parse the card and
+// renders Sami's raw text with the opening <PLAN_CARD>{ tag visible.
+// 8000 handles ~30-40 write plans comfortably.
+var MAX_OUTPUT_TOKENS = 8000;
 // Real Guided Build sessions (11 mandatory questions + creative walk
 // + pair confirm + plan approve + writes) push past 40 turns easily.
 // We keep the FIRST HISTORY_HEAD_KEEP turns AND the LAST HISTORY_TAIL_
@@ -585,11 +591,38 @@ function extractNumericFacts(text) {
   var s = String(text || "");
   var out = [];
   var m;
+
+  // First pass: k / K / M / m / B / b shorthand (with or without a
+  // leading R). "10k", "R10K", "1.5M", "2b" → normalise to the full
+  // rand value so Sami echoing "R10,000" matches a user's "10k".
+  var curShortRe = /(?:R\s*)?(\d+(?:\.\d+)?)\s*([kKmMbB])\b/g;
+  var stripRanges = [];
+  while ((m = curShortRe.exec(s)) !== null) {
+    var base = parseFloat(m[1]);
+    if (!isFinite(base)) continue;
+    var suffix = m[2].toLowerCase();
+    var mult = suffix === "k" ? 1000 : suffix === "m" ? 1000000 : 1000000000;
+    out.push("R" + Math.round(base * mult));
+    stripRanges.push([m.index, m.index + m[0].length]);
+  }
+
+  // Build a "remaining" copy of the text with shorthand matches
+  // replaced by spaces so the plain-currency pass below doesn't
+  // re-parse "10" from an already-matched "10k".
+  var remaining = s;
+  for (var i = stripRanges.length - 1; i >= 0; i--) {
+    var r = stripRanges[i];
+    remaining = remaining.slice(0, r[0]) + Array(r[1] - r[0] + 1).join(" ") + remaining.slice(r[1]);
+  }
+
+  // Second pass: plain currency amounts (R100, R10,000, R 10 000).
   var curRe = /R\s*(\d[\d.,\s]*)/g;
-  while ((m = curRe.exec(s)) !== null) {
+  while ((m = curRe.exec(remaining)) !== null) {
     var digits = m[1].replace(/[\s,]/g, "").replace(/\.+$/, "");
     if (digits && digits.length >= 2) out.push("R" + digits);
   }
+
+  // Percentages: unchanged (k/M/B shorthand on percentages is nonsense).
   var pctRe = /(\d+(?:[.,]\d+)?)\s*%/g;
   while ((m = pctRe.exec(s)) !== null) {
     out.push(m[1].replace(/,/g, ".") + "%");
@@ -806,6 +839,18 @@ export default async function handler(req, res) {
     // brief is not fabrication).
     var unverified = computeUnverifiedNumbers(extracted, messages, actions.length);
 
+    // Truncation detector. If Anthropic hit the max_tokens ceiling,
+    // any card JSON in the tail was probably cut mid-write and won't
+    // parse — surface a specific warning so the AM knows to ask Sami
+    // to retry (or split the plan) instead of staring at raw JSON.
+    var stopReason = result.data.stop_reason || null;
+    var truncated = stopReason === "max_tokens";
+    // Also detect a hanging open card tag (extractor failed AND the
+    // reply contains a bare "<PLAN_CARD>" or "<APPROVAL_CARD>" — that
+    // means the tag opened but was cut before the closer arrived).
+    var hasOpenTag = /<(?:PLAN|APPROVAL|BRIEF|CREATIVE_PAIR)_CARD>/.test(extracted.text) &&
+      extracted.cards.length + extracted.plans.length + extracted.briefs.length + extracted.pairCards.length === 0;
+
     res.status(200).json({
       reply: extracted.text,
       cards: extracted.cards,
@@ -815,7 +860,8 @@ export default async function handler(req, res) {
       memories: extracted.memories,
       actions: actions,
       unverifiedNumbers: unverified,
-      stopReason: result.data.stop_reason || null
+      truncated: truncated || hasOpenTag,
+      stopReason: stopReason
     });
   } catch (err) {
     console.error("sami-hub failed", err);
