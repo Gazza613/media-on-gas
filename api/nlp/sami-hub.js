@@ -623,8 +623,15 @@ function computeUnverifiedNumbers(extracted, messages, actionsCount) {
   });
   if (samiNumbers.length === 0) return false;
   var userNumbers = {};
-  var recentUser = messages.filter(function (m) { return m && m.role === "user"; }).slice(-6);
-  recentUser.forEach(function (m) {
+  // Scan EVERY user turn Sami currently has in context, not just the
+  // last 6. On a long build session the opening brief (R10,000 budget,
+  // dates, etc.) lives in the head of the head+tail history window;
+  // Sami rightly still echoes those numbers 60 turns later, and the
+  // grounding sentinel used to flag them as "unverified" because the
+  // last-6 slice missed them. Now any user-supplied number anywhere
+  // in the surviving history counts as verified echo.
+  var allUser = messages.filter(function (m) { return m && m.role === "user"; });
+  allUser.forEach(function (m) {
     extractNumericFacts(m.content).forEach(function (n) { userNumbers[n] = true; });
     // Also index bare-digit versions so "10000" typed without the R
     // prefix still matches an "R10000" from Sami.
