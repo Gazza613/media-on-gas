@@ -2190,11 +2190,27 @@ function ThumbOverrideModal(props){
               setVideoBust(function(n){return n+1;});
               return;
             }
-            setVideoState({loading:false,error:"could not load video",loaded:false});
+            // After the retry has also failed, fire a diagnostic fetch
+            // to the same URL so we surface the actual HTTP status +
+            // error body — the <video> onError event gives no
+            // diagnosis by itself. Range: bytes=0-0 keeps it cheap
+            // (0-byte-preview probe) while still exercising the same
+            // proxy code path.
+            fetch(videoSrc,{method:"GET",headers:{"Range":"bytes=0-0"}}).then(function(r){
+              var status=r.status;
+              r.text().then(function(body){
+                var brief=(body||"").slice(0,140);
+                setVideoState({loading:false,error:"HTTP "+status+(brief?" · "+brief:""),loaded:false});
+              }).catch(function(){
+                setVideoState({loading:false,error:"HTTP "+status+" (no body)",loaded:false});
+              });
+            }).catch(function(fetchErr){
+              setVideoState({loading:false,error:"Network fetch failed: "+String(fetchErr&&fetchErr.message||fetchErr),loaded:false});
+            });
           }}
         />
         {videoState.error&&<div style={{marginBottom:6}}>
-          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif"}}>Video failed to load after one auto-retry. Meta signed URL may have expired, the CDN may be rate-limiting, or the video was removed from the ad account.</div>
+          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif",wordBreak:"break-word"}}>Video failed to load after one auto-retry. Diagnostic: <code style={{fontFamily:"Menlo,Consolas,monospace",background:"rgba(0,0,0,0.35)",padding:"1px 5px",borderRadius:3,color:"#F87171"}}>{videoState.error}</code></div>
           <button onClick={function(){autoRetriedRef.current=false;setVideoBust(function(n){return n+1;});setVideoState({loading:true,error:"",loaded:false});}} style={{marginTop:6,background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:6,padding:"5px 10px",color:"#F43F5E",fontSize:10,fontWeight:800,fontFamily:"monospace",letterSpacing:1.2,cursor:"pointer",textTransform:"uppercase"}}>Retry Load</button>
           <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:8,fontFamily:"Helvetica,Arial,sans-serif"}}>or upload / paste a screenshot below.</span>
         </div>}
@@ -9943,9 +9959,16 @@ export default function MediaOnGas(){
                 });
                 var _selWaConvoTA=_selAllLearnalotTA||_selAllChillaTA;
                 var objGroups=[
-                  {key:"leads",label:"LEAD GENERATION",accent:P.rose,criterion:_selWaConvoTA?"by WhatsApp conversations & cost per conversation":"by leads & cost per lead"},
+                  {key:"leads",label:_selWaConvoTA?"CONVERSATIONS":"LEAD GENERATION",accent:P.rose,criterion:_selWaConvoTA?"by WhatsApp conversations & cost per conversation":"by leads & cost per lead"},
                   {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,criterion:"by clicks & CTR (min 5k impressions)"},
                   {key:"followers",label:"FOLLOWERS",accent:P.tt,criterion:"by follower growth & cost per follower"},
+                  // landingpage keeps its native label — the sub-header
+                  // criterion swap already communicates that ranking flips
+                  // to conversations for WA-first clients when a WA ad
+                  // ends up bucketed here. Renaming the section itself to
+                  // "CONVERSATIONS" would produce two identically-titled
+                  // sections on-screen (leads + landingpage both flipped)
+                  // which reads as a duplication bug.
                   {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,criterion:_selWaConvoTA?"by WhatsApp conversations & cost per conversation":"by clicks to landing page"},
                   {key:"community_reach",label:"COMMUNITY REACH",accent:P.momoYellow,criterion:"by reach & CPM"}
                 ];

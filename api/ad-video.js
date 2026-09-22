@@ -313,8 +313,26 @@ export default async function handler(req, res) {
         // so the client can log it, and use 502 for auth / rate-limit
         // failures so a browser retry with `?bust=1` self-heals a stale
         // signed URL. 404s stay 404 (nothing to retry).
+        //
+        // Also log the failure to Vercel logs with enough context to
+        // debug — the resolved URL host + upstream status tells us
+        // whether Meta is 403-ing us (signature expired), 429-ing us
+        // (rate limit) or 404-ing (video removed).
+        var _upstreamBody = "";
+        try { _upstreamBody = (await upstream.text()).slice(0, 300); } catch (_) {}
+        var _urlHost = "";
+        try { _urlHost = new URL(resolved.url).host; } catch (_) {}
+        console.error("[ad-video proxy] upstream fail", {
+          videoId: videoId,
+          platform: platform,
+          adId: adId,
+          bust: bust,
+          upstreamHost: _urlHost,
+          upstreamStatus: upstream.status,
+          upstreamBodyPreview: _upstreamBody
+        });
         var _mapStatus = upstream.status === 404 ? 404 : 502;
-        res.status(_mapStatus).json({ error: "Upstream " + upstream.status, upstreamStatus: upstream.status });
+        res.status(_mapStatus).json({ error: "Upstream " + upstream.status, upstreamStatus: upstream.status, upstreamHost: _urlHost, upstreamBodyPreview: _upstreamBody });
         return;
       }
       res.setHeader("Content-Type", upstream.headers.get("Content-Type") || "video/mp4");
