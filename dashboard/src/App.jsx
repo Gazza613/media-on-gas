@@ -10926,14 +10926,32 @@ export default function MediaOnGas(){
               return true;
             });
 
+            // Conversation-first (Learnalot + Chilla) detection at this
+            // scope. Same all-selected substring test used elsewhere.
+            // Chilla and Learnalot both run WhatsApp Conversations as
+            // their headline KPI; every other client keeps the standard
+            // "Lead Generation / by leads & CPL" framing.
+            var _crWaConvo=(computed.allSelected||[]).length>0&&(computed.allSelected||[]).every(function(c){
+              var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+              var cn=String(c.campaignName||"").toLowerCase();
+              return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0
+                ||an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;
+            });
+
             // Objective sections in fixed order. Icons render in P.fb so
             // the headline strip (icon container, label, ADS IN SECTION
             // count) reads in one consistent blue voice across all four
             // sections — same treatment as Summary's "Top Ads Per Objective"
             // block. Per-objective accent is still preserved on the KPI
             // tiles and creatives table below for subtle differentiation.
+            //
+            // Leads section flips its label + description + cost label
+            // for conversation-first clients: 'LEAD GENERATION' →
+            // 'CONVERSATIONS', 'CPL' → 'COST PER CONVO', and the
+            // descriptor drops all lead language. Every other section +
+            // every other client keeps its existing text.
             var objSections=[
-              {key:"leads",label:"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.fb,20),metric:"leads",costLabel:"CPL",sortBy:"results",bench:benchmarks.meta.cpl,desc:"Best ad based on number of leads generated and cost per lead"},
+              {key:"leads",label:_crWaConvo?"CONVERSATIONS":"LEAD GENERATION",accent:P.rose,icon:Ic.target(P.fb,20),metric:_crWaConvo?"conversations":"leads",costLabel:_crWaConvo?"COST PER CONVO":"CPL",sortBy:"results",bench:_crWaConvo?null:benchmarks.meta.cpl,desc:_crWaConvo?"Best ads based on WhatsApp conversations opened and cost per conversation":"Best ad based on number of leads generated and cost per lead"},
               {key:"appinstall",label:"CLICKS TO APP STORE",accent:P.fb,icon:Ic.bolt(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on store clicks delivered and cost per click"},
               {key:"followers",label:"FOLLOWERS",accent:P.tt,icon:Ic.users(P.fb,20),metric:"follows",costLabel:"CPF",sortBy:"results",bench:benchmarks.meta.cpf,desc:"Best ad based on follow volume and cost per follow"},
               {key:"landingpage",label:"LANDING PAGE",accent:P.cyan,icon:Ic.eye(P.fb,20),metric:"clicks",costLabel:"CPC",sortBy:"results",bench:benchmarks.meta.cpc,desc:"Best ad based on landing page clicks and cost per click"},

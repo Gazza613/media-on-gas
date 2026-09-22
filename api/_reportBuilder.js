@@ -1291,7 +1291,12 @@ function objectiveWeight(row, campaignObjType) {
 // segMapClicks. Age & Region bar charts (mirror the dashboard
 // Demographics OBJECTIVE stage) read from ageObj / genderObj /
 // segMapObj / byRegionObj.
-function aggregateAgeGender(rows, campaignObjType) {
+// weightFn (optional): row-level weight override. When provided, its
+// return value replaces objectiveWeight(row, campaignObjType) for the
+// AGE/GENDER rollup. Used by the conversation-first override so
+// WhatsApp campaigns weight by proportionally-distributed WA
+// conversations instead of leads/follows/clicks (all zero on a WA row).
+function aggregateAgeGender(rows, campaignObjType, weightFn) {
   var byPlat = {};
   var ageClicksAll = {}, ageObjAll = {};
   var genderClicksAll = { male: 0, female: 0 };
@@ -1325,7 +1330,7 @@ function aggregateAgeGender(rows, campaignObjType) {
     var bp = byPlat[p];
     var clicks = parseInt(r.clicks || 0, 10);
     var imps = parseInt(r.impressions || 0, 10);
-    var w = campaignObjType ? objectiveWeight(r, campaignObjType) : clicks;
+    var w = typeof weightFn === "function" ? weightFn(r) : (campaignObjType ? objectiveWeight(r, campaignObjType) : clicks);
     var rawGender = String(r.gender || "").toLowerCase();
     var g = rawGender === "male" || rawGender === "m" ? "male" : rawGender === "female" || rawGender === "f" ? "female" : "";
     // Persona tally — dashboard buildPersona logic: include ALL ages
@@ -1373,7 +1378,10 @@ function aggregateAgeGender(rows, campaignObjType) {
 // read byPlatformRegionClicks; TikTok persona reads
 // byPlatformRegionImpressions per the per-platform data-quality
 // decision (see aggregateAgeGender docblock above).
-function aggregateRegion(rows, campaignObjType) {
+// weightFn (optional): row-level weight override, same contract as
+// aggregateAgeGender. Enables the conversation-first branch (WA
+// campaigns) to render a non-zero region breakdown.
+function aggregateRegion(rows, campaignObjType, weightFn) {
   var byRegion = {};
   var byPlatformRegionClicks = {}, byPlatformRegionObj = {}, byPlatformRegionImpressions = {};
   (rows || []).forEach(function(r) {
@@ -1382,7 +1390,7 @@ function aggregateRegion(rows, campaignObjType) {
     var p = platformFamily(r.platform || "Other");
     var clicks = parseInt(r.clicks || 0, 10);
     var imps = parseInt(r.impressions || 0, 10);
-    var w = campaignObjType ? objectiveWeight(r, campaignObjType) : clicks;
+    var w = typeof weightFn === "function" ? weightFn(r) : (campaignObjType ? objectiveWeight(r, campaignObjType) : clicks);
     if (!byRegion[reg]) byRegion[reg] = { impressions: 0, clicks: 0, spend: 0, weight: 0 };
     byRegion[reg].impressions += imps;
     byRegion[reg].clicks += clicks;
@@ -1442,8 +1450,66 @@ function renderAudienceSection(opts) {
   var ageRows = (demo.ageGender || []).filter(inSel);
   var regRows = (demo.region || []).filter(inSel);
   var cot = opts.campaignObjType || {};
-  var agAgg = aggregateAgeGender(ageRows, cot);
-  var regAgg = aggregateRegion(regRows, cot);
+  // Conversation-first weight override (Learnalot + Chilla). Meta
+  // returns messaging_conversation_started_7d at the CAMPAIGN level
+  // but does not reliably split it per age/region breakdown row —
+  // so reading r.results.messagingConversations directly gives 0 for
+  // most rows and the whole panel renders empty. Fix: proportionally
+  // distribute each campaign's WA-conversation TOTAL (from its
+  // campaign-level actions array) across its breakdown rows using
+  // the row's impression share of that campaign's rowset total.
+  // Same technique the dashboard uses at App.jsx:6972-7020.
+  //
+  // No-op for every other client — weightFn stays undefined and the
+  // aggregators fall back to objectiveWeight(row, cot) exactly as
+  // before.
+  var _waWeightFn = null;
+  if (isConversationFirstSlug(opts.clientSlug)) {
+    var _campConvByCid = {};
+    campaignsList.forEach(function(c) {
+      var acts = Array.isArray(c.actions) ? c.actions : [];
+      var best = 0;
+      for (var _i = 0; _i < acts.length; _i++) {
+        if (String(acts[_i].action_type || "").toLowerCase() === "onsite_conversion.messaging_conversation_started_7d") {
+          var v = parseFloat(acts[_i].value || 0);
+          if (v > best) best = v;
+        }
+      }
+      if (best > 0) {
+        var _cid = String(c.campaignId || "");
+        var _raw = c.rawCampaignId || _cid.replace(/_facebook$/, "").replace(/_instagram$/, "").replace(/^google_/, "");
+        _campConvByCid[_cid] = best;
+        if (_raw && !_campConvByCid[_raw]) _campConvByCid[_raw] = best;
+      }
+    });
+    var _impsByRowSet = function(rows) {
+      var m = {};
+      rows.forEach(function(r) {
+        var cid = String(r.campaignId || "");
+        m[cid] = (m[cid] || 0) + (parseFloat(r.impressions || 0) || 0);
+      });
+      return m;
+    };
+    var _agImpsByCid = _impsByRowSet(ageRows);
+    var _regImpsByCid = _impsByRowSet(regRows);
+    _waWeightFn = function(r) {
+      var rs = (r && r.results) || {};
+      var raw = parseFloat(rs.messagingConversations || 0) || 0;
+      if (raw > 0) return raw;
+      var cid = String(r.campaignId || "");
+      var campTotal = _campConvByCid[cid] || 0;
+      if (campTotal <= 0) return 0;
+      // Region rows carry `region`; age/gender rows do not. Route each
+      // row to its correct impression-share denominator so the split
+      // adds up to campTotal for its rowset (no double-counting).
+      var setTotal = r.region !== undefined ? (_regImpsByCid[cid] || 0) : (_agImpsByCid[cid] || 0);
+      if (setTotal <= 0) return 0;
+      var rowImps = parseFloat(r.impressions || 0) || 0;
+      return (rowImps / setTotal) * campTotal;
+    };
+  }
+  var agAgg = aggregateAgeGender(ageRows, cot, _waWeightFn);
+  var regAgg = aggregateRegion(regRows, cot, _waWeightFn);
 
   // Persona per platform. Match dashboard's persona keys: only render
   // Facebook, Instagram, TikTok, Google Ads (in that order) and skip
@@ -1784,8 +1850,15 @@ function renderTopAdsSection(opts) {
   // it's a natural fit (awareness / reach objectives). Google Search is
   // deliberately omitted since search ads are text-only and have no
   // creative thumbnail.
+  // Conversation-first (Learnalot + Chilla): swap the Lead Generation
+  // section's title / labels / criterion so the Creative Read reads as
+  // 'WhatsApp Conversations' with 'wa convos / per convo' columns.
+  // The section still buckets on objective="leads" because Meta's
+  // objective classification puts WA campaigns under Leads — only the
+  // display + ranking metric change, not the routing.
+  var _waConvoTA = isConversationFirstSlug(opts.clientSlug);
   var objSections = [
-    { key: "leads",           title: "Lead Generation",     accent: "#F43F5E", sort: leadSort,          resultLabel: "leads",           costLabel: "per lead",           criterion: "Ranked by leads captured and cost per lead.",                       platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
+    { key: "leads",           title: _waConvoTA ? "WhatsApp Conversations" : "Lead Generation", accent: "#F43F5E", sort: leadSort,          resultLabel: _waConvoTA ? "wa convos" : "leads", costLabel: _waConvoTA ? "per convo" : "per lead", criterion: _waConvoTA ? "Ranked by WhatsApp conversations opened and cost per conversation." : "Ranked by leads captured and cost per lead.", platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
     { key: "appinstall",      title: "Clicks to App Store", accent: "#4599FF", sort: appInstallSort,    resultLabel: "store clicks",    costLabel: "per store click",    criterion: "Ranked by app store clicks and cost per store click.",              platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
     { key: "followers",       title: "Followers",           accent: "#34D399", sort: followerSort,      resultLabel: "follows",         costLabel: "per follow",         criterion: "Ranked by followers and page likes gained. Not by general clicks.", platforms: ["Facebook", "Instagram", "TikTok", "Google Display"] },
     { key: "landingpage",     title: "Landing Page",        accent: "#00F2EA", sort: landingPageSort,   resultLabel: "LP clicks",       costLabel: "per LP click",       criterion: "Ranked by landing page clicks. Landing-page destination campaigns only.", platforms: ["Facebook", "Instagram", "TikTok", "Google Display", "YouTube"] },
@@ -1918,6 +1991,20 @@ function renderTopAdsSection(opts) {
     bucket.followers.Instagram = bucket.followers.Instagram.map(function(a) {
       var ck = parseFloat(a.clicks || 0);
       return Object.assign({}, a, { results: ck, resultType: "profile_visits", _igFollower: true });
+    });
+  }
+  // Conversation-first per-ad rewrite (Learnalot + Chilla). The leads
+  // bucket carries the WA campaigns (Meta classifies WA Conversations
+  // objective under "leads") — replace each ad's `results` with its
+  // messagingConversations7d count so leadSort ranks on WA conversations
+  // and adResult / adCard read the WA number for the big overlay + the
+  // per-convo cost column. Mirrors dashboard rewrite at App.jsx:9928.
+  if (_waConvoTA && bucket.leads) {
+    Object.keys(bucket.leads).forEach(function(pl) {
+      bucket.leads[pl] = bucket.leads[pl].map(function(a) {
+        var wa = parseInt(a.messagingConversations7d || 0, 10);
+        return Object.assign({}, a, { results: wa, resultType: "conversations" });
+      });
     });
   }
 
