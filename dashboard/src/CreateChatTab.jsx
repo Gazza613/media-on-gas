@@ -644,6 +644,57 @@ function BriefCard(props) {
   </div>;
 }
 
+// ---- Result card (10x: every successful write emits one) -----------------
+//
+// Sami emits <RESULT_CARD>{...}</RESULT_CARD> after every successful
+// run_write_operation. Renders as a compact tile with the platform-
+// assigned resource id, status pill, budget line, client tag, and a
+// direct "Open in [Platform]" link so the AM can click through to
+// Meta Ads Manager / TikTok Ads / Google Ads / LinkedIn without
+// hunting for it. Also logged server-side to the Live Campaign State
+// header at the top of the hub.
+
+function ResultCard(props) {
+  var card = props.card, P = props.P, ff = props.ff, fm = props.fm;
+  var accent = card.platform === "meta" ? "#4599FF"
+    : card.platform === "tiktok" ? "#00F2EA"
+    : card.platform === "google" ? "#34A853"
+    : card.platform === "linkedin" ? "#0A66C2"
+    : (P.solar || "#FFAA00");
+  var status = String(card.status || "").toUpperCase();
+  var isLive = status === "ACTIVE" || status === "ENABLED" || status === "RUNNING";
+  var statusColor = isLive ? (P.mint || "#34D399") : (P.solar || "#FFAA00");
+  var budget = card.budget && card.budget.amount
+    ? "R" + (card.budget.amount / 100).toLocaleString("en-ZA", { maximumFractionDigits: 0 }) + " " + (card.budget.type || "")
+    : null;
+  var openUrl = card.open_url && /^https?:\/\//i.test(card.open_url) ? card.open_url : null;
+
+  return <div style={{
+    marginTop: 8, marginBottom: 4,
+    background: "rgba(52,211,153,0.04)",
+    border: "1px solid " + (P.mint || "#34D399") + "40",
+    borderLeft: "4px solid " + (P.mint || "#34D399"),
+    borderRadius: 10, padding: "10px 14px",
+    display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap"
+  }}>
+    <span style={{ fontSize: 9, fontWeight: 900, color: accent, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", background: accent + "18", border: "1px solid " + accent + "44", borderRadius: 5, padding: "2px 7px" }}>
+      ✓ {(card.platform || "?").toUpperCase()} · {(card.kind || "?").toUpperCase()}
+    </span>
+    <span style={{ fontSize: 12, fontWeight: 700, color: P.txt, fontFamily: ff, wordBreak: "break-word", flex: 1, minWidth: 200 }}>
+      {card.resource_name || card.resource_id || "Created"}
+    </span>
+    <span style={{ fontSize: 8, fontWeight: 800, color: statusColor, fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", background: statusColor + "14", border: "1px solid " + statusColor + "44", borderRadius: 4, padding: "2px 6px" }}>
+      {status || "CREATED"}
+    </span>
+    {budget && <span style={{ fontSize: 10, color: P.label || "#c9c1d5", fontFamily: fm, fontWeight: 700 }}>{budget}</span>}
+    {card.client && <span style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, fontStyle: "italic" }}>{card.client}</span>}
+    {card.resource_id && <span style={{ fontSize: 9, color: P.caption || "#8B7FA3", fontFamily: fm, fontFamily: "Menlo,Consolas,monospace" }}>id {card.resource_id}</span>}
+    {openUrl && <a href={openUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, fontWeight: 800, color: accent, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", textDecoration: "none", padding: "4px 10px", border: "1px solid " + accent + "60", borderRadius: 5 }}>
+      Open →
+    </a>}
+  </div>;
+}
+
 // ---- Plan card (audit fix #6, batched approval) --------------------------
 //
 // Sami emits <PLAN_CARD>{...}</PLAN_CARD> when a single brief requires 3+
@@ -1169,6 +1220,25 @@ export default function CreateChatTab(props) {
   var pls = useState({}), planStatus = pls[0], setPlanStatus = pls[1];
   // World-class UX: BRIEF_CARD statuses keyed by brief id.
   var brs = useState({}), briefStatus = brs[0], setBriefStatus = brs[1];
+  // 10x live state: aggregate of RESULT_CARD emissions rendered in
+  // the header strip. Fetched on hub mount + refreshed after every
+  // Sami reply.
+  var lss = useState({ loading: true, today: null, week: null, activeClient: "", credits: null });
+  var liveState = lss[0], setLiveState = lss[1];
+  var fetchLiveState = function () {
+    if (!token) return;
+    fetch(apiBase + "/api/nlp/sami-live-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        setLiveState({ loading: false, today: d.today || null, week: d.week || null, activeClient: d.activeClient || "", credits: d.credits || null });
+      })
+      .catch(function () { setLiveState(Object.assign({}, lss[0], { loading: false })); });
+  };
+  useEffect(function () { fetchLiveState(); }, [token]);
   var is = useState(""), input = is[0], setInput = is[1];
   var bs = useState(false), busy = bs[0], setBusy = bs[1];
   var es = useState(""), err = es[0], setErr = es[1];
@@ -1458,6 +1528,7 @@ export default function CreateChatTab(props) {
           briefs: Array.isArray(x.data.briefs) ? x.data.briefs : [],
           pairCards: Array.isArray(x.data.pairCards) ? x.data.pairCards : [],
           memories: Array.isArray(x.data.memories) ? x.data.memories : [],
+          results: Array.isArray(x.data.results) ? x.data.results : [],
           actions: Array.isArray(x.data.actions) ? x.data.actions : [],
           live: Array.isArray(x.data.actions) && x.data.actions.length > 0,
           unverifiedNumbers: !!x.data.unverifiedNumbers,
@@ -1513,9 +1584,11 @@ export default function CreateChatTab(props) {
         // Persist the thread after Sami's reply. Forward the caller's
         // statusOverrides so an approve/reject-then-send flow saves
         // the FRESH status, not the pre-approve closure snapshot.
-        // Otherwise a reload after Sami replies renders the card as
-        // "pending" again and the AM would re-click to re-authorise.
         saveThread(activeThreadId, withReply, statusOverrides || undefined);
+        // 10x: if this Sami turn included any RESULT_CARD emissions,
+        // the server just logged them. Refresh the Live Campaign
+        // State header so the "created today" counters update.
+        if (samiTurn.results.length > 0) fetchLiveState();
       })
       .catch(function (e) {
         setBusy(false);
@@ -1710,12 +1783,41 @@ export default function CreateChatTab(props) {
 
     {/* Main pane — chat */}
     <section style={{ display: "flex", flexDirection: "column", height: "78vh" }}>
-      <header style={{ padding: "14px 22px", borderBottom: "1px solid " + P.rule, display: "flex", alignItems: "center", gap: 10 }}>
-        {Ic && Ic.bolt ? Ic.bolt(P.ember, 18) : null}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase" }}>Sami · Campaign Hub</div>
-          <div style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 0.5 }}>Plan, brief and build live campaigns. Every write is paused and awaits your approval.</div>
+      <header style={{ padding: "12px 22px 10px", borderBottom: "1px solid " + P.rule }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {Ic && Ic.bolt ? Ic.bolt(P.ember, 18) : null}
+          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: P.txt, fontFamily: fm, letterSpacing: 2, textTransform: "uppercase" }}>Sami · Campaign Hub</div>
+            <div style={{ fontSize: 10, color: P.caption || "#8B7FA3", fontFamily: fm, letterSpacing: 0.5 }}>Plan, brief and build live campaigns. Every write is paused and awaits your approval.</div>
+          </div>
         </div>
+        {(function () {
+          var t = liveState.today || {}, w = liveState.week || {}, cr = liveState.credits || {};
+          var counts = t.counts || {};
+          var camp = counts.campaign || 0, adset = counts.adset || 0, ad = counts.ad || 0, media = counts.media || 0;
+          var totalToday = t.totalWrites || 0;
+          var totalWeek = w.totalWrites || 0;
+          var dailyBudgetR = t.dailyBudgetCents ? (t.dailyBudgetCents / 100) : 0;
+          var lifetimeBudgetR = t.lifetimeBudgetCents ? (t.lifetimeBudgetCents / 100) : 0;
+          var creditRemaining = cr.remaining;
+          var creditPctUsed = cr.limit ? (((cr.used || 0) / cr.limit) * 100).toFixed(0) : "0";
+          var chip = function (label, value, color) {
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: (color || "#4599FF") + "14", border: "1px solid " + (color || "#4599FF") + "30", borderRadius: 5, fontSize: 10, fontFamily: fm }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: color || "#4599FF", letterSpacing: 1, textTransform: "uppercase" }}>{label}</span>
+              <span style={{ fontWeight: 700, color: P.txt }}>{value}</span>
+            </span>;
+          };
+          return <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            {liveState.activeClient
+              ? chip("Active", liveState.activeClient, "#B085FF")
+              : <span style={{ fontSize: 9, color: P.caption, fontFamily: fm, letterSpacing: 1, textTransform: "uppercase", fontStyle: "italic" }}>No active client yet</span>}
+            {totalToday > 0 && chip("Today", camp + " camp · " + adset + " adset · " + ad + " ad" + (media ? " · " + media + " media" : ""), P.mint || "#34D399")}
+            {totalToday === 0 && chip("Today", "nothing shipped yet", P.caption || "#8B7FA3")}
+            {(dailyBudgetR > 0 || lifetimeBudgetR > 0) && chip("Budget locked", (dailyBudgetR > 0 ? "R" + dailyBudgetR.toLocaleString("en-ZA") + "/day" : "") + (dailyBudgetR > 0 && lifetimeBudgetR > 0 ? " · " : "") + (lifetimeBudgetR > 0 ? "R" + lifetimeBudgetR.toLocaleString("en-ZA") + " lifetime" : ""), "#FF6B00")}
+            {totalWeek > 0 && chip("Week", totalWeek + " writes", "#4599FF")}
+            {cr.limit && chip("Credits", (creditRemaining != null ? creditRemaining.toLocaleString("en-ZA") : "?") + " left · " + creditPctUsed + "% used", parseFloat(creditPctUsed) >= 96 ? (P.critical || "#ef4444") : parseFloat(creditPctUsed) >= 80 ? (P.solar || "#FFAA00") : (P.mint || "#34D399"))}
+          </div>;
+        })()}
       </header>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "22px 26px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1808,6 +1910,9 @@ export default function CreateChatTab(props) {
               return <ApprovalCard key={c.id} card={c} P={P} ff={ff} fm={fm}
                 status={cardStatus[c.id] || "pending"}
                 onApprove={handleApprove} onReject={handleReject} />;
+            })}
+            {Array.isArray(m.results) && m.results.map(function (c, i) {
+              return <ResultCard key={"result-" + i + "-" + (c.resource_id || c.id || "")} card={c} P={P} ff={ff} fm={fm} />;
             })}
             {m.live && <div title={Array.isArray(m.actions) && m.actions.length ? ("Engine calls: " + m.actions.join(", ")) : "Live engine activity"}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 9, fontWeight: 700, color: P.mint || "#34D399", fontFamily: fm, letterSpacing: 1.5, textTransform: "uppercase", cursor: "help" }}>
