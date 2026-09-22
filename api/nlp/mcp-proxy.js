@@ -243,54 +243,62 @@ export default async function handler(req, res) {
   var upstreamSession = upstream.headers.get("mcp-session-id");
   if (upstreamSession) res.setHeader("mcp-session-id", upstreamSession);
 
-  // JSON response: buffer, cache for idempotency on successful writes,
-  // then forward.
-  if (upstreamCT.indexOf("application/json") >= 0 || isWrite) {
-    var text = await upstream.text();
-    if (isWrite && upstream.status >= 200 && upstream.status < 300) {
-      try {
-        var parsedResp = JSON.parse(text);
-        var writeArgs = (body.params && body.params.arguments) || {};
-        // Only cache when the JSON-RPC response itself is a success
-        // (no top-level error, no isError:true on the tool result).
-        var toolIsError = parsedResp
-          && parsedResp.result
-          && parsedResp.result.isError === true;
-        if (!parsedResp.error && !toolIsError) {
-          await consumeNonce(writeArgs.operation_id, writeArgs.input_data, parsedResp);
-        }
-      } catch (err) {
-        console.warn("[mcp-proxy] response not JSON, skipping idempotency cache", err && err.message);
-      }
+  // Buffer the whole upstream response as text. Markifact returns
+  // text/event-stream even for one-shot MCP responses; piping SSE
+  // bytes through Vercel serverless streaming was silently dropping
+  // frames and Anthropic surfaced it as "Error while communicating".
+  // We unwrap the SSE, extract the JSON-RPC payload, and send Anthropic
+  // clean application/json. MCP spec says server picks response mode;
+  // client (Anthropic) accepts either.
+  var text = await upstream.text();
+  var responseData = null;
+
+  if (upstreamCT.indexOf("application/json") >= 0) {
+    try { responseData = JSON.parse(text); } catch (_) { /* leave null, fall through to raw send */ }
+  } else if (upstreamCT.indexOf("text/event-stream") >= 0) {
+    // SSE frames look like:
+    //   event: message
+    //   data: {"jsonrpc":"2.0","id":1,"result":{...}}
+    //   \n
+    // Multi-line `data:` continues the previous. Extract every data
+    // line, concatenate, JSON.parse. Works for both initialize +
+    // tools/call responses because Markifact sends one message per
+    // response.
+    var dataLines = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      if (line.indexOf("data:") === 0) dataLines.push(line.slice(5).replace(/^\s/, ""));
+    });
+    if (dataLines.length > 0) {
+      try { responseData = JSON.parse(dataLines.join("")); }
+      catch (err) { console.warn("[mcp-proxy] SSE payload not JSON:", err && err.message, "preview:", dataLines.join("").slice(0, 200)); }
     }
-    // Record usage AFTER we know the response was accepted. Only
-    // counts tools/call (reads + writes). initialize / tools/list /
-    // resources/* etc. flow through but do not consume a Markifact
-    // operation, so we don't count them.
-    if (isToolsCall && upstream.status >= 200 && upstream.status < 300) {
-      recordUsage(attributedUser, { isWrite: isWrite });
-    }
-    res.setHeader("content-type", upstreamCT || "application/json");
-    res.status(upstream.status).send(text);
-    return;
   }
 
-  // SSE / other streaming: pipe through without buffering. No
-  // idempotency caching in this path (writes are forced to JSON above,
-  // so this branch is only reads/streams).
-  res.setHeader("content-type", upstreamCT);
-  res.status(upstream.status);
-  var reader = upstream.body && upstream.body.getReader ? upstream.body.getReader() : null;
-  if (!reader) { res.end(); return; }
-  try {
-    while (true) {
-      var chunk = await reader.read();
-      if (chunk.done) break;
-      res.write(Buffer.from(chunk.value));
+  // Idempotency cache: cache the parsed response against the nonce
+  // for successful writes (works for both original JSON and SSE-parsed
+  // paths now).
+  if (isWrite && upstream.status >= 200 && upstream.status < 300 && responseData) {
+    var writeArgs = (body.params && body.params.arguments) || {};
+    var toolIsError = responseData.result && responseData.result.isError === true;
+    if (!responseData.error && !toolIsError) {
+      await consumeNonce(writeArgs.operation_id, writeArgs.input_data, responseData);
     }
-  } catch (err) {
-    console.error("[mcp-proxy] stream pipe error", err);
-  } finally {
-    res.end();
+  }
+
+  // Usage counter attribution for tools/call successes.
+  if (isToolsCall && upstream.status >= 200 && upstream.status < 300) {
+    recordUsage(attributedUser, { isWrite: isWrite });
+  }
+
+  // Return to Anthropic. Prefer the parsed JSON (compatible with
+  // either MCP transport mode). Fall back to the raw text if parse
+  // failed so no data is lost, though this branch means the response
+  // itself was malformed and Anthropic will error either way.
+  if (responseData) {
+    res.setHeader("content-type", "application/json");
+    res.status(upstream.status).send(JSON.stringify(responseData));
+  } else {
+    res.setHeader("content-type", upstreamCT || "application/json");
+    res.status(upstream.status).send(text);
   }
 }
