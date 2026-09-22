@@ -307,6 +307,23 @@ export default async function handler(req, res) {
       // a generic media-error → the "Video failed to load" banner.
       var upstreamHeaders = {};
       if (req.headers["range"]) upstreamHeaders["Range"] = req.headers["range"];
+      // Refuse iframe-only resolutions before we even hit the network.
+      // resolveMetaVideo falls through from `d.source` (direct MP4) →
+      // format[].embed_html src → embed_html src, and can end up with
+      // an Instagram-permalink or Facebook video-page URL that is a
+      // full HTML embed page, not an MP4. Proxying that would serve
+      // the HTML bytes with Content-Type: video/mp4 and the browser
+      // would reject it every time.
+      if (resolved.type === "iframe") {
+        console.error("[ad-video proxy] iframe-only resolution, cannot serve as video", { videoId: videoId, platform: platform, adId: adId });
+        res.status(415).json({
+          error: "Video is iframe-embed only",
+          upstreamStatus: 200,
+          upstreamHost: (function () { try { return new URL(resolved.url).host; } catch (_) { return ""; } })(),
+          reason: "Meta returned an iframe/embed URL for this video, not a direct MP4 source. This happens on older Instagram-native uploads where Meta no longer exposes the raw source. Upload a screenshot instead."
+        });
+        return;
+      }
       var upstream = await fetch(resolved.url, { headers: upstreamHeaders });
       if (!upstream.ok && upstream.status !== 206) {
         // Non-OK from Meta — surface a small JSON body with the status
@@ -333,6 +350,40 @@ export default async function handler(req, res) {
         });
         var _mapStatus = upstream.status === 404 ? 404 : 502;
         res.status(_mapStatus).json({ error: "Upstream " + upstream.status, upstreamStatus: upstream.status, upstreamHost: _urlHost, upstreamBodyPreview: _upstreamBody });
+        return;
+      }
+      // Content-type sniff: Meta CDN sometimes returns 206 with an XML
+      // error body when a signed URL has an issue but the byte-range
+      // itself is honoured (weird but observed in the wild — the
+      // response is HTTP 206 with a body starting with `<?xml…?>`
+      // instead of MP4 magic bytes `\x00\x00\x00\x18ftyp…`). Serving
+      // that as Content-Type: video/mp4 makes the browser reject it
+      // with a generic media-error and no retry recovers because the
+      // real problem is upstream, not our proxy.
+      //
+      // Guard: if the upstream Content-Type doesn't start with 'video/'
+      // (and isn't blank — Meta occasionally omits it for legitimate
+      // MP4 responses), buffer the body, sniff first bytes for HTML/XML
+      // markers, and reject with a diagnostic 502 if it looks wrong.
+      var _upCT = String(upstream.headers.get("Content-Type") || "").toLowerCase();
+      var _looksNotVideo = _upCT && _upCT.indexOf("video/") !== 0 && _upCT.indexOf("application/octet-stream") !== 0;
+      if (_looksNotVideo) {
+        var _wrongBody = "";
+        try { _wrongBody = (await upstream.text()).slice(0, 200); } catch (_) {}
+        var _wrongHost = "";
+        try { _wrongHost = new URL(resolved.url).host; } catch (_) {}
+        console.error("[ad-video proxy] upstream returned non-video content-type", {
+          videoId: videoId, platform: platform, adId: adId, bust: bust,
+          upstreamHost: _wrongHost, upstreamStatus: upstream.status,
+          contentType: _upCT, bodyPreview: _wrongBody
+        });
+        res.status(502).json({
+          error: "Upstream returned " + _upCT + " not video",
+          upstreamStatus: upstream.status,
+          upstreamHost: _wrongHost,
+          contentType: _upCT,
+          upstreamBodyPreview: _wrongBody
+        });
         return;
       }
       res.setHeader("Content-Type", upstream.headers.get("Content-Type") || "video/mp4");

@@ -2179,40 +2179,46 @@ function ThumbOverrideModal(props){
           onLoadedData={function(){autoRetriedRef.current=false;setVideoState({loading:false,error:"",loaded:true});}}
           onLoadStart={function(){setVideoState({loading:true,error:"",loaded:false});}}
           onError={function(){
-            // Auto-retry once with a fresh signed URL. Meta's video
-            // permalink is signed with a ~30min expiry, and ad-video's
-            // resolve cache is 10min — a lookup that hit the cache
-            // right at the tail of Meta's signature window will fail
-            // the first proxy fetch; a bust=1 second attempt gets a
-            // freshly resolved URL and almost always succeeds.
-            if(!autoRetriedRef.current){
-              autoRetriedRef.current=true;
-              setVideoBust(function(n){return n+1;});
-              return;
-            }
-            // After the retry has also failed, fire a diagnostic fetch
-            // to the same URL so we surface the actual HTTP status +
-            // error body — the <video> onError event gives no
-            // diagnosis by itself. Range: bytes=0-0 keeps it cheap
-            // (0-byte-preview probe) while still exercising the same
-            // proxy code path.
+            // Probe the proxy first to decide whether to auto-retry.
+            // Some failures (415 iframe-only, 502 non-video content
+            // type, 404 video removed) are unrecoverable — retrying
+            // just re-hits the same broken upstream. Others (502
+            // stale signed URL, 429 rate limit) genuinely can heal
+            // with a fresh resolve, so we still bust=1 those.
             fetch(videoSrc,{method:"GET",headers:{"Range":"bytes=0-0"}}).then(function(r){
               var status=r.status;
-              r.text().then(function(body){
-                var brief=(body||"").slice(0,140);
-                setVideoState({loading:false,error:"HTTP "+status+(brief?" · "+brief:""),loaded:false});
-              }).catch(function(){
-                setVideoState({loading:false,error:"HTTP "+status+" (no body)",loaded:false});
+              return r.text().then(function(body){
+                var brief=(body||"").slice(0,180);
+                var unrecoverable=status===415||status===404;
+                var reason=brief;
+                try {
+                  var j=JSON.parse(body);
+                  if(j&&j.reason)reason=j.reason;
+                  else if(j&&j.error)reason=j.error+(j.contentType?" ("+j.contentType+")":"");
+                } catch(_) {}
+                if(!unrecoverable&&!autoRetriedRef.current){
+                  autoRetriedRef.current=true;
+                  setVideoBust(function(n){return n+1;});
+                  return;
+                }
+                setVideoState({loading:false,error:"HTTP "+status+" · "+reason,loaded:false,unrecoverable:unrecoverable});
               });
             }).catch(function(fetchErr){
-              setVideoState({loading:false,error:"Network fetch failed: "+String(fetchErr&&fetchErr.message||fetchErr),loaded:false});
+              // Network-level fetch failed (no HTTP response). Still
+              // worth one bust retry — could be a transient blip.
+              if(!autoRetriedRef.current){
+                autoRetriedRef.current=true;
+                setVideoBust(function(n){return n+1;});
+                return;
+              }
+              setVideoState({loading:false,error:"Network fetch failed: "+String(fetchErr&&fetchErr.message||fetchErr),loaded:false,unrecoverable:true});
             });
           }}
         />
         {videoState.error&&<div style={{marginBottom:6}}>
-          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif",wordBreak:"break-word"}}>Video failed to load after one auto-retry. Diagnostic: <code style={{fontFamily:"Menlo,Consolas,monospace",background:"rgba(0,0,0,0.35)",padding:"1px 5px",borderRadius:3,color:"#F87171"}}>{videoState.error}</code></div>
-          <button onClick={function(){autoRetriedRef.current=false;setVideoBust(function(n){return n+1;});setVideoState({loading:true,error:"",loaded:false});}} style={{marginTop:6,background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:6,padding:"5px 10px",color:"#F43F5E",fontSize:10,fontWeight:800,fontFamily:"monospace",letterSpacing:1.2,cursor:"pointer",textTransform:"uppercase"}}>Retry Load</button>
-          <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:8,fontFamily:"Helvetica,Arial,sans-serif"}}>or upload / paste a screenshot below.</span>
+          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif",wordBreak:"break-word"}}>{videoState.unrecoverable?"Video preview not available for this ad — use the upload / paste-URL path below.":"Video failed to load after one auto-retry."} <span style={{color:"rgba(255,255,255,0.5)"}}>Diagnostic:</span> <code style={{fontFamily:"Menlo,Consolas,monospace",background:"rgba(0,0,0,0.35)",padding:"1px 5px",borderRadius:3,color:"#F87171"}}>{videoState.error}</code></div>
+          {!videoState.unrecoverable&&<button onClick={function(){autoRetriedRef.current=false;setVideoBust(function(n){return n+1;});setVideoState({loading:true,error:"",loaded:false});}} style={{marginTop:6,background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:6,padding:"5px 10px",color:"#F43F5E",fontSize:10,fontWeight:800,fontFamily:"monospace",letterSpacing:1.2,cursor:"pointer",textTransform:"uppercase"}}>Retry Load</button>}
+          {!videoState.unrecoverable&&<span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:8,fontFamily:"Helvetica,Arial,sans-serif"}}>or upload / paste a screenshot below.</span>}
         </div>}
         <button onClick={captureFrame} disabled={!videoState.loaded} style={{background:videoState.loaded?"#34D399":"rgba(255,255,255,0.1)",border:"none",borderRadius:6,padding:"8px 14px",color:videoState.loaded?"#062014":"rgba(255,255,255,0.4)",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:videoState.loaded?"pointer":"not-allowed",textTransform:"uppercase",width:"100%"}}>Capture Frame at Current Time</button>
       </div>}
