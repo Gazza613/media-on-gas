@@ -2017,6 +2017,18 @@ export default async function handler(req, res) {
             // envelope shape.
             try { console.error("[campaigns] Google Ads 400 body:", gErrTxt.substring(0, 1500)); } catch(_) {}
             warnings.push({ platform: "Google", stage: "ads", message: gErrMsg });
+            // Cache a suppressed marker for the retry window on 429 so
+            // subsequent requests inside that window skip the fetch
+            // entirely — a 429 today burns quota tomorrow if we keep
+            // hitting the API. Retry-after is parsed from Google's
+            // error text (e.g. "Retry in 39070 seconds"); clamp to a
+            // sane [60, 3600] range so a bogus payload can't lock us
+            // out for hours or expose us to a runaway retry loop.
+            if (gRes.status === 429) {
+              var _retryMatch = /Retry in (\d+) seconds?/i.exec(gErrTxt || "");
+              var _retrySec = _retryMatch ? Math.min(Math.max(parseInt(_retryMatch[1], 10) || 300, 60), 3600) : 300;
+              try { redisSetJson(gCacheKey, { results: [], suppressed: true, retryAt: Date.now() + _retrySec * 1000 }, _retrySec); } catch (_) {}
+            }
           } else {
             var gData = await gRes.json();
             gResults = gData.results || [];

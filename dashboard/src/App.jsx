@@ -6911,20 +6911,21 @@ export default function MediaOnGas(){
               engagement:{key:"clicks",label:"Clicks",costLabel:"Cost Per Click",accent:P.mint,accentDeep:"#059669",deep:"#065f46",cool:"#059669",warm:"#10b981",hot:"#34d399",icon:Ic.bolt,title:"Engagement",subtitle:"Middle of funnel - who responded",field:function(r){return r.clicks||0;}},
               objective:{key:"obj",label:"Objective Actions",costLabel:"Cost Per Objective",accent:P.rose,accentDeep:"#be123c",deep:"#9f1239",cool:"#be123c",warm:"#e11d48",hot:"#fb7185",icon:Ic.target,title:"Objective",subtitle:"Bottom of funnel - who actually converted",field:function(r){var type=rowObjectiveType(r);var rs=r.results||{};if(type==="Leads")return rs.leads||0;if(type==="Followers")return (rs.follows||0)+(rs.pageLikes||0);return r.clicks||0;}}
             };
-            // Learnalot override: the client's dashboard is conversation-
-            // first, not lead-first. Every downstream reader of
-            // stageDef.objective (Objective Highlights BY AGE GROUP chart,
-            // stageDef.objective narrative helpers, WHO & HOW blocks that
-            // read the objective field) uses WhatsApp conversations
+            // Conversation-first override (Learnalot + Chilla, 2026-09-22).
+            // The client's dashboard is conversation-first, not lead-first.
+            // Every downstream reader of stageDef.objective (Objective
+            // Highlights BY AGE GROUP chart, WHO & HOW blocks, WHERE
+            // province map + OBJECTIVE ACTIONS BY PROVINCE table, OBJECTIVE
+            // DEMOGRAPHIC INSIGHTS narrative) uses WhatsApp conversations
             // started as the objective weight instead of leads/follows/
-            // clicks. Detection mirrors the pattern used by the BOFU
-            // learnalotInSel gate (line ~8057). demoData rows carry
-            // results.messagingConversations from the demographics
-            // endpoint (extractResults in api/demographics.js:60).
+            // clicks. demoData rows carry results.messagingConversations
+            // from the demographics endpoint (extractResults in
+            // api/demographics.js:60).
             var _selAllLearnalotStage=sel.length>0&&sel.every(function(c){
               var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");
               var cn=String(c.campaignName||"").toLowerCase();
-              return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0;
+              return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0
+                ||an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;
             });
             if(_selAllLearnalotStage){
               // Override authObj (the AUTHORITATIVE campaign-level
@@ -8163,16 +8164,36 @@ export default function MediaOnGas(){
         already never see it. */}
     {!isClient&&tab==="summary"&&<ChatPanel apiBase={API} session={session} viewToken={viewToken} dateFrom={df} dateTo={dt} open={showChat} setOpen={setShowChat} campaigns={campaigns} selected={selected} onOpenAd={setPreviewAd}/>}
 
-    {!isClient&&dataWarnings.length>0&&<div style={{maxWidth:1400,margin:"12px auto 0",padding:"12px 18px",background:P.warning+"15",border:"1px solid "+P.warning+"50",borderLeft:"4px solid "+P.warning,borderRadius:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative",zIndex:2}}>
-      <div style={{color:P.warning,fontSize:18,flexShrink:0,marginTop:1}}>{"\u26A0"}</div>
-      <div style={{flex:1,fontSize:11,fontFamily:fm,color:P.txt,lineHeight:1.6}}>
-        <div style={{fontWeight:800,color:P.warning,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Partial data: {dataWarnings.length} fetch{dataWarnings.length===1?"":"es"} failed</div>
-        {dataWarnings.slice(0,4).map(function(w,i){return <div key={i} style={{color:P.label}}>{w.platform+(w.account?(" / "+w.account):"")+(w.stage?(" ("+w.stage+")"):"")+": "+(w.message||"unknown error")}</div>;})}
-        {dataWarnings.length>4&&<div style={{color:P.caption,marginTop:4}}>+ {dataWarnings.length-4} more</div>}
-        <div style={{color:P.caption,marginTop:6,fontStyle:"italic"}}>Numbers shown may be under-reported for affected platforms. Re-try with Refresh.</div>
-      </div>
-      <button onClick={function(){setDataWarnings([]);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.label,cursor:"pointer",fontSize:14,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
-    </div>}
+    {!isClient&&dataWarnings.length>0&&(function(){
+      // Filter warnings to platforms actually represented in the
+      // current campaign selection. A Google 429 on MoMo is only
+      // relevant to whoever is looking at a view that INCLUDES
+      // Google campaigns \u2014 showing it on a Chilla-only view (which
+      // has no Google spend and never queries Google client-side)
+      // is noise. Meta / Instagram share the "Meta" umbrella; the
+      // "All" platform (province-filter meta-warning) always shows.
+      var visible=new Set();
+      (computed.allSelected||[]).forEach(function(c){
+        var mp=String(c.metaPlatform||"").toLowerCase();
+        if(mp==="google")visible.add("Google");
+        else if(mp==="tiktok")visible.add("TikTok");
+        else if(mp==="facebook"||mp==="instagram"||mp==="meta")visible.add("Meta");
+      });
+      var relevant=dataWarnings.filter(function(w){
+        return !w.platform||w.platform==="All"||visible.has(w.platform);
+      });
+      if(relevant.length===0)return null;
+      return <div style={{maxWidth:1400,margin:"12px auto 0",padding:"12px 18px",background:P.warning+"15",border:"1px solid "+P.warning+"50",borderLeft:"4px solid "+P.warning,borderRadius:10,display:"flex",alignItems:"flex-start",gap:12,position:"relative",zIndex:2}}>
+        <div style={{color:P.warning,fontSize:18,flexShrink:0,marginTop:1}}>{"\u26A0"}</div>
+        <div style={{flex:1,fontSize:11,fontFamily:fm,color:P.txt,lineHeight:1.6}}>
+          <div style={{fontWeight:800,color:P.warning,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Partial data: {relevant.length} fetch{relevant.length===1?"":"es"} failed</div>
+          {relevant.slice(0,4).map(function(w,i){return <div key={i} style={{color:P.label}}>{w.platform+(w.account?(" / "+w.account):"")+(w.stage?(" ("+w.stage+")"):"")+": "+(w.message||"unknown error")}</div>;})}
+          {relevant.length>4&&<div style={{color:P.caption,marginTop:4}}>+ {relevant.length-4} more</div>}
+          <div style={{color:P.caption,marginTop:6,fontStyle:"italic"}}>Numbers shown may be under-reported for affected platforms. Re-try with Refresh.</div>
+        </div>
+        <button onClick={function(){setDataWarnings([]);}} style={{background:"transparent",border:"1px solid "+P.rule,borderRadius:6,width:26,height:26,color:P.label,cursor:"pointer",fontSize:14,lineHeight:1,padding:0,flexShrink:0}}>{"\u00D7"}</button>
+      </div>;
+    })()}
 
     <div style={{width:"100%",maxWidth:1400,margin:"0 auto",padding:"40px 28px 80px",display:"flex",gap:20,position:"relative",zIndex:1,flex:1,boxSizing:"border-box"}}>
       {!isClient&&showCampaigns&&<><div onClick={function(){setShowCampaigns(false);}} style={{position:"fixed",inset:0,zIndex:9,background:"transparent",cursor:"default"}}/><div style={{width:340,flexShrink:0,position:"sticky",top:120,maxHeight:"calc(100vh - 140px)",overflowY:"auto",alignSelf:"flex-start",zIndex:10}}><CampaignSelector campaigns={campaigns} selected={selected} onToggle={toggle} onToggleGroup={toggleGroup} onSelectAll={selectAll} onClearAll={clearAll} search={search} onSearch={setSearch}/></div></>}

@@ -822,22 +822,14 @@ function renderBofuSection(opts) {
   if (showLearnalotOctet) {
     // ── DIAGNOSTIC BANNER ────────────────────────────────────────
     // If the octet is rendering (Learnalot slug detected) but
-    // waLeadTotal is 0, show a visible warning at the top of the
-    // section so the operator immediately sees WHY WhatsApp Leads
-    // reads 0 and blended CPL is inflated. Common causes: custom
-    // outcomes not entered for the report month, entry label doesn't
-    // match the WhatsApp regex, or customOutcomes body was empty on
-    // the request. The banner is invisible when everything is fine.
+    // (2026-09-22) The "Data mismatch: WhatsApp Leads reads 0"
+    // diagnostic banner was removed — it surfaced developer-facing
+    // language ("customOutcomes body was empty on the request") in a
+    // client-shared report and Chilla (no CAPI leads ever) hit it on
+    // every render. If you need the diagnostic during a report-gen
+    // bug hunt, add it back behind a `?diag=1` flag; the operator
+    // has better tools now (Sami logs + custom-outcomes admin panel).
     var _diagBanner = "";
-    if (_isLearnalot && waLeadTotal === 0) {
-      var _reason;
-      if (coList.length === 0) _reason = "No custom outcomes reached the report generator. The dashboard may not have loaded the outcomes state before Download PDF was clicked, or the client slug lookup fell through.";
-      else if (activeCo.length === 0) _reason = "Custom outcomes exist (" + coList.length + " total) but none match the report window months. Add or update the outcome for the correct month in Settings, Custom Outcomes.";
-      else _reason = "Custom outcomes match the window (" + activeCo.length + " active) but none carry a WhatsApp label. The label must contain \"whatsapp\", \"wapp\", or \" wa \" for the aggregator to pick it up.";
-      _diagBanner = '<div style="background:rgba(244,63,94,0.08);border:1px solid #F43F5E55;border-left:3px solid #F43F5E;border-radius:2mm;padding:3mm 4mm;margin-bottom:4mm;font-size:8.5pt;color:var(--rp-fg);line-height:1.5;">' +
-        '<strong style="color:#F43F5E;letter-spacing:1px;">Data mismatch:</strong> WhatsApp Leads reads 0 for this report. ' + escapeHtmlLocal(_reason) +
-      '</div>';
-    }
     // ── OCTET (2×4 tiles) ──────────────────────────────────────────
     var _formCpl = formLeadsCount > 0 ? (formLeadsSpend / formLeadsCount) : 0;
     var _waSpend = wa ? (wa.spend || 0) : 0;
@@ -884,15 +876,27 @@ function renderBofuSection(opts) {
     // this tile is quiet supplementary reporting.
     var _rateEng = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
     var _leadsCpl = waLeadTotal > 0 && _waSpend > 0 ? (_waSpend / waLeadTotal) : 0;
-    var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(5,1fr);">'
-      + _tile("Conversations Started",fmtNum(_waConv),                  "ad-attributed within 7 days of click", COL.mint)
+    // _hasAnyLeads: gates every lead-language chunk below (5th tile,
+    // "captured in the Leads database" attribution, standRow blocks,
+    // Cost-Per-Lead-by-Path bar, narrative lead line, "Leads Captured"
+    // sub-title, "Leads Standouts" sub). Clients with no CAPI + no
+    // form leads (Chilla today, or Learnalot in a blank window) get
+    // a pure conversation-first render with zero lead language.
+    var _hasAnyLeads = waLeadTotal > 0 || formLeadsCount > 0;
+    var _summaryTilesHtml = _tile("Conversations Started",fmtNum(_waConv),                  "ad-attributed within 7 days of click", COL.mint)
       + _tile("Cost per Conversation",_waCostPerConv > 0 ? fmtR(_waCostPerConv) : "&mdash;", "WhatsApp spend / conversations", COL.orchid)
       + _tile("Engaged 3+ Messages",  fmtNum(_waEng3),                  "three or more messages exchanged", COL.solar)
-      + _tile("Engagement Rate",      _rateEng > 0 ? _rateEng.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan)
-      + _tile("Leads",                fmtNum(waLeadTotal),              _leadsCpl > 0 ? fmtR(_leadsCpl) + " per lead" : "CAPI QualifiedLead events", COL.rose)
+      + _tile("Engagement Rate",      _rateEng > 0 ? _rateEng.toFixed(2) + "%" : "&mdash;", fmtNum(_waEng3) + " of " + fmtNum(_waConv) + " reached 3+ messages", COL.cyan);
+    if (waLeadTotal > 0) {
+      _summaryTilesHtml += _tile("Leads", fmtNum(waLeadTotal), _leadsCpl > 0 ? fmtR(_leadsCpl) + " per lead" : "CAPI QualifiedLead events", COL.rose);
+    }
+    var _tileCols = waLeadTotal > 0 ? 5 : 4;
+    var _attrTail = _hasAnyLeads ? " but ARE captured in the Leads database" : "";
+    var _octet = _diagBanner + '<div class="rp-outcomes-grid" style="grid-template-columns:repeat(' + _tileCols + ',1fr);">'
+      + _summaryTilesHtml
       + '</div>'
       + '<div style="margin-top:3mm;padding:3mm 4mm;border-radius:2mm;background:rgba(255,255,255,0.03);border:1px solid var(--rp-rule);font-size:7.5pt;color:var(--rp-fg-dim);line-height:1.5;page-break-inside:avoid;">'
-      + '<strong style="color:var(--rp-fg);font-weight:800;">Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter but ARE captured in the Leads database.'
+      + '<strong style="color:var(--rp-fg);font-weight:800;">Attribution note:</strong> Meta counts only ad-attributed conversations within 7 days of an ad click. Organic WhatsApp opens (typed number, referrals, returning customers, chats that start &gt;7 days after the click) are not reflected in this counter' + _attrTail + '.'
       + '</div>';
 
     // ── Row 2: WhatsApp Message Funnel (staged bars) ────────────
@@ -982,7 +986,7 @@ function renderBofuSection(opts) {
           <tbody>${_rawRows}</tbody>
         </table>
         <div style="margin-top:3mm;padding-top:2.5mm;border-top:1px solid var(--rp-line);font-size:7.5pt;color:var(--rp-fg-mute);line-height:1.5;">
-          <strong style="color:var(--rp-fg);font-weight:800;">Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users. CAPI Qualified Leads above are captured independently by the bot and reconcile against the "Unique Users" column in Meta Events Manager, not against these depth counters.
+          <strong style="color:var(--rp-fg);font-weight:800;">Reconciliation note:</strong> The 5+ counter fires on every 5-message threshold cross (5, 10, 15, ...) so its value is inflated versus unique users.${waLeadTotal > 0 ? ' CAPI Qualified Leads above are captured independently by the bot and reconcile against the &quot;Unique Users&quot; column in Meta Events Manager, not against these depth counters.' : ''}
         </div>
       </div>`;
     }
@@ -1029,42 +1033,78 @@ function renderBofuSection(opts) {
       ${_standTile("Total Leads", fmtNum(_totalLeads), COL.ember)}
     </div>`;
 
-    // ── LEAD-FIRST OBJECTIVE INSIGHTS NARRATIVE ───────────────────
+    // ── OBJECTIVE INSIGHTS NARRATIVE ──────────────────────────────
+    // Conversation-first for BOTH clients. When there are real
+    // leads (Learnalot in a normal window) the lead lines get pushed
+    // on top; otherwise the narrative reads pure WhatsApp.
     var _narLines = [];
-    _narLines.push(fmtNum(_totalLeads) + " qualified leads were captured across the two paths from " + fmtR(_totalSpend) + " invested" + (_blendedCpl > 0 ? " at a blended " + fmtR(_blendedCpl) + " cost per lead" : "") + ", " + fmtNum(formLeadsCount) + " through PSI lead forms and " + fmtNum(waLeadTotal) + " as WhatsApp qualified leads.");
-    if (formLeadsCount > 0 && waLeadTotal > 0) {
-      var _pathVol = formLeadsCount >= waLeadTotal ? "PSI Form Leads" : "WhatsApp PSI Leads";
-      var _pathEff = _formCpl > 0 && _waCpl > 0 ? (_formCpl <= _waCpl ? "PSI Form Leads" : "WhatsApp PSI Leads") : (_formCpl > 0 ? "PSI Form Leads" : "WhatsApp PSI Leads");
-      _narLines.push(_pathVol + " led on volume" + (_pathEff === _pathVol ? " and on efficiency, the stronger path on both dimensions" : "; " + _pathEff + " led on efficiency at " + fmtR(_pathEff === "PSI Form Leads" ? _formCpl : _waCpl) + " per lead vs " + fmtR(_pathVol === "PSI Form Leads" ? _formCpl : _waCpl) + " on " + _pathVol) + ".");
+    var _cpc = _waConv > 0 ? (_waSpend / _waConv) : 0;
+    if (_hasAnyLeads) {
+      _narLines.push(fmtNum(_totalLeads) + " qualified leads were captured across the two paths from " + fmtR(_totalSpend) + " invested" + (_blendedCpl > 0 ? " at a blended " + fmtR(_blendedCpl) + " cost per lead" : "") + ", " + fmtNum(formLeadsCount) + " through PSI lead forms and " + fmtNum(waLeadTotal) + " as WhatsApp qualified leads.");
+      if (formLeadsCount > 0 && waLeadTotal > 0) {
+        var _pathVol = formLeadsCount >= waLeadTotal ? "PSI Form Leads" : "WhatsApp PSI Leads";
+        var _pathEff = _formCpl > 0 && _waCpl > 0 ? (_formCpl <= _waCpl ? "PSI Form Leads" : "WhatsApp PSI Leads") : (_formCpl > 0 ? "PSI Form Leads" : "WhatsApp PSI Leads");
+        _narLines.push(_pathVol + " led on volume" + (_pathEff === _pathVol ? " and on efficiency, the stronger path on both dimensions" : "; " + _pathEff + " led on efficiency at " + fmtR(_pathEff === "PSI Form Leads" ? _formCpl : _waCpl) + " per lead vs " + fmtR(_pathVol === "PSI Form Leads" ? _formCpl : _waCpl) + " on " + _pathVol) + ".");
+      }
     }
     if (_waConv > 0) {
-      var _cpc = _waConv > 0 ? (_waSpend / _waConv) : 0;
-      var _funnelBits = [];
-      _funnelBits.push(fmtNum(_waConv) + " paid conversations opened at " + fmtR(_cpc) + " per conversation");
-      if (_waEng3 > 0) _funnelBits.push(fmtNum(_waEng3) + " engaged 3+ messages");
-      if (_convToLead > 0) _funnelBits.push(_convToLead.toFixed(2) + "% of conversations became a qualified lead");
-      _narLines.push("WhatsApp mid-funnel context, " + _funnelBits.join(", ") + ", the volume the WhatsApp lead conversions came out of.");
+      if (_hasAnyLeads) {
+        // Two-path context: WhatsApp mid-funnel supports the lead story.
+        var _funnelBitsL = [];
+        _funnelBitsL.push(fmtNum(_waConv) + " paid conversations opened at " + fmtR(_cpc) + " per conversation");
+        if (_waEng3 > 0) _funnelBitsL.push(fmtNum(_waEng3) + " engaged 3+ messages");
+        if (_convToLead > 0) _funnelBitsL.push(_convToLead.toFixed(2) + "% of conversations became a qualified lead");
+        _narLines.push("WhatsApp mid-funnel context, " + _funnelBitsL.join(", ") + ".");
+      } else {
+        // Conversation-only: headline the demand-generation story.
+        var _headline = fmtNum(_waConv) + " WhatsApp conversations were opened from " + fmtR(_waSpend) + " invested" + (_cpc > 0 ? " at " + fmtR(_cpc) + " per conversation" : "") + ", the primary demand-generation metric for the period.";
+        _narLines.push(_headline);
+        if ((wa && wa.firstReplies > 0)) {
+          var _frRate = _waConv > 0 ? ((wa.firstReplies / _waConv) * 100) : 0;
+          _narLines.push(fmtNum(wa.firstReplies) + " conversations progressed past the initial reply (" + _frRate.toFixed(2) + "% of opened chats), the first quality checkpoint on the way to a meaningful exchange.");
+        }
+        if (_waEng3 > 0) {
+          var _engRateN = _waConv > 0 ? (_waEng3 / _waConv * 100) : 0;
+          _narLines.push(fmtNum(_waEng3) + " conversations reached the engaged 3+ message threshold (" + _engRateN.toFixed(2) + "% of opened chats)" + (_waCostPerEng > 0 ? " at " + fmtR(_waCostPerEng) + " per engaged conversation" : "") + ", the strongest indicator of prospect intent inside the funnel.");
+        }
+      }
     }
     var _narrative = `<div class="rp-bofu-sub" style="page-break-inside:avoid;">
-      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Objective Insights</div></div>
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">${_hasAnyLeads ? "Objective Insights" : "Conversation Insights"}</div></div>
       <div class="rp-bofu-sub-desc" style="line-height:1.6;">${_narLines.join(" ")}</div>
     </div>`;
 
     // Push each piece as its own sub — a single wrapper with the
-    // whole Learnalot layout was too tall for `.rp-bofu-sub`'s
+    // whole layout was too tall for `.rp-bofu-sub`'s
     // `page-break-inside: avoid` and the browser pushed it off-page,
     // leaving section 03 blank. Separated pieces page-break naturally
     // between them.
+    //
+    // Title + description flip based on whether there are real leads
+    // to talk about. Conversation-first clients with no leads (Chilla,
+    // or Learnalot in a blank window) get a "WhatsApp Conversations"
+    // header + generic description — no "Leads Captured", no
+    // hardcoded client name, no PSI lead paths language.
+    var _subTitle = _hasAnyLeads ? "Leads Captured" : "WhatsApp Conversations";
+    var _subTotal = _hasAnyLeads ? fmtNum(_totalLeads) : fmtNum(_waConv);
+    var _subDesc = _hasAnyLeads
+      ? "Two lead paths in parallel: PSI Form Leads via Meta lead forms (full platform attribution) and WhatsApp PSI Leads via CAPI QualifiedLead events on the client&rsquo;s Meta dataset (event-scoped, no per-lead demographic attribution). The tiles below show each path independently plus a blended total that matches the dashboard Total Leads (blended) card."
+      : "New paid-media-driven WhatsApp conversations opened during the reporting period. Same 7-day attribution window Meta uses in Ads Manager. The tiles below headline conversation volume + engagement quality, and the funnel underneath tracks drop-off between each stage.";
     subs.push(`<div class="rp-bofu-sub" style="page-break-inside:avoid;">
-      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Captured</div><div class="rp-bofu-sub-total">${fmtNum(_totalLeads)}</div></div>
-      <div class="rp-bofu-sub-desc">Learnalot runs two lead paths in parallel: PSI Form Leads via Meta lead forms (full platform attribution) and WhatsApp PSI Leads via CAPI QualifiedLead events on the client&rsquo;s Meta dataset (event-scoped, no per-lead demographic attribution). The tiles below show each path independently plus a blended total that matches the dashboard Total Leads (blended) card.</div>
+      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">${_subTitle}</div><div class="rp-bofu-sub-total">${_subTotal}</div></div>
+      <div class="rp-bofu-sub-desc">${_subDesc}</div>
       ${_octet}
     </div>`);
     if (_barBlock) subs.push(_barBlock);
-    subs.push(`<div class="rp-bofu-sub" style="page-break-inside:avoid;">
-      <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Standouts</div></div>
-      ${_standRow}
-    </div>`);
+    // Standouts row only fires when there are real leads — it's a
+    // lead-comparison view (PSI Form vs WhatsApp CAPI, blended CPL,
+    // total leads) that has no meaning for a pure-conversations client.
+    if (_hasAnyLeads) {
+      subs.push(`<div class="rp-bofu-sub" style="page-break-inside:avoid;">
+        <div class="rp-bofu-sub-head"><div class="rp-bofu-sub-title">Leads Standouts</div></div>
+        ${_standRow}
+      </div>`);
+    }
     subs.push(_narrative);
   } else {
     // Non-Learnalot: keep the existing Leads Captured sub layout.
@@ -1157,8 +1197,17 @@ function renderBofuSection(opts) {
   var p1 = p1Parts.length ? "The bottom of funnel layer delivered " + p1Parts.join(", ") + ", each attributable directly to the objective its campaigns were built to achieve. These are the outcomes the funnel was structured around, and the numbers here match the Summary tab of the live dashboard exactly." : "";
   var p2 = "Bottom of funnel spend is the honest test of the awareness and consideration layers above. Warm audiences convert efficiently only when the funnel has first done the work of building recognition and intent. A cost per outcome trending stable or downward window over window confirms the strategy is compounding rather than depleting the audience pool.";
   var insight = p1 ? (p1 + "</p><p class=\"rp-body\">" + p2) : p2;
+  // Section-03 lede swaps its outcomes list based on whether this
+  // report belongs to a conversation-first client (Learnalot / Chilla).
+  // The generic lede lists every possible objective outcome ending
+  // in "qualified leads"; the WA-first lede leads with WhatsApp
+  // conversations instead so the reader isn't primed to look for a
+  // lead metric that may not exist for this client.
+  var _sec03Lede = isConversationFirstSlug(opts.clientSlug)
+    ? "The action layer. This is where warm audiences convert into measurable business outcomes, WhatsApp conversations opened, three-plus message engagements, followers, likes, and community reach. Each subsection below reads only from campaigns whose objective matches that outcome, so per-platform rows never include a platform that never ran that objective."
+    : "The action layer. This is where warm audiences convert into measurable business outcomes, clicks to a landing page, followers, likes, app store visits, community reach, and qualified leads. Each subsection below reads only from campaigns whose objective matches that outcome, so per-platform rows never include a platform that never ran that objective.";
   return `<section class="rp-page">
-    ${renderSectionHeader("03", "Bottom of the Funnel", "Result Objectives", "The action layer. This is where warm audiences convert into measurable business outcomes, clicks to a landing page, followers, likes, app store visits, community reach, and qualified leads. Each subsection below reads only from campaigns whose objective matches that outcome, so per-platform rows never include a platform that never ran that objective.")}
+    ${renderSectionHeader("03", "Bottom of the Funnel", "Result Objectives", _sec03Lede)}
     ${subsHtml}
     ${ecoBlock}
     ${renderInsight("Performance Insights", insight)}
