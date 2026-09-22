@@ -225,6 +225,50 @@ export default async function handler(req, res) {
     }
   }
 
+  // thumbnails=1 — Meta-only fallback for the thumbnail-override modal.
+  // When resolveMetaVideo cannot expose a direct MP4 source (Path 3
+  // returned iframe-only) the modal has no way to let the operator
+  // scrub the video for a frame. Meta's /{video_id}/thumbnails
+  // endpoint returns 4-8 auto-generated frames as JPGs, which we
+  // return as a picker grid instead. Frames are pre-signed CDN URLs,
+  // no proxy required on the client side.
+  if (req.query.thumbnails === "1") {
+    if (platform !== "meta") {
+      res.status(400).json({ error: "thumbnails=1 only supported for platform=meta" });
+      return;
+    }
+    var metaTokenT = process.env.META_ACCESS_TOKEN;
+    if (!metaTokenT) { res.status(500).json({ error: "META_ACCESS_TOKEN not configured" }); return; }
+    try {
+      var thumbsUrl = "https://graph.facebook.com/v25.0/" + encodeURIComponent(videoId) + "/thumbnails?fields=uri,is_preferred,width,height,scale&access_token=" + metaTokenT;
+      var thumbsRes = await fetch(thumbsUrl);
+      if (!thumbsRes.ok) {
+        var _tbody = "";
+        try { _tbody = (await thumbsRes.text()).slice(0, 200); } catch (_) {}
+        console.error("[ad-video thumbnails] upstream fail", { videoId: videoId, adId: adId, status: thumbsRes.status, bodyPreview: _tbody });
+        res.status(502).json({ error: "Meta thumbnails fetch failed", upstreamStatus: thumbsRes.status });
+        return;
+      }
+      var thumbsData = await thumbsRes.json();
+      var list = Array.isArray(thumbsData.data) ? thumbsData.data : [];
+      // Preferred thumbnail first (Meta's own default pick), then
+      // rest in descending resolution so the highest-res frame the
+      // operator might want is easy to spot.
+      list.sort(function (a, b) {
+        if (a.is_preferred && !b.is_preferred) return -1;
+        if (b.is_preferred && !a.is_preferred) return 1;
+        return (parseInt(b.width || 0) * parseInt(b.height || 0)) - (parseInt(a.width || 0) * parseInt(a.height || 0));
+      });
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.status(200).json({ thumbnails: list.map(function (t) { return { uri: t.uri, is_preferred: !!t.is_preferred, width: t.width || null, height: t.height || null }; }) });
+      return;
+    } catch (thumbsErr) {
+      console.error("[ad-video thumbnails] handler error", thumbsErr);
+      res.status(500).json({ error: "Thumbnails handler failed" });
+      return;
+    }
+  }
+
   var cacheKey = platform + "|" + videoId;
   var cached = resolveCache[cacheKey];
   // bust=<any truthy> skips the 10-min resolve cache. The client sends this after a

@@ -2032,6 +2032,11 @@ function ThumbOverrideModal(props){
   // broken video (404, deleted asset) surfaces the manual retry button
   // instead of looping.
   var autoRetriedRef=useRef(false);
+  // Thumbnail-fallback state. When the video preview is genuinely
+  // unavailable (iframe-only ad, deleted source), fetch Meta's
+  // auto-generated /{video_id}/thumbnails so the operator can still
+  // pick a frame from a picker grid instead of hitting the upload path.
+  var tbs=useState({loading:false,error:"",list:[]}),thumbsState=tbs[0],setThumbsState=tbs[1];
   var authHeaders=function(){var h={"Content-Type":"application/json"};if(props.session)h["x-session-token"]=props.session;return h;};
   useEffect(function(){
     if(!ad||!ad.adId)return;
@@ -2202,6 +2207,21 @@ function ThumbOverrideModal(props){
                   return;
                 }
                 setVideoState({loading:false,error:"HTTP "+status+" · "+reason,loaded:false,unrecoverable:unrecoverable});
+                // Unrecoverable Meta video (iframe-only, deleted, or
+                // any other permanent failure)? Auto-fetch Meta's
+                // /{video_id}/thumbnails so the operator can still
+                // pick a frame from the auto-generated preview grid,
+                // instead of having to screenshot the ad manually.
+                if(unrecoverable&&videoPlatform==="meta"&&ad.videoId){
+                  setThumbsState({loading:true,error:"",list:[]});
+                  fetch(props.apiBase+"/api/ad-video?platform=meta&id="+encodeURIComponent(ad.videoId)+"&adId="+encodeURIComponent(ad.adId)+"&thumbnails=1"+(props.session?"&st="+encodeURIComponent(props.session):""))
+                    .then(function(tr){return tr.ok?tr.json():Promise.reject(new Error("HTTP "+tr.status));})
+                    .then(function(td){
+                      var list=Array.isArray(td.thumbnails)?td.thumbnails:[];
+                      setThumbsState({loading:false,error:list.length===0?"Meta returned no auto-generated thumbnails for this video":"",list:list});
+                    })
+                    .catch(function(te){setThumbsState({loading:false,error:"Thumbnails fetch failed: "+(te.message||te),list:[]});});
+                }
               });
             }).catch(function(fetchErr){
               // Network-level fetch failed (no HTTP response). Still
@@ -2216,9 +2236,24 @@ function ThumbOverrideModal(props){
           }}
         />
         {videoState.error&&<div style={{marginBottom:6}}>
-          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif",wordBreak:"break-word"}}>{videoState.unrecoverable?"Video preview not available for this ad — use the upload / paste-URL path below.":"Video failed to load after one auto-retry."} <span style={{color:"rgba(255,255,255,0.5)"}}>Diagnostic:</span> <code style={{fontFamily:"Menlo,Consolas,monospace",background:"rgba(0,0,0,0.35)",padding:"1px 5px",borderRadius:3,color:"#F87171"}}>{videoState.error}</code></div>
+          <div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif",wordBreak:"break-word"}}>{videoState.unrecoverable?(thumbsState.list.length>0?"Video preview not available for this ad — pick a frame from Meta's auto-generated thumbnails below.":"Video preview not available for this ad — use the upload / paste-URL path below."):"Video failed to load after one auto-retry."} <span style={{color:"rgba(255,255,255,0.5)"}}>Diagnostic:</span> <code style={{fontFamily:"Menlo,Consolas,monospace",background:"rgba(0,0,0,0.35)",padding:"1px 5px",borderRadius:3,color:"#F87171"}}>{videoState.error}</code></div>
           {!videoState.unrecoverable&&<button onClick={function(){autoRetriedRef.current=false;setVideoBust(function(n){return n+1;});setVideoState({loading:true,error:"",loaded:false});}} style={{marginTop:6,background:"transparent",border:"1px solid rgba(244,63,94,0.55)",borderRadius:6,padding:"5px 10px",color:"#F43F5E",fontSize:10,fontWeight:800,fontFamily:"monospace",letterSpacing:1.2,cursor:"pointer",textTransform:"uppercase"}}>Retry Load</button>}
           {!videoState.unrecoverable&&<span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginLeft:8,fontFamily:"Helvetica,Arial,sans-serif"}}>or upload / paste a screenshot below.</span>}
+        </div>}
+        {videoState.unrecoverable&&(thumbsState.loading||thumbsState.list.length>0||thumbsState.error)&&<div style={{marginTop:10,padding:10,background:"rgba(52,211,153,0.05)",borderRadius:8,border:"1px solid rgba(52,211,153,0.25)"}}>
+          <div style={{fontSize:10,color:"#34D399",letterSpacing:2,fontWeight:800,fontFamily:"monospace",marginBottom:6}}>PICK FROM META THUMBNAILS</div>
+          {thumbsState.loading&&<div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontFamily:"Helvetica,Arial,sans-serif"}}>Fetching Meta auto-generated thumbnails…</div>}
+          {!thumbsState.loading&&thumbsState.error&&<div style={{fontSize:10,color:"#F43F5E",fontFamily:"Helvetica,Arial,sans-serif"}}>{thumbsState.error}</div>}
+          {!thumbsState.loading&&thumbsState.list.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8,marginTop:6}}>
+            {thumbsState.list.map(function(t,i){
+              var selected=inputUrl===t.uri;
+              return <div key={i} onClick={function(){setInputUrl(t.uri);setErrMsg("");}} title={(t.width&&t.height?t.width+"×"+t.height+" ":"")+(t.is_preferred?"(Meta preferred)":"")} style={{position:"relative",cursor:"pointer",border:selected?"2px solid #34D399":"1px solid rgba(255,255,255,0.15)",borderRadius:6,overflow:"hidden",background:"#000",aspectRatio:"16/9"}}>
+                <img src={t.uri} alt={"thumb-"+i} referrerPolicy="no-referrer" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={function(e){e.target.style.opacity=0.3;}}/>
+                {t.is_preferred&&<span style={{position:"absolute",top:4,left:4,padding:"1px 5px",background:"rgba(52,211,153,0.9)",color:"#062014",fontSize:8,fontWeight:900,fontFamily:"monospace",letterSpacing:0.8,borderRadius:3,textTransform:"uppercase"}}>Default</span>}
+                {selected&&<span style={{position:"absolute",top:4,right:4,padding:"1px 5px",background:"#34D399",color:"#062014",fontSize:8,fontWeight:900,fontFamily:"monospace",letterSpacing:0.8,borderRadius:3,textTransform:"uppercase"}}>Selected</span>}
+              </div>;
+            })}
+          </div>}
         </div>}
         <button onClick={captureFrame} disabled={!videoState.loaded} style={{background:videoState.loaded?"#34D399":"rgba(255,255,255,0.1)",border:"none",borderRadius:6,padding:"8px 14px",color:videoState.loaded?"#062014":"rgba(255,255,255,0.4)",fontSize:11,fontWeight:900,fontFamily:"monospace",letterSpacing:1.5,cursor:videoState.loaded?"pointer":"not-allowed",textTransform:"uppercase",width:"100%"}}>Capture Frame at Current Time</button>
       </div>}
