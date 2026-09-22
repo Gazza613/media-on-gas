@@ -97,6 +97,10 @@ function normId(raw) {
 export async function issuePendingNonce(cardId, opId, inputData, user) {
   var id = normId(cardId);
   if (!id || !opId || inputData == null) return null;
+  // User scoping is mandatory now — refuse to issue a nonce without
+  // it so a future caller can't accidentally bypass the cross-user
+  // guard in authoriseNonce.
+  if (!normId(user)) { console.error("[sami-nonce] refused to issue nonce without user for card", id); return null; }
   var hash = hashCall(opId, inputData);
   var record = {
     cardId: id,
@@ -128,10 +132,13 @@ export async function authoriseNonce(cardId, user) {
   if (!raw || !raw.result) return false;
   var rec;
   try { rec = JSON.parse(raw.result); } catch (_) { return false; }
-  // Cross-user guard: only the same slug that issued the card can
-  // authorise it. Legacy records without issuedBy (pre-fix) still
-  // work to avoid breaking in-flight cards during the deploy.
-  if (rec.issuedBy && u && rec.issuedBy !== u) return false;
+  // Cross-user guard: strict. Both sides must have the same slug.
+  // No legacy-record bypass — the deploy window is long past and
+  // leaving the `rec.issuedBy &&` short-circuit in place means any
+  // future refactor that accidentally passes user=null to
+  // issuePendingNonce would silently re-open the cross-tenant
+  // approval hole.
+  if (rec.issuedBy !== u) return false;
   if (rec.authorisedAt) return true;
   rec.authorisedAt = Date.now();
   rec.authorisedBy = u || null;

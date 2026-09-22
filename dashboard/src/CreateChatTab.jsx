@@ -130,7 +130,7 @@ function PinGate(props) {
         var code = x.data && x.data.code;
         if (code === "no-access") setMode("no-access");
         else if (code === "no-pin") { setMode("set-pin"); setOkMsg("Set a 4-digit Sami PIN to activate your access."); }
-        else if (code === "no-account") setMode("signin");
+        else if (code === "no-account" || code === "no-session") setMode("signin");
         else setMode("verify");
       })
       .catch(function () { setMode("verify"); /* fall back to letting them try a PIN */ });
@@ -691,6 +691,9 @@ function PlanCard(props) {
         </div>;
       })}
     </div>}
+    {card.truncatedChildren > 0 && <div style={{ marginBottom: 10, padding: "8px 12px", background: "rgba(255,170,0,0.10)", border: "1px solid rgba(255,170,0,0.35)", borderRadius: 8, fontSize: 10, color: P.solar || "#FFAA00", fontFamily: fm, letterSpacing: 0.5 }}>
+      ⚠ {card.truncatedChildren} write{card.truncatedChildren === 1 ? "" : "s"} trimmed from this plan (100-child cap). Ask Sami to split the remaining writes into a second plan card, or approve this one and continue with the leftovers next turn.
+    </div>}
     {status === "pending" && <div style={{ display: "flex", gap: 10 }}>
       <button onClick={function () { props.onApprove(card); }}
         style={{ background: "linear-gradient(135deg,#059669,#34D399)", border: "none", borderRadius: 8, padding: "9px 18px", color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: fm, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase" }}>
@@ -962,6 +965,12 @@ function renderableImageUrl(rawUrl) {
   if (!rawUrl) return "";
   var s = String(rawUrl).trim();
 
+  // Scheme allowlist — reject anything that isn't http(s). Prevents
+  // a poisoned Sami reply from setting <img src="javascript:...">
+  // (inert in modern browsers, but defense in depth) or exotic
+  // schemes that could leak via referrer even with no-referrer set.
+  if (!/^https?:\/\//i.test(s)) return "";
+
   // Google Drive: /file/d/<ID>/view?... -> /uc?export=view&id=<ID>
   var m = s.match(/^https?:\/\/drive\.google\.com\/file\/d\/([^\/?#]+)/);
   if (m) return "https://drive.google.com/uc?export=view&id=" + m[1];
@@ -972,18 +981,41 @@ function renderableImageUrl(rawUrl) {
   if (/^https?:\/\/drive\.google\.com\/uc\?/.test(s)) return s;
 
   // Dropbox: force the raw-content host + raw=1 param so the browser
-  // gets the file bytes instead of the preview HTML page.
+  // gets the file bytes instead of the preview HTML page. Parse the
+  // URL properly to avoid the "?dl=0&rlkey=xyz" edge case where a
+  // naive regex delete of "?dl=0" would leave "&rlkey=xyz" hanging
+  // off the path segment and Dropbox 404s.
   if (/^https?:\/\/(www|dl)\.dropbox\.com\//.test(s)) {
-    var u = s.replace(/:\/\/www\.dropbox\.com/, "://dl.dropboxusercontent.com")
-             .replace(/[?&]dl=[01]/g, "")
-             .replace(/[?&]raw=[01]/g, "");
-    if (u.indexOf("?") >= 0) u += "&raw=1"; else u += "?raw=1";
-    return u;
+    try {
+      var url = new URL(s);
+      url.host = "dl.dropboxusercontent.com";
+      url.searchParams.delete("dl");
+      url.searchParams.delete("raw");
+      url.searchParams.set("raw", "1");
+      return url.toString();
+    } catch (_) {
+      // Fallback for any URL that fails to parse: strip both params
+      // safely and re-append raw=1. Handles the odd malformed value.
+      var u = s.replace(/:\/\/www\.dropbox\.com/, "://dl.dropboxusercontent.com")
+               .replace(/([?&])dl=[01](&|$)/g, function (_m, sep, tail) { return tail === "&" ? sep : ""; })
+               .replace(/([?&])raw=[01](&|$)/g, function (_m, sep, tail) { return tail === "&" ? sep : ""; })
+               .replace(/[?&]$/, "");
+      if (u.indexOf("?") >= 0) u += "&raw=1"; else u += "?raw=1";
+      return u;
+    }
   }
 
-  // Everything else (Meta CDN, direct image host, uploaded asset URL)
-  // pass through unchanged.
-  return s;
+  // Everything else: only pass through hosts we recognise as
+  // creative-asset providers so a Sami reply can't set <img src>
+  // to an attacker-controlled pixel that would leak the AM's
+  // IP + UA on load. referrerPolicy=no-referrer stops referrer
+  // leakage, but the request still fires.
+  var allowedHostRe = /(?:^|\.)(?:fbcdn\.net|cdninstagram\.com|tiktokcdn(?:-us|-eu)?\.com|tiktokv\.com|googleusercontent\.com|googleapis\.com|linkedin\.com|licdn\.com|dropboxusercontent\.com|meta\.com|akamaihd\.net|amazonaws\.com|cloudfront\.net|scontent[^\/]*\.fbcdn\.net)$/i;
+  try {
+    var host = new URL(s).host;
+    if (allowedHostRe.test(host)) return s;
+  } catch (_) { /* malformed URL -> reject */ }
+  return "";
 }
 
 function CreativePairCard(props) {
@@ -1385,7 +1417,7 @@ export default function CreateChatTab(props) {
   // (from clicking Approve/Reject on a card). Auto-generates a threadId
   // on the first send of a fresh session, and persists the thread after
   // each Sami reply so Recent Conversations stays up to date.
-  var send = function (text) {
+  var send = function (text, statusOverrides) {
     var content = String(text == null ? input : text).trim();
     if (!content || busy || !token) return;
     setErr("");
@@ -1478,9 +1510,12 @@ export default function CreateChatTab(props) {
             return nextStatuses;
           });
         }
-        // Persist the thread after Sami's reply so the sidebar updates
-        // and a page refresh / cross-device resume finds this conversation.
-        saveThread(activeThreadId, withReply);
+        // Persist the thread after Sami's reply. Forward the caller's
+        // statusOverrides so an approve/reject-then-send flow saves
+        // the FRESH status, not the pre-approve closure snapshot.
+        // Otherwise a reload after Sami replies renders the card as
+        // "pending" again and the AM would re-click to re-authorise.
+        saveThread(activeThreadId, withReply, statusOverrides || undefined);
       })
       .catch(function (e) {
         setBusy(false);
@@ -1507,26 +1542,25 @@ export default function CreateChatTab(props) {
     if (busy) return;
     var next = Object.assign({}, cardStatus, {}); next[card.id] = "approved";
     setCardStatus(next);
-    // Bug fix: use the `threadId` state variable, not `activeThreadId`
-    // (which is a local `var` scoped only inside send()). Referencing
-    // it here in strict mode threw a ReferenceError and killed the
-    // whole approve flow before the server ever heard about it.
+    // Bug fix: forward the fresh cardStatus into send() so the
+    // post-reply saveThread doesn't clobber it with the stale
+    // pre-approve closure value.
     if (threadId) saveThread(threadId, messages, { cardStatus: next });
-    send("APPROVED: " + card.id);
+    send("APPROVED: " + card.id, { cardStatus: next });
   };
   var handleReject = function (card) {
     if (busy) return;
     var next = Object.assign({}, cardStatus, {}); next[card.id] = "rejected";
     setCardStatus(next);
     if (threadId) saveThread(threadId, messages, { cardStatus: next });
-    send("REJECTED: " + card.id);
+    send("REJECTED: " + card.id, { cardStatus: next });
   };
   var handleConfirmPair = function (card) {
     if (busy) return;
     var next = Object.assign({}, pairStatus, {}); next[card.id] = "confirmed";
     setPairStatus(next);
     if (threadId) saveThread(threadId, messages, { pairStatus: next });
-    send("PAIRS_OK: " + card.id);
+    send("PAIRS_OK: " + card.id, { pairStatus: next });
   };
 
   // Audit fix #6: plan-level approve/reject. Approving flips the plan
@@ -1541,17 +1575,15 @@ export default function CreateChatTab(props) {
     var nextCard = Object.assign({}, cardStatus, {});
     (plan.plan || []).forEach(function (c) { if (c && c.id) nextCard[c.id] = "approved"; });
     setCardStatus(nextCard);
-    // Bug fix (same as handleApprove): use `threadId` state, not the
-    // send()-local `activeThreadId`.
     if (threadId) saveThread(threadId, messages, { cardStatus: nextCard, planStatus: nextPlan });
-    send("APPROVED_PLAN: " + plan.id);
+    send("APPROVED_PLAN: " + plan.id, { cardStatus: nextCard, planStatus: nextPlan });
   };
   var handleRejectPlan = function (plan) {
     if (busy) return;
     var nextPlan = Object.assign({}, planStatus, {}); nextPlan[plan.id] = "rejected";
     setPlanStatus(nextPlan);
     if (threadId) saveThread(threadId, messages, { planStatus: nextPlan });
-    send("REJECTED_PLAN: " + plan.id);
+    send("REJECTED_PLAN: " + plan.id, { planStatus: nextPlan });
   };
 
   // Brief card submission. Sends "BRIEF_FILLED: <id>" followed by a
@@ -1561,14 +1593,12 @@ export default function CreateChatTab(props) {
     if (busy) return;
     var next = Object.assign({}, briefStatus, {}); next[card.id] = "submitted";
     setBriefStatus(next);
-    if (threadId) saveThread(threadId, messages);
+    if (threadId) saveThread(threadId, messages, { briefStatus: next });
     // JSON.stringify without indent halves the payload size so it
     // stays under sami-hub's MAX_MESSAGE_CHARS=8000 even with a full
-    // copy_primary_text + long creative URL. The pre-fix version
-    // used null-2 indent which pushed >10KB briefs past truncation
-    // and produced invalid JSON on Sami's end.
+    // copy_primary_text + long creative URL.
     var body = "BRIEF_FILLED: " + card.id + "\n" + JSON.stringify(filledFields);
-    send(body);
+    send(body, { briefStatus: next });
   };
 
   var onKeyDown = function (e) {

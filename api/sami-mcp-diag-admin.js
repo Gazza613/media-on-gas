@@ -50,7 +50,14 @@ export default async function handler(req, res) {
       live.ok = probe.ok;
       live.contentType = probe.headers.get("content-type") || null;
       var probeText = await probe.text();
-      live.bodyPreview = probeText.slice(0, 500);
+      // Scrub Bearer tokens / sk-* keys / authorization values so a
+      // Markifact error echo can't leak MARKIFACT_MCP_TOKEN into the
+      // superadmin UI response.
+      var scrubbed = probeText
+        .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [REDACTED]")
+        .replace(/sk-[A-Za-z0-9_-]+/g, "sk-[REDACTED]")
+        .replace(/(authorization[":\s]+")[^"]+/gi, "$1[REDACTED]");
+      live.bodyPreview = scrubbed.slice(0, 500);
     } catch (err) {
       live.error = String(err && err.message || err).slice(0, 300);
     }

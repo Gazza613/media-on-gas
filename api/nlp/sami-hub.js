@@ -250,8 +250,9 @@ function buildSystemPrompt() {
     "  2. Pair matching aspect ratios by filename similarity. Standard heuristic: strip common aspect-ratio suffixes (_1x1, _9x16, _feed, _story, _reel, _vertical, _square) and file extensions from each name; two files with the same base name form a pair. Feed asset = 1:1 (square). Story/Reel/WhatsApp Status asset = 9:16 (vertical).",
     "  3. Group results into 'paired concepts', 'square-only' (feed-eligible but no vertical companion), and 'vertical-only' (Stories/Reels/Status-eligible but no square companion).",
     "  4. Emit ONE CREATIVE_PAIR_CARD block summarising what you found (see format below). Stop. Wait for the user to confirm the pairing looks right (they will reply with 'PAIRS_OK: <id>' meaning proceed, or ask you to reassign specific pairs in plain English).",
-    "  5. Once the pairing is confirmed, do the BULK UPLOAD + BUILD in a single PLAN_CARD. Emit ONE plan card whose plan[] array contains, in order: one upload_media child per file (Meta media library upload of every square + every vertical + every video from the pair set) then the campaign + ad set + one-ad-per-concept writes that reference the uploaded media handles. That is a single Approve click for the whole flow. Do NOT emit an APPROVAL_CARD per file, do NOT ask the AM to click Approve 55 times.",
-    "  6. If the plan exceeds PLAN_CARD's 100-child cap, split into two plan cards ('Upload' plan + 'Build' plan) but never one file per card.",
+    "  5. Once the pairing is confirmed, do the BULK UPLOAD + BUILD across ONE OR TWO PLAN_CARDs — never one file per card. Preferred pattern: emit ONE plan card whose plan[] contains an upload_media child per file, then the campaign + ad set + one-ad-per-concept writes referencing the uploaded handles. Single Approve click.",
+    "  6. AUTOMATIC SPLIT AT 15 CHILDREN. If the total write count would exceed 15 (e.g. > 5-6 ads with paired uploads), emit TWO plan cards in sequence: first an 'Upload' plan with ONLY the upload_media children, second a 'Build' plan with campaign + ad set + ads referencing the handles. Reason: each child carries a full operation_id + input_data (~250 output tokens), so 15 children ~= 4000 output tokens and stays safely under the 8k output budget. Larger single-plan cards get truncated mid-JSON, which the AM sees as 'response was cut short' with no way to recover the plan. Splitting at 15 keeps every plan atomic and approvable.",
+    "  7. If ONE plan-card genuinely needs > 100 children (rare — 100 individual writes for one build), that hits the hard proxy cap and the trailing writes will silently drop. Always split at 15 to avoid this.",
     "",
     "CREATIVE_PAIR_CARD emission format (use exactly, only once per folder walk):",
     "<CREATIVE_PAIR_CARD>{",
@@ -522,10 +523,15 @@ function extractStructuredCards(text) {
     try {
       var parsedPl = JSON.parse(pl[1].trim());
       if (parsedPl && parsedPl.id && Array.isArray(parsedPl.plan) && parsedPl.plan.length > 0) {
-        // Cap at 100 children matches the prompt's rule; anything
-        // over that is truncated silently so Sami can't blow the
-        // plan-nonce store with a runaway plan.
-        parsedPl.plan = parsedPl.plan.slice(0, 100);
+        // Cap at 100 children matches the prompt's rule. Anything
+        // over the cap is trimmed AND the count is surfaced so the
+        // frontend can render an amber warning on the card — Sami
+        // would otherwise happily try to execute writes 101-120
+        // against nonces that were never issued.
+        if (parsedPl.plan.length > 100) {
+          parsedPl.truncatedChildren = parsedPl.plan.length - 100;
+          parsedPl.plan = parsedPl.plan.slice(0, 100);
+        }
         plans.push(parsedPl);
       }
     } catch (_) { /* malformed — leave in text */ }
