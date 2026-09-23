@@ -83,6 +83,16 @@ export default async function handler(req, res) {
       MARKIFACT_MCP_TOKEN: !!mcpToken,
       MARKIFACT_MCP_URL: !!envStr("MARKIFACT_MCP_URL")
     },
+    // envOptional: which env vars are safe to leave unset because
+    // the code has a hardcoded fallback. Rendered as 'using default'
+    // instead of the red 'missing' chip so operators don't chase a
+    // non-problem. MARKIFACT_MCP_URL defaults to the standard
+    // Markifact endpoint (api/nlp/mcp-proxy.js:95, this file :34).
+    envOptional: {
+      SAMI_MCP_PROXY_TOKEN: false,
+      MARKIFACT_MCP_TOKEN: false,
+      MARKIFACT_MCP_URL: true
+    },
     upstreamUrl: mcpUrl,
     liveInitializeProbe: live,
     verdict: verdict

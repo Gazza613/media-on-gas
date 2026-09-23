@@ -4165,10 +4165,23 @@ function CampaignAuditModal(props){
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:11,fontFamily:fm}}>
                   <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.35)",borderRadius:8,border:"1px solid "+P.rule}}>
                     <div style={{fontSize:9,fontWeight:800,color:P.caption,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Env vars present</div>
-                    {Object.keys(d.result.envPresent||{}).map(function(k){var ok=d.result.envPresent[k];return <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",color:P.txt}}>
-                      <span>{k}</span>
-                      <span style={{color:ok?P.mint:P.critical,fontWeight:800}}>{ok?"✓ set":"✗ missing"}</span>
-                    </div>;})}
+                    {Object.keys(d.result.envPresent||{}).map(function(k){
+                      var ok=d.result.envPresent[k];
+                      var optional=(d.result.envOptional||{})[k]===true;
+                      // Tri-state: set (mint) / using default (mint) /
+                      // missing-and-required (red). Optional vars that
+                      // are unset are functionally fine because the
+                      // server falls back to a hardcoded default, so
+                      // rendering them as red 'missing' was misleading.
+                      var label,color;
+                      if(ok){label="✓ set";color=P.mint;}
+                      else if(optional){label="○ using default";color=P.mint;}
+                      else{label="✗ missing";color=P.critical;}
+                      return <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",color:P.txt}}>
+                        <span>{k}</span>
+                        <span style={{color:color,fontWeight:800}}>{label}</span>
+                      </div>;
+                    })}
                   </div>
                   <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.35)",borderRadius:8,border:"1px solid "+P.rule}}>
                     <div style={{fontSize:9,fontWeight:800,color:P.caption,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Upstream probe</div>
