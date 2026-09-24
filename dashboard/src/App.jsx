@@ -448,7 +448,7 @@ function HomePage(){
     <div style={{position:"relative",zIndex:3,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"56px 24px",textAlign:"center"}}>
       {/* Full GAS logo lockup — placed verbatim from the brand asset,
           no crop, no HTML text overlay. */}
-      <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:375,height:"auto",marginBottom:26}}/>
+      <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:375,height:"auto",marginBottom:44}}/>
       <div style={{fontSize:16,fontWeight:800,letterSpacing:5,marginBottom:34,fontFamily:fm,textTransform:"uppercase"}}>
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
