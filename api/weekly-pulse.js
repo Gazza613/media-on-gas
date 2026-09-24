@@ -587,7 +587,12 @@ function buildHtml(opts) {
 
       '<tr><td class="pulse-pad" style="padding:28px 36px 20px;text-align:center;">' +
       logoBlock +
-      '<div class="pulse-eyebrow" style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:8px;margin-bottom:4px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Weekly Pulse</div>' +
+      // MEDIA ON GAS wordmark as HTML text — see daily-report.js for
+      // rationale (cropped out of the PNG so it can be sized freely).
+      '<div class="pulse-headline" style="font-size:30px;font-weight:900;letter-spacing:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:2px;">' +
+        '<span style="color:#A855F7;">MEDIA ON </span><span style="color:' + P.ember + ';">GAS</span>' +
+      '</div>' +
+      '<div class="pulse-eyebrow" style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:0;margin-bottom:8px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Weekly Pulse</div>' +
       '<div style="font-size:11px;color:' + P.caption + ';letter-spacing:3px;text-transform:uppercase;font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(weekLabel) + '</div>' +
       '</td></tr>' +
 

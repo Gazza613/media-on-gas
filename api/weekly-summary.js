@@ -279,9 +279,14 @@ function buildHtml(opts) {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;background:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">' +
 
     // Header
-    '<tr><td style="padding:36px 40px 24px;text-align:center;">' +
+    '<tr><td style="padding:32px 40px 22px;text-align:center;">' +
     logoBlock +
-    '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-top:8px;margin-bottom:4px;text-transform:uppercase;">Weekly Activity Summary</div>' +
+    // MEDIA ON GAS wordmark as HTML text — see daily-report.js for
+    // rationale (cropped out of the PNG so it can be sized freely).
+    '<div style="font-size:30px;font-weight:900;letter-spacing:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:2px;">' +
+      '<span style="color:#A855F7;">MEDIA ON </span><span style="color:#F96203;">GAS</span>' +
+    '</div>' +
+    '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-top:0;margin-bottom:8px;text-transform:uppercase;">Weekly Activity Summary</div>' +
     '</td></tr>' +
 
     // Divider
