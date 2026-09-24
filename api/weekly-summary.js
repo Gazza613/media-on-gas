@@ -455,11 +455,11 @@ function buildHtml(opts) {
     '<tr><td style="padding:28px 40px 8px;"><div style="height:1px;background:rgba(168,85,247,0.16);"></div></td></tr>' +
 
     // Footer
-    '<tr><td style="padding:20px 40px 32px;">' +
+    '<tr><td class="ws-pad" style="padding:20px 40px 32px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">' +
-    '<tr><td valign="middle" style="width:56px;padding-right:14px;">' +
+    '<tr><td class="ws-footer-row" valign="middle" style="width:56px;padding-right:14px;">' +
     '<img src="' + logoUrl + '" alt="GAS Marketing" width="48" height="48" border="0" style="width:48px;height:48px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
-    '</td><td valign="middle">' +
+    '</td><td class="ws-footer-row" valign="middle">' +
     '<div style="font-size:12px;color:#FFFBF8;font-weight:800;letter-spacing:3px;">' +
     '<span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span></div>' +
     '<div style="font-size:10px;color:#8B7FA3;letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;">Weekly Management Summary</div>' +

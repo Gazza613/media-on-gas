@@ -829,19 +829,32 @@ export default async function handler(req, res) {
       );
     }
 
+    // Defence-in-depth: if the upstream error body echoed any part of
+    // our request context, strip Bearer tokens / access_token= params
+    // / authorization headers before returning it in the response
+    // body. Same scrubber the mcp-diag panel uses.
+    var _scrubRaw = function (s) {
+      return String(s || "")
+        .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer <redacted>")
+        .replace(/authorization[":\s]+"[^"]+/gi, "authorization: <redacted>")
+        .replace(/access_token=[^&"\s]+/g, "access_token=<redacted>")
+        .replace(/sk-[A-Za-z0-9_-]+/g, "sk-<redacted>");
+    };
     if (result.status === 401 || result.status === 403) {
-      console.error("sami-hub upstream auth failure", result.status, result.rawText && result.rawText.slice(0, 300));
+      var _authRaw = _scrubRaw((result.rawText || "").slice(0, 300));
+      console.error("sami-hub upstream auth failure", result.status, _authRaw);
       res.status(502).json({
         error: "The data engine rejected our credentials. Check ANTHROPIC_API_KEY and MARKIFACT_MCP_TOKEN.",
-        detail: "upstream " + result.status + ": " + ((result.rawText || "").slice(0, 300))
+        detail: "upstream " + result.status + ": " + _authRaw
       });
       return;
     }
     if (result.status !== 200 || !result.data) {
-      console.error("sami-hub upstream error", result.status, result.rawText && result.rawText.slice(0, 500));
+      var _errRaw = _scrubRaw((result.rawText || "").slice(0, 500));
+      console.error("sami-hub upstream error", result.status, _errRaw);
       res.status(502).json({
         error: "Sami hit a problem answering. Try again in a moment.",
-        detail: "upstream " + result.status + ": " + ((result.rawText || "").slice(0, 500))
+        detail: "upstream " + result.status + ": " + _errRaw
       });
       return;
     }

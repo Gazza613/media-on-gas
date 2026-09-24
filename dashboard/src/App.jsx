@@ -2035,7 +2035,17 @@ function ThumbOverrideModal(props){
   var authHeaders=function(){var h={"Content-Type":"application/json"};if(props.session)h["x-session-token"]=props.session;return h;};
   useEffect(function(){
     if(!ad||!ad.adId)return;
+    // Reset every piece of transient state when the operator switches to
+    // a new ad. Without this: autoRetriedRef stayed true across opens,
+    // so the SECOND ad's video would fail without an auto-retry; the
+    // stale videoState.error banner and thumbsState picker grid from
+    // the previous ad would also flash on top of the new video before
+    // its onLoadStart fired.
     setErrMsg("");setInputUrl("");setCurrentUrl("");
+    autoRetriedRef.current=false;
+    setVideoBust(0);
+    setVideoState({loading:false,error:"",loaded:false});
+    setThumbsState({loading:false,error:"",list:[]});
     fetch(props.apiBase+"/api/thumb-override?adId="+encodeURIComponent(ad.adId),{headers:authHeaders()})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(d){if(d&&d.url){setCurrentUrl(d.url);setInputUrl(d.url);}}).catch(function(){});
@@ -8289,7 +8299,13 @@ export default function MediaOnGas(){
         else if(mp==="tiktok")visible.add("TikTok");
         else if(mp==="facebook"||mp==="instagram"||mp==="meta")visible.add("Meta");
       });
-      var relevant=dataWarnings.filter(function(w){
+      // Pre-selection race guard: on first load, computed.allSelected can
+      // be empty for a beat before the campaign fetch resolves. If we
+      // platform-filter against an empty set, EVERY warning with a real
+      // platform gets hidden and the operator misses genuine 429/500s.
+      // Fall through unfiltered until there's at least one visible platform
+      // to key on.
+      var relevant=visible.size===0?dataWarnings:dataWarnings.filter(function(w){
         return !w.platform||w.platform==="All"||visible.has(w.platform);
       });
       if(relevant.length===0)return null;
@@ -9503,7 +9519,7 @@ export default function MediaOnGas(){
                   The octet + funnel + insights narrative above already
                   frame the conversation story properly. If we ever build
                   a conversation-volume trendline matrix, drop this gate. */}
-              {!(function(){return (computed.allSelected||[]).some(function(c){var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");var cn=String(c.campaignName||"").toLowerCase();return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0||an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;});})()&&renderTrendlines({showCommentary:false})}
+              {!(function(){var sel=computed.allSelected||[];return sel.length>0&&sel.every(function(c){var an=String(c.accountName||"").toLowerCase().replace(/[^a-z0-9]/g,"");var cn=String(c.campaignName||"").toLowerCase();return an.indexOf("learnalot")>=0||cn.indexOf("learnalot")>=0||an.indexOf("chilla")>=0||cn.indexOf("chilla")>=0;});})()&&renderTrendlines({showCommentary:false})}
 
               {/* Placement Performance Assessment — sub-platform breakdown
                   showing where the budget is delivering and what each
@@ -11423,7 +11439,17 @@ export default function MediaOnGas(){
                 // with no WA CTA) so both the sort AND the card render
                 // use the new metric with no per-card branching
                 // downstream. Other clients: arr is untouched.
-                if(_selWaConvo){
+                //
+                // Scope the rewrite to the LEADS bucket only. The objSections
+                // header/label swap above ('CONVERSATIONS') only fires on the
+                // leads row, so rewriting cards in other buckets (landingpage,
+                // followers, community_reach) produced a header/card mismatch
+                // — 'LANDING PAGE / by clicks to landing page' with 'WA CONVOS
+                // / COST PER CONVO' cards inside. Meta correctly buckets WA
+                // Conversations campaigns as leads (LEAD_GENERATION / _lead_
+                // name match), so the leads-only scope covers every genuine
+                // Chilla / Learnalot ad.
+                if(_selWaConvo&&sec.key==="leads"){
                   arr=arr.map(function(a){
                     var wa=parseInt(a.messagingConversations7d||0,10);
                     return Object.assign({},a,{results:wa,resultType:"conversations"});

@@ -530,9 +530,9 @@ function buildHtml(opts) {
       '<tr><td class="dr-pad" style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
       '<tr><td class="dr-pad" style="padding:18px 36px 30px;">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">' +
-      '<tr><td valign="middle" style="width:54px;padding-right:14px;">' +
+      '<tr><td class="dr-footer-row" valign="middle" style="width:54px;padding-right:14px;">' +
       '<img src="' + logoUrl + '" alt="GAS Marketing" width="46" height="46" border="0" style="width:46px;height:46px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
-      '</td><td valign="middle">' +
+      '</td><td class="dr-footer-row" valign="middle">' +
       '<div style="font-size:12px;color:' + P.txt + ';font-weight:800;letter-spacing:3px;font-family:Manrope,Helvetica,Arial,sans-serif;">' +
       '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
       '<div style="font-size:10px;color:' + P.caption + ';letter-spacing:2px;margin-top:3px;text-transform:uppercase;font-weight:600;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse, 08:15 SAST</div>' +

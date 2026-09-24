@@ -233,6 +233,17 @@ export default async function handler(req, res) {
   // return as a picker grid instead. Frames are pre-signed CDN URLs,
   // no proxy required on the client side.
   if (req.query.thumbnails === "1") {
+    // Admin-only: the ThumbOverride modal that consumes this endpoint
+    // is gated `!isClient` in the dashboard. Client-role tokens have
+    // no legitimate use for enumerating frame URIs and — because the
+    // existing campaign/ad guard above doesn't bind videoId to the
+    // ad's actual creative — could otherwise pass their own allowlisted
+    // campaignId + an arbitrary videoId to receive frames from another
+    // tenant's video. Refusing at the branch shuts the leak entirely.
+    if (principal.role === "client") {
+      res.status(403).json({ error: "thumbnails=1 not available to client tokens" });
+      return;
+    }
     if (platform !== "meta") {
       res.status(400).json({ error: "thumbnails=1 only supported for platform=meta" });
       return;
@@ -418,6 +429,15 @@ export default async function handler(req, res) {
         // (rate limit) or 404-ing (video removed).
         var _upstreamBody = "";
         try { _upstreamBody = (await upstream.text()).slice(0, 300); } catch (_) {}
+        // Defence-in-depth: strip any echoed access_token / Bearer /
+        // authorization header value from the upstream body before
+        // logging or returning. Meta CDN doesn't typically echo tokens
+        // but the thumbnails branch already does this scrub — match
+        // the pattern so a future upstream change can't leak the token.
+        _upstreamBody = _upstreamBody
+          .replace(/access_token=[^&"\s]+/g, "access_token=<redacted>")
+          .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer <redacted>")
+          .replace(/authorization[":\s]+"[^"]+/gi, "authorization: <redacted>");
         var _urlHost = "";
         try { _urlHost = new URL(resolved.url).host; } catch (_) {}
         console.error("[ad-video proxy] upstream fail", {
@@ -451,6 +471,10 @@ export default async function handler(req, res) {
       if (_looksNotVideo) {
         var _wrongBody = "";
         try { _wrongBody = (await upstream.text()).slice(0, 200); } catch (_) {}
+        _wrongBody = _wrongBody
+          .replace(/access_token=[^&"\s]+/g, "access_token=<redacted>")
+          .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer <redacted>")
+          .replace(/authorization[":\s]+"[^"]+/gi, "authorization: <redacted>");
         var _wrongHost = "";
         try { _wrongHost = new URL(resolved.url).host; } catch (_) {}
         console.error("[ad-video proxy] upstream returned non-video content-type", {

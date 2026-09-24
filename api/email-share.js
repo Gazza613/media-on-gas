@@ -1399,11 +1399,24 @@ function buildEmailHtml(opts) {
 
       <tr><td style="padding:36px 40px 24px;text-align:center;">
         <div style="margin-bottom:18px;">
-          ${clientLogo
-            ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr><td align="center" style="text-align:center;padding:6px 0;">
-                <img src="${clientLogo}" alt="${escapeHtml(clientName)}" width="${logoWidth}" border="0" style="width:${logoWidth}px;max-width:80%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>
-              </td></tr></table>`
-            : `<img class="gas-logo-glow" src="${logoUrl}" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>`}
+          ${(function () {
+            // Only interpolate clientLogo if it validates as an
+            // https URL AND passes escapeHtml. Blocks XSS from a KPI
+            // profile writer setting logoUrl to '"><script>...' or a
+            // javascript: URL that would execute if any email client
+            // ever rendered it. Falls through to the GAS logo path
+            // when the client logo is missing OR malformed.
+            var _safeLogo = "";
+            if (clientLogo && /^https:\/\//i.test(String(clientLogo))) {
+              _safeLogo = escapeHtml(String(clientLogo));
+            }
+            if (_safeLogo) {
+              return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr><td align="center" style="text-align:center;padding:6px 0;">' +
+                '<img src="' + _safeLogo + '" alt="' + escapeHtml(clientName) + '" width="' + logoWidth + '" border="0" style="width:' + logoWidth + 'px;max-width:80%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
+                '</td></tr></table>';
+            }
+            return '<img class="gas-logo-glow" src="' + escapeHtml(logoUrl) + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>';
+          })()}
         </div>
         <div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>
         <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">
