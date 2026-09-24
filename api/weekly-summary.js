@@ -254,6 +254,9 @@ function buildHtml(opts) {
   // like one product family.
   var glowStyles =
     '<style>' +
+    // Poppins webfont for the MEDIA ON GAS wordmark; Outlook desktop
+    // strips this and falls back to Arial Black from the family stack.
+    "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&display=swap');" +
     '@keyframes gasGlow {' +
       '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
       '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
@@ -283,7 +286,7 @@ function buildHtml(opts) {
     logoBlock +
     // MEDIA ON GAS wordmark as HTML text — see daily-report.js for
     // rationale (cropped out of the PNG so it can be sized freely).
-    '<div style="font-size:30px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Manrope,\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
+    '<div style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
       '<span style="color:#F96203;">MEDIA ON GAS</span>' +
     '</div>' +
     '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;">Weekly Activity Summary</div>' +

@@ -531,6 +531,9 @@ function buildHtml(opts) {
 
   var glowStyles =
     '<style>' +
+    // Poppins webfont for the MEDIA ON GAS wordmark. Outlook strips
+    // this and falls back to Arial Black from the family stack.
+    "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&display=swap');" +
     // Resets to keep Gmail / iOS Mail / Outlook from inheriting host page styles
     'body,table,td,p,a,div{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}' +
     'table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}' +
@@ -589,7 +592,7 @@ function buildHtml(opts) {
       logoBlock +
       // MEDIA ON GAS wordmark as HTML text — see daily-report.js for
       // rationale (cropped out of the PNG so it can be sized freely).
-      '<div class="pulse-headline" style="font-size:30px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Manrope,\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
+      '<div class="pulse-headline" style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
         '<span style="color:' + P.ember + ';">MEDIA ON GAS</span>' +
       '</div>' +
       '<div class="pulse-eyebrow" style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Weekly Pulse</div>' +

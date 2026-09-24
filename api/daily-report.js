@@ -385,6 +385,11 @@ function buildHtml(opts) {
 
   var glowStyles =
     '<style>' +
+    // Import Poppins for the MEDIA ON GAS wordmark. Clients that
+    // load webfonts (Apple Mail, Gmail web, iOS/Android) render
+    // Poppins; Outlook desktop strips the @import and falls back to
+    // Arial Black from the family stack — still bold, still on-brand.
+    "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&display=swap');" +
     '@keyframes gasGlow {' +
       '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
       '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
@@ -412,7 +417,7 @@ function buildHtml(opts) {
       // independently of the header image (cropped out of the PNG to
       // separate its scale from the banner scale). Solid colors —
       // gradient text is unreliable in Outlook + some Gmail views.
-      '<div style="font-size:30px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Manrope,\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
+      '<div style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
         '<span style="color:' + P.ember + ';">MEDIA ON GAS</span>' +
       '</div>' +
       '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse</div>' +
