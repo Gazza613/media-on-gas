@@ -412,10 +412,10 @@ function buildHtml(opts) {
       // independently of the header image (cropped out of the PNG to
       // separate its scale from the banner scale). Solid colors —
       // gradient text is unreliable in Outlook + some Gmail views.
-      '<div style="font-size:30px;font-weight:900;letter-spacing:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:2px;">' +
+      '<div style="font-size:30px;font-weight:900;letter-spacing:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
         '<span style="color:#A855F7;">MEDIA ON </span><span style="color:' + P.ember + ';">GAS</span>' +
       '</div>' +
-      '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:0;margin-bottom:8px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse</div>' +
+      '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse</div>' +
       '<div style="font-size:11px;color:' + P.caption + ';letter-spacing:3px;text-transform:uppercase;font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(dateLabel) + '</div>' +
       '</td></tr>' +
 
