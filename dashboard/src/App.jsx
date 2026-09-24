@@ -432,10 +432,10 @@ function HomePage(){
       }
       return <>
         <div className="gas-matrix gas-matrix-left" aria-hidden="true">
-          {streams.map(function(s,i){return <pre key={"ml"+i} className="gas-matrix-col" style={{left:(i*10)+"%",animationDelay:(-i*1.7)+"s",animationDuration:(12+((i*3)%8))+"s",opacity:0.28+((i*5)%10)/50}}>{s}</pre>;})}
+          {streams.map(function(s,i){return <pre key={"ml"+i} className="gas-matrix-col" style={{left:(i*10)+"%",animationDelay:(-i*1.7)+"s",animationDuration:(12+((i*3)%8))+"s",opacity:0.16+((i*5)%10)/60}}>{s}</pre>;})}
         </div>
         <div className="gas-matrix gas-matrix-right" aria-hidden="true">
-          {streams.map(function(s,i){return <pre key={"mr"+i} className="gas-matrix-col" style={{right:(i*10)+"%",animationDelay:(-i*2.1)+"s",animationDuration:(13+((i*5)%9))+"s",opacity:0.28+((i*7)%10)/50}}>{s}</pre>;})}
+          {streams.map(function(s,i){return <pre key={"mr"+i} className="gas-matrix-col" style={{right:(i*10)+"%",animationDelay:(-i*2.1)+"s",animationDuration:(13+((i*5)%9))+"s",opacity:0.16+((i*7)%10)/60}}>{s}</pre>;})}
         </div>
       </>;
     })()}
@@ -478,7 +478,7 @@ function HomePage(){
       .gas-matrix{position:absolute;top:0;bottom:0;width:220px;pointer-events:none;overflow:hidden;z-index:2;mask-image:linear-gradient(180deg,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 10%,#000 90%,transparent 100%);}
       .gas-matrix-left{left:0;}
       .gas-matrix-right{right:0;}
-      .gas-matrix-col{position:absolute;top:0;margin:0;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:14px;line-height:1.6;color:#34D399;text-shadow:0 0 8px rgba(52,211,153,0.55),0 0 14px rgba(52,211,153,0.28);white-space:pre;animation-name:gasMatrixFall;animation-timing-function:linear;animation-iteration-count:infinite;will-change:transform;}
+      .gas-matrix-col{position:absolute;top:0;margin:0;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:14px;line-height:1.6;color:#34D399;text-shadow:0 0 5px rgba(52,211,153,0.35),0 0 10px rgba(52,211,153,0.14);white-space:pre;animation-name:gasMatrixFall;animation-timing-function:linear;animation-iteration-count:infinite;will-change:transform;}
       @media (max-width:900px){.gas-matrix{display:none;}}
     `}</style>
   </div>;
