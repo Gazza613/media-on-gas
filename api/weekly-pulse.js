@@ -567,7 +567,7 @@ function buildHtml(opts) {
   var headerImgUrl = ORIGIN + "/GAS_EMAIL_HEADER.png";
   var logoBlock =
     '<div style="text-align:center;margin-bottom:14px;">' +
-      '<img src="' + headerImgUrl + '" alt="GAS — MEDIA ON GAS" border="0" style="display:block;width:100%;max-width:600px;height:auto;margin:0 auto;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
+      '<img src="' + headerImgUrl + '" alt="GAS — MEDIA ON GAS" border="0" style="display:block;width:100%;max-width:420px;height:auto;margin:0 auto;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
     '</div>';
 
   var preheader = "Weekly Pulse for " + weekLabel + ", " + totalAction + " action / " + totalHealthy + " healthy across the agency.";
