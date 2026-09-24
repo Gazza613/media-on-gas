@@ -134,6 +134,12 @@ function buildHtml(opts) {
   var sanityChecks = opts.sanityChecks || [];
   var perClientSnap = opts.perClientSnap || {};
   var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  // 2026-09-24 team-report header: single AGENCY OF NOW composited
+  // banner (dark bg, brand mark + MEDIA ON GAS wordmark) supplied
+  // by the owner. Replaces the emblem-in-circle + separate title
+  // line block. Native size 666x367; caps at 600 in-email so it fits
+  // the 720px card with padding on either side.
+  var headerImgUrl = ORIGIN + "/GAS_EMAIL_HEADER.png";
 
   // Per-client objective-aware snapshot. Renders one block per client
   // with their primary KPI's status leading, then adjacent metrics
@@ -387,8 +393,8 @@ function buildHtml(opts) {
     '</style>';
 
   var logoBlock =
-    '<div style="text-align:center;margin-bottom:18px;">' +
-      '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>' +
+    '<div style="text-align:center;margin-bottom:14px;">' +
+      '<img src="' + headerImgUrl + '" alt="GAS — MEDIA ON GAS" border="0" style="display:block;width:100%;max-width:600px;height:auto;margin:0 auto;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
     '</div>';
 
   return '<!DOCTYPE html>' +
@@ -400,12 +406,10 @@ function buildHtml(opts) {
     '<tr><td align="center">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
 
-      '<tr><td style="padding:32px 36px 24px;text-align:center;">' +
+      '<tr><td style="padding:28px 36px 20px;text-align:center;">' +
       logoBlock +
-      '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">GAS Daily Pulse</div>' +
-      '<div style="font-size:26px;font-weight:900;letter-spacing:4px;color:' + P.txt + ';font-family:Manrope,Helvetica,Arial,sans-serif;">' +
-        '<span>MEDIA </span><span style="color:' + P.ember + ';">ON </span><span style="color:' + P.lava + ';">GAS</span></div>' +
-      '<div style="font-size:11px;color:' + P.caption + ';letter-spacing:3px;margin-top:8px;text-transform:uppercase;font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(dateLabel) + '</div>' +
+      '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:8px;margin-bottom:4px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse</div>' +
+      '<div style="font-size:11px;color:' + P.caption + ';letter-spacing:3px;text-transform:uppercase;font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;">' + escapeHtml(dateLabel) + '</div>' +
       '</td></tr>' +
 
       '<tr><td style="padding:0 36px;"><div style="height:1px;background:linear-gradient(90deg,transparent,' + P.ember + ',transparent);"></div></td></tr>' +

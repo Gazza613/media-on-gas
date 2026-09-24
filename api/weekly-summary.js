@@ -260,9 +260,13 @@ function buildHtml(opts) {
     '}' +
     '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
     '</style>';
+  // 2026-09-24 team-report header: single AGENCY OF NOW composited
+  // banner replaces the emblem-in-circle + separate title line.
+  // Native size 666x367; capped at 600 in-email to fit the card.
+  var headerImgUrl = origin + "/GAS_EMAIL_HEADER.png";
   var logoBlock =
-    '<div style="text-align:center;margin-bottom:18px;">' +
-      '<img class="gas-logo-glow" src="' + logoUrl + '" alt="GAS Marketing" width="84" height="84" border="0" style="width:84px;height:84px;display:inline-block;border-radius:50%;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;box-shadow:0 0 24px rgba(249,98,3,0.45),0 0 50px rgba(255,61,0,0.28);"/>' +
+    '<div style="text-align:center;margin-bottom:14px;">' +
+      '<img src="' + headerImgUrl + '" alt="GAS — MEDIA ON GAS" border="0" style="display:block;width:100%;max-width:600px;height:auto;margin:0 auto;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
     '</div>';
 
   return '<!DOCTYPE html>' +
@@ -275,12 +279,9 @@ function buildHtml(opts) {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;background:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">' +
 
     // Header
-    '<tr><td style="padding:40px 40px 28px;text-align:center;">' +
+    '<tr><td style="padding:36px 40px 24px;text-align:center;">' +
     logoBlock +
-    '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-bottom:6px;text-transform:uppercase;">GAS Marketing Automation</div>' +
-    '<div style="font-size:26px;font-weight:900;letter-spacing:4px;color:#FFFBF8;margin-bottom:0;">' +
-    '<span>MEDIA </span><span style="color:#F96203;">ON </span><span style="color:#FF3D00;">GAS</span></div>' +
-    '<div style="font-size:10px;color:#8B7FA3;letter-spacing:3px;margin-top:6px;text-transform:uppercase;font-weight:600;">Weekly Activity Summary</div>' +
+    '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-top:8px;margin-bottom:4px;text-transform:uppercase;">Weekly Activity Summary</div>' +
     '</td></tr>' +
 
     // Divider
