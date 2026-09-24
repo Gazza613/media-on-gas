@@ -1296,7 +1296,7 @@ function buildEmailHtml(opts) {
   var url = opts.shareUrl;
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
   var origin = opts.origin || "https://media.gasmarketing.co.za";
-  var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   // Per-client brand logo for the email header. Pre-validated by the
   // handler (reachable image) so a missing/wrong logo silently falls
   // back to the GAS emblem instead of a broken image in the client's

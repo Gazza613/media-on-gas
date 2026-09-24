@@ -212,7 +212,7 @@ function buildHtml(opts) {
   var memberCards = opts.memberCards || [];
   var narrativeLines = opts.narrativeLines || [];
   var origin = opts.origin;
-  var logoUrl = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
 
   // (per-member login table removed, Team adoption scorecards cover it)
 

@@ -133,7 +133,7 @@ function buildHtml(opts) {
   var totalCampaignsWatched = opts.totalCampaignsWatched || 0;
   var sanityChecks = opts.sanityChecks || [];
   var perClientSnap = opts.perClientSnap || {};
-  var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   // 2026-09-24 team-report header: single AGENCY OF NOW composited
   // banner (dark bg, brand mark + MEDIA ON GAS wordmark) supplied
   // by the owner. Replaces the emblem-in-circle + separate title

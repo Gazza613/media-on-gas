@@ -372,7 +372,7 @@ function buildHtml(opts) {
   var weekLabel = opts.weekLabel;
   var clients = opts.clients;
   var totals = opts.totals;
-  var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = ORIGIN + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
 
   var totalAction = 0, totalWarning = 0, totalWatch = 0, totalHealthy = 0;
   clients.forEach(function(b) {

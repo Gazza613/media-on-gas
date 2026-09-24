@@ -17,7 +17,7 @@ function buildInviteHtml(opts) {
   var greetingName = escapeHtml(opts.name || "there");
   var invitedByName = escapeHtml(opts.invitedByName || "Gary Berman");
   var signupUrl = opts.signupUrl;
-  var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   var expiresDisplay = new Date(opts.expiresAt).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" });
 
   return `<!DOCTYPE html>

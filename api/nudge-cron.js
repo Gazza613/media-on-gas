@@ -201,7 +201,7 @@ function buildNudgeHtml(opts) {
   var lastSentDisplay = opts.lastSentDisplay;
   var daysOverdue = opts.daysOverdue;
   var dashboardUrl = opts.dashboardUrl;
-  var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   var reminderType = opts.reminderType || "sla_overdue";
   var campaignEndedDisplay = escapeHtml(opts.campaignEndedDisplay || "");
   // Nudge body intentionally does not name the internal GAS sender,

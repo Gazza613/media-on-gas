@@ -14,7 +14,7 @@ export function buildResetHtml(opts) {
   var triggeredByLabel = opts.triggeredBy === "self"
     ? "You requested a password reset"
     : "A password reset was triggered for you by " + escapeHtml(opts.triggeredBy || "the admin team");
-  var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var logoUrl = opts.origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   var expiresDisplay = new Date(opts.expiresAt).toLocaleString("en-ZA", {
     year: "numeric", month: "short", day: "numeric",
     hour: "2-digit", minute: "2-digit", hour12: false

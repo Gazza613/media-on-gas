@@ -459,7 +459,7 @@ function renderCoverPage(opts) {
   var senderName = escapeHtmlLocal(opts.senderName || "");
   var senderTitle = escapeHtmlLocal(opts.senderTitle || "");
   var origin = opts.origin || "https://media.gasmarketing.co.za";
-  var agencyLogo = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var agencyLogo = origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   return `<section class="rp-page rp-cover">
     <div class="rp-cover-frame">
       <div class="rp-cover-top">
@@ -2241,7 +2241,7 @@ function renderClosingNote(opts) {
   var senderName = escapeHtmlLocal(senderNameRaw);
   var senderTitle = escapeHtmlLocal(opts.senderTitle || "");
   var origin = opts.origin || "https://media.gasmarketing.co.za";
-  var agencyLogo = origin + "/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png";
+  var agencyLogo = origin + "/GAS_LOGO_EMBLEM_ORIGINAL.png";
   var period = escapeHtmlLocal(opts.periodDisplay || "");
   // Sender-derived contact email so the client sees the person who
   // actually prepared the report, not the generic grow@ mailbox.
