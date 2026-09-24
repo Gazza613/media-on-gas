@@ -446,7 +446,7 @@ function HomePage(){
     <div style={{position:"relative",zIndex:3,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"56px 24px",textAlign:"center"}}>
       {/* Full GAS logo lockup — placed verbatim from the brand asset,
           no crop, no HTML text overlay. */}
-      <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:357,height:"auto",marginBottom:26}}/>
+      <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:375,height:"auto",marginBottom:26}}/>
       <div style={{fontSize:13,fontWeight:800,letterSpacing:4,marginBottom:34,fontFamily:fm,textTransform:"uppercase"}}>
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
@@ -549,7 +549,7 @@ function LoginScreen(props){
     <div style={{width:"100%",maxWidth:380,padding:32,position:"relative",zIndex:2,animation:"gasEnter 0.8s cubic-bezier(0.2,0.8,0.2,1) both"}}>
       <div style={{textAlign:"center",marginBottom:40,animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.05s both"}}>
         {/* Full GAS logo lockup — placed verbatim, no crop, no HTML. */}
-        <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:272,height:"auto",margin:"0 auto 22px"}}/>
+        <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:286,height:"auto",margin:"0 auto 22px"}}/>
         <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{backgroundImage:"linear-gradient(90deg,#F96203,#FF3D00,#A855F7,#F96203)",backgroundSize:"300% 100%",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",animation:"gasShimmer 6s linear infinite"}}>GAS</span></div>
         <div style={{fontSize:13,color:"rgba(255,251,248,0.78)",letterSpacing:3.5,textTransform:"uppercase",fontFamily:fm,fontWeight:700,whiteSpace:"nowrap",animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.15s both"}}>Metrics That Matter</div>
       </div>
