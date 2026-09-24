@@ -444,19 +444,9 @@ function HomePage(){
 
     {/* Hero */}
     <div style={{position:"relative",zIndex:3,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"56px 24px",textAlign:"center"}}>
-      {/* Full GAS lockup: emblem + 'AI Execution.' tagline, rendered as
-          HTML alongside the transparent-PNG emblem so it stays sharp at
-          any resolution, adapts to the dark landing background, and
-          doesn't drag in a white-background composite PNG. Soft ember
-          halo behind the emblem blends its transparent edges into the
-          void the same way the standalone emblem used to. */}
-      <div style={{position:"relative",marginBottom:26,display:"inline-flex",alignItems:"center",gap:18}}>
-        <div style={{position:"relative"}}>
-          <div style={{position:"absolute",inset:-18,borderRadius:"50%",background:"radial-gradient(circle,rgba(249,98,3,0.35) 0%,rgba(249,98,3,0) 70%)",filter:"blur(8px)"}} aria-hidden="true"></div>
-          <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" style={{position:"relative",width:104,height:104,display:"block",filter:"drop-shadow(0 8px 32px rgba(249,98,3,0.4))"}}/>
-        </div>
-        <div style={{fontSize:26,fontWeight:900,fontFamily:fm,letterSpacing:-0.5,color:P.ember,lineHeight:1,textShadow:"0 2px 20px rgba(249,98,3,0.35)"}}>AI Execution.</div>
-      </div>
+      {/* Full GAS logo lockup — placed verbatim from the brand asset,
+          no crop, no HTML text overlay. */}
+      <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:420,height:"auto",marginBottom:26}}/>
       <div style={{fontSize:13,fontWeight:800,letterSpacing:4,marginBottom:34,fontFamily:fm,textTransform:"uppercase"}}>
         <span style={{background:gPurple,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Media on </span>
         <span style={{background:"linear-gradient(135deg,#FF3D00,#F96203)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>GAS</span>
@@ -558,19 +548,8 @@ function LoginScreen(props){
 
     <div style={{width:"100%",maxWidth:380,padding:32,position:"relative",zIndex:2,animation:"gasEnter 0.8s cubic-bezier(0.2,0.8,0.2,1) both"}}>
       <div style={{textAlign:"center",marginBottom:40,animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.05s both"}}>
-        {/* Full GAS lockup: emblem + 'AI Execution.' tagline. Emblem
-            keeps its orbit-ring animation; tagline sits to the right,
-            vertically centred. Same rationale as the landing hero —
-            HTML text stays crisp + adapts to the dark login background
-            without embedding a white composite PNG. */}
-        <div style={{display:"inline-flex",alignItems:"center",gap:14,margin:"0 auto 22px"}}>
-          <div style={{width:80,height:80,borderRadius:"50%",overflow:"hidden",animation:"gasLogoGlow 4s ease-in-out infinite",position:"relative",flexShrink:0}}>
-            <img src="/GAS_LOGO_EMBLEM_GAS_Primary_Gradient.png" alt="GAS" width="80" height="80" fetchpriority="high" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-            {/* shimmer ring */}
-            <div style={{position:"absolute",inset:-2,borderRadius:"50%",background:"conic-gradient(from 0deg,transparent 0deg,rgba(249,98,3,0.35) 60deg,transparent 120deg,transparent 360deg)",animation:"gasOrbit 6s linear infinite",opacity:0.6,pointerEvents:"none"}}/>
-          </div>
-          <div style={{fontSize:20,fontWeight:900,fontFamily:fm,letterSpacing:-0.3,color:P.ember,lineHeight:1,textShadow:"0 2px 16px rgba(249,98,3,0.35)"}}>AI Execution.</div>
-        </div>
+        {/* Full GAS logo lockup — placed verbatim, no crop, no HTML. */}
+        <img src="/GAS_LOGO_FULL.png" alt="GAS — AI Execution." style={{display:"block",width:"100%",maxWidth:320,height:"auto",margin:"0 auto 22px"}}/>
         <div style={{fontSize:22,fontWeight:900,letterSpacing:7,fontFamily:fm,lineHeight:1,marginBottom:10}}><span style={{color:P.txt}}>MEDIA </span><span style={{color:P.ember}}>ON </span><span style={{backgroundImage:"linear-gradient(90deg,#F96203,#FF3D00,#A855F7,#F96203)",backgroundSize:"300% 100%",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",animation:"gasShimmer 6s linear infinite"}}>GAS</span></div>
         <div style={{fontSize:13,color:"rgba(255,251,248,0.78)",letterSpacing:3.5,textTransform:"uppercase",fontFamily:fm,fontWeight:700,whiteSpace:"nowrap",animation:"gasEnter 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.15s both"}}>Metrics That Matter</div>
       </div>
