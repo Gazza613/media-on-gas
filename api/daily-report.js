@@ -551,18 +551,27 @@ export default async function handler(req, res) {
   var authHeader = req.headers.authorization || req.headers.Authorization || "";
   var isCron = !!(cronSecret && timingSafeStrEqual(authHeader, "Bearer " + cronSecret));
 
+  // testTo=<email> — admin-authed one-off send to a single address for
+  // rendering smoke-tests (Gmail web / mobile / Outlook). Bypasses the
+  // full RECIPIENT_LIST and the once-per-day cron dedup so the operator
+  // can fire multiple test versions in a row without spamming the team.
+  // Validated as a syntactically-plausible email under 120 chars.
+  var testTo = String(req.query.testTo || "").trim();
+  var isTestSend = !!testTo && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo) && testTo.length <= 120;
+
   if (!isCron) {
     if (!(await rateLimit(req, res, { maxPerMin: 60, maxPerHour: 600 }))) return;
     var apiKey = req.headers["x-api-key"] || req.query.api_key || "";
     var expectedKey = process.env.DASHBOARD_API_KEY || "";
     var apiKeyOk = apiKey && expectedKey && timingSafeStrEqual(String(apiKey), expectedKey);
     if (!apiKeyOk) {
-      // Admin session fallback so operators can run dryRun from the
-      // dashboard DevTools console without needing the API key. dryRun
-      // is the only path that ever serves a session-authed caller; an
-      // actual cron send still goes through the API key / Bearer check.
+      // Admin session fallback so operators can run dryRun / testTo from
+      // the dashboard DevTools console without needing the API key. Both
+      // are safe: dryRun never emails, testTo only emails one specified
+      // address (never the full RECIPIENT_LIST). An actual cron send
+      // still goes through the API key / Bearer check.
       var sessionOk = false;
-      if (req.query.dryRun === "1" || req.query.dry === "1") {
+      if (req.query.dryRun === "1" || req.query.dry === "1" || isTestSend) {
         if (await checkAuth(req, res)) {
           sessionOk = isAdminOrSuperadmin(req.authPrincipal || {});
         } else {
@@ -911,10 +920,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  return await sendEmail(res, dateLabel, html, isCron);
+  return await sendEmail(res, dateLabel, html, isCron, isTestSend ? testTo : null);
 }
 
-async function sendEmail(res, dateLabel, html, isCron) {
+async function sendEmail(res, dateLabel, html, isCron, testTo) {
   var gmailUser = process.env.GMAIL_USER;
   var gmailPass = process.env.GMAIL_APP_PASSWORD;
   if (!gmailUser || !gmailPass) {
@@ -922,7 +931,10 @@ async function sendEmail(res, dateLabel, html, isCron) {
     return;
   }
 
-  if (isCron) {
+  // Cron dedup only applies to the real team-wide send. Test sends
+  // must be repeatable so the operator can iterate on layout tweaks
+  // without waiting 36h for the dedup key to expire.
+  if (isCron && !testTo) {
     var nowSast = sastNow();
     var keyDate = ymd(new Date(nowSast.getTime() - 24 * 60 * 60 * 1000));
     var dedupKey = "daily-anomalies:sent:" + keyDate;
@@ -938,15 +950,17 @@ async function sendEmail(res, dateLabel, html, isCron) {
     auth: { user: gmailUser, pass: gmailPass }
   });
 
+  var recipient = testTo || RECIPIENT_LIST;
+  var subjectPrefix = testTo ? "[TEST] Daily Pulse | " : "Daily Pulse | ";
   try {
     await transporter.sendMail({
       from: "GAS Marketing Automation <" + gmailUser + ">",
-      to: RECIPIENT_LIST,
-      subject: "Daily Pulse | " + dateLabel,
+      to: recipient,
+      subject: subjectPrefix + dateLabel,
       text: "GAS Daily Pulse for " + dateLabel + ". Open the dashboard: " + ORIGIN,
       html: html
     });
-    res.status(200).json({ ok: true, sent: true, to: RECIPIENT_LIST, dateLabel: dateLabel });
+    res.status(200).json({ ok: true, sent: true, to: recipient, dateLabel: dateLabel, test: !!testTo });
   } catch (err) {
     console.error("Daily anomalies send failed", err);
     res.status(500).json({ ok: false, error: String(err && err.message || err) });
