@@ -284,7 +284,7 @@ function buildHtml(opts) {
     // MEDIA ON GAS wordmark as HTML text — see daily-report.js for
     // rationale (cropped out of the PNG so it can be sized freely).
     '<div style="font-size:30px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:Manrope,\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
-      '<span style="color:#A855F7;">MEDIA ON </span><span style="color:#F96203;">GAS</span>' +
+      '<span style="color:#F96203;">MEDIA ON GAS</span>' +
     '</div>' +
     '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;">Weekly Activity Summary</div>' +
     '</td></tr>' +
