@@ -257,11 +257,30 @@ function buildHtml(opts) {
     // Poppins webfont for the MEDIA ON GAS wordmark; Outlook desktop
     // strips this and falls back to Arial Black from the family stack.
     "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&display=swap');" +
+    // Cross-client resets — prevent Gmail Android text-inflate,
+    // strip Outlook table gutters, keep image resampling clean.
+    'body,table,td,p,a,div{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}' +
+    'table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}' +
+    'img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;}' +
+    'a{text-decoration:none;}' +
     '@keyframes gasGlow {' +
       '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
       '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
     '}' +
     '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
+    // Mobile responsive — applies on all clients that respect media
+    // queries (Apple Mail, iOS Mail, Gmail mobile, Outlook iOS).
+    // Outlook desktop uses the fixed-width MSO wrapper (680px) below.
+    '@media only screen and (max-width:600px) {' +
+      '.ws-container { width:100% !important; max-width:100% !important; border-radius:14px !important; }' +
+      '.ws-pad { padding-left:20px !important; padding-right:20px !important; }' +
+      '.ws-header-pad { padding:24px 20px 18px !important; }' +
+      '.ws-headline { font-size:20px !important; letter-spacing:2px !important; }' +
+      '.ws-kpi td { display:block !important; width:100% !important; padding:0 0 8px 0 !important; }' +
+      '.cta-btn { display:block !important; padding:14px 28px !important; }' +
+      '.ws-footer-row { display:block !important; width:100% !important; padding:0 0 10px 0 !important; text-align:center !important; }' +
+      '.ws-footer-row img { margin:0 auto !important; }' +
+    '}' +
     '</style>';
   // 2026-09-24 team-report header: single AGENCY OF NOW composited
   // banner replaces the emblem-in-circle + separate title line.
@@ -272,21 +291,39 @@ function buildHtml(opts) {
       '<img src="' + headerImgUrl + '" alt="GAS — MEDIA ON GAS" border="0" style="display:block;width:100%;max-width:420px;height:auto;margin:0 auto;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
     '</div>';
 
+  // Inbox preview snippet — shows next to the subject line in Gmail
+  // / Apple Mail / Outlook mobile. Fixed opening: report name + team
+  // logins + reports sent this week + overdue count if any.
+  var _wsLogins = loginRows.reduce(function(a, r) { return a + r.logins; }, 0);
+  var preheader = "Weekly Summary, " + _wsLogins + " team login" + (_wsLogins === 1 ? "" : "s") + ", " + reportRows.length + " report" + (reportRows.length === 1 ? "" : "s") + " sent" + (overdueRows.length > 0 ? ", " + overdueRows.length + " overdue" : "") + ".";
   return '<!DOCTYPE html>' +
-    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Weekly Activity Summary</title>' +
+    '<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"><head>' +
+    '<meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta http-equiv="X-UA-Compatible" content="IE=edge">' +
+    '<meta name="color-scheme" content="dark light">' +
+    '<meta name="supported-color-schemes" content="dark light">' +
+    '<title>Weekly Activity Summary</title>' +
+    // Pin Outlook to 96 DPI so the PNG header renders at intended size.
+    '<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->' +
     glowStyles +
     '</head>' +
     '<body style="margin:0;padding:0;background:#070E16;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
+    // Hidden preheader — inbox snippet only, invisible in the body.
+    '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;color:transparent;mso-hide:all;">' + escapeHtml(preheader) + '</div>' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#070E16;padding:40px 16px;">' +
     '<tr><td align="center">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;background:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">' +
+    // MSO conditional 680px wrapper — Outlook desktop ignores
+    // max-width and spans the full email pane without it.
+    '<!--[if mso]><table role="presentation" align="center" width="680" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->' +
+    '<table role="presentation" class="ws-container" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;background-color:#0F1820;background-image:linear-gradient(170deg,#0F1820 0%,#13202C 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(168,85,247,0.18);">' +
 
     // Header
-    '<tr><td style="padding:32px 40px 22px;text-align:center;">' +
+    '<tr><td class="ws-header-pad" style="padding:32px 40px 22px;text-align:center;">' +
     logoBlock +
     // MEDIA ON GAS wordmark as HTML text — see daily-report.js for
     // rationale (cropped out of the PNG so it can be sized freely).
-    '<div style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
+    '<div class="ws-headline" style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
       '<span style="color:#F96203;">MEDIA ON GAS</span>' +
     '</div>' +
     '<div style="font-size:11px;color:#F96203;letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;">Weekly Activity Summary</div>' +
@@ -302,8 +339,8 @@ function buildHtml(opts) {
     '</td></tr>' +
 
     // KPI strip
-    '<tr><td style="padding:20px 40px 8px;">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    '<tr><td class="ws-pad" style="padding:20px 40px 8px;">' +
+    '<table role="presentation" class="ws-kpi" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
     '<td width="33%" style="padding:0 4px 0 0;">' +
     '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(168,85,247,0.18);border-radius:10px;padding:14px 12px;text-align:center;">' +
     '<div style="font-size:9px;color:#8B7FA3;letter-spacing:2px;font-weight:800;text-transform:uppercase;margin-bottom:4px;">Team logins</div>' +
@@ -389,11 +426,22 @@ function buildHtml(opts) {
     // Outlook-specific padding hook. Gmail / Apple Mail / mobile
     // clients still respect the modern background-color + border-
     // radius on the <a>.
-    '<tr><td style="padding:28px 40px 8px;" align="center">' +
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
-    '<tr><td align="center" bgcolor="#F96203" style="background-color:#F96203;border-radius:12px;border:1px solid #FF6B00;mso-padding-alt:16px 42px;">' +
-    '<a href="' + origin + '" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background-color:#F96203;border-radius:12px;">Open Dashboard</a>' +
-    '</td></tr></table></td></tr>' +
+    '<tr><td class="ws-pad" style="padding:28px 40px 8px;" align="center">' +
+    // Outlook bulletproof CTA — VML v:roundrect keeps the rounded
+    // pill in Outlook 2016+/365 (which strips border-radius from
+    // the older <a background-color> pattern and renders a hard
+    // rectangle otherwise). Modern clients see the non-MSO
+    // gradient anchor.
+    '<!--[if mso]>' +
+    '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="' + origin + '" style="height:52px;v-text-anchor:middle;width:240px;" arcsize="24%" strokecolor="#FF6B00" fillcolor="#F96203">' +
+    '<w:anchorlock/>' +
+    '<center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">Open Dashboard</center>' +
+    '</v:roundrect>' +
+    '<![endif]-->' +
+    '<!--[if !mso]><!-- -->' +
+    '<a class="cta-btn" href="' + origin + '" style="display:inline-block;padding:16px 42px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:\'Helvetica Neue\',Helvetica,Arial,sans-serif;background:linear-gradient(135deg,#FF3D00 0%,#FF6B00 45%,#F96203 100%);background-color:#F96203;border-radius:12px;border:1px solid #FF6B00;">Open Dashboard</a>' +
+    '<!--<![endif]-->' +
+    '</td></tr>' +
 
     // Signoff, same author as the daily Pulse so EXCO sees a consistent
     // named voice across all automated reports.
@@ -419,7 +467,10 @@ function buildHtml(opts) {
     '<a href="mailto:grow@gasmarketing.co.za" style="color:#8B7FA3;text-decoration:none;">grow@gasmarketing.co.za</a></div>' +
     '</td></tr></table></td></tr>' +
 
-    '</table></td></tr></table></body></html>';
+    '</table>' +
+    // Close the MSO 680px wrapper table.
+    '<!--[if mso]></td></tr></table><![endif]-->' +
+    '</td></tr></table></body></html>';
 }
 
 export default async function handler(req, res) {

@@ -256,7 +256,7 @@ function buildHtml(opts) {
 
   // Severity tiles strip
   var totalsStrip =
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+    '<table role="presentation" class="dr-totals" width="100%" cellpadding="0" cellspacing="0" border="0">' +
     '<tr>' +
       '<td width="25%" style="padding:0 4px 0 0;">' +
         '<div style="background:rgba(255,255,255,0.04);border:1px solid ' + P.rule + ';border-radius:12px;padding:14px 12px;text-align:center;">' +
@@ -390,11 +390,31 @@ function buildHtml(opts) {
     // Poppins; Outlook desktop strips the @import and falls back to
     // Arial Black from the family stack — still bold, still on-brand.
     "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&display=swap');" +
+    // Cross-client resets — prevent Gmail Android text-inflate,
+    // strip Outlook table gutters, keep image resampling clean.
+    'body,table,td,p,a,div{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}' +
+    'table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}' +
+    'img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;}' +
+    'a{text-decoration:none;}' +
     '@keyframes gasGlow {' +
       '0%, 100% { box-shadow: 0 0 18px rgba(249,98,3,0.35), 0 0 38px rgba(255,61,0,0.22); }' +
       '50% { box-shadow: 0 0 28px rgba(249,98,3,0.55), 0 0 60px rgba(255,61,0,0.35); }' +
     '}' +
     '.gas-logo-glow { animation: gasGlow 2.6s ease-in-out infinite; }' +
+    // Mobile responsive — applies in Apple Mail, iOS Mail, Gmail
+    // mobile, Outlook iOS. Outlook desktop ignores media queries
+    // and uses its fixed-width MSO table at 720px (see MSO wrapper
+    // in the return HTML), which is fine at desktop sizes.
+    '@media only screen and (max-width:600px) {' +
+      '.dr-container { width:100% !important; max-width:100% !important; border-radius:14px !important; }' +
+      '.dr-pad { padding-left:18px !important; padding-right:18px !important; }' +
+      '.dr-header-pad { padding:22px 18px 16px !important; }' +
+      '.dr-headline { font-size:20px !important; letter-spacing:2px !important; }' +
+      '.dr-totals td { display:block !important; width:100% !important; padding:0 0 8px 0 !important; }' +
+      '.cta-btn { display:block !important; padding:14px 28px !important; }' +
+      '.dr-footer-row { display:block !important; width:100% !important; padding:0 0 10px 0 !important; text-align:center !important; }' +
+      '.dr-footer-row img { margin:0 auto !important; }' +
+    '}' +
     '</style>';
 
   var logoBlock =
@@ -402,22 +422,45 @@ function buildHtml(opts) {
       '<img src="' + headerImgUrl + '" alt="GAS — MEDIA ON GAS" border="0" style="display:block;width:100%;max-width:420px;height:auto;margin:0 auto;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
     '</div>';
 
+  // Inbox preview text — Gmail / Apple Mail / Outlook mobile show
+  // the first visible text as a snippet next to the subject line.
+  // Without this the snippet reads whatever HTML alt / hidden CSS
+  // happens to appear first, which is noise. Fixed opening line
+  // that identifies the report + date + total anomalies.
+  var preheader = "Daily Pulse for " + dateLabel + ", " + totalAnomalies + " anomal" + (totalAnomalies === 1 ? "y" : "ies") + " across " + totalCampaignsWatched + " campaign" + (totalCampaignsWatched === 1 ? "" : "s") + " watched.";
   return '<!DOCTYPE html>' +
-    '<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Pulse</title>' +
+    '<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"><head>' +
+    '<meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta http-equiv="X-UA-Compatible" content="IE=edge">' +
+    // Tell Apple Mail / iOS Mail we handle both color schemes so
+    // it doesn\'t auto-invert brand colors in dark mode.
+    '<meta name="color-scheme" content="dark light">' +
+    '<meta name="supported-color-schemes" content="dark light">' +
+    '<title>Daily Pulse</title>' +
+    // Outlook uses Word\'s rendering engine and will up-sample PNGs
+    // to 120 DPI by default (1.25x oversize). Pin to 96 DPI.
+    '<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->' +
     glowStyles +
     '</head>' +
     '<body style="margin:0;padding:0;background:' + P.bg + ';font-family:Manrope,\'Helvetica Neue\',Helvetica,Arial,sans-serif;">' +
+    // Hidden preheader div — inbox snippet only, invisible in body.
+    '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;color:transparent;mso-hide:all;">' + escapeHtml(preheader) + '</div>' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' + P.bg + ';padding:36px 14px;">' +
     '<tr><td align="center">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
+    // Outlook desktop (2016+/365) ignores max-width, so wrap in an
+    // MSO-only 720px table. Every other client uses the modern
+    // max-width:720px on the inner table below.
+    '<!--[if mso]><table role="presentation" align="center" width="720" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->' +
+    '<table role="presentation" class="dr-container" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:720px;background-color:' + P.panel + ';background-image:linear-gradient(170deg,' + P.panel + ' 0%,' + P.panel2 + ' 100%);border-radius:22px;overflow:hidden;border:1px solid ' + P.rule + ';">' +
 
-      '<tr><td style="padding:28px 36px 20px;text-align:center;">' +
+      '<tr><td class="dr-header-pad" style="padding:28px 36px 20px;text-align:center;">' +
       logoBlock +
       // MEDIA ON GAS wordmark rendered as HTML text so it can be sized
       // independently of the header image (cropped out of the PNG to
       // separate its scale from the banner scale). Solid colors —
       // gradient text is unreliable in Outlook + some Gmail views.
-      '<div style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
+      '<div class="dr-headline" style="font-size:24px;font-weight:900;letter-spacing:2px;text-transform:uppercase;font-family:\'Poppins\',\'Arial Black\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;line-height:1;margin-top:6px;margin-bottom:10px;">' +
         '<span style="color:' + P.ember + ';">MEDIA ON GAS</span>' +
       '</div>' +
       '<div style="font-size:11px;color:' + P.ember + ';letter-spacing:6px;font-weight:800;margin-top:2px;margin-bottom:4px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;">Daily Pulse</div>' +
@@ -460,20 +503,32 @@ function buildHtml(opts) {
         '</td></tr>';
       })() +
 
-      '<tr><td style="padding:24px 36px 8px;" align="center">' +
-      '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' +
-      '<tr><td align="center" bgcolor="#F96203" style="background-color:#F96203;border-radius:12px;border:1px solid #FF6B00;mso-padding-alt:14px 38px;">' +
-      '<a href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;background-color:#F96203;border-radius:12px;">Open Dashboard</a>' +
-      '</td></tr></table></td></tr>' +
+      '<tr><td class="dr-pad" style="padding:24px 36px 8px;" align="center">' +
+      // Outlook bulletproof button (VML). Outlook strips
+      // border-radius from the older <a background-color> pattern
+      // and renders a hard-edged rectangle. VML <v:roundrect> under
+      // an [if mso] gate gives Outlook a solid orange pill with
+      // proper rounded corners. Modern clients (Gmail, Apple Mail,
+      // mobile) see the [if !mso] gradient <a> instead.
+      '<!--[if mso]>' +
+      '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="' + ORIGIN + '" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="25%" strokecolor="#FF6B00" fillcolor="#F96203">' +
+      '<w:anchorlock/>' +
+      '<center style="color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">Open Dashboard</center>' +
+      '</v:roundrect>' +
+      '<![endif]-->' +
+      '<!--[if !mso]><!-- -->' +
+      '<a class="cta-btn" href="' + ORIGIN + '" style="display:inline-block;padding:14px 38px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;font-family:Manrope,Helvetica,Arial,sans-serif;background:linear-gradient(135deg,#FF3D00 0%,#FF6B00 45%,#F96203 100%);background-color:#F96203;border-radius:12px;border:1px solid #FF6B00;">Open Dashboard</a>' +
+      '<!--<![endif]-->' +
+      '</td></tr>' +
 
-      '<tr><td style="padding:28px 36px 4px;">' +
+      '<tr><td class="dr-pad" style="padding:28px 36px 4px;">' +
       '<div style="font-size:13px;color:' + P.txt + ';font-weight:800;font-family:Manrope,Helvetica,Arial,sans-serif;letter-spacing:1px;">Sami</div>' +
       '<div style="font-size:11px;color:' + P.ember + ';font-weight:700;font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">AI Expert Agent</div>' +
       '<div style="font-size:10px;color:' + P.caption + ';font-family:Manrope,Helvetica,Arial,sans-serif;margin-top:2px;letter-spacing:1px;">Media Department</div>' +
       '</td></tr>' +
 
-      '<tr><td style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
-      '<tr><td style="padding:18px 36px 30px;">' +
+      '<tr><td class="dr-pad" style="padding:24px 36px 8px;"><div style="height:1px;background:' + P.rule + ';"></div></td></tr>' +
+      '<tr><td class="dr-pad" style="padding:18px 36px 30px;">' +
       '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">' +
       '<tr><td valign="middle" style="width:54px;padding-right:14px;">' +
       '<img src="' + logoUrl + '" alt="GAS Marketing" width="46" height="46" border="0" style="width:46px;height:46px;border-radius:50%;display:block;border:none;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;"/>' +
@@ -485,7 +540,10 @@ function buildHtml(opts) {
       '<a href="mailto:grow@gasmarketing.co.za" style="color:' + P.caption + ';text-decoration:none;">grow@gasmarketing.co.za</a></div>' +
       '</td></tr></table></td></tr>' +
 
-    '</table></td></tr></table></body></html>';
+    '</table>' +
+    // Close the MSO 720px wrapper table.
+    '<!--[if mso]></td></tr></table><![endif]-->' +
+    '</td></tr></table></body></html>';
 }
 
 export default async function handler(req, res) {
