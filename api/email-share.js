@@ -179,11 +179,32 @@ async function fetchTopAds(req, from, to, campaignIds, campaignNames, kpiProfile
       var lk = String(k || "").toLowerCase();
       return lk === "reach" || lk === "unique_reach";
     });
+    // Conversation-first check: when EVERY selected campaign is
+    // Learnalot or Chilla (both WA-first clients), the client's
+    // headline KPI is WhatsApp conversations, not leads / reach.
+    // Meta classifies these ads as objective=leads because the
+    // campaign name contains 'Leads' / 'Lead_Gen', so a.results
+    // comes back as Meta's raw `leads` field (leadgen.other action
+    // count) with resultType='leads'. Rewrite to the per-ad
+    // messagingConversations7d count so the client email top-ads
+    // block reads 'N Conversations at Rx per convo' instead of
+    // 'N Leads at Rx per lead'. Mirrors dashboard App.jsx:9928
+    // and PDF _reportBuilder.js:1918 rewrites.
+    var _waConvoSel = campaignNames.length > 0 && campaignNames.every(function (nm) {
+      var s = String(nm || "").toLowerCase();
+      return s.indexOf("learnalot") >= 0 || s.indexOf("chilla") >= 0;
+    });
     filtered.forEach(function(a) {
       if (reachPrimary) {
         var rch = parseFloat(a.reach || 0);
         a.results = rch > 0 ? rch : parseFloat(a.impressions || 0);
         a.resultType = rch > 0 ? "reach" : "impressions";
+        return;
+      }
+      if (_waConvoSel) {
+        var wa = parseInt(a.messagingConversations7d || 0, 10);
+        a.results = wa;
+        a.resultType = "conversations";
         return;
       }
       // Test objective AND campaign name AND ad name. Awareness has no
@@ -1174,8 +1195,8 @@ function renderTopAdsBlock(topAds, origin, token) {
     return ph;
   };
   var platColors = { "Facebook": "#4599FF", "Instagram": "#E1306C", "TikTok": "#00F2EA", "Google Display": "#34A853", "YouTube": "#FF0000", "Google Search": "#FFAA00", "Performance Max": "#7C3AED", "Demand Gen": "#D946EF" };
-  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "installs" ? "App Clicks" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "App Clicks" : rt === "lp_clicks" ? "LP Clicks" : rt === "reach" ? "Reach" : rt === "impressions" ? "Impressions" : rt === "clicks" ? "Clicks" : "Results"; };
-  var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "installs" ? "per click" : rt === "follows" ? "per follower" : "per click"; };
+  var resultLabel = function(rt) { return rt === "leads" ? "Leads" : rt === "conversations" ? "Conversations" : rt === "installs" ? "App Clicks" : rt === "follows" ? "Followers" : rt === "conversions" ? "Conversions" : rt === "store_clicks" ? "App Clicks" : rt === "lp_clicks" ? "LP Clicks" : rt === "reach" ? "Reach" : rt === "impressions" ? "Impressions" : rt === "clicks" ? "Clicks" : "Results"; };
+  var costPerLabel = function(rt) { return rt === "leads" ? "per lead" : rt === "conversations" ? "per conversation" : rt === "installs" ? "per click" : rt === "follows" ? "per follower" : "per click"; };
 
   var platformBlocks = topAds.map(function(pl) {
     var accent = platColors[pl.platform] || "#F96203";
