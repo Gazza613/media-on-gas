@@ -618,13 +618,13 @@ function buildHtml(opts) {
       // Modern clients (Gmail, Apple Mail, mobile) get the gradient
       // <a>. Same pattern as the nudge / share emails.
       '<!--[if mso]>' +
-      '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="' + ORIGIN + '" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="25%" stroke="f" fillcolor="#FF5A1F">' +
+      '<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="' + ORIGIN + '" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="25%" strokecolor="#FF6B00" fillcolor="#FF5A1F">' +
       '<w:anchorlock/>' +
       '<center style="color:#ffffff;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">OPEN DASHBOARD</center>' +
       '</v:roundrect>' +
       '<![endif]-->' +
       '<!--[if !mso]><!-->' +
-      '<a href="' + ORIGIN + '" class="cta-btn" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border-radius:12px;color:#ffffff;display:inline-block;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:3px;padding:14px 38px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>' +
+      '<a href="' + ORIGIN + '" class="cta-btn" style="background-color:#FF5A1F;background-image:linear-gradient(135deg,' + P.lava + ',' + P.solar + ');border:1px solid #FF6B00;border-radius:12px;color:#ffffff;display:inline-block;font-family:Manrope,Helvetica,Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:3px;padding:14px 38px;text-decoration:none;text-transform:uppercase;mso-hide:all;">Open Dashboard</a>' +
       '<!--<![endif]-->' +
       '</td></tr>' +
 

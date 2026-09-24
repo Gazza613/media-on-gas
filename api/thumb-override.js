@@ -26,6 +26,54 @@ function isValidThumbSrc(u) {
   return false;
 }
 
+// Meta CDN URLs (fbcdn.net, cdninstagram.com) carry an expiring
+// signature in the `oe=` query param — typically valid for 24-72
+// hours from issue. Saving the raw URL as a thumb override worked
+// on day one and then silently 404'd once the signature expired,
+// leaving the operator with an ad card that looked fine yesterday
+// and broken today. Materialise the image into an inline base64
+// data URI at save time so the stored value stays valid for the
+// lifetime of the override, decoupled from Meta's URL signing.
+//
+// Called from POST before isValidThumbSrc + setThumbOverride. If
+// the fetch fails (network blip, non-image content-type, image
+// too large), falls through to the raw URL — the existing
+// isValidThumbSrc pass then still accepts the URL and the operator
+// gets the pre-fix behaviour (works until the signature expires),
+// which is strictly no worse than shipping the URL untouched.
+async function materializeEphemeralUrl(url) {
+  if (!url || !/^https:\/\//i.test(url)) return url;
+  var host = "";
+  try { host = new URL(url).hostname.toLowerCase(); } catch (_) { return url; }
+  var isEphemeral = /(^|\.)fbcdn\.net$/.test(host)
+    || /(^|\.)cdninstagram\.com$/.test(host)
+    || /(^|\.)akamaihd\.net$/.test(host);
+  if (!isEphemeral) return url;
+  try {
+    var r = await fetch(url);
+    if (!r.ok) { console.warn("[thumb-override] ephemeral URL fetch failed", r.status, host); return url; }
+    var ct = String(r.headers.get("Content-Type") || "").toLowerCase();
+    if (!/^image\/(jpeg|png|webp|gif)/.test(ct)) {
+      console.warn("[thumb-override] non-image content-type from ephemeral URL", ct, host);
+      return url;
+    }
+    var buf = Buffer.from(await r.arrayBuffer());
+    // Cap raw bytes at 220KB so the base64 encoding (≈ 4/3 of source)
+    // stays under the existing 300KB storage limit set on data URIs.
+    if (buf.length > 220 * 1024) {
+      console.warn("[thumb-override] ephemeral image too large to inline", buf.length, host);
+      return url;
+    }
+    var mime = ct.split(";")[0].trim();
+    var dataUri = "data:" + mime + ";base64," + buf.toString("base64");
+    console.log("[thumb-override] materialised ephemeral URL", { host: host, bytes: buf.length, encoded: dataUri.length });
+    return dataUri;
+  } catch (err) {
+    console.warn("[thumb-override] materialize error", err && err.message);
+    return url;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
   if (!(await rateLimit(req, res))) return;
@@ -58,6 +106,9 @@ export default async function handler(req, res) {
     if (!adId) { res.status(400).json({ error: "adId required" }); return; }
     if (adId.length > 64) { res.status(400).json({ error: "adId too long" }); return; }
     var url2 = String(body.url || "").trim();
+    // Meta CDN URLs go stale in ~48h. Inline as data URI up-front so
+    // the stored override survives Meta's signature expiry.
+    url2 = await materializeEphemeralUrl(url2);
     if (!isValidThumbSrc(url2)) { res.status(400).json({ error: "url must be an https:// image URL or a data:image/... base64 URL under 300KB" }); return; }
     var ok = await setThumbOverride(adId, url2);
     if (!ok) { res.status(500).json({ error: "storage_failed" }); return; }
